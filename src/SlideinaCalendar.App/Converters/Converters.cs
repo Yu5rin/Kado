@@ -231,3 +231,19 @@ public sealed class DateOnlyToDateTimeConverter : IValueConverter
     public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is DateTime dateTime ? DateOnly.FromDateTime(dateTime) : null;
 }
+
+/// <summary>
+/// 時間軸の上端からの位置を余白に変える。
+/// <para>
+/// ブロックは横に伸ばしたいので Canvas には置けない。上端からの距離を
+/// <see cref="Thickness"/> の上側に入れ、左右は <c>2</c> 空けて重なりを避ける。
+/// </para>
+/// </summary>
+public sealed class TimelineOffsetToMarginConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is double top ? new Thickness(2, top, 2, 0) : new Thickness(2, 0, 2, 0);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
