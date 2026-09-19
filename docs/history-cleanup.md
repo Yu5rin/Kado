@@ -73,6 +73,46 @@ git push --force --tags origin
 手順4を実行したあとは、すべてのコミットの ID が変わる。`git log --oneline` で見て、
 `334f6e4` のような見覚えのある ID が消えていれば、書き換わっている。
 
+## 追加：本文に残った語を消す
+
+ファイルを丸ごと消すのとは別に、**本文に書かれた語**を履歴から消したいことがある。
+会社の略称のように、現在の内容からは消しても過去のコミットに残るもの。
+
+`--replace-text` を使う。手順は上と同じ流れで、4だけ差し替える。
+
+```powershell
+pip install git-filter-repo
+
+cd $HOME
+Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
+git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
+cd cleanup
+
+# 置換の指定を作る。BOM が付くと filter-repo が読めないので、付かない形で書く
+[System.IO.File]::WriteAllText(
+  "$PWD\replacements.txt",
+  "配布元==>配布元`n",
+  [System.Text.UTF8Encoding]::new($false))
+
+git filter-repo --replace-text replacements.txt
+
+# 消えたか（何も出なければ成功）
+git grep -l "配布元" $(git rev-list --all)
+
+git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
+git push --force --all origin
+```
+
+`==>` の左が消したい語、右が置き換え後。置き換え後を空にすると
+`***REMOVED***` に置き換わるので、読める言葉を入れておくほうがよい。
+
+指定ファイル（`replacements.txt`）は履歴には入らない。filter-repo が処理の前に
+読むだけで、コミットの対象にはならない。
+
+> この手順は実際に走らせて確かめてある。123 件が 0 件になり、
+> 「見出し『配布元稼働日』が入っている」は「見出し『配布元稼働日』が入っている」になって、
+> 文としても通る。
+
 ## 済んだあと
 
 ### 手元の古い clone は捨てる
