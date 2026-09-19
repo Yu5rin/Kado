@@ -19,6 +19,22 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
+
+        <!-- 日付の行のラベルの右クリックメニュー。Tag 経由で MainViewModel を引く -->
+        <ContextMenu x:Key="MilestoneMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
 
 
@@ -114,11 +130,17 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border CornerRadius="3" Padding="5,0" Margin="0,0,0,1"
-                                        Background="{Binding Converter={StaticResource MilestoneBrush},
+                                        Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
+                                        Tag="{Binding DataContext,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ContextMenu="{StaticResource MilestoneMenu}"
+                                        MouseLeftButtonDown="OnMilestoneClicked"
+                                        Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                     ConverterParameter=Face}">
                                     <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
                                                LineHeight="15"
-                                               Foreground="{Binding Converter={StaticResource MilestoneBrush}}" />
+                                               Foreground="{Binding Name,
+                                                           Converter={StaticResource MilestoneBrush}}" />
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

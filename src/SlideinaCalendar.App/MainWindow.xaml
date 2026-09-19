@@ -100,12 +100,36 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
+
+        <!--
+            日付の行のラベルの右クリックメニュー。
+            ContextMenu は画面の木から外れて出るので、Tag に MainViewModel を入れて
+            PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="MilestoneMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
-                    Background="{Binding Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}">
+                    Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource MilestoneMenu}"
+                    MouseLeftButtonDown="OnMilestoneClicked"
+                    Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー">
                 <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" LineHeight="15"
-                           Foreground="{Binding Converter={StaticResource MilestoneBrush}}" />
+                           Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
         </DataTemplate>
     </Window.Resources>

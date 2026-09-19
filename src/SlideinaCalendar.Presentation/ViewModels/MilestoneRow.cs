@@ -1,7 +1,22 @@
-using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Data.Repositories;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
+
+/// <summary>
+/// 日付の行に並べるラベル1つ。
+/// <para>
+/// 元の予定の識別子を持つ。ラベルからその予定を開いたり消したりするのに要る。
+/// 以前は名前と日付しか持たない値だったので、押しても何もできなかった。
+/// </para>
+/// </summary>
+public sealed class MilestoneViewModel(string id, string name)
+{
+    /// <summary>元の予定の識別子。</summary>
+    public string Id { get; } = id;
+
+    /// <summary>ラベルに出す名前。色もこれで決まる。</summary>
+    public string Name { get; } = name;
+}
 
 /// <summary>
 /// 日付の行に並べるマイルストーン。
@@ -17,17 +32,17 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 public static class MilestoneRow
 {
     /// <summary>その日の分を組み立てる。</summary>
-    /// <param name="date">この日。</param>
+    /// <param name="date">この日。使わないが、呼ぶ側の読みやすさのために受ける。</param>
     /// <param name="events">その日に重なる予定。</param>
     /// <param name="filter">出すかどうかの判断。渡さなければ実働日データ由来のものだけ。</param>
-    public static IReadOnlyList<Milestone> For(
+    public static IReadOnlyList<MilestoneViewModel> For(
         DateOnly date, IEnumerable<ScheduledEvent>? events, ISourceFilter? filter)
     {
         if (events is null) return [];
 
         var decide = filter ?? DefaultCalendarSources.Instance;
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var result = new List<Milestone>();
+        var result = new List<MilestoneViewModel>();
 
         foreach (var scheduled in events)
         {
@@ -41,7 +56,7 @@ public static class MilestoneRow
             // 旧 inaCalendar が Google 側にも書き込んでいたため。同じ名前は1つにする
             if (!seen.Add(scheduled.Source.Title)) continue;
 
-            result.Add(new Milestone(date, scheduled.Source.Title));
+            result.Add(new MilestoneViewModel(scheduled.Source.Id, scheduled.Source.Title));
         }
 
         return result;

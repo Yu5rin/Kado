@@ -89,6 +89,8 @@ public sealed class MainViewModel : ObservableObject
         EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
         DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
         EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(EditBlock);
+        EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
+        DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
         DeleteBlockCommand = new RelayCommand<TimeBlockViewModel?>(
             block => DeleteEventBy(block?.IsWorkBlock == false ? block.Id : null));
         DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
@@ -386,6 +388,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
     public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
+
+    /// <summary>日付の行のラベルを開く。実働日データから起こした予定も直せる。</summary>
+    public RelayCommand<MilestoneViewModel?> EditMilestoneCommand { get; }
+
+    /// <summary>日付の行のラベルを消す。</summary>
+    public RelayCommand<MilestoneViewModel?> DeleteMilestoneCommand { get; }
 
     /// <summary>週ビュー・日ビューの時間軸に置かれた1件を開く。</summary>
     public RelayCommand<TimeBlockViewModel?> EditBlockCommand { get; }
