@@ -125,6 +125,65 @@ internal sealed class FakeEventGateway : IEventGateway
         return id;
     }
 
+    /// <summary>繰り返しの親を置く。</summary>
+    public string AddRecurring(string id, string summary, string date, string rule)
+    {
+        Items[id] = new JsonObject
+        {
+            ["id"] = id,
+            ["summary"] = summary,
+            ["status"] = "confirmed",
+            ["updated"] = "2026-09-19T00:00:00.000Z",
+            ["start"] = new JsonObject { ["date"] = date },
+            ["end"] = new JsonObject { ["date"] = DateOnly.Parse(date).AddDays(1).ToString("yyyy-MM-dd") },
+            ["recurrence"] = new JsonArray($"RRULE:{rule}"),
+        };
+
+        Touch(id);
+        return id;
+    }
+
+    /// <summary>
+    /// 繰り返しのうち1回だけを差し替えたものを置く。
+    /// <para><paramref name="cancelled"/> が true なら「その回は中止」。</para>
+    /// </summary>
+    public string AddException(
+        string id, string parentId, string originalDate, string? newDate = null,
+        string? summary = null, bool cancelled = false)
+    {
+        var item = new JsonObject
+        {
+            ["id"] = id,
+            ["recurringEventId"] = parentId,
+            ["originalStartTime"] = new JsonObject { ["date"] = originalDate },
+            ["status"] = cancelled ? "cancelled" : "confirmed",
+            ["updated"] = "2026-09-19T00:00:00.000Z",
+        };
+
+        if (!cancelled)
+        {
+            var date = newDate ?? originalDate;
+            item["summary"] = summary ?? "差し替えた回";
+            item["start"] = new JsonObject { ["date"] = date };
+            item["end"] = new JsonObject { ["date"] = DateOnly.Parse(date).AddDays(1).ToString("yyyy-MM-dd") };
+        }
+
+        Items[id] = item;
+        Touch(id);
+        return id;
+    }
+
+    /// <summary>並び順を入れ替える。例外回が先に降ってくる場面を作る。</summary>
+    public void PutFirst(string id)
+    {
+        var value = Items[id];
+        var rest = Items.Where(p => !string.Equals(p.Key, id, StringComparison.Ordinal)).ToArray();
+
+        Items.Clear();
+        Items[id] = value;
+        foreach (var pair in rest) Items[pair.Key] = pair.Value;
+    }
+
     /// <summary>相手が取り消した状態にする。</summary>
     public void Cancel(string id)
     {
