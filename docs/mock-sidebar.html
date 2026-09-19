@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SlideinaCalendar サイドバーUIモック</title>
+<style>
+:root{
+  --desk:#2e3440;
+  --bg:#fbfbfc;
+  --bg-sunken:#f1f2f5;
+  --panel:#ffffff;
+  --line:#e2e4ea;
+  --line-strong:#c8ccd6;
+  --ink:#1c2029;
+  --ink-2:#585f6e;
+  --ink-3:#8f96a4;
+  --ai:#27528f;
+  --ai-soft:#e8eef7;
+  --sat:#3b6ea8;
+  --sun:#b03a34;
+  --off:#eceef2;
+  --done:#a3a9b5;
+  --ok:#2f7d5b;
+  --shadow:0 12px 36px rgba(20,24,34,.28);
+  --r:7px;
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --desk:#0e1014;
+    --bg:#1a1d24;
+    --bg-sunken:#15181e;
+    --panel:#20242c;
+    --line:#2c313b;
+    --line-strong:#3a4150;
+    --ink:#e6e9ef;
+    --ink-2:#a8b0be;
+    --ink-3:#727a89;
+    --ai:#7aa5df;
+    --ai-soft:#233247;
+    --sat:#7aa5df;
+    --sun:#e0827c;
+    --off:#171a20;
+    --done:#5d6472;
+    --ok:#5fb08a;
+    --shadow:0 12px 36px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --desk:#0e1014;
+  --bg:#1a1d24;
+  --bg-sunken:#15181e;
+  --panel:#20242c;
+  --line:#2c313b;
+  --line-strong:#3a4150;
+  --ink:#e6e9ef;
+  --ink-2:#a8b0be;
+  --ink-3:#727a89;
+  --ai:#7aa5df;
+  --ai-soft:#233247;
+  --sat:#7aa5df;
+  --sun:#e0827c;
+  --off:#171a20;
+  --done:#5d6472;
+  --ok:#5fb08a;
+  --shadow:0 12px 36px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--desk);
+  color:var(--ink);
+  font-family:"Yu Gothic UI","Segoe UI",system-ui,"Hiragino Kaku Gothic ProN",sans-serif;
+  font-size:13px;
+  line-height:1.5;
+  font-feature-settings:"palt" 1;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+  padding:28px 20px 48px;
+}
+.stage{max-width:980px;margin:0 auto}
+.stage-head{color:#c9ced9;margin-bottom:22px}
+.stage-head h1{font-size:15px;font-weight:600;margin:0 0 4px;letter-spacing:.02em}
+.stage-head p{margin:0;font-size:12px;color:#8d95a4;max-width:62ch}
+.controls{display:flex;gap:8px;margin:16px 0 26px;flex-wrap:wrap}
+.controls button{
+  background:rgba(255,255,255,.07);color:#d6dbe4;border:1px solid rgba(255,255,255,.14);
+  padding:5px 12px;border-radius:5px;font:inherit;font-size:12px;cursor:pointer;
+}
+.controls button:hover{background:rgba(255,255,255,.13)}
+.controls button:focus-visible{outline:2px solid #7aa5df;outline-offset:2px}
+
+.frames{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+.frame-label{color:#8d95a4;font-size:11.5px;margin-bottom:8px}
+
+/* ---- アプリ本体 ---- */
+.app{
+  width:352px;height:640px;
+  background:var(--bg);color:var(--ink);
+  border:1px solid var(--line-strong);border-radius:var(--r);
+  box-shadow:var(--shadow);
+  display:flex;flex-direction:column;overflow:hidden;position:relative;
+}
+
+/* ヘッダー */
+.hd{display:flex;align-items:center;gap:2px;padding:8px 8px 8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.month{font-size:15px;font-weight:600;letter-spacing:.01em;margin-right:auto;font-variant-numeric:tabular-nums}
+.month .yr{color:var(--ink-3);font-weight:500;font-size:12px;margin-right:5px}
+.ib{width:26px;height:26px;display:grid;place-items:center;border:0;background:none;color:var(--ink-2);border-radius:5px;cursor:pointer;font:inherit}
+.ib:hover{background:var(--bg-sunken);color:var(--ink)}
+.ib:focus-visible{outline:2px solid var(--ai);outline-offset:-2px}
+.ib svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.today-btn{font-size:11.5px;padding:0 9px;height:24px;border:1px solid var(--line-strong);background:none;color:var(--ink-2);border-radius:4px;cursor:pointer;font-family:inherit;margin:0 4px}
+.today-btn:hover{background:var(--bg-sunken);color:var(--ink)}
+
+/* 実働日サマリー */
+.wd-bar{
+  display:flex;align-items:baseline;gap:5px;padding:6px 12px;
+  background:var(--ai-soft);border-bottom:1px solid var(--line);
+  font-size:11.5px;color:var(--ink-2);
+}
+.wd-bar b{font-size:15px;font-weight:600;color:var(--ai);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.wd-bar .sep{margin-left:auto}
+
+/* カレンダー */
+.cal{padding:6px 8px 8px}
+.dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
+.dow span{text-align:center;font-size:10.5px;color:var(--ink-3);padding:2px 0}
+.dow span:first-child{color:var(--sun)}
+.dow span:last-child{color:var(--sat)}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.cell{
+  background:var(--panel);min-height:52px;padding:3px 4px 2px;position:relative;cursor:pointer;
+  display:flex;flex-direction:column;gap:1px;
+}
+.cell:hover{background:var(--bg-sunken)}
+.cell.off{background:var(--off)}
+.cell.off .dn{color:var(--ink-3)}
+.cell.other .dn{opacity:.35}
+.cell.other{background:var(--bg-sunken)}
+.dn{font-size:11.5px;font-variant-numeric:tabular-nums;line-height:1.3;font-weight:500}
+.cell.sun .dn{color:var(--sun)}
+.cell.sat .dn{color:var(--sat)}
+/* 実働日の通し番号：このアプリ固有の主役表現 */
+.wdn{
+  position:absolute;top:3px;right:4px;font-size:9px;line-height:1;
+  color:var(--ai);opacity:.62;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+}
+.cell.today{box-shadow:inset 0 0 0 2px var(--ai);z-index:1}
+.cell.today .dn{color:var(--ai);font-weight:700}
+.cell.sel{background:var(--ai-soft)}
+.hol{font-size:9.5px;color:var(--sun);line-height:1.2;white-space:nowrap;overflow:hidden}
+.chip{
+  font-size:10px;line-height:1.35;padding:1px 3px;border-radius:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-left:2.5px solid var(--ai);background:var(--ai-soft);color:var(--ink);
+}
+.chip.g{border-left-color:var(--ok);background:rgba(47,125,91,.1)}
+.chip.o{border-left-color:#c2762b;background:rgba(194,118,43,.12)}
+.chip.task{border-left-color:transparent;background:none;padding-left:0;color:var(--ink-2);display:flex;gap:3px;align-items:center}
+.chip.task::before{content:"";width:4px;height:4px;border-radius:50%;border:1px solid var(--ink-3);flex:none}
+.more{font-size:9.5px;color:var(--ink-3);padding-left:2px}
+
+/* 仕切り */
+.splitter{height:5px;background:var(--bg);cursor:ns-resize;display:grid;place-items:center;flex:none}
+.splitter::after{content:"";width:34px;height:2px;border-radius:2px;background:var(--line-strong)}
+
+/* 下ペイン */
+.lower{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;border-top:1px solid var(--line)}
+.tabs{display:flex;gap:0;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel);flex:none}
+.tab{
+  padding:7px 10px 6px;font-size:12px;color:var(--ink-3);border:0;background:none;cursor:pointer;
+  border-bottom:2px solid transparent;font-family:inherit;display:flex;align-items:center;gap:5px;
+}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ai);font-weight:600}
+.tab:focus-visible{outline:2px solid var(--ai);outline-offset:-2px}
+.count{font-size:10px;background:var(--bg-sunken);color:var(--ink-2);border-radius:8px;padding:0 5px;font-variant-numeric:tabular-nums}
+.tab[aria-selected="true"] .count{background:var(--ai-soft);color:var(--ai)}
+.pane{flex:1;overflow-y:auto;padding:4px 0 8px}
+.pane[hidden]{display:none}
+.daylabel{
+  padding:7px 12px 4px;font-size:11.5px;color:var(--ink-3);
+  display:flex;align-items:baseline;gap:6px;
+}
+.daylabel b{color:var(--ink);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ev{display:flex;gap:9px;padding:6px 12px;cursor:pointer;align-items:flex-start}
+.ev:hover{background:var(--bg-sunken)}
+.ev .t{font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums;width:38px;flex:none;padding-top:1px;text-align:right}
+.ev .bar{width:2.5px;border-radius:2px;background:var(--ai);flex:none;align-self:stretch;min-height:17px}
+.ev.g .bar{background:var(--ok)} .ev.o .bar{background:#c2762b}
+.ev .body{min-width:0}
+.ev .ti{font-size:12.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .sub{font-size:10.5px;color:var(--ink-3);margin-top:1px}
+.empty{padding:14px 12px;font-size:11.5px;color:var(--ink-3)}
+
+/* タスク */
+.tk{display:flex;gap:9px;padding:7px 12px;align-items:flex-start;cursor:pointer}
+.tk:hover{background:var(--bg-sunken)}
+.box{
+  width:14px;height:14px;border:1.5px solid var(--line-strong);border-radius:3px;flex:none;margin-top:2px;
+  display:grid;place-items:center;background:var(--panel);
+}
+.tk.done .box{background:var(--done);border-color:var(--done)}
+.box svg{width:9px;height:9px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round;visibility:hidden}
+.tk.done .box svg{visibility:visible}
+.tk .ti{font-size:12.5px;line-height:1.4}
+.tk.done .ti{color:var(--done);text-decoration:line-through}
+.due{font-size:10.5px;color:var(--ink-3);margin-top:1px;display:flex;gap:6px;align-items:center}
+.due .soon{color:var(--sun)}
+.grp{padding:9px 12px 3px;font-size:10.5px;color:var(--ink-3)}
+.grp:first-child{padding-top:6px}
+
+/* フッター */
+.ft{display:flex;align-items:center;gap:6px;padding:7px 8px 7px 10px;border-top:1px solid var(--line);background:var(--panel);flex:none}
+.add{
+  display:flex;align-items:center;gap:6px;border:1px dashed var(--line-strong);background:none;color:var(--ink-3);
+  border-radius:5px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;flex:1;text-align:left;
+}
+.add:hover{border-color:var(--ai);color:var(--ai);border-style:solid}
+.add svg{width:13px;height:13px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
+.calcbtn{
+  border:1px solid var(--line-strong);background:none;color:var(--ink-2);border-radius:5px;
+  padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;
+}
+.calcbtn:hover{background:var(--ai-soft);color:var(--ai);border-color:var(--ai)}
+.calcbtn[aria-expanded="true"]{background:var(--ai);color:#fff;border-color:var(--ai)}
+
+/* 実働日計算パネル */
+.calcpanel{
+  position:absolute;left:0;right:0;bottom:0;background:var(--panel);
+  border-top:1px solid var(--line-strong);box-shadow:0 -8px 24px rgba(20,24,34,.14);
+  padding:12px 12px 14px;transform:translateY(100%);transition:transform .16s cubic-bezier(.2,.8,.3,1);
+  z-index:5;
+}
+.calcpanel.open{transform:translateY(0)}
+@media (prefers-reduced-motion:reduce){.calcpanel{transition:none}}
+.calchd{display:flex;align-items:center;margin-bottom:10px}
+.calchd h3{font-size:12.5px;margin:0;font-weight:600}
+.calchd .ib{margin-left:auto}
+.row{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px}
+.row label{color:var(--ink-3);font-size:11.5px;width:52px;flex:none}
+.fld{
+  border:1px solid var(--line-strong);border-radius:4px;padding:3px 7px;background:var(--bg);
+  font:inherit;font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.fld:focus{outline:2px solid var(--ai);outline-offset:-1px;border-color:var(--ai)}
+.fld.n{width:54px;text-align:right}
+.res{
+  background:var(--ai-soft);border-radius:5px;padding:8px 10px;margin-top:10px;
+  display:flex;align-items:baseline;gap:6px;font-size:11.5px;color:var(--ink-2);
+}
+.res b{font-size:19px;font-weight:600;color:var(--ai);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.res .r2{margin-left:auto;font-size:11.5px}
+.res .r2 b{font-size:13px}
+.hint{font-size:10.5px;color:var(--ink-3);margin-top:7px}
+
+.notes{color:#a7aebc;font-size:12px;max-width:34ch;line-height:1.75}
+.notes h2{font-size:12.5px;color:#dde2ea;margin:0 0 8px;font-weight:600}
+.notes p{margin:0 0 12px}
+.notes strong{color:#dde2ea;font-weight:600}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="stage-head">
+    <h1>SlideinaCalendar — サイドバーモック</h1>
+    <p>幅352pxのドック表示。上にカレンダー、下に選択日の予定とタスク。実働日計算はフッターから開く。</p>
+  </div>
+
+  <div class="controls">
+    <button onclick="toggleTheme()">テーマ切替</button>
+    <button onclick="toggleCalc()">実働日計算を開閉</button>
+    <button onclick="switchTab('ev')">予定タブ</button>
+    <button onclick="switchTab('tk')">タスクタブ</button>
+  </div>
+
+  <div class="frames">
+  <div>
+  <div class="frame-label">ドックモード（画面右端に常駐）</div>
+  <div class="app">
+
+    <div class="hd">
+      <div class="month"><span class="yr">2026</span>9月</div>
+      <button class="ib" title="前の月"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="ib" title="次の月"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="today-btn">今日</button>
+      <button class="ib" title="検索"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
+      <button class="ib" title="設定"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1h.2a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg></button>
+    </div>
+
+    <div class="wd-bar">
+      <span>今月の実働日</span><b>20</b><span>日</span>
+      <span class="sep">残り</span><b>6</b><span>日</span>
+    </div>
+
+    <div class="cal">
+      <div class="dow"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="splitter" title="ドラッグで高さを変更"></div>
+
+    <div class="lower">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" id="tab-ev" onclick="switchTab('ev')">予定 <span class="count">3</span></button>
+        <button class="tab" role="tab" aria-selected="false" id="tab-tk" onclick="switchTab('tk')">タスク <span class="count">4</span></button>
+      </div>
+
+      <div class="pane" id="pane-ev" role="tabpanel">
+        <div class="daylabel"><b>9月24日（木）</b><span>実働 17日目</span></div>
+        <div class="ev">
+          <span class="t">09:00</span><span class="bar"></span>
+          <span class="body"><span class="ti">10月度 生産台数計画 レビュー</span><span class="sub">第2会議室 ・ 1時間30分</span></span>
+        </div>
+        <div class="ev g">
+          <span class="t">13:30</span><span class="bar"></span>
+          <span class="body"><span class="ti">ライン切替 立ち会い</span><span class="sub">第3工場</span></span>
+        </div>
+        <div class="ev o">
+          <span class="t">終日</span><span class="bar"></span>
+          <span class="body"><span class="ti">月次棚卸（準備日）</span></span>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-tk" role="tabpanel" hidden>
+        <div class="grp">期限あり</div>
+        <div class="tk">
+          <span class="box"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></span>
+          <span><span class="ti">10月度 台数計画の確定</span><span class="due"><span class="soon">残り 3実働日</span><span>9/24</span></span></span>
+        </div>
+        <div class="tk">
+          <span class="box"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></span>
+          <span><span class="ti">治具の発注手配</span><span class="due"><span>残り 8実働日</span><span>10/1</span></span></span>
+        </div>
+        <div class="grp">期限なし</div>
+        <div class="tk">
+          <span class="box"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></span>
+          <span><span class="ti">設備点検の日程を調整する</span></span>
+        </div>
+        <div class="grp">完了</div>
+        <div class="tk done">
+          <span class="box"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></span>
+          <span><span class="ti">9月度 実績の集計</span></span>
+        </div>
+      </div>
+
+      <div class="ft">
+        <button class="add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>予定を追加</button>
+        <button class="calcbtn" id="calcbtn" aria-expanded="false" onclick="toggleCalc()">実働日計算</button>
+      </div>
+    </div>
+
+    <div class="calcpanel" id="calcpanel">
+      <div class="calchd">
+        <h3>実働日計算</h3>
+        <button class="ib" onclick="toggleCalc()" title="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="row">
+        <label for="c1">期間</label>
+        <input class="fld" id="c1" type="date" value="2026-09-19">
+        <span style="color:var(--ink-3)">→</span>
+        <input class="fld" type="date" value="2026-10-15">
+      </div>
+      <div class="row">
+        <label for="c2">基準日</label>
+        <input class="fld" id="c2" type="date" value="2026-09-19">
+        <span style="color:var(--ink-3)">＋</span>
+        <input class="fld n" type="number" value="15">
+        <span style="font-size:11.5px;color:var(--ink-3)">実働日</span>
+      </div>
+      <div class="res">
+        <span>期間の実働日</span><b>17</b><span>日</span>
+        <span class="r2">到達日 <b>10/13</b>（火）</span>
+      </div>
+      <div class="hint">カレンダー上をドラッグして期間を選ぶこともできる</div>
+    </div>
+
+  </div>
+  </div>
+
+  <div class="notes">
+    <h2>設計の意図</h2>
+    <p><strong>セル右上の小さな数字</strong>がその月の何実働日目かを示す。現行版ではカウントが計算欄の中に閉じていたが、カレンダーそのものに刻むことで「この日は何日目か」が常に読める。このアプリ固有の主役表現なので、他の装飾は徹底して抑えた。</p>
+    <p><strong>非稼働日は沈める</strong>。色を足すのではなく背景を落とす引き算にしてあるので、祝日の赤や予定の色と競合しない。</p>
+    <p><strong>予定とタスクはタブで切り替える</strong>。幅352pxで上下にさらに分けると各ペインが3行しか入らず実用にならないため、上ペインをカレンダー、下ペインをタブ構成にした。ウィンドウモードでは横に並べて同時表示する。</p>
+    <p><strong>タスクの期限は実働日で数える</strong>。「残り3実働日」という見え方が、暦日の残日数より生産計画の実感に近い。</p>
+    <p><strong>実働日計算はフッターから下からせり出す</strong>。カレンダーを隠さず、閉じれば元の高さに戻る。</p>
+  </div>
+  </div>
+</div>
+
+<script>
+const HOL={21:"敬老の日",23:"秋分の日"};
+const OFFDAY=new Set([25]); // 会社休（例）
+const TODAY=19, SEL=24;
+(function(){
+  const g=document.getElementById('grid');
+  let wd=0;
+  // 8/31(月)から開始、9/1は火曜
+  for(let i=0;i<35;i++){
+    const off=i-1; // グリッド先頭は8/30(日)
+    const d=document.createElement('div');
+    d.className='cell';
+    const dowIdx=i%7;
+    let day, other=false;
+    if(off<0){day=30+off+1;other=true;}
+    else if(off>=30){day=off-30+1;other=true;}
+    else day=off+1;
+    if(dowIdx===0)d.classList.add('sun');
+    if(dowIdx===6)d.classList.add('sat');
+    const isOff = other || dowIdx===0 || dowIdx===6 || HOL[day] || OFFDAY.has(day);
+    if(other)d.classList.add('other');
+    if(isOff)d.classList.add('off');
+    d.innerHTML='<span class="dn">'+day+'</span>';
+    if(!other&&!isOff){wd++;d.innerHTML+='<span class="wdn">'+wd+'</span>';}
+    if(!other&&HOL[day])d.innerHTML+='<span class="hol">'+HOL[day]+'</span>';
+    if(!other&&day===TODAY)d.classList.add('today');
+    if(!other&&day===SEL)d.classList.add('sel');
+    if(!other&&day===24){d.innerHTML+='<span class="chip">計画レビュー</span><span class="chip g">ライン切替</span><span class="more">＋1</span>';}
+    if(!other&&day===17){d.innerHTML+='<span class="chip o">工程会議</span>';}
+    if(!other&&day===30){d.innerHTML+='<span class="chip task">棚卸集計</span>';}
+    if(!other&&day===22){d.innerHTML+='<span class="chip">部品入荷</span>';}
+    g.appendChild(d);
+  }
+})();
+function toggleTheme(){
+  const r=document.documentElement;
+  const cur=r.getAttribute('data-theme');
+  const dark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  r.setAttribute('data-theme', cur? (cur==='dark'?'light':'dark') : (dark?'light':'dark'));
+}
+function toggleCalc(){
+  const p=document.getElementById('calcpanel'), b=document.getElementById('calcbtn');
+  const open=p.classList.toggle('open');
+  b.setAttribute('aria-expanded', open?'true':'false');
+}
+function switchTab(k){
+  ['ev','tk'].forEach(x=>{
+    document.getElementById('tab-'+x).setAttribute('aria-selected', x===k?'true':'false');
+    document.getElementById('pane-'+x).hidden = x!==k;
+  });
+}
+</script>
+</body>
+</html>
