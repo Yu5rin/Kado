@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using AppBarProbe.Interop;
 
 namespace AppBarProbe;
@@ -30,6 +31,11 @@ internal sealed class AppBarController : IDisposable
     private HwndSource? _source;
     private IntPtr _hwnd;
     private bool _disposed;
+
+    // 隣のウィンドウの最大化を見張るタイマー。最大化は AppBar に通知されないので自分で見る。
+    private readonly DispatcherTimer _neighborWatch = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private bool _neighborMaximized;
+    private RECT _lastDockRect;
 
     // ピン留め前のウィンドウ外観。解除時に戻す。
     private WindowStyle _styleBeforeDock;
@@ -65,7 +71,11 @@ internal sealed class AppBarController : IDisposable
     /// <summary>状態が変わったときに呼ばれる。UI へのログ出力用。</summary>
     public event Action<string>? StatusChanged;
 
-    public AppBarController(Window window) => _window = window;
+    public AppBarController(Window window)
+    {
+        _window = window;
+        _neighborWatch.Tick += OnNeighborWatchTick;
+    }
 
     // ------------------------------------------------------------------
     // 登録・解除
@@ -103,6 +113,15 @@ internal sealed class AppBarController : IDisposable
         _source?.AddHook(WndProc);
 
         Reposition();
+
+        // 隣のウィンドウが最大化されたら隙間埋めを止める必要がある。
+        // 最大化は AppBar の通知に乗らないため、自前で見張る。
+        if (EdgeOverlap > 0)
+        {
+            _neighborWatch.Start();
+            // ピン留めした時点で既に隣が最大化されていることもあるので、その場で一度見る
+            OnNeighborWatchTick(null, EventArgs.Empty);
+        }
         Report($"AppBar を登録しました（辺: {Edge}、幅: {DesiredWidth}px）。他のウィンドウを最大化して重ならないことを確認してください。");
     }
 
@@ -115,6 +134,8 @@ internal sealed class AppBarController : IDisposable
         NativeMethods.SHAppBarMessage(NativeMethods.ABM_REMOVE, ref data);
 
         IsRegistered = false;
+        _neighborWatch.Stop();
+        _neighborMaximized = false;
         _source?.RemoveHook(WndProc);
         WorkAreaRecovery.MarkUnregistered();
         RestoreChrome();
@@ -142,6 +163,7 @@ internal sealed class AppBarController : IDisposable
             };
             NativeMethods.SHAppBarMessage(NativeMethods.ABM_REMOVE, ref data);
             IsRegistered = false;
+            _neighborWatch.Stop();
             WorkAreaRecovery.MarkUnregistered();
         }
         catch
@@ -192,10 +214,17 @@ internal sealed class AppBarController : IDisposable
         NativeMethods.SHAppBarMessage(NativeMethods.ABM_SETPOS, ref data);
 
         var rc = data.rc;
-        var windowRect = ExpandForOverlap(rc);
+        _lastDockRect = rc;
+
+        var overlap = EffectiveOverlap();
+        var windowRect = ExpandForOverlap(rc, overlap);
         ApplyWindowBounds(windowRect);
 
-        var overlapNote = EdgeOverlap > 0 ? $"／隙間埋め {EdgeOverlap}px（ウィンドウは {windowRect}）" : string.Empty;
+        var overlapNote = EdgeOverlap > 0
+            ? overlap > 0
+                ? $"／隙間埋め {overlap}px（ウィンドウは {windowRect}）"
+                : "／隙間埋めは休止中（隣が最大化）"
+            : string.Empty;
         Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）／{LastPlacementNote}{overlapNote}");
     }
 
@@ -212,17 +241,41 @@ internal sealed class AppBarController : IDisposable
     /// 隣のウィンドウとの隙間を埋めるぶんだけ、ウィンドウの矩形を内側へ広げる。
     /// ワークエリアの境界は動かさないので、他のウィンドウの最大化範囲は変わらない。
     /// </summary>
-    private RECT ExpandForOverlap(RECT rc)
+    private static RECT ExpandForOverlap(RECT rc, int overlap, AppBarEdge edge) => overlap <= 0 ? rc : edge switch
     {
-        if (EdgeOverlap <= 0) return rc;
+        AppBarEdge.Left => rc with { Right = rc.Right + overlap },
+        AppBarEdge.Right => rc with { Left = rc.Left - overlap },
+        AppBarEdge.Top => rc with { Bottom = rc.Bottom + overlap },
+        _ => rc with { Top = rc.Top - overlap },
+    };
 
-        return Edge switch
-        {
-            AppBarEdge.Left => rc with { Right = rc.Right + EdgeOverlap },
-            AppBarEdge.Right => rc with { Left = rc.Left - EdgeOverlap },
-            AppBarEdge.Top => rc with { Bottom = rc.Bottom + EdgeOverlap },
-            _ => rc with { Top = rc.Top - EdgeOverlap },
-        };
+    private RECT ExpandForOverlap(RECT rc, int overlap) => ExpandForOverlap(rc, overlap, Edge);
+
+    /// <summary>
+    /// 実際に適用する隙間埋めの量。
+    /// <para>
+    /// 隣が最大化されているときは 0 にする。最大化ウィンドウは可視境界がワークエリアに
+    /// ぴったり揃っており隙間が無いため、埋めようとすると<b>重なってしまう</b>。
+    /// 「他のウィンドウを最大化しても重ならないこと」は最優先の要件なので、
+    /// 見栄えより重ならないことを優先する。
+    /// </para>
+    /// </summary>
+    private int EffectiveOverlap() => EdgeOverlap <= 0 || _neighborMaximized ? 0 : EdgeOverlap;
+
+    /// <summary>隣のウィンドウの最大化状態を見張り、変わったら配置し直す。</summary>
+    private void OnNeighborWatchTick(object? sender, EventArgs e)
+    {
+        if (!IsRegistered) return;
+
+        var maximized = NativeMethods.IsNeighborMaximized(_hwnd, _lastDockRect, Edge);
+        if (maximized == _neighborMaximized) return;
+
+        _neighborMaximized = maximized;
+        Report(maximized
+            ? "隣のウィンドウが最大化されました。重なりを避けるため隙間埋めを休止します。"
+            : "隣のウィンドウの最大化が解除されました。隙間埋めを再開します。");
+
+        Reposition();
     }
 
     /// <summary>
@@ -373,6 +426,8 @@ internal sealed class AppBarController : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _neighborWatch.Stop();
+        _neighborWatch.Tick -= OnNeighborWatchTick;
         Unregister();
     }
 }
