@@ -110,6 +110,24 @@ public sealed class CalendarWorkspace
     /// <summary>既定のカレンダー名。何も無いときに作る。</summary>
     public const string DefaultCalendarName = "マイカレンダー";
 
+    /// <summary>
+    /// 実働日データから起こしたマイルストーンを入れるカレンダーの名前。
+    /// <para>
+    /// 旧 inaCalendar と同じ名前にしてある。向こうは Google 側にこの名前のカレンダーを
+    /// 作って書き込んでいた。同じ名前にしておけば、繋いだときに同じところへ集まる。
+    /// </para>
+    /// </summary>
+    public const string WorkingDayCalendarName = "inaCalendar";
+
+    /// <summary>
+    /// マイルストーン由来の予定に付ける印。
+    /// <para>
+    /// <b>月ビューでは日付の行に別途出している</b>ので、予定の並びからは外す。
+    /// 付けておかないと同じ日に二度出る。
+    /// </para>
+    /// </summary>
+    public const string WorkingDaySource = "workingday";
+
     /// <summary>既定のタスクリスト名。</summary>
     public const string DefaultTaskListName = "マイタスク";
 
@@ -295,8 +313,68 @@ public sealed class CalendarWorkspace
         var result = new WorkdayFileImporter().Import(xlsx);
         WorkingDayStore.Apply(result);
 
+        // 旧 inaCalendar と同じく、マイルストーンをカレンダーの予定としても持つ。
+        // Google に繋いでいれば、そちらへ送られて他の端末からも見える
+        WriteMilestonesToCalendar(result);
+
         ReloadWorkingDays();
         return result;
+    }
+
+    /// <summary>
+    /// マイルストーンを「inaCalendar」の予定として書き出す。
+    /// <para>
+    /// 取り込んだ期間ぶんを<b>入れ替える</b>。古いファイルを読み直したときに、前の版の
+    /// マイルストーンが残らないようにする。期間の外は触らない（実働日データと同じ考え方）。
+    /// </para>
+    /// </summary>
+    private void WriteMilestonesToCalendar(ImportResult result)
+    {
+        if (result.Milestones.Count == 0) return;
+
+        var calendar = EnsureWorkingDayCalendar();
+
+        // 入れ替える範囲。マイルストーンが載っている期間だけ
+        var from = result.MilestoneRangeStart ?? result.Milestones.Min(m => m.Date);
+        var to = result.MilestoneRangeEnd ?? result.Milestones.Max(m => m.Date);
+
+        foreach (var stale in Events.InRange(from, to)
+                     .Where(e => string.Equals(e.Source, WorkingDaySource, StringComparison.Ordinal)))
+        {
+            Events.Delete(stale.Id);
+        }
+
+        var now = DateTimeOffset.Now;
+
+        Events.UpsertMany(result.Milestones.Select(m => new CalendarEvent
+        {
+            // 同じ日の同じ名前なら同じ予定。読み直しても増えない
+            Id = $"workingday:{m.Date:yyyyMMdd}:{m.Name}",
+            Title = m.Name,
+            Date = m.Date,
+            CalendarId = calendar.Id,
+            Source = WorkingDaySource,
+            Note = m.SourceVersion is { Length: > 0 } version ? $"実働日データ {version}" : null,
+            UpdatedAt = now,
+        }));
+
+        NotifyChanged();
+    }
+
+    /// <summary>
+    /// 「inaCalendar」を用意する。
+    /// <para>
+    /// 名前で探す。Google から取り込んだものがあればそれを使い、無ければこのアプリの
+    /// 中に作る。繋いだあとに同じ名前のものが降りてきたら、そちらへ寄せ直す。
+    /// </para>
+    /// </summary>
+    public CalendarSource EnsureWorkingDayCalendar()
+    {
+        var existing = Sources.Calendars()
+            .FirstOrDefault(c => string.Equals(
+                c.DisplayName, WorkingDayCalendarName, StringComparison.Ordinal));
+
+        return existing ?? CreateCalendar(WorkingDayCalendarName);
     }
 
     /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
