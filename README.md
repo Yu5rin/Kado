@@ -1,5 +1,7 @@
 # SlideinaCalendar
 
+[![CI](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml/badge.svg)](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml)
+
 Windows デスクトップ向けの予定・タスク管理アプリ。画面端に常駐させて一日中使うツールで、
 Google カレンダー／Google タスクと同期しつつ、**会社の実働日（稼働日）を軸に日数を数えられる**
 ことが他製品との差になる。
@@ -42,6 +44,15 @@ WPF プロジェクト（`SlideinaCalendar.App` / `AppBarProbe`）は `net8.0-wi
 **実行は Windows が必要。**
 
 AppBar の検証手順は `samples/AppBarProbe/README.md` を参照。
+
+### CI
+
+`main` への push と `main` 宛のプルリクエストで、`.github/workflows/ci.yml` が
+ビルドと単体テストを回す（Release 構成、ubuntu-latest）。テスト結果は `trx` 形式で
+アーティファクトに残るので、失敗時は Actions の実行ページから中身を確認できる。
+
+Linux で確認するのはコンパイルが通ることとテストが通ることまで。WPF の実行は Windows が
+必要なので、AppBar まわりの動作確認は引き続き実機で行う。
 
 ## Phase 1 の実装範囲
 
