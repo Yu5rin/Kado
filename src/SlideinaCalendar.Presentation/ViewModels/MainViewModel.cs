@@ -1,4 +1,6 @@
 using System.Globalization;
+using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -28,6 +30,7 @@ public enum CalendarView
 public sealed class MainViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
+    private readonly IEditorPresenter _editors;
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
@@ -35,9 +38,11 @@ public sealed class MainViewModel : ObservableObject
     private string? _statusMessage;
     private string _searchText = string.Empty;
 
-    public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday)
+    public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
+        IEditorPresenter? editors = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _editors = editors ?? NullEditorPresenter.Instance;
         _today = today;
 
         SourceLists = new SourceListsViewModel(workspace);
@@ -57,10 +62,20 @@ public sealed class MainViewModel : ObservableObject
         MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
         MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
 
-        // 追加の画面はこのあとのフェーズで作る。押しても無反応だと壊れて見えるので、
-        // いまは何が起きていないかを状態表示で伝える
-        AddEventCommand = new RelayCommand(() => StatusMessage = "予定の追加画面はこのあとのフェーズで実装します");
-        AddTaskCommand = new RelayCommand(() => StatusMessage = "タスクの追加画面はこのあとのフェーズで実装します");
+        AddEventCommand = new RelayCommand(AddEvent);
+        AddEventOnCommand = new RelayCommand<DateOnly?>(date =>
+        {
+            // その日をダブルクリックして足すので、選択も移す
+            if (date is { } d) SelectedDate = d;
+            AddEvent();
+        });
+        AddTaskCommand = new RelayCommand(AddTask);
+        EditEventCommand = new RelayCommand<DayEventViewModel?>(EditEvent);
+        DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
+        EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
+        DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
+        ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
+
         OpenWorkingDayCalculatorCommand =
             new RelayCommand(() => StatusMessage = "実働日計算の画面はこのあとのフェーズで実装します");
 
@@ -262,7 +277,15 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand MiniPreviousCommand { get; }
     public RelayCommand MiniNextCommand { get; }
     public RelayCommand AddEventCommand { get; }
+
+    /// <summary>日を指定して予定を足す。月ビューのマスをダブルクリックしたとき。</summary>
+    public RelayCommand<DateOnly?> AddEventOnCommand { get; }
     public RelayCommand AddTaskCommand { get; }
+    public RelayCommand<DayEventViewModel?> EditEventCommand { get; }
+    public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
     private void GoToPrevious()
@@ -288,6 +311,91 @@ public sealed class MainViewModel : ObservableObject
         RaiseHeader();
         Raise(nameof(SelectedDate));
     }
+
+    // ------------------------------------------------------------------
+    // 予定とタスクの編集。どれも CalendarWorkspace を通すので Undo が効く
+    // ------------------------------------------------------------------
+
+    /// <summary>選択している日に予定を足す。</summary>
+    private void AddEvent()
+    {
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames);
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        _workspace.AddEvent(editor.ToModel());
+        StatusMessage = "予定を追加しました";
+    }
+
+    private void EditEvent(DayEventViewModel? target)
+    {
+        if (target is null) return;
+
+        // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
+        if (_workspace.Events.Find(target.Id) is not { } stored) return;
+
+        var editor = new EventEditorViewModel(stored, CalendarNames);
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateEvent(editor.ToModel())
+            ? "予定を変更しました"
+            : "予定が見つかりませんでした";
+    }
+
+    private void DeleteEvent(DayEventViewModel? target)
+    {
+        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+
+        StatusMessage = _workspace.DeleteEvent(target.Id)
+            ? "予定を削除しました"
+            : "予定が見つかりませんでした";
+    }
+
+    /// <summary>選択している日を期限にしてタスクを足す。</summary>
+    private void AddTask()
+    {
+        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        _workspace.AddTask(editor.ToModel());
+        StatusMessage = "タスクを追加しました";
+    }
+
+    private void EditTask(TaskListItemViewModel? target)
+    {
+        if (target is null) return;
+        if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
+
+        var editor = new TaskEditorViewModel(stored, TaskListNames, SelectedDate);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateTask(editor.ToModel())
+            ? "タスクを変更しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    private void DeleteTask(TaskListItemViewModel? target)
+    {
+        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+
+        StatusMessage = _workspace.DeleteTask(target.Id)
+            ? "タスクを削除しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    /// <summary>チェックの入り切り。画面を開かずに切り替えられる。</summary>
+    private void ToggleTaskDone(TaskListItemViewModel? target)
+    {
+        if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
+
+        StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
+    }
+
+    /// <summary>編集画面に出すカレンダーの候補。</summary>
+    private IReadOnlyList<string> CalendarNames =>
+        SourceLists.Calendars.Select(c => c.Id).ToArray();
+
+    private IReadOnlyList<string> TaskListNames =>
+        SourceLists.TaskLists.Select(t => t.Id).ToArray();
 
     private void Undo()
     {

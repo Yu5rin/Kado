@@ -97,7 +97,14 @@
                 <DataTemplate>
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
-                            ClipToBounds="True" Cursor="Hand">
+                            ClipToBounds="True" Cursor="Hand"
+                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加"
+                            MouseLeftButtonDown="OnCellClicked">
+                        <!--
+                            月ビューは日を選ぶための面でもある。押しても右ペインが動かないと、
+                            ミニ月暦からしか日を選べない。InputBinding からは
+                            RelativeSource の祖先をたどれないので、コードビハインドで受ける
+                        -->
                         <StackPanel>
                             <!-- 日付とマイルストーン。日付は左に固定 -->
                             <Grid>

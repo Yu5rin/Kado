@@ -341,7 +341,9 @@
                             <ItemsControl ItemsSource="{Binding Events}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand">
+                                        <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
+                                                ToolTip="ダブルクリックで編集"
+                                                MouseLeftButtonDown="OnEventRowClicked">
                                             <DockPanel>
                                                 <TextBlock DockPanel.Dock="Left" Width="38" Margin="0,2,9,0"
                                                            Text="{Binding TimeText}" FontSize="11"
@@ -351,6 +353,17 @@
                                                 <Border DockPanel.Dock="Left" Width="3" MinHeight="20" Margin="0,0,9,0"
                                                         CornerRadius="2"
                                                         Background="{Binding Accent, Converter={StaticResource EventAccentBrush}}" />
+
+                                                <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
+                                                        Style="{StaticResource RowDeleteButtonStyle}"
+                                                        Command="{Binding DataContext.DeleteEventCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="13" Height="13"
+                                                          StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                                </Button>
+
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Title}" FontSize="13" LineHeight="18"
                                                                TextWrapping="Wrap"
@@ -366,6 +379,8 @@
                                             <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Row" Property="Background"
                                                         Value="{DynamicResource SunkenBrush}" />
+                                                <!-- 並んでいる間は出さない。行ごとにボタンが並ぶと読みにくい -->
+                                                <Setter TargetName="Delete" Property="Opacity" Value="1" />
                                             </Trigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -385,11 +400,27 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
-                                                ToolTip="{Binding DueTooltip}">
+                                                ToolTip="{Binding DueTooltip}"
+                                                MouseLeftButtonDown="OnTaskRowClicked">
                                             <DockPanel>
+                                                <!-- 完了の切り替えは画面を開かずにここで済ませる -->
                                                 <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
                                                           Style="{StaticResource TaskCheckBoxStyle}"
-                                                          IsChecked="{Binding IsDone, Mode=OneWay}" />
+                                                          IsChecked="{Binding IsDone, Mode=OneWay}"
+                                                          Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          CommandParameter="{Binding}" />
+
+                                                <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
+                                                        Style="{StaticResource RowDeleteButtonStyle}"
+                                                        Command="{Binding DataContext.DeleteTaskCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="13" Height="13"
+                                                          StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                                </Button>
+
                                                 <StackPanel>
                                                     <TextBlock x:Name="TaskTitle" Text="{Binding Title}"
                                                                FontSize="13" LineHeight="18" TextWrapping="Wrap"
@@ -411,6 +442,7 @@
                                             <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Row" Property="Background"
                                                         Value="{DynamicResource SunkenBrush}" />
+                                                <Setter TargetName="Delete" Property="Opacity" Value="1" />
                                             </Trigger>
                                             <!-- 済みは取り消し線で沈める -->
                                             <DataTrigger Binding="{Binding IsDone}" Value="True">
