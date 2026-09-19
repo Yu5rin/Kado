@@ -94,6 +94,19 @@ public sealed class CalendarWorkspace
     // 分けて入れたい、というのは連携の有無に関わらず要る
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// このアプリの中だけで作ったものに付ける印。
+    /// <para>
+    /// Google 側の ID と衝突させないためと、<b>同期の対象から外す</b>ため。
+    /// Google に無いものを送ろうとしても行き先が無い。
+    /// </para>
+    /// </summary>
+    public const string LocalIdPrefix = "local:";
+
+    /// <summary>この ID は、このアプリの中だけのものか。</summary>
+    public static bool IsLocalId(string? id) =>
+        id is not null && id.StartsWith(LocalIdPrefix, StringComparison.Ordinal);
+
     /// <summary>既定のカレンダー名。何も無いときに作る。</summary>
     public const string DefaultCalendarName = "マイカレンダー";
 
@@ -109,7 +122,7 @@ public sealed class CalendarWorkspace
         var value = new CalendarSource
         {
             // Google 側の ID と衝突しないよう、こちらで作ったものは印を付ける
-            Id = $"local:{Guid.NewGuid():N}"[..21],
+            Id = $"{LocalIdPrefix}{Guid.NewGuid():N}"[..21],
             Summary = name.Trim(),
             BackgroundColor = color ?? CalendarPalette.NextColor(
                 Sources.Calendars().Select(c => c.BackgroundColor)),
@@ -130,7 +143,7 @@ public sealed class CalendarWorkspace
 
         var value = new TaskListSource
         {
-            Id = $"local:{Guid.NewGuid():N}"[..21],
+            Id = $"{LocalIdPrefix}{Guid.NewGuid():N}"[..21],
             Title = title.Trim(),
             SortOrder = Sources.NextTaskListOrder(),
             UpdatedAt = DateTimeOffset.Now,
