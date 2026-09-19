@@ -128,12 +128,10 @@
                                Foreground="{DynamicResource SundayBrush}"
                                Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
-                    <!-- 週ビューの日付ヘッダは実働日の通し番号を出す場所（要件書 4.3） -->
-                    <TextBlock Text="{Binding WorkingDayLabel}" FontSize="9.5"
-                               HorizontalAlignment="Center" Opacity="0.75"
-                               Foreground="{DynamicResource AccentBrush}"
-                               Typography.NumeralAlignment="Tabular"
-                               Visibility="{Binding WorkingDayLabel, Converter={StaticResource NullToVisibility}}" />
+                    <!--
+                        実働日の通し番号はここには出さない。7日ぶん並ぶと数字が多すぎて、
+                        日付そのものが読みにくくなる。日ビューと上部のバーには出る
+                    -->
 
                     <ItemsControl ItemsSource="{Binding Milestones}" Margin="0,2,0,0"
                                   HorizontalAlignment="Center">
