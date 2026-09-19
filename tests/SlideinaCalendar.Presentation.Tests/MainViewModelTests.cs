@@ -280,4 +280,74 @@ public class MainViewModelTests
 
         Assert.Equal(D(2026, 9, 14), vm.MiniCalendar.SelectedDate);
     }
+
+    [Fact]
+    public void ビューを切り替えると見ている日がそろう()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+        vm.SelectedDate = D(2026, 9, 14);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        Assert.True(vm.IsWeekView);
+        Assert.Equal(D(2026, 9, 13), vm.Week.WeekStart);   // 9/14 を含む週
+
+        vm.SwitchViewCommand.Execute(CalendarView.Day);
+        Assert.True(vm.IsDayView);
+        Assert.Equal(D(2026, 9, 14), vm.Day.Date);
+    }
+
+    [Fact]
+    public void 前後の移動はビューごとに幅が変わる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 月ビューでは月単位
+        vm.NextCommand.Execute(null);
+        Assert.Equal("2026年10月", vm.Title);
+        vm.PreviousCommand.Execute(null);
+
+        // 週ビューでは週単位
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        vm.NextCommand.Execute(null);
+        Assert.Equal(D(2026, 9, 27), vm.Week.WeekStart);
+
+        // 日ビューでは日単位
+        vm.SwitchViewCommand.Execute(CalendarView.Day);
+        vm.NextCommand.Execute(null);
+        Assert.Equal(D(2026, 9, 25), vm.Day.Date);
+    }
+
+    [Fact]
+    public void 週を送って月をまたぐと見出しも追いつく()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        vm.NextCommand.Execute(null);   // 9/27〜10/3
+        vm.NextCommand.Execute(null);   // 10/4〜10/10
+
+        // 見出しだけ前の月に残ると、どこを見ているのか分からない
+        Assert.Equal("2026年10月", vm.Title);
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
+    }
+
+    [Fact]
+    public void 今日へ戻るとどのビューも今日に合う()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Day);
+        vm.NextCommand.Execute(null);
+        vm.NextCommand.Execute(null);
+
+        vm.TodayCommand.Execute(null);
+
+        Assert.Equal(D(2026, 9, 24), vm.Day.Date);
+        Assert.Equal(D(2026, 9, 20), vm.Week.WeekStart);
+        Assert.Equal("2026年9月", vm.Title);
+    }
 }
