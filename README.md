@@ -22,12 +22,13 @@ Google カレンダー／Google タスクと同期しつつ、**会社の実働�
 SlideinaCalendar.sln
 ├ src/
 │  ├ SlideinaCalendar.Core/      … 繰り返し・実働日・日付計算。UI 非依存
-│  ├ SlideinaCalendar.Data/      … SQLite（Phase 2）
+│  ├ SlideinaCalendar.Data/      … SQLite・旧データ移行
 │  ├ SlideinaCalendar.Google/    … Calendar / Tasks 同期（Phase 4）
 │  ├ SlideinaCalendar.Shell/     … AppBar・トレイ・通知（Phase 5）
 │  └ SlideinaCalendar.App/       … WPF 本体（Phase 3）
 ├ tests/
-│  └ SlideinaCalendar.Core.Tests/    … xUnit
+│  ├ SlideinaCalendar.Core.Tests/    … xUnit
+│  └ SlideinaCalendar.Data.Tests/    … xUnit
 └ samples/
    └ AppBarProbe/                … AppBar 成立性の検証用プロトタイプ
 ```
@@ -146,12 +147,58 @@ D 列に現れた文字列をそのまま種類として登録するので、将
 - **ヘッダ行は警告にしない**。実ファイルの B5 には見出し「配布元稼働日」が入っている。
   データが始まる前の非日付セルは黙って読み飛ばし、データ開始後のものだけ警告する
 
+## Phase 2 の実装範囲
+
+`SlideinaCalendar.Data`。SQLite（Microsoft.Data.Sqlite + Dapper）でデータを保持し、
+旧 Edge 拡張 inaCalendar のバックアップ JSON を取り込む。
+
+### スキーマ
+
+版の記録には `PRAGMA user_version` を使い、各版をひとつのトランザクションで適用する。
+一度リリースした版の SQL は書き換えない（既存のデータベースには適用済みで反映されないため）。
+
+| テーブル | 内容 |
+|---|---|
+| `events` | 予定 |
+| `tasks` / `work_blocks` | タスクと作業時間ブロック |
+| `working_days` / `data_ranges` / `milestones` | 実働日データ |
+| `settings` / `sync_state` | 設定と同期状態 |
+| `tombstones` | 削除の伝播用 |
+
+**予定とタスクは別テーブル**（要件書 3.1）。Google Calendar と Google Tasks が別 API である以上、
+混ぜると同期のたびに変換が入り不整合の温床になる。
+
+日付は `yyyy-MM-dd`、時刻は `HH:mm` の固定書式で持つ。辞書順と時系列が一致するので
+`ORDER BY` や範囲検索がそのまま使える。書式はカルチャに依存させない。
+
+検索用の FTS5 は Phase 6（検索）で追加する。マイグレーション機構があるので後から足せる。
+
+### 旧データの移行
+
+`LegacyBackupImporter` が読み、`LegacyBackupMigrator` が書き込む。読み込みと保存を
+分けてあるのは、取り込み内容を先に確認してから書き込めるようにするため。移行はやり直しが効かない。
+
+**予定に付いていた ToDo フラグはタスクへ変換する**（要件書 8 章）。データモデルを分離した
+ことによる唯一の変換処理なので、1 件ずつ変換ログに残す。
+
+読めない行があっても止めない。1 件のために移行全体が失敗すると、どこまで移せたのか
+分からなくなる。落とした行はログに残して先へ進む。
+
+### バックアップ
+
+SQLite のオンラインバックアップ API を使う。**`VACUUM INTO` は使わない。**
+メモリ上のデータベースに対して実行すると、例外も返り値のエラーも出さずに何も書き出さない。
+黙って失敗されると、バックアップを取ったつもりで中身が無いという最悪の事態になる。
+
+復元は接続を閉じてから行う。接続はプールに残ってファイルを掴み続け、WAL の内容が
+本体に反映されるのもプールから外れたときなので、差し替える前に解放する。
+
 ## 開発フェーズ
 
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 1 | Core（繰り返し判定・実働日計算・期限カウント）＋単体テスト | **今回** |
-| 2 | SQLite データ層＋旧 JSON インポート | |
+| 1 | Core（繰り返し判定・実働日計算・期限カウント）＋単体テスト | 完了 |
+| 2 | SQLite データ層＋旧 JSON インポート | **今回** |
 | 3 | WPF ウィンドウモード＋予定・タスク CRUD＋Undo | |
 | 4 | Google 同期（Calendar → Tasks の順） | |
 | 5 | Shell 統合（トレイ→サイドバー→ホバー→ピン／AppBar） | プロトタイプのみ先行 |
