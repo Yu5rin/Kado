@@ -37,12 +37,31 @@ public sealed class SingleInstance : IDisposable
     /// 最初の1本として起動できたか試す。
     /// <para>取れなければ、すでに動いている。</para>
     /// </summary>
+    /// <param name="wait">
+    /// どれだけ待つか。
+    /// <para>
+    /// ふつうは待たない。<b>更新で入れ替えた直後だけ待つ。</b>前のプロセスがまだ
+    /// 終わりきっておらず、待たずに判定すると「すでに起動しています」で即座に終わり、
+    /// 更新したのに立ち上がらないように見える。
+    /// </para>
+    /// </param>
     /// <returns>取れたら実体。取れなければ null。</returns>
-    public static SingleInstance? TryAcquire()
+    public static SingleInstance? TryAcquire(TimeSpan wait = default)
     {
-        var mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
+        var mutex = new Mutex(initiallyOwned: false, MutexName, out _);
 
-        if (isFirst) return new SingleInstance(mutex);
+        try
+        {
+            if (mutex.WaitOne(wait <= TimeSpan.Zero ? TimeSpan.Zero : wait))
+            {
+                return new SingleInstance(mutex);
+            }
+        }
+        catch (AbandonedMutexException)
+        {
+            // 前のプロセスが返さずに落ちた。こちらが引き継ぐ
+            return new SingleInstance(mutex);
+        }
 
         mutex.Dispose();
         return null;
