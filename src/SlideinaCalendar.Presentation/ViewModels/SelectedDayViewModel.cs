@@ -72,7 +72,7 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
 /// 場所と長さはその場で判断したい情報なので、開かずに読めるようにする。
 /// </para>
 /// </summary>
-public sealed class DayEventViewModel(ScheduledEvent scheduled)
+public sealed class DayEventViewModel(ScheduledEvent scheduled, string? color = null)
 {
     /// <summary>元の予定。</summary>
     public ScheduledEvent Scheduled { get; } = scheduled;
@@ -85,8 +85,8 @@ public sealed class DayEventViewModel(ScheduledEvent scheduled)
         ? start.ToString("HH:mm", CultureInfo.InvariantCulture)
         : "終日";
 
-    /// <summary>帯の色。</summary>
-    public EventAccent Accent => EventChipViewModel.ResolveAccent(Scheduled.Source.Color);
+    /// <summary>帯の色（<c>#rrggbb</c>）。所属カレンダーで決まる。null なら既定のアクセント色。</summary>
+    public string? Color { get; } = color;
 
     /// <summary>「第2会議室 ・ 1時間30分」。どちらも無ければ null。</summary>
     public string? SubText
@@ -131,7 +131,7 @@ public sealed class DayEventViewModel(ScheduledEvent scheduled)
 public sealed class SelectedDayViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
-    private readonly ISourceFilter _filter;
+    private readonly ICalendarSources _sources;
 
     private DateOnly _date;
     private DateOnly _today;
@@ -139,10 +139,10 @@ public sealed class SelectedDayViewModel : ObservableObject
     private IReadOnlyList<TaskListItemViewModel> _tasks = [];
 
     public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
-        ISourceFilter? filter = null)
+        ICalendarSources? sources = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-        _filter = filter ?? ShowAllFilter.Instance;
+        _sources = sources ?? DefaultCalendarSources.Instance;
         _date = date;
         _today = today;
 
@@ -243,12 +243,12 @@ public sealed class SelectedDayViewModel : ObservableObject
     public void Refresh()
     {
         Events = _workspace.Schedule.EventsInRange(_date, _date)
-            .Where(e => _filter.IncludesEvent(e.Source))
-            .Select(e => new DayEventViewModel(e))
+            .Where(e => _sources.IncludesEvent(e.Source))
+            .Select(e => new DayEventViewModel(e, _sources.ColorOf(e.Source.CalendarId)))
             .ToArray();
 
         Tasks = _workspace.Tasks.All()
-            .Where(_filter.IncludesTask)
+            .Where(_sources.IncludesTask)
             .Where(t => t.HasDue)
             // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
             .Where(t => !t.IsDone || t.Due == _date)

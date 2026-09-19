@@ -105,4 +105,37 @@ public class SourceListsViewModelTests
         Assert.Equal(2, after.AllEvents.Count);
         Assert.Equal(2, main.SelectedDay.Events.Count);
     }
+
+    [Fact]
+    public void カレンダーの色を引ける()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // 予定の色は所属カレンダーで決まる。1件ずつは選ばせない
+        Assert.Equal(vm.Calendars.Single(c => c.Name == "仕事").SwatchColor, vm.ColorOf("仕事"));
+
+        // 所属が無い・知らないカレンダーは既定の色に任せる
+        Assert.Null(vm.ColorOf(null));
+        Assert.Null(vm.ColorOf("知らない"));
+    }
+
+    [Fact]
+    public void 予定の帯はカレンダーの色になる()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var expected = main.SourceLists.ColorOf("仕事");
+
+        Assert.Equal(expected, main.SelectedDay.Events.Single(e => e.Id == "e1").Color);
+        Assert.Equal(expected,
+            main.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).Events.Single(e => e.Id == "e1").Color);
+
+        // 所属なしの予定は既定の色に任せる
+        Assert.Null(main.SelectedDay.Events.Single(e => e.Id == "e3").Color);
+    }
 }

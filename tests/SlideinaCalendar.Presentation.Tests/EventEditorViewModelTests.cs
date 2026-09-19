@@ -131,19 +131,35 @@ public class EventEditorViewModelTests
     }
 
     [Fact]
-    public void 色は読み書きで往復する()
+    public void 色は選ばせない()
     {
-        foreach (var accent in Enum.GetValues<EventAccent>())
+        // 色は所属カレンダーで決まる（要件どおりの運用）。1件ずつは選ばせない
+        Assert.Null(typeof(EventEditorViewModel).GetProperty("Accent"));
+    }
+
+    [Fact]
+    public void 取り込んだ予定が持つ色は消さない()
+    {
+        var source = new CalendarEvent
         {
-            var vm = New();
-            vm.Title = "会議";
-            vm.Accent = accent;
+            Id = "e1", Title = "会議", Date = D(2026, 9, 24), Color = "#d1fae5",
+        };
 
-            var stored = vm.ToModel();
-            var reopened = new EventEditorViewModel(stored, ["仕事"]);
+        var vm = new EventEditorViewModel(source, []) { Title = "会議（変更）" };
 
-            Assert.Equal(accent, reopened.Accent);
-        }
+        // 画面に色の欄が無いからといって、持っている値を落とさない
+        Assert.Equal("#d1fae5", vm.ToModel().Color);
+    }
+
+    [Fact]
+    public void URLを持てる()
+    {
+        var vm = New();
+        vm.Title = "図面レビュー";
+        vm.Url = " https://example.com/drawing ";
+
+        // 説明欄に書くと本文と混ざって拾いにくい
+        Assert.Equal("https://example.com/drawing", vm.ToModel().Url);
     }
 
     [Fact]

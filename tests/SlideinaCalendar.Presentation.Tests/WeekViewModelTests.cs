@@ -245,7 +245,7 @@ public class WeekViewModelTests
         var lists = new SourceListsViewModel(test.Workspace);
         lists.Calendars.Single(c => c.Name == "私用").IsVisible = false;
 
-        var vm = new WeekViewModel(test.Workspace, D(2026, 9, 24), D(2026, 9, 24), filter: lists);
+        var vm = new WeekViewModel(test.Workspace, D(2026, 9, 24), D(2026, 9, 24), sources: lists);
 
         Assert.Empty(vm.Days.Single(d => d.Date == D(2026, 9, 24)).Blocks);
     }

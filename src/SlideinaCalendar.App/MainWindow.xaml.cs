@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App;
@@ -13,7 +14,24 @@ namespace SlideinaCalendar.App;
 /// </summary>
 public partial class MainWindow : Window
 {
-    public MainWindow() => InitializeComponent();
+    /// <summary>現在時刻の線を動かす時計。1分ごとで足りる。</summary>
+    private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMinutes(1) };
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        _clock.Tick += (_, _) => ViewModel?.UpdateNow(DateTime.Now);
+
+        // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
+        Loaded += (_, _) =>
+        {
+            ViewModel?.UpdateNow(DateTime.Now);
+            _clock.Start();
+        };
+
+        Closed += (_, _) => _clock.Stop();
+    }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
