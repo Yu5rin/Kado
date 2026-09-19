@@ -86,6 +86,21 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>繋げる支度ができているか。</summary>
     public bool CanConnect => _google is { CanConnect: true };
 
+    /// <summary>
+    /// 押せるかどうかを見直す。
+    /// <para>
+    /// 繋げるかどうかは<b>こちらの外側で変わる</b>。クライアント設定を読み込んだ時点で
+    /// 繋げるようになるが、これらのコマンドは WPF の <c>CommandManager</c> に乗って
+    /// いないので、黙っていると無効のままになる。設定を入れたのに「Google に接続…」が
+    /// 押せない、という状態を防ぐために呼ぶ。
+    /// </para>
+    /// </summary>
+    public void RefreshAvailability()
+    {
+        Raise(nameof(CanConnect));
+        RaiseCanExecute();
+    }
+
     /// <summary>最後に同期できた時刻。一度も成功していなければ null。</summary>
     public DateTimeOffset? LastSyncedAt
     {
