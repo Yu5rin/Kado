@@ -11,6 +11,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -32,13 +33,22 @@
             <TextBlock Text="px" VerticalAlignment="Center" Foreground="#8F96A4" Margin="4,0,0,0" />
         </StackPanel>
 
+        <!-- 隣のウィンドウの影で空く隙間を埋める量 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="隙間埋め" VerticalAlignment="Center" Foreground="#8F96A4" Margin="0,0,6,0" />
+            <TextBox x:Name="OverlapBox" Width="46" Text="0" TextAlignment="Right" />
+            <TextBlock Text="px" VerticalAlignment="Center" Foreground="#8F96A4" Margin="4,0,8,0" />
+            <TextBlock Text="隣のウィンドウの影ぶん広げる" VerticalAlignment="Center"
+                       Foreground="#8F96A4" FontSize="10.5" TextWrapping="Wrap" Width="150" />
+        </StackPanel>
+
         <!-- ピン留め -->
-        <ToggleButton Grid.Row="2" x:Name="PinButton" Height="36" Margin="0,0,0,10"
+        <ToggleButton Grid.Row="3" x:Name="PinButton" Height="36" Margin="0,0,0,10"
                       Content="ピン留めする（AppBar 登録）"
                       Checked="OnPinChecked" Unchecked="OnPinUnchecked" />
 
         <!-- ログ -->
-        <Border Grid.Row="3" BorderBrush="#E2E4EA" BorderThickness="1" CornerRadius="4" Background="White">
+        <Border Grid.Row="4" BorderBrush="#E2E4EA" BorderThickness="1" CornerRadius="4" Background="White">
             <TextBox x:Name="LogBox" IsReadOnly="True" BorderThickness="0"
                      VerticalScrollBarVisibility="Auto" TextWrapping="Wrap"
                      Padding="8" FontFamily="Consolas, Yu Gothic UI" FontSize="11"
@@ -46,7 +56,7 @@
         </Border>
 
         <!-- 安全装置の検証 -->
-        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+        <StackPanel Grid.Row="5" Margin="0,10,0,0">
             <TextBlock Text="安全装置の検証" Foreground="#8F96A4" Margin="0,0,0,4" />
             <Button x:Name="CrashButton" Height="30" Content="わざと例外を出す（自動解除を確認）"
                     Click="OnCrashClick" />

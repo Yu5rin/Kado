@@ -42,6 +42,20 @@ internal sealed class AppBarController : IDisposable
     /// <summary>希望するドック幅（物理ピクセル）。</summary>
     public int DesiredWidth { get; set; } = 352;
 
+    /// <summary>
+    /// 隣のウィンドウ側へはみ出させる量（物理ピクセル）。既定は 0。
+    /// <para>
+    /// 隣接するウィンドウはドロップシャドウ用の不可視マージンを持つため、境界どうしを
+    /// 突き合わせても数ピクセルの隙間が見える。Windows でウィンドウを並べたときの標準的な
+    /// 見た目だが、常駐させるアプリでは目につく。その分だけウィンドウを広げると埋められる。
+    /// </para>
+    /// <para>
+    /// 広げるのはウィンドウだけで、AppBar に申告する矩形（＝ワークエリアの境界）は変えない。
+    /// はみ出した部分は隣のウィンドウの影の下に潜り込む形になる。
+    /// </para>
+    /// </summary>
+    public int EdgeOverlap { get; set; }
+
     /// <summary>現在 AppBar として登録されているか。</summary>
     public bool IsRegistered { get; private set; }
 
@@ -178,9 +192,11 @@ internal sealed class AppBarController : IDisposable
         NativeMethods.SHAppBarMessage(NativeMethods.ABM_SETPOS, ref data);
 
         var rc = data.rc;
-        ApplyWindowBounds(rc);
+        var windowRect = ExpandForOverlap(rc);
+        ApplyWindowBounds(windowRect);
 
-        Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）／{LastPlacementNote}");
+        var overlapNote = EdgeOverlap > 0 ? $"／隙間埋め {EdgeOverlap}px（ウィンドウは {windowRect}）" : string.Empty;
+        Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）／{LastPlacementNote}{overlapNote}");
     }
 
     /// <summary>希望するドック矩形。モニタの端いっぱいに寄せる。</summary>
@@ -191,6 +207,23 @@ internal sealed class AppBarController : IDisposable
         AppBarEdge.Top => monitor with { Bottom = monitor.Top + DesiredWidth },
         _ => monitor with { Top = monitor.Bottom - DesiredWidth },
     };
+
+    /// <summary>
+    /// 隣のウィンドウとの隙間を埋めるぶんだけ、ウィンドウの矩形を内側へ広げる。
+    /// ワークエリアの境界は動かさないので、他のウィンドウの最大化範囲は変わらない。
+    /// </summary>
+    private RECT ExpandForOverlap(RECT rc)
+    {
+        if (EdgeOverlap <= 0) return rc;
+
+        return Edge switch
+        {
+            AppBarEdge.Left => rc with { Right = rc.Right + EdgeOverlap },
+            AppBarEdge.Right => rc with { Left = rc.Left - EdgeOverlap },
+            AppBarEdge.Top => rc with { Bottom = rc.Bottom + EdgeOverlap },
+            _ => rc with { Top = rc.Top - EdgeOverlap },
+        };
+    }
 
     /// <summary>
     /// 割り当てられた矩形に、ウィンドウの<b>見た目</b>をぴったり合わせる。
