@@ -100,6 +100,45 @@ public static class RecurrenceConverter
         return lines;
     }
 
+    /// <summary>
+    /// 繰り返しに除外日を足す。
+    /// <para>
+    /// Google で「この回だけ」を差し替えると、その回は親と例外回の両方に現れる。
+    /// 親からその日を除かないと、同じ日に二重に出る。
+    /// </para>
+    /// <para>すでに除いてあれば何もしない。繰り返しでなければ触らない。</para>
+    /// </summary>
+    /// <returns>足したあとの指定。変わらなければ元のまま。</returns>
+    public static string? WithExceptionDate(string? spec, DateOnly date)
+    {
+        if (string.IsNullOrWhiteSpace(spec)) return spec;
+
+        var stamp = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+
+        var ruleParts = new List<string>();
+        var exceptDates = new List<string>();
+
+        foreach (var part in spec.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.StartsWith("EXDATE=", StringComparison.OrdinalIgnoreCase))
+            {
+                exceptDates.AddRange(part["EXDATE=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+            else
+            {
+                ruleParts.Add(part);
+            }
+        }
+
+        if (exceptDates.Contains(stamp, StringComparer.OrdinalIgnoreCase)) return spec;
+
+        exceptDates.Add(stamp);
+        exceptDates.Sort(StringComparer.Ordinal);
+
+        return $"{string.Join(';', ruleParts)};EXDATE={string.Join(',', exceptDates)}";
+    }
+
     /// <summary>区切りの後ろ。無ければ null。</summary>
     private static string? After(string line, char separator)
     {
