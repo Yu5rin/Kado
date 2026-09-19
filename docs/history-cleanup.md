@@ -21,8 +21,12 @@
 社内情報なし）。
 
 ```
-tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx
+tests/SlideinaCalendar.Core.Tests/TestData/（会社配布 Excel）.xlsx
 ```
+
+**この手順書に実際のファイル名を書かない。** 書けば、消したはずの名前が
+手順書のほうに残ってしまう。下では `$Path` に入れて扱い、実際の名前は
+実行するときに与える。
 
 ## 作業
 
@@ -36,6 +40,9 @@ Windows なら PowerShell、Mac／Linux なら端末で。**5分ほど。**
 # 1. 道具を入れる（入っていれば飛ばされる）
 pip install git-filter-repo
 
+# 消したいファイルの、リポジトリ内での位置。ここだけ書き換えて使う
+$Path = "tests/SlideinaCalendar.Core.Tests/TestData/（実際のファイル名）.xlsx"
+
 # 2. 前に試したものが残っていれば片付ける
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
@@ -46,10 +53,10 @@ git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
 cd cleanup
 
 # 4. 履歴から消す
-git filter-repo --invert-paths --path "tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx"
+git filter-repo --invert-paths --path "$Path"
 
 # 5. 消えたか確かめる（何も出なければ成功）
-git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx"
+git log --all --oneline -- "$Path"
 
 # 6. 差し替えた合成版は残っているか（1行出れば正しい）
 git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日サンプル.xlsx"
