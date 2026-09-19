@@ -33,6 +33,10 @@ public static class MilestoneRow
         {
             if (!decide.IncludesMilestone(scheduled.Source)) continue;
 
+            // 「休業日」「特別出勤」は文字として出さない。マスの色で示す。
+            // Google カレンダー側では今までどおり文字で見える
+            if (IsDayMark(scheduled.Source.Title)) continue;
+
             // 実働日 Excel と Google の inaCalendar に同じものが入っていることがある。
             // 旧 inaCalendar が Google 側にも書き込んでいたため。同じ名前は1つにする
             if (!seen.Add(scheduled.Source.Title)) continue;
@@ -42,4 +46,9 @@ public static class MilestoneRow
 
         return result;
     }
+
+    /// <summary>稼働・非稼働を示すだけの印か。実働日データから起こした2つ。</summary>
+    private static bool IsDayMark(string title) =>
+        string.Equals(title, CalendarWorkspace.ClosedDayTitle, StringComparison.Ordinal) ||
+        string.Equals(title, CalendarWorkspace.OpenDayTitle, StringComparison.Ordinal);
 }

@@ -322,15 +322,19 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
-    public void 休業日は予定の並びには出さず日付の行に出す()
+    public void 休業日は文字として出さずマスの色で示す()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.WriteWorkingDayEvents();
 
         var main = new MainViewModel(test.Workspace, today: Closed[0]);
 
-        Assert.Contains(CalendarWorkspace.ClosedDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
+        // 予定の並びにも日付の行にも出さない。Google カレンダー側では文字で見える
         Assert.DoesNotContain(main.SelectedDay.Events, e => e.Title == CalendarWorkspace.ClosedDayTitle);
+        Assert.DoesNotContain(CalendarWorkspace.ClosedDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
+
+        // 面は沈む
+        Assert.True(main.Month.Cells.Single(c => c.Date == Closed[0]).IsDimmed);
     }
 
     [Fact]
@@ -421,7 +425,7 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
-    public void 特別出勤も予定の並びには出さず日付の行に出す()
+    public void 特別出勤も文字として出さずマスの色で示す()
     {
         var days = Enumerable.Range(1, 30)
             .Select(d => new DateOnly(2026, 9, d))
@@ -432,10 +436,14 @@ public class WorkingDayCalendarImportTests
         Save(test, days);
         test.Workspace.WriteWorkingDayEvents();
 
-        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 26));
+        var saturday = new DateOnly(2026, 9, 26);
+        var main = new MainViewModel(test.Workspace, today: saturday);
 
-        Assert.Contains(CalendarWorkspace.OpenDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
         Assert.DoesNotContain(main.SelectedDay.Events, e => e.Title == CalendarWorkspace.OpenDayTitle);
+        Assert.DoesNotContain(CalendarWorkspace.OpenDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
+
+        // 土曜だが稼働するので面を起こす
+        Assert.True(main.Month.Cells.Single(c => c.Date == saturday).IsWorkingDayLit);
     }
 
     /// <summary>稼働日を直に入れる。取り込みを通さずに並びを決めたいとき。</summary>
@@ -468,8 +476,8 @@ public class WorkingDayCalendarImportTests
         // 印の無い日には今までどおり作る
         Assert.Contains(Closed[1], ClosedDays(test).Select(e => e.Date));
 
-        // 日付の行には1つだけ出る
+        // よそから来た分だけでも面は沈む
         var main = new MainViewModel(test.Workspace, today: Closed[0]);
-        Assert.Single(main.SelectedDay.Milestones, m => m.Name == CalendarWorkspace.ClosedDayTitle);
+        Assert.True(main.Month.Cells.Single(c => c.Date == Closed[0]).IsDimmed);
     }
 }
