@@ -36,6 +36,22 @@ public sealed class EventRepository(SqliteConnection connection)
         _connection.Query<CalendarEvent>($"SELECT {Columns} FROM events ORDER BY date, start_time;").ToArray();
 
     /// <summary>
+    /// 使われているカレンダー ID を重複なく返す。
+    /// <para>
+    /// カレンダーそのものの表を持たず、予定が持つ所属 ID から引く。Google 側の
+    /// カレンダー一覧はまだ取り込んでおらず、ローカルに独立した表を作ると
+    /// 同期を始めたときに二重管理になるため。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> CalendarIds() =>
+        _connection.Query<string>(
+            """
+            SELECT DISTINCT calendar_id FROM events
+            WHERE calendar_id IS NOT NULL AND calendar_id <> ''
+            ORDER BY calendar_id;
+            """).ToArray();
+
+    /// <summary>
     /// 期間に重なる<b>単発の</b>予定。複数日予定は終了日まで見て判定する。
     /// 繰り返し予定は <see cref="AllRecurring"/> で取ること。
     /// </summary>
