@@ -229,4 +229,38 @@ public class SettingsTests
 
         Assert.True(main.Day.HourHeight > whole);
     }
+
+    [Fact]
+    public void 今の時刻の線は高さを変えても位置が合う()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        main.Week.ViewportHeight = 720;          // 1時間 30px
+        main.UpdateNow(new DateTime(2026, 9, 24, 10, 0, 0));
+
+        Assert.True(main.Week.ShowNowLine);
+        Assert.Equal(300, main.Week.NowOffset);  // 10時 × 30px
+
+        // 高さが変われば線も動く。引き直さないと、罫線だけがずれていく
+        main.Week.ViewportHeight = 1200;         // 1時間 50px
+        Assert.Equal(500, main.Week.NowOffset);
+    }
+
+    [Fact]
+    public void 今日を含まない週では線を出さない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        main.UpdateNow(new DateTime(2026, 9, 24, 10, 0, 0));
+        Assert.True(main.Week.ShowNowLine);
+
+        main.Week.GoToNextWeek();
+        main.UpdateNow(new DateTime(2026, 9, 24, 10, 0, 0));
+
+        Assert.False(main.Week.ShowNowLine);
+    }
 }

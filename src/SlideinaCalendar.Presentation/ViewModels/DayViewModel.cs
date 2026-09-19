@@ -17,6 +17,9 @@ public sealed class DayViewModel : ObservableObject
     private readonly CalendarWorkspace _workspace;
     private TimelineBuilder _timeline;
 
+    /// <summary>最後に受け取った「いま」。高さが変わったときに引き直すために控える。</summary>
+    private TimeOnly? _now;
+
     private DateOnly _date;
     private DateOnly _today;
     private WeekDayColumnViewModel _day;
@@ -102,6 +105,9 @@ public sealed class DayViewModel : ObservableObject
     /// <summary>現在時刻の線を動かす。</summary>
     public void UpdateNowLine(TimeOnly now)
     {
+        // 1時間の高さが変わると線の位置も変わる。控えておいて引き直せるようにする
+        _now = now;
+
         var inRange = _timeline.Covers(now);
 
         ShowNowLine = inRange && _date == _today;
@@ -123,6 +129,8 @@ public sealed class DayViewModel : ObservableObject
 
             _timeline = _timeline.WithHourHeight(height);
             Refresh();
+
+            if (_now is { } now) UpdateNowLine(now);
         }
     }
 

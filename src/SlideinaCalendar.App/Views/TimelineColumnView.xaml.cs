@@ -21,7 +21,29 @@ public partial class TimelineColumnView : UserControl
     public static readonly DependencyProperty RowHeightProperty = DependencyProperty.Register(
         nameof(RowHeight), typeof(double), typeof(TimelineColumnView), new PropertyMetadata(44d));
 
+    /// <summary>今の時刻の位置（時間軸の上端からの距離）。</summary>
+    public static readonly DependencyProperty NowOffsetProperty = DependencyProperty.Register(
+        nameof(NowOffset), typeof(double), typeof(TimelineColumnView), new PropertyMetadata(0d));
+
+    /// <summary>今の時刻を出すか。表示時間帯の外に出ているときは出さない。</summary>
+    public static readonly DependencyProperty ShowNowProperty = DependencyProperty.Register(
+        nameof(ShowNow), typeof(bool), typeof(TimelineColumnView), new PropertyMetadata(false));
+
     public TimelineColumnView() => InitializeComponent();
+
+    /// <inheritdoc cref="NowOffsetProperty"/>
+    public double NowOffset
+    {
+        get => (double)GetValue(NowOffsetProperty);
+        set => SetValue(NowOffsetProperty, value);
+    }
+
+    /// <inheritdoc cref="ShowNowProperty"/>
+    public bool ShowNow
+    {
+        get => (bool)GetValue(ShowNowProperty);
+        set => SetValue(ShowNowProperty, value);
+    }
 
     /// <summary>1時間分の高さ。罫線の間隔になる。</summary>
     public double RowHeight
