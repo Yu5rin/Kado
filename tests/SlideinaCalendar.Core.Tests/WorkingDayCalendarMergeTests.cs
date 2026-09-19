@@ -149,13 +149,13 @@ public class WorkingDayCalendarMergeTests
     }
 
     [Fact]
-    public void 実ファイルを既存データに重ねても期間外は残る()
+    public void 取り込んだファイルを既存データに重ねても期間外は残る()
     {
         using var stream = File.OpenRead(
-            Path.Combine(AppContext.BaseDirectory, "TestData", "ツール用実働日.xlsx"));
+            Path.Combine(AppContext.BaseDirectory, "TestData", "実働日サンプル.xlsx"));
         var result = new WorkdayFileImporter().Import(stream);
 
-        // ファイルの期間（2023/1/5〜2026/3/31）の外側にある古いデータ
+        // ファイルの期間（2023/1/5〜2025/11/24）の外側にある古いデータ
         var existing = WorkingDayCalendar.Create(
             [D(2022, 12, 28), D(2023, 5, 1)],
             D(2022, 12, 28), D(2023, 5, 1),
@@ -166,7 +166,7 @@ public class WorkingDayCalendarMergeTests
         Assert.True(merged.IsWorkingDay(D(2022, 12, 28)));           // 期間外なので残る
         Assert.Equal(754, merged.Count);                              // 753 + 残った 1 件
         Assert.Equal(D(2022, 12, 28), merged.RangeStart);
-        Assert.Equal(D(2026, 3, 31), merged.RangeEnd);
+        Assert.Equal(D(2025, 11, 24), merged.RangeEnd);
         Assert.Equal(176, merged.AllMilestones.Count);
     }
 }
