@@ -80,6 +80,12 @@ internal static class NativeMethods
 
     public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
 
+    /// <summary>DWM に「実際に見えている」ウィンドウ境界を問い合わせる属性。</summary>
+    public const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// <summary>ドロップシャドウ用マージンとして妥当な上限。これを超える値は異常とみなす。</summary>
+    private const int MaxShadowPadding = 64;
+
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
 
     [DllImport("shell32.dll", CallingConvention = CallingConvention.StdCall)]
@@ -105,6 +111,14 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(
+        IntPtr hwnd, uint dwAttribute, out RECT pvAttribute, int cbAttribute);
+
     /// <summary>現在のワークエリア（プライマリモニタ）を取得する。</summary>
     public static RECT GetWorkArea()
     {
@@ -126,5 +140,69 @@ internal static class NativeMethods
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(monitor, ref info);
         return info;
+    }
+
+    /// <summary>
+    /// ダミーの AppBar を登録してすぐ解除し、Explorer にワークエリアを再計算させる。
+    /// <para>
+    /// 前回のプロセスが <c>ABM_REMOVE</c> を呼ばずに落ちると、Explorer 側に死んだ
+    /// ウィンドウの登録が残ることがある。その状態では <c>SPI_SETWORKAREA</c> だけでは
+    /// 戻り切らないため、AppBar のやり取りを一度発生させて掃除を促す。
+    /// </para>
+    /// <para>
+    /// <c>ABM_NEW</c> はワークエリアを削らない（削るのは <c>ABM_SETPOS</c>）ので、
+    /// この操作自体がデスクトップを壊すことはない。
+    /// </para>
+    /// </summary>
+    public static void NudgeAppBarRegistry(IntPtr hwnd)
+    {
+        var data = new APPBARDATA
+        {
+            cbSize = Marshal.SizeOf<APPBARDATA>(),
+            hWnd = hwnd,
+            uEdge = (uint)AppBarEdge.Left,
+        };
+
+        // 登録できなくても構わない。解除だけは必ず投げる。
+        SHAppBarMessage(ABM_NEW, ref data);
+        SHAppBarMessage(ABM_REMOVE, ref data);
+    }
+
+    /// <summary>
+    /// ウィンドウ矩形に含まれる「見えない余白」の大きさ。
+    /// <para>
+    /// Windows 10 以降、<c>GetWindowRect</c> が返す矩形にはドロップシャドウ用の
+    /// 不可視マージンが含まれる。AppBar から割り当てられた矩形へ素直に
+    /// <c>SetWindowPos</c> すると、この分だけ画面端との間に隙間が空いて見える。
+    /// DWM に実際の可視境界を問い合わせ、その差を余白として返す。
+    /// </para>
+    /// </summary>
+    /// <returns>余白を測れたら true。測れない場合や値が不自然な場合は false。</returns>
+    public static bool TryGetShadowPadding(
+        IntPtr hwnd, out (int Left, int Top, int Right, int Bottom) padding)
+    {
+        padding = default;
+
+        if (!GetWindowRect(hwnd, out var window)) return false;
+        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var visible,
+                Marshal.SizeOf<RECT>()) != 0)
+        {
+            return false;
+        }
+
+        var result = (
+            Left: visible.Left - window.Left,
+            Top: visible.Top - window.Top,
+            Right: window.Right - visible.Right,
+            Bottom: window.Bottom - visible.Bottom);
+
+        // 想定外の値で配置を壊さないよう、妥当な範囲に収まるときだけ採用する
+        foreach (var v in new[] { result.Left, result.Top, result.Right, result.Bottom })
+        {
+            if (v < 0 || v > MaxShadowPadding) return false;
+        }
+
+        padding = result;
+        return true;
     }
 }
