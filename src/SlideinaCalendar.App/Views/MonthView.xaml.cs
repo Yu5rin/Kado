@@ -17,6 +17,24 @@ public partial class MonthView : UserControl
 {
     public MonthView() => InitializeComponent();
 
+    /// <summary>
+    /// マスの高さが変わったら、並べる件数を決め直す。
+    /// <para>
+    /// 固定の件数だと、画面を広げてもマスの下が空いたまま「＋N」と出る。高さは
+    /// 表示側にしか分からないので、ここで測って ViewModel へ渡す。
+    /// </para>
+    /// </summary>
+    private void OnCellsResized(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.HeightChanged) return;
+        if (DataContext is not MonthViewModel month || month.Cells.Count == 0) return;
+
+        var rows = month.Cells.Count / 7;
+        if (rows <= 0) return;
+
+        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(e.NewSize.Height / rows);
+    }
+
     /// <summary>1回押しでその日を選び、2回でその日に予定を足す。</summary>
     private void OnCellClicked(object sender, MouseButtonEventArgs e)
     {

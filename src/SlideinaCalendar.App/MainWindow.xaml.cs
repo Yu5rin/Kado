@@ -123,17 +123,33 @@ public partial class MainWindow : Window
 
     private void OnSourceRowDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = CanDrop(sender, e) ? DragDropEffects.Move : DragDropEffects.None;
+        var ok = CanDrop(sender, e);
+
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
+
+        // どこへ入るのかを線で示す。示さないと、落としてみるまで分からない
+        ViewModel?.ShowDropHint(
+            ok ? DataContextOf<SourceListItemViewModel>(sender) : null, IsUpperHalf(sender, e));
     }
+
+    private void OnSourceRowDragLeave(object sender, DragEventArgs e) =>
+        ViewModel?.ShowDropHint(null, above: false);
 
     private void OnSourceRowDropped(object sender, DragEventArgs e)
     {
         if (!CanDrop(sender, e)) return;
 
-        ViewModel?.MoveSource(Dragged(e), DataContextOf<SourceListItemViewModel>(sender));
+        ViewModel?.MoveSource(
+            Dragged(e), DataContextOf<SourceListItemViewModel>(sender), IsUpperHalf(sender, e));
+
         e.Handled = true;
     }
+
+    /// <summary>行の上半分にいるか。上半分ならその行の上、下半分なら下に入る。</summary>
+    private static bool IsUpperHalf(object sender, DragEventArgs e) =>
+        sender is not FrameworkElement row ||
+        e.GetPosition(row).Y < row.ActualHeight / 2;
 
     /// <summary>落とせる先か。カレンダーとタスクリストの間では動かさない。</summary>
     private bool CanDrop(object sender, DragEventArgs e) =>

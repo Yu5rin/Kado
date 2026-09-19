@@ -266,6 +266,19 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
+                  <Grid>
+                    <!--
+                        並べ替えの最中に、落とすとどこへ入るかを示す線。
+                        面の上に重ねて出すので、行の高さは動かない。枠線で出すと
+                        中身が 2px ずれて、掴むたびに行が揺れる
+                    -->
+                    <Border x:Name="DropAbove" Height="2" VerticalAlignment="Top"
+                            Background="{DynamicResource AccentBrush}"
+                            Visibility="Collapsed" Panel.ZIndex="1" />
+                    <Border x:Name="DropBelow" Height="2" VerticalAlignment="Bottom"
+                            Background="{DynamicResource AccentBrush}"
+                            Visibility="Collapsed" Panel.ZIndex="1" />
+
                     <Border Background="Transparent" Padding="0,3.5">
                         <DockPanel>
                             <Border x:Name="Swatch" DockPanel.Dock="Left"
@@ -292,7 +305,15 @@
                                        TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                     </Border>
+                  </Grid>
                     <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding DropHint}" Value="Above">
+                            <Setter TargetName="DropAbove" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding DropHint}" Value="Below">
+                            <Setter TargetName="DropBelow" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+
                         <Trigger Property="IsChecked" Value="False">
                             <Setter TargetName="Swatch" Property="Background" Value="Transparent" />
                             <Setter TargetName="Swatch" Property="BorderThickness" Value="1.5" />

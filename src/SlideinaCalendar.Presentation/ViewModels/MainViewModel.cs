@@ -609,9 +609,13 @@ public sealed class MainViewModel : ObservableObject
     /// カレンダーとタスクリストの間では動かさない。別の一覧なので、混ぜる意味がない。
     /// </para>
     /// </summary>
+    /// <param name="above">true なら target の上、false なら下に入れる。</param>
     /// <returns>実際に動いたら true。</returns>
-    public bool MoveSource(SourceListItemViewModel? moved, SourceListItemViewModel? target)
+    public bool MoveSource(
+        SourceListItemViewModel? moved, SourceListItemViewModel? target, bool above = true)
     {
+        ShowDropHint(null, above: false);
+
         if (!CanMoveSource(moved, target)) return false;
 
         var isTaskList = IsTaskList(moved!);
@@ -619,13 +623,13 @@ public sealed class MainViewModel : ObservableObject
         var items = isTaskList ? SourceLists.TaskLists : SourceLists.Calendars;
 
         var ids = items.Select(i => i.Id).ToList();
-        var from = ids.IndexOf(moved.Id);
-        var to = ids.IndexOf(target.Id);
+        if (!ids.Remove(moved!.Id)) return false;
 
-        if (from < 0 || to < 0 || from == to) return false;
+        // 抜いたあとに数え直す。先に位置を控えると、上へ動かすときに1つずれる
+        var to = ids.IndexOf(target!.Id);
+        if (to < 0) return false;
 
-        ids.RemoveAt(from);
-        ids.Insert(to, moved.Id);
+        ids.Insert(above ? to : to + 1, moved.Id);
 
         if (isTaskList) _workspace.Sources.SetTaskListOrder(ids);
         else _workspace.Sources.SetCalendarOrder(ids);
@@ -635,6 +639,20 @@ public sealed class MainViewModel : ObservableObject
 
         StatusMessage = $"「{moved.Name}」の位置を変えました";
         return true;
+    }
+
+    /// <summary>
+    /// 並べ替えの最中に、落ちる位置を示す。
+    /// <para>掴んだまま動かすたびに呼ぶ。<paramref name="target"/> が null なら消す。</para>
+    /// </summary>
+    public void ShowDropHint(SourceListItemViewModel? target, bool above)
+    {
+        foreach (var item in SourceLists.Calendars.Concat(SourceLists.TaskLists))
+        {
+            item.DropHint = ReferenceEquals(item, target)
+                ? above ? DropHint.Above : DropHint.Below
+                : DropHint.None;
+        }
     }
 
     /// <summary>並べ替えとして成り立つ組み合わせか。落とせる先かどうかの判断に使う。</summary>

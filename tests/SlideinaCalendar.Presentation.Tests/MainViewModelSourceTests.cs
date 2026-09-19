@@ -453,7 +453,7 @@ public class MainViewModelSourceTests
         var moved = vm.SourceLists.Calendars.Single(c => c.Name == "社内行事");
         var target = vm.SourceLists.Calendars.Single(c => c.Name == "仕事");
 
-        Assert.True(vm.MoveSource(moved, target));
+        Assert.True(vm.MoveSource(moved, target, above: true));
 
         var after = vm.SourceLists.Calendars.Select(c => c.Name).ToArray();
 
@@ -529,4 +529,84 @@ public class MainViewModelSourceTests
 
         Assert.Equal(["e2", "e1"], vm.SelectedDay.Events.Select(e => e.Id));
     }
+
+    [Fact]
+    public void 上に落とすか下に落とすかで入る位置が変わる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "あ", "い", "う");
+
+        var moved = vm.SourceLists.Calendars.Single(c => c.Name == "う");
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "い");
+
+        vm.MoveSource(moved, target, above: true);
+        Assert.Equal(["あ", "う", "い"], Names(vm));
+
+        // 戻してから下側に落とす
+        vm.MoveSource(
+            vm.SourceLists.Calendars.Single(c => c.Name == "う"),
+            vm.SourceLists.Calendars.Single(c => c.Name == "い"),
+            above: false);
+
+        Assert.Equal(["あ", "い", "う"], Names(vm));
+    }
+
+    [Fact]
+    public void 上へ動かしても位置がずれない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "あ", "い", "う", "え");
+
+        // いちばん下を、いちばん上の手前へ
+        vm.MoveSource(
+            vm.SourceLists.Calendars.Single(c => c.Name == "え"),
+            vm.SourceLists.Calendars.Single(c => c.Name == "あ"),
+            above: true);
+
+        Assert.Equal(["え", "あ", "い", "う"], Names(vm));
+    }
+
+    [Fact]
+    public void 掴んでいる間は落ちる位置を示す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "あ", "い");
+
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "い");
+
+        vm.ShowDropHint(target, above: true);
+
+        Assert.Equal(DropHint.Above, target.DropHint);
+        Assert.All(vm.SourceLists.Calendars.Where(c => !ReferenceEquals(c, target)),
+            c => Assert.Equal(DropHint.None, c.DropHint));
+
+        vm.ShowDropHint(target, above: false);
+        Assert.Equal(DropHint.Below, target.DropHint);
+
+        // 外へ出たら消す
+        vm.ShowDropHint(null, above: false);
+        Assert.All(vm.SourceLists.Calendars, c => Assert.Equal(DropHint.None, c.DropHint));
+    }
+
+    [Fact]
+    public void 落としたら示すのをやめる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "あ", "い");
+
+        var moved = vm.SourceLists.Calendars.Single(c => c.Name == "い");
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "あ");
+
+        vm.ShowDropHint(target, above: true);
+        vm.MoveSource(moved, target, above: true);
+
+        Assert.All(vm.SourceLists.Calendars, c => Assert.Equal(DropHint.None, c.DropHint));
+    }
+
+    /// <summary>作ったぶんだけ並びを見る。既定のマイカレンダーは先頭にいる。</summary>
+    private static string[] Names(MainViewModel vm) =>
+        vm.SourceLists.Calendars
+            .Select(c => c.Name)
+            .Where(n => n != CalendarWorkspace.DefaultCalendarName)
+            .ToArray();
 }

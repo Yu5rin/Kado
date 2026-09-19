@@ -73,11 +73,25 @@ public sealed class DefaultCalendarSources : ICalendarSources
     public int OrderOf(string? calendarId) => 0;
 }
 
+/// <summary>並べ替えのとき、落とすと行のどちら側に入るか。</summary>
+public enum DropHint
+{
+    /// <summary>いまは示さない。</summary>
+    None,
+
+    /// <summary>この行の上に入る。</summary>
+    Above,
+
+    /// <summary>この行の下に入る。</summary>
+    Below,
+}
+
 /// <summary>左パネルに並べるカレンダー／タスクリスト1件。</summary>
 public sealed class SourceListItemViewModel : ObservableObject
 {
     private readonly Action<SourceListItemViewModel> _onToggled;
     private bool _isVisible = true;
+    private DropHint _dropHint;
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
         bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled)
@@ -120,6 +134,19 @@ public sealed class SourceListItemViewModel : ObservableObject
     /// <para>取り込み済みなら Google の色、そうでなければ名前から決まる色。</para>
     /// </summary>
     public string SwatchColor { get; }
+
+    /// <summary>
+    /// 並べ替えの最中、この行のどちら側に入るか。
+    /// <para>
+    /// 掴んだものを落としたときにどこへ入るのかが分からないと、何度もやり直すことになる。
+    /// 行の上端・下端に線を出して示す。
+    /// </para>
+    /// </summary>
+    public DropHint DropHint
+    {
+        get => _dropHint;
+        set => Set(ref _dropHint, value);
+    }
 
     /// <summary>チェックが入っているか。外すと月ビューと右ペインから消える。</summary>
     public bool IsVisible
