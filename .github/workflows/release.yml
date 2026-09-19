@@ -115,8 +115,10 @@ jobs:
 
           dotnet @args
 
+      # Releases へ添える用。手動実行のときは作らない（成果物は publish の中身をそのまま渡す）
       - name: ZIP にまとめる
         id: package
+        if: github.ref_type == 'tag'
         shell: pwsh
         run: |
           $name = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.zip"
@@ -134,10 +136,14 @@ jobs:
             --title 'SlideinaCalendar ${{ steps.version.outputs.value }}' `
             --generate-notes
 
-      # 手動実行でも受け取れるようにしておく
+      # 手動実行でも受け取れるようにしておく。
+      #
+      # ここで渡すのは ZIP ではなく publish の中身そのもの。GitHub は成果物を
+      # 受け取るときに自動で ZIP にするので、ZIP を渡すと二重になり、
+      # 落とした人が二度展開することになる
       - name: 成果物として残す
         uses: actions/upload-artifact@v4
         with:
-          name: SlideinaCalendar-win-x64
-          path: ${{ steps.package.outputs.asset }}
+          name: SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64
+          path: publish/
           retention-days: 14
