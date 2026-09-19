@@ -34,6 +34,7 @@ public sealed class CalendarWorkspace
         WorkingDayStore = new WorkingDayRepository(connection);
         Sources = new SourceRepository(connection);
         Settings = new SettingsRepository(connection);
+        Tombstones = new TombstoneRepository(connection);
         Schedule = new ScheduleQuery(Events, Tasks);
 
         EnsureSources();
@@ -50,6 +51,13 @@ public sealed class CalendarWorkspace
     /// <summary>カレンダーとタスクリスト。同期を始めるまでは空のことがある。</summary>
     public SourceRepository Sources { get; }
     public SettingsRepository Settings { get; }
+
+    /// <summary>
+    /// 消したことの記録。
+    /// <para>残さないと、次の同期で消したものが復活する。伝え終わったら消える。</para>
+    /// </summary>
+    public TombstoneRepository Tombstones { get; }
+
     public ScheduleQuery Schedule { get; }
 
     /// <summary>元に戻す・やり直しの履歴。</summary>
@@ -320,7 +328,7 @@ public sealed class CalendarWorkspace
     {
         if (Events.Find(id) is not { } value) return false;
 
-        Run(new DeleteEventEdit(Events, value));
+        Run(new DeleteEventEdit(Events, value, Tombstones));
         return true;
     }
 
@@ -359,7 +367,7 @@ public sealed class CalendarWorkspace
         // 連鎖で消える作業時間ブロックを控えておかないと、元に戻したときに失われる
         var blocks = Tasks.BlocksOf(id);
 
-        Run(new DeleteTaskEdit(Tasks, value, blocks));
+        Run(new DeleteTaskEdit(Tasks, value, blocks, Tombstones));
         return true;
     }
 

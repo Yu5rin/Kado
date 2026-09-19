@@ -33,14 +33,37 @@ public sealed class UpdateEventEdit(EventRepository repository, CalendarEvent be
     public void Revert() => repository.Upsert(before);
 }
 
-/// <summary>予定を削除する。元に戻すときは同じ内容で作り直す。</summary>
-public sealed class DeleteEventEdit(EventRepository repository, CalendarEvent value) : IUndoableEdit
+/// <summary>
+/// 予定を削除する。元に戻すときは同じ内容で作り直す。
+/// <para>
+/// Google と結び付いていたら、消したことを記録する。<b>記録を残さないと、次の同期で
+/// 復活する</b>。こちらで消しただけでは相手にはまだ残っていて、「こちらに無い予定」として
+/// 降ってくるため。元に戻したときは記録も消す。消していないことになったのだから、
+/// 相手へ伝えては困る。
+/// </para>
+/// </summary>
+public sealed class DeleteEventEdit(
+    EventRepository repository, CalendarEvent value, TombstoneRepository? tombstones = null)
+    : IUndoableEdit
 {
     public string Description => "予定の削除";
 
-    public void Apply() => repository.Delete(value.Id);
+    public void Apply()
+    {
+        repository.Delete(value.Id);
 
-    public void Revert() => repository.Upsert(value);
+        if (value.GoogleEventId is { Length: > 0 })
+        {
+            tombstones?.Record(
+                value.Id, TombstoneRepository.EventKind, value.GoogleEventId, DateTimeOffset.Now);
+        }
+    }
+
+    public void Revert()
+    {
+        repository.Upsert(value);
+        tombstones?.Clear(value.Id, TombstoneRepository.EventKind);
+    }
 }
 
 /// <summary>タスクを追加する。</summary>
@@ -73,16 +96,32 @@ public sealed class UpdateTaskEdit(TaskRepository repository, TaskItem before, T
 /// タスクを削除する。
 /// <para>作業時間ブロックも連鎖して消えるので、元に戻すときに入れ直す。</para>
 /// </summary>
-public sealed class DeleteTaskEdit(TaskRepository repository, TaskItem value, IReadOnlyList<WorkBlock> blocks)
+public sealed class DeleteTaskEdit(
+    TaskRepository repository,
+    TaskItem value,
+    IReadOnlyList<WorkBlock> blocks,
+    TombstoneRepository? tombstones = null)
     : IUndoableEdit
 {
     public string Description => "タスクの削除";
 
-    public void Apply() => repository.Delete(value.Id);
+    public void Apply()
+    {
+        repository.Delete(value.Id);
+
+        // 記録を残さないと、次の同期で復活する
+        if (value.GoogleTaskId is { Length: > 0 })
+        {
+            tombstones?.Record(
+                value.Id, TombstoneRepository.TaskKind, value.GoogleTaskId, DateTimeOffset.Now);
+        }
+    }
 
     public void Revert()
     {
         repository.Upsert(value);
         foreach (var block in blocks) repository.UpsertBlock(block);
+
+        tombstones?.Clear(value.Id, TombstoneRepository.TaskKind);
     }
 }

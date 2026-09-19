@@ -39,9 +39,9 @@ public sealed class EventRepository(SqliteConnection connection)
     /// <summary>
     /// 使われているカレンダー ID を重複なく返す。
     /// <para>
-    /// カレンダーそのものの表を持たず、予定が持つ所属 ID から引く。Google 側の
-    /// カレンダー一覧はまだ取り込んでおらず、ローカルに独立した表を作ると
-    /// 同期を始めたときに二重管理になるため。
+    /// 一覧そのものは <c>calendars</c> の表が持つ。こちらは、表に載っていない所属を
+    /// 見つけて起こすために使う（<c>CalendarWorkspace.EnsureSources</c>）。
+    /// 旧データからの移行や、表を作る前に入った予定を拾う。
     /// </para>
     /// </summary>
     public IReadOnlyList<string> CalendarIds() =>
