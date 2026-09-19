@@ -59,8 +59,9 @@ public class WorkingDayCalendarImportTests
         var calendar = test.Workspace.Sources.Calendars()
             .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
 
+        // 休業日・特別出勤の印も同じカレンダーに入るので、マイルストーンだけを数える
         var written = test.Workspace.Events.All()
-            .Where(e => e.CalendarId == calendar.Id)
+            .Where(e => e.CalendarId == calendar.Id && CalendarWorkspace.IsMilestoneId(e.Id))
             .ToArray();
 
         Assert.Equal(result.Milestones.Count, written.Length);

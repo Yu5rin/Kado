@@ -297,4 +297,30 @@ public class GoogleSyncServiceTests : IDisposable
 
         Assert.DoesNotContain(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task 祝日のカレンダーは初めから外しておく()
+    {
+        var handler = new RoutingHandler(url => url.Contains("calendarList", StringComparison.Ordinal)
+            ? (HttpStatusCode.OK, """
+                {"items":[
+                  {"id":"ja.japanese#holiday@group.v.calendar.google.com","summary":"日本の祝日",
+                   "accessRole":"reader"},
+                  {"id":"shigoto@group.calendar.google.com","summary":"仕事","accessRole":"owner"}
+                ]}
+                """)
+            : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        // 祝日はアプリの中で計算して添え書きとして出す。予定としても並ぶと二重になる
+        var holidays = _test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == "日本の祝日");
+
+        Assert.False(holidays.IsVisible);
+
+        // ほかのカレンダーは今までどおり出す
+        Assert.True(_test.Workspace.Sources.Calendars().Single(c => c.DisplayName == "仕事").IsVisible);
+    }
 }

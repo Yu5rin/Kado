@@ -145,6 +145,13 @@ public sealed class GoogleSyncService(
     }
 
     /// <summary>
+    /// Google が配っている祝日のカレンダーか。
+    /// <para>「日本の祝日」などの ID は <c>...#holiday@group.v.calendar.google.com</c> の形。</para>
+    /// </summary>
+    private static bool IsHolidayCalendar(string id) =>
+        id.Contains("#holiday@", StringComparison.Ordinal);
+
+    /// <summary>
     /// Google 側にあるものか。同期するのはこれだけ。
     /// <para>
     /// 判断は<b>最後に受け取った姿を持っているか</b>で行う。一覧の取り込みは必ず
@@ -268,8 +275,11 @@ public sealed class GoogleSyncService(
                         ForegroundColor = item.Text("foregroundColor") ?? existing?.ForegroundColor,
                         IsPrimary = item.Flag("primary"),
 
-                        // チェックを外したカレンダーが同期のたびに戻らないようにする
-                        IsVisible = existing?.IsVisible ?? true,
+                        // チェックを外したカレンダーが同期のたびに戻らないようにする。
+                        // 祝日のカレンダーだけ、初めて取り込むときは外しておく。祝日は
+                        // アプリの中で計算して日付の添え書きとして出すので、予定としても
+                        // 並ぶと二重になる。見たければチェックを入れればよい
+                        IsVisible = existing?.IsVisible ?? !IsHolidayCalendar(id),
 
                         SortOrder = existing?.SortOrder ?? order++,
                         GoogleRaw = GoogleJson.Normalize(item),

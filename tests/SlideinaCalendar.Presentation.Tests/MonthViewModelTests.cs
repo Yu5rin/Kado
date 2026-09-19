@@ -368,11 +368,25 @@ public class MonthViewModelTests
     }
 
     [Fact]
-    public void 祝日データが無ければ名前は出ない()
+    public void 祝日はアプリの中で持つ()
     {
         using var test = TestWorkspace.Create();
 
-        // 取り込むまでは何も返さない実装が入る
+        // Google の「日本の祝日」カレンダーには頼らない。繋いでいなくても出る
+        Assert.Equal("敬老の日", Cell(Create(test), D(2026, 9, 21)).HolidayName);
+        Assert.Equal("国民の休日", Cell(Create(test), D(2026, 9, 22)).HolidayName);
+        Assert.Equal("秋分の日", Cell(Create(test), D(2026, 9, 23)).HolidayName);
+        Assert.Null(Cell(Create(test), D(2026, 9, 24)).HolidayName);
+    }
+
+    [Fact]
+    public void 祝日の一覧を差し替えられる()
+    {
+        // 取り込んだ一覧を使いたいときのため。既定はアプリの中の計算
+        using var test = TestWorkspace.Create(
+            holidays: new Dictionary<DateOnly, string> { [D(2026, 9, 24)] = "創立記念日" });
+
+        Assert.Equal("創立記念日", Cell(Create(test), D(2026, 9, 24)).HolidayName);
         Assert.Null(Cell(Create(test), D(2026, 9, 21)).HolidayName);
     }
 

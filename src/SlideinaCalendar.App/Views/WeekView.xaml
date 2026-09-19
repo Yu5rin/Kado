@@ -106,7 +106,8 @@
             <Border x:Name="Head" Padding="0,5,0,6"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
-                    <TextBlock x:Name="DayName" Text="{Binding HeaderText}" FontSize="10.5"
+                    <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
+                    <TextBlock x:Name="DayName" Text="{Binding DayName}" FontSize="10.5"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource Ink3Brush}" />
 
@@ -117,6 +118,15 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular" />
                     </Border>
+
+                    <!--
+                        祝日名。予定としてではなく、日付の添え書きとして出す。
+                        Google の「日本の祝日」カレンダーを引くと予定の並びに混ざる
+                    -->
+                    <TextBlock Text="{Binding HolidayName}" FontSize="9.5"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SundayBrush}"
+                               Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
                     <!-- 週ビューの日付ヘッダは実働日の通し番号を出す場所（要件書 4.3） -->
                     <TextBlock Text="{Binding WorkingDayLabel}" FontSize="9.5"
