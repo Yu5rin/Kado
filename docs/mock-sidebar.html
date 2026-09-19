@@ -141,11 +141,9 @@ body{
 .dn{font-size:11.5px;font-variant-numeric:tabular-nums;line-height:1.3;font-weight:500}
 .cell.sun .dn{color:var(--sun)}
 .cell.sat .dn{color:var(--sat)}
-/* 実働日の通し番号：このアプリ固有の主役表現 */
-.wdn{
-  position:absolute;top:3px;right:4px;font-size:9px;line-height:1;
-  color:var(--ai);opacity:.62;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
-}
+/* 実働日の通し番号は月ビューのセルには出さない（要件書 4.3）。
+   マイルストーン表示と競合し、密度が上がりすぎるため。
+   出す場所はツールバーのサマリー・選択日ヘッダ・週ビューの日付ヘッダ・一覧ビューの日付列。 */
 .cell.today{box-shadow:inset 0 0 0 2px var(--ai);z-index:1}
 .cell.today .dn{color:var(--ai);font-weight:700}
 .cell.sel{background:var(--ai-soft)}
@@ -380,7 +378,7 @@ body{
 
   <div class="notes">
     <h2>設計の意図</h2>
-    <p><strong>セル右上の小さな数字</strong>がその月の何実働日目かを示す。現行版ではカウントが計算欄の中に閉じていたが、カレンダーそのものに刻むことで「この日は何日目か」が常に読める。このアプリ固有の主役表現なので、他の装飾は徹底して抑えた。</p>
+    <p><strong>実働日の通し番号は月ビューのセルには出さない</strong>。マイルストーンのラベルと競合して密度が上がりすぎるため、上部のサマリーと選択日ヘッダ、週ビューの日付ヘッダ、一覧ビューの日付列に出す（要件書 4.3）。セルに刻む案もあったが、日付・マイルストーン・予定が同じ狭さに並ぶ月ビューでは読み取りにくくなる。</p>
     <p><strong>非稼働日は沈める</strong>。色を足すのではなく背景を落とす引き算にしてあるので、祝日の赤や予定の色と競合しない。</p>
     <p><strong>予定とタスクはタブで切り替える</strong>。幅352pxで上下にさらに分けると各ペインが3行しか入らず実用にならないため、上ペインをカレンダー、下ペインをタブ構成にした。ウィンドウモードでは横に並べて同時表示する。</p>
     <p><strong>タスクの期限は実働日で数える</strong>。「残り3実働日」という見え方が、暦日の残日数より生産計画の実感に近い。</p>
@@ -412,7 +410,7 @@ const TODAY=19, SEL=24;
     if(other)d.classList.add('other');
     if(isOff)d.classList.add('off');
     d.innerHTML='<span class="dn">'+day+'</span>';
-    if(!other&&!isOff){wd++;d.innerHTML+='<span class="wdn">'+wd+'</span>';}
+    if(!other&&!isOff){wd++;}
     if(!other&&HOL[day])d.innerHTML+='<span class="hol">'+HOL[day]+'</span>';
     if(!other&&day===TODAY)d.classList.add('today');
     if(!other&&day===SEL)d.classList.add('sel');
