@@ -25,6 +25,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppBarProbe", "samples\AppB
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.Data.Tests", "tests\SlideinaCalendar.Data.Tests\SlideinaCalendar.Data.Tests.csproj", "{B6F1BFCD-6D38-4A06-AFEA-128766F069CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.Presentation", "src\SlideinaCalendar.Presentation\SlideinaCalendar.Presentation.csproj", "{0286E8A8-886C-4BC1-93BB-853D88D33C19}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.Presentation.Tests", "tests\SlideinaCalendar.Presentation.Tests\SlideinaCalendar.Presentation.Tests.csproj", "{BFB7168B-0B61-48A6-97DE-94023ABC0C36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -66,6 +70,14 @@ Global
 		{B6F1BFCD-6D38-4A06-AFEA-128766F069CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B6F1BFCD-6D38-4A06-AFEA-128766F069CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B6F1BFCD-6D38-4A06-AFEA-128766F069CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0286E8A8-886C-4BC1-93BB-853D88D33C19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0286E8A8-886C-4BC1-93BB-853D88D33C19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0286E8A8-886C-4BC1-93BB-853D88D33C19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0286E8A8-886C-4BC1-93BB-853D88D33C19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFB7168B-0B61-48A6-97DE-94023ABC0C36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFB7168B-0B61-48A6-97DE-94023ABC0C36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFB7168B-0B61-48A6-97DE-94023ABC0C36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFB7168B-0B61-48A6-97DE-94023ABC0C36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{44194D89-B633-4BE2-A810-7335EB7C2F4F} = {C76B1A71-E17E-4C2A-A5FB-A5D03E2C489B}
@@ -76,5 +88,7 @@ Global
 		{33D99882-899A-4DF9-955F-B655B6F61CE9} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
 		{24896ED0-32CD-488A-A8A0-3EFE1055C2F3} = {3C81A150-631F-4513-B71C-2AB442957EE2}
 		{B6F1BFCD-6D38-4A06-AFEA-128766F069CA} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
+		{0286E8A8-886C-4BC1-93BB-853D88D33C19} = {C76B1A71-E17E-4C2A-A5FB-A5D03E2C489B}
+		{BFB7168B-0B61-48A6-97DE-94023ABC0C36} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
 	EndGlobalSection
 EndGlobal
