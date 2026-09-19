@@ -80,8 +80,16 @@ git push --force --tags origin
 
 `--replace-text` を使う。手順は上と同じ流れで、4だけ差し替える。
 
+**この手順書自身に消したい語を書かない。** 書いてしまうと、置換のあとに
+「A==>A」という意味の通らない文が残る。下では `$Word` に入れて扱い、
+実際の語は手順書の外（実行するときの入力）で与える。
+
 ```powershell
 pip install git-filter-repo
+
+# 消したい語と、置き換え後の語。ここだけ書き換えて使う
+$Word = "（消したい語）"
+$Into = "（置き換え後の語）"
 
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
@@ -91,13 +99,13 @@ cd cleanup
 # 置換の指定を作る。BOM が付くと filter-repo が読めないので、付かない形で書く
 [System.IO.File]::WriteAllText(
   "$PWD\replacements.txt",
-  "配布元==>配布元`n",
+  "$Word==>$Into`n",
   [System.Text.UTF8Encoding]::new($false))
 
 git filter-repo --replace-text replacements.txt
 
 # 消えたか（何も出なければ成功）
-git grep -l "配布元" $(git rev-list --all)
+git grep -l "$Word" $(git rev-list --all)
 
 git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
 git push --force --all origin
@@ -109,9 +117,8 @@ git push --force --all origin
 指定ファイル（`replacements.txt`）は履歴には入らない。filter-repo が処理の前に
 読むだけで、コミットの対象にはならない。
 
-> この手順は実際に走らせて確かめてある。123 件が 0 件になり、
-> 「見出し『配布元稼働日』が入っている」は「見出し『配布元稼働日』が入っている」になって、
-> 文としても通る。
+> この手順は実際に走らせて確かめてある。対象の語が 123 件あった状態から 0 件になり、
+> 置き換え後も「見出し『◯◯稼働日』が入っている」という文がそのまま通ることを見ている。
 
 ## 済んだあと
 
