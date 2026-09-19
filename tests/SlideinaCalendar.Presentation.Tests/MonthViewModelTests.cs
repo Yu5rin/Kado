@@ -387,6 +387,28 @@ public class MonthViewModelTests
 
     private static DayCellViewModel Cell(MonthViewModel vm, DateOnly date) =>
         vm.Cells.Single(c => c.Date == date);
+
+    [Fact]
+    public void 実働日と休業日とデータ無しで面を分ける()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 稼働する日
+        var working = Cell(vm, D(2026, 9, 24));
+        Assert.True(working.IsWorkingDayLit);
+        Assert.False(working.IsDimmed);
+
+        // 休業する日（敬老の日）
+        var closed = Cell(vm, D(2026, 9, 21));
+        Assert.False(closed.IsWorkingDayLit);
+        Assert.True(closed.IsDimmed);
+
+        // データを持たない日は、どちらでもない。どこまで登録済みかが面の色で読める
+        var unknown = Cell(vm, D(2026, 8, 31));
+        Assert.False(unknown.IsWorkingDayLit);
+        Assert.False(unknown.IsDimmed);
+    }
 }
 
 /// <summary>読みやすさのための小さな拡張。</summary>

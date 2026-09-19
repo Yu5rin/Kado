@@ -386,40 +386,97 @@ public sealed class CalendarWorkspace
 
         var result = new WorkdayFileImporter().Import(xlsx);
         WorkingDayStore.Apply(result);
-
-        // 旧 inaCalendar と同じく、マイルストーンをカレンダーの予定としても持つ。
-        // Google に繋いでいれば、そちらへ送られて他の端末からも見える
-        WriteMilestonesToCalendar(result);
-
         ReloadWorkingDays();
+
+        // 旧 inaCalendar と同じく、マイルストーンと休業日をカレンダーの予定としても持つ。
+        // Google に繋いでいれば、そちらへ送られて他の端末からも見える。
+        // 読み直したあとのデータを見る。取り込みは期間を広げることがある
+        BackfillMilestones();
+        WriteClosedDays(result.WorkingDayRangeStart, result.WorkingDayRangeEnd);
+
         return result;
     }
 
     /// <summary>
-    /// マイルストーンを「inaCalendar」の予定として書き出す。
+    /// 実働日データを「inaCalendar」の予定として書き出す。
     /// <para>
-    /// 取り込んだ期間ぶんを<b>入れ替える</b>。古いファイルを読み直したときに、前の版の
-    /// マイルストーンが残らないようにする。期間の外は触らない（実働日データと同じ考え方）。
+    /// マイルストーンと休業日の2種類。取り込んだ期間ぶんを<b>入れ替える</b>ので、古い
+    /// ファイルを読み直しても前の版が残らない。期間の外は触らない。
     /// </para>
+    /// <para>同じ日の同じものは同じ識別子になるので、何度呼んでも増えない。</para>
     /// </summary>
-    private void WriteMilestonesToCalendar(ImportResult result) => WriteMilestones(
-        result.Milestones, result.MilestoneRangeStart, result.MilestoneRangeEnd);
+    public void WriteWorkingDayEvents()
+    {
+        BackfillMilestones();
+
+        if (WorkingDays.RangeStart is { } from && WorkingDays.RangeEnd is { } to)
+        {
+            WriteClosedDays(from, to);
+        }
+    }
 
     /// <summary>
     /// 取り込み済みの実働日データから、まだ書かれていないマイルストーンを補う。
     /// <para>
     /// 日付の行は<b>予定から</b>組み立てる（左パネルのチェックを効かせるため）。書き出しを
     /// するようになる前に取り込んだデータは予定を持たないので、起動時に補っておく。
-    /// 同じ日の同じ名前は同じ識別子になるので、何度呼んでも増えない。
+    /// </para>
+    /// <para>
+    /// 休業日はここでは書かない。取り込みを頼まれたときだけにする。起動しただけで
+    /// 何百件もの予定とカレンダーができるのは、頼まれていない仕事が過ぎる。
     /// </para>
     /// </summary>
-    public void BackfillMilestones()
-    {
-        var milestones = WorkingDays.AllMilestones;
-        if (milestones.Count == 0) return;
+    public void BackfillMilestones() => WriteMilestones(
+        WorkingDays.AllMilestones, WorkingDays.MilestoneRangeStart, WorkingDays.MilestoneRangeEnd);
 
-        WriteMilestones(milestones, WorkingDays.MilestoneRangeStart, WorkingDays.MilestoneRangeEnd);
+    /// <summary>
+    /// 休業日を書き出す。
+    /// <para>
+    /// 実働日データが持っているのは稼働日だけなので、期間内で稼働日でない日が休業日。
+    /// <b>土日は入れない。</b>月ビューでは背景が沈むうえ、毎週のことなので予定にすると
+    /// 本当に見たい年末年始や連休が埋もれる。
+    /// </para>
+    /// <para>
+    /// 見るのは<b>いま取り込んだファイルの期間だけ</b>。保存済みの期間は複数のファイルを
+    /// 合わせた外枠なので、間にデータの無い隙間があると、そこまで休業日にしてしまう。
+    /// </para>
+    /// </summary>
+    /// <param name="from">見る期間の始め。</param>
+    /// <param name="to">見る期間の終わり。</param>
+    private void WriteClosedDays(DateOnly from, DateOnly to)
+    {
+        var calendar = EnsureWorkingDayCalendar();
+        var now = DateTimeOffset.Now;
+        var wanted = new List<CalendarEvent>();
+
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+            if (WorkingDays.IsWorkingDay(date)) continue;
+
+            wanted.Add(new CalendarEvent
+            {
+                Id = $"{ClosedDayIdPrefix}{date:yyyyMMdd}",
+                Title = ClosedDayTitle,
+                Date = date,
+                CalendarId = calendar.Id,
+                Source = WorkingDaySource,
+                UpdatedAt = now,
+            });
+        }
+
+        Replace(wanted, from, to, IsClosedDayId, calendar.Id, now);
+        NotifyChanged();
     }
+
+    /// <summary>休業日の予定に付ける題。</summary>
+    public const string ClosedDayTitle = "休業日";
+
+    /// <summary>休業日の予定か。</summary>
+    public static bool IsClosedDayId(string? id) =>
+        id is not null && id.StartsWith(ClosedDayIdPrefix, StringComparison.Ordinal);
+
+    private const string ClosedDayIdPrefix = "closedday:";
 
     private void WriteMilestones(
         IReadOnlyList<Milestone> milestones, DateOnly? rangeStart, DateOnly? rangeEnd)
@@ -447,18 +504,30 @@ public sealed class CalendarWorkspace
             })
             .ToArray();
 
+        Replace(wanted, from, to, IsMilestoneId, calendar.Id, now);
+        NotifyChanged();
+    }
+
+    /// <summary>
+    /// 期間内の書き出し分を入れ替える。
+    /// <para>
+    /// 見分けは<b>識別子の頭</b>で行う。所属や Source では見分けられない。同期を通ると
+    /// Source は "google" に書き換わり、所属は Google 側の inaCalendar に移るため。
+    /// 識別子はこちらが付けたまま残るので、これが唯一の手がかりになる。
+    /// </para>
+    /// <para>
+    /// こちらが書いたものだけを消す。inaCalendar には利用者が自分で入れた予定も
+    /// ありうるので、期間内を丸ごと消してはいけない。
+    /// </para>
+    /// </summary>
+    private void Replace(
+        IReadOnlyList<CalendarEvent> wanted, DateOnly from, DateOnly to,
+        Func<string?, bool> mine, string calendarId, DateTimeOffset now)
+    {
         var keep = wanted.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
 
-        // 前の版のマイルストーンを落とす。
-        //
-        // 見分けは識別子の頭で行う。所属や Source では見分けられない。同期を通ると
-        // Source は "google" に書き換わり、所属は Google 側の inaCalendar に移るため。
-        // 識別子はこちらが付けたまま残るので、これが唯一の手がかりになる。
-        //
-        // こちらが書いたものだけを消す。inaCalendar には利用者が自分で入れた予定も
-        // ありうるので、期間内を丸ごと消してはいけない。
         foreach (var stale in Events.InRange(from, to)
-                     .Where(e => IsMilestoneId(e.Id) && !keep.Contains(e.Id)))
+                     .Where(e => mine(e.Id) && !keep.Contains(e.Id)))
         {
             Events.Delete(stale.Id);
 
@@ -476,13 +545,11 @@ public sealed class CalendarWorkspace
             {
                 Title = e.Title,
                 Date = e.Date,
-                CalendarId = calendar.Id,
+                CalendarId = calendarId,
                 Note = e.Note,
                 UpdatedAt = now,
             }
             : e));
-
-        NotifyChanged();
     }
 
     /// <summary>マイルストーンの予定に付ける識別子。同じ日の同じ名前なら同じものになる。</summary>

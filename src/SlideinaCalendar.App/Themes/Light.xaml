@@ -29,8 +29,13 @@
     <Color x:Key="SundayColor">#B03A34</Color>
     <Color x:Key="SaturdayColor">#3B6EA8</Color>
 
-    <!-- 非稼働日の面。色を足すのではなく背景を落とす引き算（要件書 4.3） -->
-    <Color x:Key="OffDayColor">#ECEEF2</Color>
+    <!--
+        実働日データを持つ日の面。稼働する日と休業する日で分ける。
+        どちらも色を足すのではなく面の明るさで示す（要件書 4.3）。
+        データを持たない日は PanelColor のまま。ここを見れば「登録済みかどうか」も分かる
+    -->
+    <Color x:Key="WorkingDayColor">#FBFCFE</Color>
+    <Color x:Key="OffDayColor">#E3E7EE</Color>
 
     <!-- 予定のカテゴリ色。モックの ok / amber の変数に対応する -->
     <Color x:Key="CategoryGreenColor">#2F7D5B</Color>

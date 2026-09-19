@@ -127,6 +127,9 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                    <Setter TargetName="Head" Property="Background" Value="{DynamicResource WorkingDayBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
@@ -161,6 +164,9 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                    <Setter TargetName="Cell" Property="Background" Value="{DynamicResource WorkingDayBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Cell" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>

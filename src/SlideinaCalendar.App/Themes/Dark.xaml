@@ -22,7 +22,8 @@
     <Color x:Key="SundayColor">#E0827C</Color>
     <Color x:Key="SaturdayColor">#7AA5DF</Color>
 
-    <Color x:Key="OffDayColor">#171A20</Color>
+    <Color x:Key="WorkingDayColor">#242A34</Color>
+    <Color x:Key="OffDayColor">#12151A</Color>
 
     <Color x:Key="CategoryGreenColor">#5FB08A</Color>
     <Color x:Key="CategoryAmberColor">#D59A55</Color>

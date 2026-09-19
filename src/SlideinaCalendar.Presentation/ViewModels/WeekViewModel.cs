@@ -123,6 +123,9 @@ public sealed class WeekDayColumnViewModel
     /// <summary>非稼働日は面を沈める。データ範囲外は判断できないので沈めない。</summary>
     public bool IsDimmed => HasWorkingDayData && !IsWorkingDay;
 
+    /// <inheritdoc cref="DayCellViewModel.IsWorkingDayLit"/>
+    public bool IsWorkingDayLit => HasWorkingDayData && IsWorkingDay;
+
     public IReadOnlyList<Milestone> Milestones { get; }
 
     /// <summary>実働日の月内通し番号。</summary>

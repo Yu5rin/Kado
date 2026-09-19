@@ -105,7 +105,10 @@
     <UserControl.Style>
         <Style TargetType="UserControl">
             <Style.Triggers>
-                <!-- 非稼働日は面を沈める（要件書 4.3） -->
+                <!-- 稼働する日と休業する日で面を分ける（要件書 4.3） -->
+                <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource WorkingDayBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
