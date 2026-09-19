@@ -1,9 +1,9 @@
+using System.Windows;
+
 namespace SlideinaCalendar.App;
 
-/// <summary>
-/// ウィンドウモードの本体。Phase 3 で実装する。
-/// </summary>
-public partial class MainWindow : System.Windows.Window
+/// <summary>ウィンドウモードの本体。状態は MainViewModel が持つ。</summary>
+public partial class MainWindow : Window
 {
     public MainWindow() => InitializeComponent();
 }
