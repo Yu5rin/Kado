@@ -1,0 +1,23 @@
+# ビルド出力
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/
+
+# テスト結果
+[Tt]est[Rr]esult*/
+*.trx
+coverage*.json
+*.opencover.xml
+
+# NuGet
+*.nupkg
+packages/
