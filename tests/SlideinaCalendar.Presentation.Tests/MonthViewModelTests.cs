@@ -129,7 +129,7 @@ public class MonthViewModelTests
         var vm = Create(test);
 
         var cell = Cell(vm, D(2026, 9, 24));
-        Assert.Equal("会議", Assert.Single(cell.Events).Source.Title);
+        Assert.Equal("会議", Assert.Single(cell.Events).Scheduled.Source.Title);
         Assert.Equal("提出", Assert.Single(cell.Tasks).Title);
         Assert.False(cell.IsEmpty);
 
@@ -251,6 +251,134 @@ public class MonthViewModelTests
         vm.Refresh();
 
         Assert.Single(Cell(vm, D(2026, 9, 24)).Events);
+    }
+
+    // ------------------------------------------------------------------
+    // マスの中身（モックの月グリッドに合わせた表示）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 予定のチップに開始時刻が付く()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "計画レビュー", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 30),
+        });
+
+        var chip = Assert.Single(Cell(Create(test), D(2026, 9, 24)).Events);
+
+        // 狭いマスで時刻とタイトルを別々に置くと、どちらも読めなくなる
+        Assert.Equal("09:00 計画レビュー", chip.Label);
+    }
+
+    [Fact]
+    public void 終日の予定には時刻が付かない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "棚卸", Date = D(2026, 9, 24) });
+
+        Assert.Equal("棚卸", Assert.Single(Cell(Create(test), D(2026, 9, 24)).Events).Label);
+    }
+
+    [Fact]
+    public void 複数日予定の2日目以降には時刻が付かない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "出張", Date = D(2026, 9, 24), EndDate = D(2026, 9, 25),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(18, 0),
+        });
+
+        var vm = Create(test);
+
+        // 継続中の日に開始時刻を出すと、その日に始まるように見える
+        Assert.Equal("09:00 出張", Assert.Single(Cell(vm, D(2026, 9, 24)).Events).Label);
+        Assert.Equal("出張", Assert.Single(Cell(vm, D(2026, 9, 25)).Events).Label);
+    }
+
+    [Fact]
+    public void 入りきらない予定は件数でまとめる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        for (var i = 1; i <= 5; i++)
+        {
+            ws.AddEvent(new CalendarEvent { Id = $"e{i}", Title = $"予定{i}", Date = D(2026, 9, 24) });
+        }
+
+        var cell = Cell(Create(test), D(2026, 9, 24));
+
+        // 隠れたまま気づけないのを防ぐ
+        Assert.Equal(DayCellViewModel.DefaultMaxChips, cell.Events.Count);
+        Assert.Equal(2, cell.OverflowCount);
+        Assert.Equal("＋2", cell.OverflowLabel);
+        Assert.Equal(5, cell.AllEvents.Count);
+    }
+
+    [Fact]
+    public void 入りきるときは件数を出さない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
+
+        var cell = Cell(Create(test), D(2026, 9, 24));
+
+        Assert.Equal(0, cell.OverflowCount);
+        Assert.Null(cell.OverflowLabel);
+    }
+
+    [Fact]
+    public void 溢れたときは予定を先に見せる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        for (var i = 1; i <= 3; i++)
+        {
+            ws.AddEvent(new CalendarEvent { Id = $"e{i}", Title = $"予定{i}", Date = D(2026, 9, 24) });
+        }
+        ws.AddTask(new TaskItem { Id = "t1", Title = "タスク", Due = D(2026, 9, 24) });
+
+        var cell = Cell(Create(test), D(2026, 9, 24));
+
+        // タスクは右ペインでも一覧できる
+        Assert.Equal(3, cell.Events.Count);
+        Assert.Empty(cell.Tasks);
+        Assert.Equal(1, cell.OverflowCount);
+    }
+
+    [Fact]
+    public void 祝日の名前が出る()
+    {
+        using var test = TestWorkspace.Create(
+            holidays: new Dictionary<DateOnly, string> { [D(2026, 9, 21)] = "敬老の日" });
+
+        var vm = Create(test);
+
+        Assert.Equal("敬老の日", Cell(vm, D(2026, 9, 21)).HolidayName);
+        Assert.Null(Cell(vm, D(2026, 9, 24)).HolidayName);
+    }
+
+    [Fact]
+    public void 祝日データが無ければ名前は出ない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 取り込むまでは何も返さない実装が入る
+        Assert.Null(Cell(Create(test), D(2026, 9, 21)).HolidayName);
+    }
+
+    [Fact]
+    public void 祝日名だけでもマスは空ではない()
+    {
+        using var test = TestWorkspace.Create(
+            holidays: new Dictionary<DateOnly, string> { [D(2026, 9, 21)] = "敬老の日" });
+
+        Assert.False(Cell(Create(test), D(2026, 9, 21)).IsEmpty);
     }
 
     private static DayCellViewModel Cell(MonthViewModel vm, DateOnly date) =>
