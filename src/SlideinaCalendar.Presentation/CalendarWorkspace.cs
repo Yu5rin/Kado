@@ -32,6 +32,7 @@ public sealed class CalendarWorkspace
         Events = new EventRepository(connection);
         Tasks = new TaskRepository(connection);
         WorkingDayStore = new WorkingDayRepository(connection);
+        Sources = new SourceRepository(connection);
         Settings = new SettingsRepository(connection);
         Schedule = new ScheduleQuery(Events, Tasks);
 
@@ -43,6 +44,9 @@ public sealed class CalendarWorkspace
     public EventRepository Events { get; }
     public TaskRepository Tasks { get; }
     public WorkingDayRepository WorkingDayStore { get; }
+
+    /// <summary>カレンダーとタスクリスト。同期を始めるまでは空のことがある。</summary>
+    public SourceRepository Sources { get; }
     public SettingsRepository Settings { get; }
     public ScheduleQuery Schedule { get; }
 

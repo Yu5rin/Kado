@@ -138,4 +138,74 @@ public class SourceListsViewModelTests
         // 所属なしの予定は既定の色に任せる
         Assert.Null(main.SelectedDay.Events.Single(e => e.Id == "e3").Color);
     }
+
+    [Fact]
+    public void 取り込んだ一覧があればそちらを使う()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "work@example.com", Summary = "仕事用カレンダー",
+            BackgroundColor = "#123456", SortOrder = 0, UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // 名前も色も Google のものになる
+        var item = Assert.Single(vm.Calendars);
+        Assert.Equal("仕事用カレンダー", item.Name);
+        Assert.Equal("#123456", item.SwatchColor);
+        Assert.Equal("#123456", vm.ColorOf("work@example.com"));
+    }
+
+    [Fact]
+    public void 付け替えた表示名があればそちらを出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "c1", Summary = "本名", SummaryOverride = "呼び名", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        Assert.Equal("呼び名", Assert.Single(new SourceListsViewModel(test.Workspace).Calendars).Name);
+    }
+
+    [Fact]
+    public void 取り込んだ一覧のチェックは保存される()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "c1", Summary = "仕事", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        Assert.Single(vm.Calendars).IsVisible = false;
+
+        // 同期のたびにチェックが戻ると使い物にならない（要件書 5.5）
+        Assert.False(Assert.Single(test.Workspace.Sources.Calendars()).IsVisible);
+        Assert.False(Assert.Single(new SourceListsViewModel(test.Workspace).Calendars).IsVisible);
+    }
+
+    [Fact]
+    public void 取り込んだ一覧でも絞り込みが効く()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "仕事", Summary = "仕事", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        Assert.Single(vm.Calendars).IsVisible = false;
+
+        Assert.False(vm.IncludesEvent(new CalendarEvent { Id = "e1", CalendarId = "仕事" }));
+        Assert.True(vm.IncludesEvent(new CalendarEvent { Id = "e2", CalendarId = "生産ライン" }));
+    }
 }
