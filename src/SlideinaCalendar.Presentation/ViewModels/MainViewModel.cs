@@ -44,7 +44,8 @@ public sealed class MainViewModel : ObservableObject
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
-        GoogleClientSecretsStore? googleClient = null)
+        GoogleClientSecretsStore? googleClient = null,
+        Sync.IGoogleSync? google = null)
     {
         _googleClient = googleClient;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
@@ -97,6 +98,24 @@ public sealed class MainViewModel : ObservableObject
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
         ImportGoogleClientCommand = new RelayCommand(ImportGoogleClient, () => _googleClient is not null);
 
+        Sync = new SyncViewModel(google);
+
+        // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す
+        Sync.Synced += (_, _) =>
+        {
+            _workspace.EnsureSources();
+            RefreshViews();
+        };
+
+        // 右上の表示は Sync が持つ。こちらは伝えるだけ
+        Sync.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(SyncViewModel.StatusText) or nameof(SyncViewModel.State))
+            {
+                Raise(nameof(SyncStatusText), nameof(IsSynced));
+            }
+        };
+
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
 
@@ -131,6 +150,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>左パネルのカレンダー一覧とタスクリスト一覧。</summary>
     public SourceListsViewModel SourceLists { get; }
+
+    /// <summary>右上の同期表示と、その操作。</summary>
+    public SyncViewModel Sync { get; }
 
     // ------------------------------------------------------------------
     // 状態
@@ -256,10 +278,10 @@ public sealed class MainViewModel : ObservableObject
     /// 同期できているのかどうかが読み取れなくなる。
     /// </para>
     /// </summary>
-    public string SyncStatusText => IsSynced ? "同期済み" : "Google 未接続";
+    public string SyncStatusText => Sync.StatusText;
 
     /// <summary>同期できているか。丸印の色を変える。</summary>
-    public bool IsSynced => false;
+    public bool IsSynced => Sync.IsConnected;
 
     /// <summary>本体ビューの下に出す凡例。ビューごとに変える。</summary>
     public string HintText => _currentView switch

@@ -28,6 +28,7 @@
         <conv:DueEmphasisBrushConverter x:Key="DueEmphasisBrush" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:SyncStateBrushConverter x:Key="SyncStateBrush" />
 
         <!--
             カレンダー／タスクリストの行を右クリックしたときのメニュー。
@@ -62,6 +63,7 @@
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+        <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -161,6 +163,15 @@
                             <MenuItem Header="Google のクライアント設定を読み込む…（JSON）"
                                       Command="{Binding ImportGoogleClientCommand}"
                                       ToolTip="Google Cloud Console で「デスクトップアプリ」型として発行し、落としたファイルを選びます" />
+                            <MenuItem Header="Google に接続…"
+                                      Command="{Binding Sync.ConnectCommand}"
+                                      ToolTip="ブラウザが開きます。許可するとカレンダーとタスクの同期が始まります" />
+                            <MenuItem Header="今すぐ同期"
+                                      Command="{Binding Sync.SyncNowCommand}"
+                                      InputGestureText="F5" />
+                            <MenuItem Header="Google との接続を切る"
+                                      Command="{Binding Sync.DisconnectCommand}"
+                                      ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
                             <Separator />
                             <MenuItem Header="設定" IsEnabled="False"
                                       ToolTip="このあとのフェーズで実装します" />
@@ -171,13 +182,21 @@
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
 
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,8,0"
-                            VerticalAlignment="Center">
-                    <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
-                             Fill="{DynamicResource Ink3Brush}" />
-                    <TextBlock Text="{Binding SyncStatusText}" FontSize="11.5"
-                               Foreground="{DynamicResource Ink3Brush}" />
-                </StackPanel>
+                <!--
+                    押すと同期する。繋いでいなければ押せない（⚙から接続する）。
+                    丸印の色で状態を出す。文字は状態だけを出し、操作の結果は混ぜない
+                -->
+                <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,2"
+                        Style="{StaticResource SyncStatusButtonStyle}"
+                        Command="{Binding Sync.SyncNowCommand}"
+                        ToolTip="押すと今すぐ同期します">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
+                                 Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
+                        <TextBlock Text="{Binding SyncStatusText}" FontSize="11.5"
+                                   Foreground="{DynamicResource Ink3Brush}" />
+                    </StackPanel>
+                </Button>
 
                 <TextBox DockPanel.Dock="Right" Style="{StaticResource SearchBoxStyle}" Margin="0,0,8,0"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />

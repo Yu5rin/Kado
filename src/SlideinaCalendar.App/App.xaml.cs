@@ -2,9 +2,11 @@ using System.IO;
 using System.Windows;
 using Microsoft.Data.Sqlite;
 using SlideinaCalendar.App.Editing;
+using SlideinaCalendar.App.Google;
 using SlideinaCalendar.App.Themes;
 using SlideinaCalendar.Data;
 using SlideinaCalendar.Presentation;
+using SlideinaCalendar.Presentation.Sync;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App;
@@ -18,6 +20,7 @@ namespace SlideinaCalendar.App;
 public partial class App : Application
 {
     private SqliteConnection? _connection;
+    private GoogleConnection? _google;
 
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
@@ -68,10 +71,20 @@ public partial class App : Application
                 Path.Combine(
                     Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-client.json"));
 
+            // トークンは DPAPI で守る。守るべきはこちら。クライアント設定のほうは
+            // デスクトップアプリ型である以上どのみち手元に置かれ、秘密として扱えない
+            _google = new GoogleConnection(
+                workspace,
+                googleClient,
+                new DpapiTokenStore(Path.Combine(
+                    Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat")),
+                OpenInBrowser);
+
             window = new MainWindow
             {
                 DataContext = new MainViewModel(
-                    workspace, today, editors: editors, files: files, googleClient: googleClient),
+                    workspace, today, editors: editors, files: files,
+                    googleClient: googleClient, google: _google),
             };
 
             MainWindow = window;
@@ -103,8 +116,24 @@ public partial class App : Application
             "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
+    /// <summary>
+    /// 認可のページを既定のブラウザで開く。
+    /// <para>
+    /// アプリの中に埋め込まない。認可はパスワードを入れる場面なので、利用者が
+    /// いつも使っているブラウザの画面で、URL を自分で確かめられるほうがよい。
+    /// </para>
+    /// </summary>
+    private static void OpenInBrowser(string url)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+        {
+            UseShellExecute = true,
+        });
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _google?.Dispose();
         _connection?.Dispose();
         base.OnExit(e);
     }

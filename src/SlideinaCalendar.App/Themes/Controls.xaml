@@ -589,4 +589,36 @@
         <Setter Property="ToolTip" Value="削除" />
     </Style>
 
+    <!--
+        右上の同期表示。押すと同期する。
+        ボタンらしく見せすぎると、ツールバーの中で目立ちすぎる。枠は乗せたときだけ出す。
+    -->
+    <Style x:Key="SyncStatusButtonStyle" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root" CornerRadius="5" Padding="{TemplateBinding Padding}"
+                            Background="Transparent"
+                            BorderThickness="1" BorderBrush="Transparent">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <!-- 繋いでいないときは押せない。押せないことを薄さで示す -->
+                            <Setter Property="Opacity" Value="0.75" />
+                            <Setter TargetName="Root" Property="Background" Value="Transparent" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>
