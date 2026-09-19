@@ -908,6 +908,87 @@ public sealed class MainViewModel : ObservableObject
     private TimeOnly NowTime => TimeOnly.FromDateTime(_clock.GetLocalNow().DateTime);
 
     /// <summary>選択している日に予定を足す。</summary>
+    // ------------------------------------------------------------------
+    // ドラッグで動かす
+    //
+    // 掴んで落とすのと、編集画面で日付を打ち直すのとでは手数が違う。
+    // Ctrl を押しながらなら複製。どちらも Undo を通る
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 予定を別の日へ移す。<paramref name="copy"/> なら複製する。
+    /// <para>
+    /// 期間のある予定は長さを保つ。時刻は動かさない（何日の予定か、だけを変える）。
+    /// </para>
+    /// <para>
+    /// 実働日データから起こした印（休業日・特別出勤・日付の行）は動かせない。
+    /// 取り込み元と食い違うと、次の取り込みで元に戻るだけになる。
+    /// </para>
+    /// </summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventTo(string? id, DateOnly date, bool copy = false)
+    {
+        if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } found) return false;
+        if (CalendarWorkspace.IsMilestoneMark(found)) return false;
+        if (found.Date == date && !copy) return false;
+
+        var length = found.EndDate is { } end ? end.DayNumber - found.Date.DayNumber : 0;
+        var moved = found with
+        {
+            Date = date,
+            EndDate = found.EndDate is null ? null : date.AddDays(length),
+        };
+
+        if (!copy)
+        {
+            if (!_workspace.UpdateEvent(moved)) return false;
+
+            StatusMessage = "予定を移しました";
+            return true;
+        }
+
+        // 複製は向こうにまだ無いものとして作る。相手側の識別子を引き継ぐと、
+        // 次の同期で元の予定のほうが書き換わる
+        _workspace.AddEvent(moved with
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            GoogleEventId = null,
+            GoogleRaw = null,
+            GoogleUpdated = null,
+        });
+
+        StatusMessage = "予定を複製しました";
+        return true;
+    }
+
+    /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveTaskTo(string? id, DateOnly date, bool copy = false)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } found) return false;
+        if (found.Due == date && !copy) return false;
+
+        var moved = found with { Due = date };
+
+        if (!copy)
+        {
+            if (!_workspace.UpdateTask(moved)) return false;
+
+            StatusMessage = "タスクの期限を移しました";
+            return true;
+        }
+
+        _workspace.AddTask(moved with
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            GoogleTaskId = null,
+            GoogleRaw = null,
+        });
+
+        StatusMessage = "タスクを複製しました";
+        return true;
+    }
+
     private void AddEvent()
     {
         var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);

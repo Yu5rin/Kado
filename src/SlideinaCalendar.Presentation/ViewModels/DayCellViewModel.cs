@@ -16,6 +16,8 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public sealed class DayCellViewModel : ObservableObject
 {
+    private bool _isDropTarget;
+
     /// <summary>
     /// マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。
     /// <para>実際の数はマスの高さから決める（<see cref="CapacityFor"/>）。これは最低限。</para>
@@ -109,6 +111,16 @@ public sealed class DayCellViewModel : ObservableObject
     {
         get => _isSelected;
         set => Set(ref _isSelected, value);
+    }
+
+    /// <summary>
+    /// いま何かを落とそうとしている先か。
+    /// <para>掴んだものがどこへ入るのか分からないと、落とす手が止まる。面で示す。</para>
+    /// </summary>
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set => Set(ref _isDropTarget, value);
     }
 
     /// <summary>実働日データの登録範囲内か。範囲外は稼働・非稼働を判断できない。</summary>
