@@ -84,10 +84,25 @@ public sealed class CalendarWorkspace
     /// <summary>実働日データを読み直す。Excel を取り込んだあとなどに呼ぶ。</summary>
     public void ReloadWorkingDays()
     {
-        _workingDays = WorkingDayStore.Load();
+        // Excel から読んだものに、「inaCalendar」の印から組み立てたものを重ねる。
+        // Excel を持っていない端末でも、同期で渡ってきた印だけで実働日数が出る
+        _workingDays = WorkingDayMarks.Overlay(WorkingDayStore.Load(), RebuildFromMarks());
+
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath);
         NotifyChanged();
+    }
+
+    /// <summary>「inaCalendar」に入っている印から稼働日を組み立てる。</summary>
+    private WorkingDayCalendar RebuildFromMarks()
+    {
+        var calendars = WorkingDayCalendars();
+        if (calendars.Count == 0) return WorkingDayCalendar.Empty;
+
+        var ids = calendars.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+
+        return WorkingDayMarks.Rebuild(
+            Events.All().Where(e => e.CalendarId is { } id && ids.Contains(id)), Holidays);
     }
 
     // ------------------------------------------------------------------
