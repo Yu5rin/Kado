@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.Mapping;
@@ -300,5 +301,86 @@ public class EventMapperTests
 
         Assert.NotNull(body["recurrence"]);
         Assert.Empty(body["recurrence"]!.AsArray());
+    }
+
+    // ------------------------------------------------------------------
+    // 送る範囲は必ず「開始より後に終わる」
+    //
+    // Google は長さ 0 の範囲も逆転した範囲も 400 で断る。実機で、送れない予定が
+    // 1件あるだけでそのカレンダーの同期が丸ごと止まった
+    // ------------------------------------------------------------------
+
+    /// <summary>送る本文から終了の時刻を読む。</summary>
+    private static DateTimeOffset EndOf(JsonObject body) =>
+        DateTimeOffset.Parse(
+            body["end"]!["dateTime"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset StartOf(JsonObject body) =>
+        DateTimeOffset.Parse(
+            body["start"]!["dateTime"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void 終了時刻の無い予定は1時間として送る()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "打ち合わせ", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0),
+        });
+
+        // 開始と同じ時刻で送ると Google が断る
+        Assert.Equal(StartOf(body).AddHours(1), EndOf(body));
+    }
+
+    [Fact]
+    public void 終了が開始より前でも後ろに直して送る()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "打ち間違い", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(9, 0),
+        });
+
+        Assert.True(EndOf(body) > StartOf(body));
+    }
+
+    [Fact]
+    public void 終了が開始と同じでも後ろに直して送る()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "長さゼロ", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0),
+        });
+
+        Assert.True(EndOf(body) > StartOf(body));
+    }
+
+    [Fact]
+    public void まともな終了時刻はそのまま送る()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(23, 0), EndTime = new TimeOnly(23, 55),
+        });
+
+        Assert.Equal(StartOf(body).AddMinutes(55), EndOf(body));
+    }
+
+    [Fact]
+    public void 日をまたぐ予定は終了日のほうで表す()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "夜勤", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(22, 0),
+            EndDate = D(2026, 9, 25), EndTime = new TimeOnly(6, 0),
+        });
+
+        // 時刻だけ見れば逆転しているが、日が進んでいるので直してはいけない
+        Assert.Equal(StartOf(body).AddHours(8), EndOf(body));
     }
 }
