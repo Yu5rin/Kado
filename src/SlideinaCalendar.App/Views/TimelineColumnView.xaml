@@ -18,6 +18,7 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EventColorFaceConverter x:Key="EventColorFace" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVisibility" />
 
         <!--
             時間軸に置かれた1件の右クリックメニュー。
@@ -67,20 +68,12 @@
             <Grid VerticalAlignment="Top" Height="1.5" IsHitTestVisible="False" Panel.ZIndex="2"
                   Margin="{Binding NowOffset, ElementName=Root,
                            Converter={StaticResource TimelineOffsetToMargin}}">
-                <Grid.Style>
-                    <Style TargetType="Grid">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding IsToday}" Value="True" />
-                                    <Condition Binding="{Binding ShowNow, ElementName=Root}" Value="True" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="Visibility" Value="Visible" />
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Grid.Style>
+                <Grid.Visibility>
+                    <MultiBinding Converter="{StaticResource AllTrueToVisibility}">
+                        <Binding Path="IsToday" />
+                        <Binding Path="ShowNow" ElementName="Root" />
+                    </MultiBinding>
+                </Grid.Visibility>
 
                 <Border Background="{DynamicResource NowLineBrush}" />
                 <Ellipse Width="10" Height="10" Fill="{DynamicResource NowLineBrush}"
