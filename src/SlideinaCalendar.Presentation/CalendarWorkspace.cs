@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.Sqlite;
 using SlideinaCalendar.Core.Import;
 using SlideinaCalendar.Core.WorkingDays;
@@ -39,9 +40,10 @@ public sealed class CalendarWorkspace
 
         EnsureSources();
 
-        _workingDays = WorkingDayStore.Load();
-        WorkingDayMath = new WorkingDayMath(_workingDays);
-        DueFormatter = new DueDateFormatter(WorkingDayMath);
+        // 起動のたびに印からも組み立てる。保存されているのは Excel から読んだ分だけで、
+        // 同期で渡ってきた印は入っていない。ここで重ねないと、取り込んだ端末では
+        // 出ていた実働日数が、起動し直すと消える
+        LoadWorkingDays();
 
         // 実働日データを読んだあとでないと補えない
         BackfillMilestones();
@@ -81,16 +83,28 @@ public sealed class CalendarWorkspace
     /// <summary>データが変わったときに呼ばれる。ビューはこれを見て引き直す。</summary>
     public event EventHandler? DataChanged;
 
-    /// <summary>実働日データを読み直す。Excel を取り込んだあとなどに呼ぶ。</summary>
+    /// <summary>実働日データを読み直す。Excel を取り込んだあとや、同期のあとに呼ぶ。</summary>
     public void ReloadWorkingDays()
     {
-        // Excel から読んだものに、「inaCalendar」の印から組み立てたものを重ねる。
-        // Excel を持っていない端末でも、同期で渡ってきた印だけで実働日数が出る
+        LoadWorkingDays();
+        NotifyChanged();
+    }
+
+    /// <summary>
+    /// 保存されている実働日に、「inaCalendar」の印から組み立てたものを重ねる。
+    /// <para>
+    /// Excel を持っていない端末でも、同期で渡ってきた印だけで実働日数が出る。
+    /// 取り込んだ端末でも、印のほうが月の頭から月末までを覆うので、ファイルが月の
+    /// 途中で始まったり終わったりする端の月を埋められる。
+    /// </para>
+    /// </summary>
+    [MemberNotNull(nameof(_workingDays), nameof(WorkingDayMath), nameof(DueFormatter))]
+    private void LoadWorkingDays()
+    {
         _workingDays = WorkingDayMarks.Overlay(WorkingDayStore.Load(), RebuildFromMarks());
 
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath);
-        NotifyChanged();
     }
 
     /// <summary>「inaCalendar」に入っている印から稼働日を組み立てる。</summary>
@@ -408,6 +422,10 @@ public sealed class CalendarWorkspace
         // 読み直したあとのデータを見る。取り込みは期間を広げることがある
         BackfillMilestones();
         WriteClosedDays(result.WorkingDayRangeStart, result.WorkingDayRangeEnd);
+
+        // 書き出した印をもう一度重ねる。Excel の期間は最初と最後の稼働日で切れて
+        // いるので、そのままだと端の月が「未登録」のままになる
+        ReloadWorkingDays();
 
         return result;
     }

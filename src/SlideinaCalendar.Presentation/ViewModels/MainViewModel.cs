@@ -121,7 +121,11 @@ public sealed class MainViewModel : ObservableObject
         Sync.Synced += (_, _) =>
         {
             _workspace.EnsureSources();
-            RefreshViews();
+
+            // 「inaCalendar」の印も同期で増減する。実働日を組み立て直さないと、
+            // 他の端末で取り込んだ分がこちらでは「未登録」のままになる。
+            // この中から DataChanged が飛ぶので、画面はそれで引き直される
+            _workspace.ReloadWorkingDays();
         };
 
         // 右上の表示は Sync が持つ。こちらは伝えるだけ
@@ -202,7 +206,7 @@ public sealed class MainViewModel : ObservableObject
             Week.GoTo(SelectedDate);
             Day.Date = SelectedDate;
 
-            Raise(nameof(HintText), nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
+            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
         }
     }
 
@@ -308,16 +312,6 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>同期できているか。丸印の色を変える。</summary>
     public bool IsSynced => Sync.IsConnected;
-
-    /// <summary>本体ビューの下に出す凡例。ビューごとに変える。</summary>
-    public string HintText => _currentView switch
-    {
-        CalendarView.Week => "終日レーンのタスクを時間帯へドラッグすると、作業時間としてブロックが置かれる",
-        CalendarView.Day => "空き時間をドラッグすると予定を追加 ・ タスクをドロップすると作業時間を確保",
-        CalendarView.Year => "1行が1か月 ・ 日付の上の横棒がマイルストーン ・ 右端は月の実働日数",
-        CalendarView.Agenda => "予定とタスクを時系列で表示 ・ 予定のない休みはまとめて折りたたむ",
-        _ => "色付きラベルは実働日データから取り込んだマイルストーン（編集不可） ・ ドラッグで期間選択 ・ Ctrl＋ドラッグで複製",
-    };
 
     /// <summary>
     /// 「実働 20 ／ 残り 6」のサマリー。
