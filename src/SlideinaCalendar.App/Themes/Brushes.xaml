@@ -1,0 +1,30 @@
+<!--
+    色からブラシを作る。テーマを差し替えると Color が入れ替わり、
+    DynamicResource で参照しているブラシも追随する。
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{DynamicResource BackgroundColor}" />
+    <SolidColorBrush x:Key="PanelBrush" Color="{DynamicResource PanelColor}" />
+    <SolidColorBrush x:Key="LineBrush" Color="{DynamicResource LineColor}" />
+    <SolidColorBrush x:Key="LineStrongBrush" Color="{DynamicResource LineStrongColor}" />
+    <SolidColorBrush x:Key="InkBrush" Color="{DynamicResource InkColor}" />
+    <SolidColorBrush x:Key="Ink2Brush" Color="{DynamicResource Ink2Color}" />
+    <SolidColorBrush x:Key="Ink3Brush" Color="{DynamicResource Ink3Color}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="{DynamicResource AccentSoftColor}" />
+    <SolidColorBrush x:Key="SundayBrush" Color="{DynamicResource SundayColor}" />
+    <SolidColorBrush x:Key="SaturdayBrush" Color="{DynamicResource SaturdayColor}" />
+    <SolidColorBrush x:Key="OffDayBrush" Color="{DynamicResource OffDayColor}" />
+
+    <SolidColorBrush x:Key="MilestoneSpecFaceBrush" Color="{DynamicResource MilestoneSpecFaceColor}" />
+    <SolidColorBrush x:Key="MilestoneSpecTextBrush" Color="{DynamicResource MilestoneSpecTextColor}" />
+    <SolidColorBrush x:Key="MilestoneGoFaceBrush" Color="{DynamicResource MilestoneGoFaceColor}" />
+    <SolidColorBrush x:Key="MilestoneGoTextBrush" Color="{DynamicResource MilestoneGoTextColor}" />
+    <SolidColorBrush x:Key="MilestoneSFaceBrush" Color="{DynamicResource MilestoneSFaceColor}" />
+    <SolidColorBrush x:Key="MilestoneSTextBrush" Color="{DynamicResource MilestoneSTextColor}" />
+    <SolidColorBrush x:Key="MilestoneMFaceBrush" Color="{DynamicResource MilestoneMFaceColor}" />
+    <SolidColorBrush x:Key="MilestoneMTextBrush" Color="{DynamicResource MilestoneMTextColor}" />
+
+</ResourceDictionary>
