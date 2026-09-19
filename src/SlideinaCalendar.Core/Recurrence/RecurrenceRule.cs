@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Globalization;
 
 namespace SlideinaCalendar.Core.Recurrence;
@@ -18,10 +19,11 @@ namespace SlideinaCalendar.Core.Recurrence;
 /// FREQ=MONTHLY;BYMONTHDAY=-1          … 月末
 /// FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=19
 /// FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231 … 終了日つき
+/// FREQ=YEARLY;EXDATE=20260421,20270421 … 除外日つき
 /// </code>
 /// <para>
-/// 現時点の対応は 毎日／毎週（曜日指定）／毎月（日付指定）／毎年 と終了日（UNTIL）。
-/// 種別は <see cref="RegisterPattern"/> で後から足せる。
+/// 現時点の対応は 毎日／毎週（曜日指定）／毎月（日付指定）／毎年 と、
+/// 終了日（UNTIL）、除外日（EXDATE）。種別は <see cref="RegisterPattern"/> で後から足せる。
 /// </para>
 /// </summary>
 public sealed class RecurrenceRule
@@ -35,10 +37,11 @@ public sealed class RecurrenceRule
             ["YEARLY"] = BuiltInPatterns.CreateYearly,
         };
 
-    private RecurrenceRule(IRecurrencePattern pattern, DateOnly? until)
+    private RecurrenceRule(IRecurrencePattern pattern, DateOnly? until, IReadOnlySet<DateOnly> exceptDates)
     {
         Pattern = pattern;
         Until = until;
+        ExceptDates = exceptDates;
     }
 
     /// <summary>周期の判定ロジック。</summary>
@@ -46,6 +49,15 @@ public sealed class RecurrenceRule
 
     /// <summary>終了日（この日までは繰り返す）。無期限なら null。</summary>
     public DateOnly? Until { get; }
+
+    /// <summary>
+    /// 繰り返しから除外する日。
+    /// <para>
+    /// 「毎年この日」と決めたあとで、特定の年だけ取りやめるようなときに使う。
+    /// RFC 5545 の EXDATE にあたる（本来は RRULE とは別行だが、ここでは同じ指定文字列に含める）。
+    /// </para>
+    /// </summary>
+    public IReadOnlySet<DateOnly> ExceptDates { get; }
 
     /// <summary>種別名（<c>DAILY</c> / <c>WEEKLY</c> / <c>MONTHLY</c> / <c>YEARLY</c> …）。</summary>
     public string Frequency => Pattern.Frequency;
@@ -103,8 +115,9 @@ public sealed class RecurrenceRule
         var parameters = new RecurrenceParameters(values);
         var pattern = factory(parameters);
         var until = ParseUntil(parameters.Get("UNTIL"));
+        var except = ParseExceptDates(parameters.Get("EXDATE"));
 
-        return new RecurrenceRule(pattern, until);
+        return new RecurrenceRule(pattern, until, except);
     }
 
     /// <summary>パース失敗を例外にせず判定したい場合。</summary>
@@ -123,11 +136,17 @@ public sealed class RecurrenceRule
     }
 
     /// <summary>パターンから直接組み立てる。</summary>
-    public static RecurrenceRule FromPattern(IRecurrencePattern pattern, DateOnly? until = null)
+    public static RecurrenceRule FromPattern(
+        IRecurrencePattern pattern,
+        DateOnly? until = null,
+        IEnumerable<DateOnly>? exceptDates = null)
     {
         ArgumentNullException.ThrowIfNull(pattern);
-        return new RecurrenceRule(pattern, until);
+        return new RecurrenceRule(pattern, until, ToSet(exceptDates));
     }
+
+    private static IReadOnlySet<DateOnly> ToSet(IEnumerable<DateOnly>? dates) =>
+        dates is null ? FrozenSet<DateOnly>.Empty : dates.ToFrozenSet();
 
     /// <summary>
     /// 繰り返し種別を追加する。既存の種別に手を入れずに拡張できるようにするための口。
@@ -158,6 +177,7 @@ public sealed class RecurrenceRule
     {
         if (date < seriesStart) return false;
         if (Until is { } until && date > until) return false;
+        if (ExceptDates.Contains(date)) return false;
         return Pattern.Matches(date, seriesStart);
     }
 
@@ -192,31 +212,63 @@ public sealed class RecurrenceRule
     /// <summary>指定文字列に戻す。保存・Google への受け渡しに使う。</summary>
     public string ToSpec()
     {
-        var spec = Pattern.ToSpec();
-        return Until is { } until
-            ? $"{spec};UNTIL={until.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}"
-            : spec;
+        var parts = new List<string> { Pattern.ToSpec() };
+
+        if (Until is { } until)
+        {
+            parts.Add($"UNTIL={until.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}");
+        }
+
+        if (ExceptDates.Count > 0)
+        {
+            var dates = ExceptDates.Order().Select(d => d.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
+            parts.Add("EXDATE=" + string.Join(",", dates));
+        }
+
+        return string.Join(";", parts);
     }
 
     public override string ToString() => ToSpec();
 
+    /// <summary>EXDATE をカンマ区切りで読む。空なら空集合。</summary>
+    private static IReadOnlySet<DateOnly> ParseExceptDates(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return FrozenSet<DateOnly>.Empty;
+
+        var result = new HashSet<DateOnly>();
+        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            result.Add(ParseDate(part, "EXDATE"));
+        }
+        return result.ToFrozenSet();
+    }
+
     private static DateOnly? ParseUntil(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
+        return ParseDate(raw, "UNTIL");
+    }
 
-        // RFC 5545 は UTC の日時形式（20261231T145959Z）も許すので、日付部分だけを見る
+    /// <summary>
+    /// 日付を読む。RFC 5545 の <c>yyyyMMdd</c> を基本とし、UTC の日時形式
+    /// （<c>20261231T145959Z</c>）と手書きの <c>2026-12-31</c> も受け入れる。
+    /// </summary>
+    private static DateOnly ParseDate(string raw, string field)
+    {
         var datePart = raw.Length >= 8 ? raw[..8] : raw;
 
-        if (!DateOnly.TryParseExact(datePart, "yyyyMMdd", CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out var until))
+        if (DateOnly.TryParseExact(datePart, "yyyyMMdd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var value))
         {
-            // 「2026-12-31」形式も受け入れる（手書きの指定を弾かないため）
-            if (!DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out until))
-            {
-                throw new FormatException($"UNTIL の日付が不正です: '{raw}'（yyyyMMdd 形式）");
-            }
+            return value;
         }
-        return until;
+
+        if (DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out value))
+        {
+            return value;
+        }
+
+        throw new FormatException($"{field} の日付が不正です: '{raw}'（yyyyMMdd 形式）");
     }
 }

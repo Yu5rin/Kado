@@ -196,6 +196,57 @@ public class RecurrenceRuleTests
     }
 
     // ------------------------------------------------------------------
+    // 除外日（EXDATE）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 除外日は該当しない()
+    {
+        // 旧 inaCalendar のバックアップに、毎年の予定から特定の年だけ外した例があった
+        var rule = RecurrenceRule.Parse("FREQ=YEARLY;EXDATE=20260421,20270421");
+        var start = D(2026, 4, 21);
+
+        Assert.False(rule.Matches(D(2026, 4, 21), start));   // 開始日でも除外されていれば該当しない
+        Assert.False(rule.Matches(D(2027, 4, 21), start));
+        Assert.True(rule.Matches(D(2028, 4, 21), start));    // 除外されていない年は該当する
+    }
+
+    [Fact]
+    public void 除外日を指定しなければ空になる()
+        => Assert.Empty(RecurrenceRule.Parse("FREQ=DAILY").ExceptDates);
+
+    [Fact]
+    public void 除外日は列挙からも外れる()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=DAILY;EXDATE=20260903");
+        var days = rule.Occurrences(D(2026, 9, 1), D(2026, 9, 1), D(2026, 9, 4)).ToArray();
+
+        Assert.Equal([D(2026, 9, 1), D(2026, 9, 2), D(2026, 9, 4)], days);
+    }
+
+    [Fact]
+    public void 除外日は終了日と併用できる()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=DAILY;UNTIL=20260904;EXDATE=20260903");
+
+        Assert.Equal(D(2026, 9, 4), rule.Until);
+        Assert.Single(rule.ExceptDates);
+        Assert.False(rule.Matches(D(2026, 9, 3), D(2026, 9, 1)));
+        Assert.True(rule.Matches(D(2026, 9, 4), D(2026, 9, 1)));
+        Assert.False(rule.Matches(D(2026, 9, 5), D(2026, 9, 1)));
+    }
+
+    [Fact]
+    public void 除外日はパターンから組み立てても効く()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=DAILY");
+        var withExcept = RecurrenceRule.FromPattern(rule.Pattern, exceptDates: [D(2026, 9, 3)]);
+
+        Assert.False(withExcept.Matches(D(2026, 9, 3), D(2026, 9, 1)));
+        Assert.True(withExcept.Matches(D(2026, 9, 2), D(2026, 9, 1)));
+    }
+
+    // ------------------------------------------------------------------
     // 列挙
     // ------------------------------------------------------------------
 
@@ -263,6 +314,8 @@ public class RecurrenceRuleTests
     [InlineData("FREQ=MONTHLY;BYMONTHDAY=15")]
     [InlineData("FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=19")]
     [InlineData("FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231")]
+    [InlineData("FREQ=YEARLY;EXDATE=20260421,20270421")]
+    [InlineData("FREQ=DAILY;UNTIL=20261231;EXDATE=20260903")]
     public void 指定文字列に復元できる(string spec)
         => Assert.Equal(spec, RecurrenceRule.Parse(spec).ToSpec());
 
@@ -287,6 +340,7 @@ public class RecurrenceRuleTests
     [InlineData("FREQ=MONTHLY;BYMONTHDAY=32")]
     [InlineData("FREQ=YEARLY;BYMONTH=13")]
     [InlineData("FREQ=DAILY;UNTIL=abc")]
+    [InlineData("FREQ=DAILY;EXDATE=abc")]
     [InlineData("FREQ")]                         // 値が無い
     public void 不正な指定はTryParseで弾ける(string spec)
     {
