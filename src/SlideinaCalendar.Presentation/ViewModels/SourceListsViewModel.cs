@@ -156,9 +156,21 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         RebuildHidden();
     }
 
-    /// <summary>所属が無い予定は常に出す。どこにも属していないだけで、消す理由にはならない。</summary>
+    /// <summary>
+    /// 所属が無い予定は常に出す。どこにも属していないだけで、消す理由にはならない。
+    /// <para>
+    /// ただし実働日データから起こしたマイルストーンは、<b>日付の行に別途出している</b>ので
+    /// 予定の並びからは外す。外さないと同じ日に二度出る。所属カレンダーのチェックは
+    /// 効くので、左パネルで消せば日付の行からも消える。
+    /// </para>
+    /// </summary>
     public bool IncludesEvent(CalendarEvent value) =>
-        value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id);
+        !IsMilestone(value) &&
+        (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
+
+    /// <summary>実働日データから起こしたマイルストーンか。</summary>
+    public static bool IsMilestone(CalendarEvent value) =>
+        string.Equals(value.Source, CalendarWorkspace.WorkingDaySource, StringComparison.Ordinal);
 
     public bool IncludesTask(TaskItem value) =>
         value.TaskListId is not { Length: > 0 } id || !_hiddenTaskLists.Contains(id);

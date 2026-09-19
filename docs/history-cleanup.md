@@ -28,65 +28,50 @@ tests/SlideinaCalendar.Core.Tests/TestData/ツール用実働日.xlsx
 
 Windows なら PowerShell、Mac／Linux なら端末で。**5分ほど。**
 
-### 1. git filter-repo を入れる
+### 手順（PowerShell に、上から順に貼る）
 
-```
+**1行ずつ貼って、エラーが出ないことを確かめながら進める。**
+
+```powershell
+# 1. 道具を入れる（入っていれば飛ばされる）
 pip install git-filter-repo
-```
 
-（`pip` が無ければ Python を入れる。`git filter-branch` でもできるが、遅く、
-書き換え漏れが起きやすいので勧めない。）
+# 2. 前に試したものが残っていれば片付ける
+cd $HOME
+Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force SlideinaCalendar -ErrorAction SilentlyContinue
 
-### 2. 作業用に新しく clone する
-
-**いま使っている作業フォルダでは行わない。** filter-repo は新鮮な clone を前提にしている。
-
-```
-cd （作業用の適当な場所）
+# 3. まっさらに取ってくる（この中では二度と clone しない）
 git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
 cd cleanup
-```
 
-### 3. 履歴から消す
-
-```
+# 4. 履歴から消す
 git filter-repo --invert-paths --path "tests/SlideinaCalendar.Core.Tests/TestData/ツール用実働日.xlsx"
-```
 
-`--invert-paths` は「指定したものだけを除く」という意味。
-
-### 4. 消えたことを確かめる
-
-```
+# 5. 消えたか確かめる（何も出なければ成功）
 git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/ツール用実働日.xlsx"
-```
 
-**何も出なければ成功。** 1行でも出たら、パスの綴りを確かめてやり直す。
-
-差し替えた合成版のほうは残っているはず。消しすぎていないことも見ておく。
-
-```
+# 6. 差し替えた合成版は残っているか（1行出れば正しい）
 git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日サンプル.xlsx"
-```
 
-こちらは**1行出れば正しい**。
-
-> 中身に氏名が残っていないかを `grep` で探す、という確認は**できない**。
-> xlsx は ZIP で圧縮されているので、そのまま文字列を探しても出てこない。
-> ファイルが履歴から消えていれば中身も消えているので、上の確認で足りる。
-
-（この手順は実際に走らせて確かめてある。Excel は 0 件、合成版は 1 件になり、
-リポジトリの容量も減った。）
-
-### 5. 押し戻す
-
-filter-repo は安全のためリモートの登録を外す。付け直してから送る。
-
-```
+# 7. 押し戻す
 git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
 git push --force --all origin
 git push --force --tags origin
 ```
+
+### つまずきやすいところ
+
+| 出たもの | 意味 | どうするか |
+|---|---|---|
+| `Refusing to destructively overwrite repo history`<br>`(you have untracked changes)` | clone したフォルダの中に、余計なものが入っている | 手順2からやり直す。**`cleanup` の中で clone しない** |
+| `error: remote origin already exists` | 手順4が走っていない（走ると origin が外れる） | 手順5で消えていないはず。手順2からやり直す |
+| `Everything up-to-date` | 書き換わっていないので送るものが無い | 同上。手順4が成功していない |
+| 手順5で行が出る | まだ履歴に残っている | パスの綴りを確かめる。日本語のファイル名なので、**引用符ごとコピーする** |
+
+**手順4がいちばんの要。** ここが通らないまま7まで進んでも、リモートは何も変わらない。
+手順4を実行したあとは、すべてのコミットの ID が変わる。`git log --oneline` で見て、
+`334f6e4` のような見覚えのある ID が消えていれば、書き換わっている。
 
 ## 済んだあと
 
