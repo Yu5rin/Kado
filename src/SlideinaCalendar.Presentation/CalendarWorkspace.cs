@@ -27,7 +27,7 @@ public sealed class CalendarWorkspace
         ArgumentNullException.ThrowIfNull(connection);
 
         _connection = connection;
-        Holidays = holidays ?? EmptyHolidaySource.Instance;
+        Holidays = holidays ?? JapaneseHolidaySource.Instance;
 
         Events = new EventRepository(connection);
         Tasks = new TaskRepository(connection);

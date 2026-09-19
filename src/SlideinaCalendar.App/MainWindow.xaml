@@ -513,6 +513,12 @@
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                <!-- 祝日名。予定ではなく日付の添え書きとして出す -->
+                                <TextBlock Text="{Binding HolidayName}" FontSize="11.5" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource SundayBrush}"
+                                           Visibility="{Binding HolidayName,
+                                                       Converter={StaticResource NullToVisibility}}" />
+
                                 <TextBlock Text="{Binding WorkingDayLabel}" FontSize="11.5"
                                            Foreground="{DynamicResource AccentBrush}"
                                            Typography.NumeralAlignment="Tabular"

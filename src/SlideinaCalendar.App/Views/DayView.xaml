@@ -82,6 +82,13 @@
                 <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
                            VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
 
+                <!-- 祝日名。予定ではなく日付の添え書きとして出す -->
+                <TextBlock Text="{Binding Day.HolidayName}" FontSize="11" Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SundayBrush}"
+                           Visibility="{Binding Day.HolidayName,
+                                       Converter={StaticResource NullToVisibility}}" />
+
                 <ItemsControl ItemsSource="{Binding Day.Milestones}" Margin="10,0,0,0"
                               VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
