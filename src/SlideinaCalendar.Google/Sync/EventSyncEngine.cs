@@ -149,13 +149,29 @@ public sealed class EventSyncEngine(
         var deleted = 0;
         var now = _clock.GetUtcNow();
 
-        foreach (var item in items)
+        // 例外回は必ず親のあとに処理する。先に処理すると、そのあと親を取り込んだときに
+        // 足した除外日が消え、同じ日に二重に出たままになる
+        foreach (var item in items.OrderBy(i => EventMapper.RecurringEventIdOf(i) is null ? 0 : 1))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (GoogleJson.Text(item, "id") is not { } googleId) continue;
 
             var existing = events.FindByGoogleId(googleId);
+
+            // 繰り返しのうち1回だけを差し替えたもの。親からその日を除かないと、
+            // 同じ日に親の回と例外回が二重に出る
+            if (EventMapper.RecurringEventIdOf(item) is { Length: > 0 } parentId)
+            {
+                if (ExcludeFromParent(parentId, EventMapper.OriginalStartDateOf(item), now)) updated++;
+
+                if (EventMapper.IsCancelled(item))
+                {
+                    // その回は中止。親から除いたので、予定としては持たない
+                    if (existing is not null && events.Delete(existing.Id)) deleted++;
+                    continue;
+                }
+            }
 
             if (EventMapper.IsCancelled(item))
             {
@@ -234,6 +250,28 @@ public sealed class EventSyncEngine(
         }
 
         return (items, nextSyncToken);
+    }
+
+    /// <summary>
+    /// 親の繰り返しからその日を除く。
+    /// <para>
+    /// 親がこちらに無いこともある（差分で例外回だけが降ってきた、親がまだ取り込まれて
+    /// いない）。そのときは何もしない。次に親が降りてくれば、その時点の例外回で除かれる。
+    /// </para>
+    /// </summary>
+    /// <returns>除いて書き換えたら true。</returns>
+    private bool ExcludeFromParent(string parentGoogleId, DateOnly? date, DateTimeOffset now)
+    {
+        if (date is not { } day) return false;
+        if (events.FindByGoogleId(parentGoogleId) is not { } parent) return false;
+
+        var updated = RecurrenceConverter.WithExceptionDate(parent.Recurrence, day);
+
+        // すでに除いてあれば触らない。毎回書き換えると更新時刻が動く
+        if (string.Equals(updated, parent.Recurrence, StringComparison.Ordinal)) return false;
+
+        events.Upsert(parent with { Recurrence = updated, UpdatedAt = now });
+        return true;
     }
 
     /// <summary>

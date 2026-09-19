@@ -21,6 +21,8 @@ public partial class App : Application
 {
     private SqliteConnection? _connection;
     private GoogleConnection? _google;
+    private SingleInstance? _instance;
+    private BackgroundSync? _background;
 
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
@@ -29,6 +31,16 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // 2本動くと同期が壊れる。同じデータベースを開き、同じカレンダーへ書き戻すため
+        _instance = SingleInstance.TryAcquire();
+        if (_instance is null)
+        {
+            // すでに動いているほうを前に出して、こちらは静かに終わる
+            SingleInstance.AskRunningInstanceToShow();
+            Shutdown();
+            return;
+        }
 
         // 拾わないと OS の「動作を停止しました」だけが出て、理由が何も残らない
         DispatcherUnhandledException += (_, args) =>
@@ -89,6 +101,19 @@ public partial class App : Application
 
             MainWindow = window;
             window.Show();
+
+            // 2本目が起動されたら、こちらを前に出す
+            _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
+
+            // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
+            if (window.DataContext is MainViewModel main)
+            {
+                _background = new BackgroundSync(
+                    token => Dispatcher.InvokeAsync(
+                        () => main.Sync.SyncQuietlyAsync(token)).Task.Unwrap());
+
+                _background.Start();
+            }
         }
         catch (Exception ex)
         {
@@ -117,6 +142,20 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// 隠れている窓を前に出す。
+    /// <para>畳まれていたら開く。2本目を起動したときに、押した甲斐があるようにする。</para>
+    /// </summary>
+    private void BringToFront()
+    {
+        if (MainWindow is not { } window) return;
+
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+
+        window.Show();
+        window.Activate();
+    }
+
+    /// <summary>
     /// 認可のページを既定のブラウザで開く。
     /// <para>
     /// アプリの中に埋め込まない。認可はパスワードを入れる場面なので、利用者が
@@ -133,8 +172,10 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _background?.Dispose();
         _google?.Dispose();
         _connection?.Dispose();
+        _instance?.Dispose();
         base.OnExit(e);
     }
 }

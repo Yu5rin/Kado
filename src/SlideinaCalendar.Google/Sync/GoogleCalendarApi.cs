@@ -89,6 +89,43 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
         return ReadPage(await GetAsync(url, cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// 色の一覧を取る。
+    /// <para>番号と実際の色の対応。こちらで決め打ちせず、毎回ここから取る。</para>
+    /// </summary>
+    public async Task<Mapping.GoogleColors> GetColorsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Mapping.GoogleColors.Read(
+                await GetAsync($"{Root}/colors", cancellationToken).ConfigureAwait(false));
+        }
+        catch (GoogleApiException)
+        {
+            // 取れなくても同期は続けられる。色の書き戻しだけを諦める
+            return Mapping.GoogleColors.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 一覧側のカレンダーの設定を書き換える。
+    /// <para>
+    /// 名前の付け替え（<c>summaryOverride</c>）と表示色は、<b>その人だけの設定</b>として
+    /// ここに持つ。カレンダーそのものの名前（<c>summary</c>）とは別で、共有している
+    /// 相手には影響しない。
+    /// </para>
+    /// </summary>
+    public async Task<JsonElement> PatchCalendarListAsync(
+        string calendarId, JsonObject body, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        return await SendAsync(
+            HttpMethod.Patch,
+            $"{Root}/users/me/calendarList/{Uri.EscapeDataString(calendarId)}",
+            body, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>イベントを作る。</summary>
     public async Task<JsonElement> InsertEventAsync(
         string calendarId, JsonObject body, CancellationToken cancellationToken = default)
