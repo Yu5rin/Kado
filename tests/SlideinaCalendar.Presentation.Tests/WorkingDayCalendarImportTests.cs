@@ -481,4 +481,59 @@ public class WorkingDayCalendarImportTests
         var main = new MainViewModel(test.Workspace, today: Closed[0]);
         Assert.True(main.Month.Cells.Single(c => c.Date == Closed[0]).IsDimmed);
     }
+
+    [Fact]
+    public void 取り込んだあとは端の月も覆う()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using var file = SampleFile();
+        var result = test.Workspace.ImportWorkingDays(file);
+
+        // Excel の期間は最初と最後の稼働日で切れている。書き出した印は月の頭から
+        // 月末までを覆うので、端の月も「実働日データ未登録」にはならない
+        var start = result.WorkingDayRangeStart;
+        var end = result.WorkingDayRangeEnd;
+
+        Assert.True(test.Workspace.WorkingDays.IsMonthFullyCovered(start.Year, start.Month));
+        Assert.True(test.Workspace.WorkingDays.IsMonthFullyCovered(end.Year, end.Month));
+    }
+
+    [Fact]
+    public void 開き直しても実働日が残る()
+    {
+        using var connection = Data.CalendarDatabase.OpenInMemory().ConnectAndMigrate();
+        var first = new CalendarWorkspace(connection);
+
+        using var file = SampleFile();
+        var result = first.ImportWorkingDays(file);
+        var month = result.WorkingDayRangeStart;
+
+        // 起動し直した体。保存されている分と印から、同じ範囲が戻ってくる
+        var second = new CalendarWorkspace(connection);
+
+        Assert.Equal(first.WorkingDays.RangeStart, second.WorkingDays.RangeStart);
+        Assert.Equal(first.WorkingDays.RangeEnd, second.WorkingDays.RangeEnd);
+        Assert.True(second.WorkingDays.IsMonthFullyCovered(month.Year, month.Month));
+    }
+
+    [Fact]
+    public void 印だけでも開き直せば実働日数が出る()
+    {
+        using var connection = Data.CalendarDatabase.OpenInMemory().ConnectAndMigrate();
+        var first = new CalendarWorkspace(connection);
+
+        // 他の端末が取り込み、同期で印だけが降りてきた体。Excel はこちらに無い
+        var ina = first.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        first.AddEvent(new CalendarEvent
+        {
+            Id = "google:closed", Title = CalendarWorkspace.ClosedDayTitle,
+            Date = new DateOnly(2026, 9, 30), CalendarId = ina.Id, Source = "google",
+        });
+
+        var second = new CalendarWorkspace(connection);
+
+        Assert.True(second.WorkingDays.IsMonthFullyCovered(2026, 9));
+        Assert.False(second.WorkingDays.IsWorkingDay(new DateOnly(2026, 9, 30)));
+    }
 }

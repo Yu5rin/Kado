@@ -236,18 +236,6 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void 凡例はビューごとに変わる()
-    {
-        using var test = TestWorkspace.Create();
-        var vm = Create(test);
-
-        Assert.Contains("マイルストーン", vm.HintText);
-
-        vm.SwitchViewCommand.Execute(CalendarView.Week);
-        Assert.Contains("終日レーン", vm.HintText);
-    }
-
-    [Fact]
     public void ミニ月暦は中央と独立して月を送れる()
     {
         using var test = TestWorkspace.Create();

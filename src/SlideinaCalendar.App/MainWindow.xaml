@@ -455,15 +455,6 @@
 
             <!-- 中央（.main） -->
             <DockPanel Grid.Column="1" Background="{DynamicResource BackgroundBrush}">
-                <!-- 凡例バー（.hintbar）。ビューごとに文言が変わる -->
-                <Border DockPanel.Dock="Bottom" Padding="14,6"
-                        Background="{DynamicResource SunkenBrush}"
-                        BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-                    <TextBlock Text="{Binding HintText}" FontSize="11"
-                               Foreground="{DynamicResource Ink3Brush}"
-                               TextTrimming="CharacterEllipsis" />
-                </Border>
-
                 <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
                 <Grid>
                     <views:MonthView DataContext="{Binding Month}"
