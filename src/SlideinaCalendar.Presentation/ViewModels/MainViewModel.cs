@@ -49,6 +49,8 @@ public sealed class MainViewModel : ObservableObject
         Month = new MonthViewModel(workspace, today, today, weekStart, SourceLists) { SelectedDate = today };
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
+        Week = new WeekViewModel(workspace, today, today, weekStart, SourceLists);
+        Day = new DayViewModel(workspace, today, today, SourceLists);
 
         PreviousCommand = new RelayCommand(GoToPrevious);
         NextCommand = new RelayCommand(GoToNext);
@@ -87,6 +89,8 @@ public sealed class MainViewModel : ObservableObject
         {
             Month.Refresh();
             SelectedDay.Refresh();
+            Week.Refresh();
+            Day.Refresh();
         };
     }
 
@@ -99,6 +103,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
+
+    /// <summary>週ビュー。</summary>
+    public WeekViewModel Week { get; }
+
+    /// <summary>日ビュー。</summary>
+    public DayViewModel Day { get; }
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; }
@@ -122,9 +132,22 @@ public sealed class MainViewModel : ObservableObject
         get => _currentView;
         set
         {
-            if (Set(ref _currentView, value)) Raise(nameof(HintText));
+            if (!Set(ref _currentView, value)) return;
+
+            // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
+            Week.GoTo(SelectedDate);
+            Day.Date = SelectedDate;
+
+            Raise(nameof(HintText), nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
         }
     }
+
+    /// <summary>中央に出すビューの出し分け。</summary>
+    public bool IsMonthView => _currentView == CalendarView.Month;
+
+    public bool IsWeekView => _currentView == CalendarView.Week;
+
+    public bool IsDayView => _currentView == CalendarView.Day;
 
     /// <summary>左サイドパネルを開いているか。終了時に保存して次回復元する。</summary>
     public bool IsSidePanelOpen
@@ -144,6 +167,8 @@ public sealed class MainViewModel : ObservableObject
             Month.Today = value;
             SelectedDay.Today = value;
             MiniCalendar.Today = value;
+            Week.Today = value;
+            Day.Today = value;
         }
     }
 
@@ -158,6 +183,8 @@ public sealed class MainViewModel : ObservableObject
             Month.SelectedDate = value;
             SelectedDay.Date = value;
             MiniCalendar.SelectedDate = value;
+            Week.GoTo(value);
+            Day.Date = value;
             Raise();
         }
     }
@@ -288,28 +315,73 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
+    /// <summary>
+    /// 前へ。動く幅は出しているビューで変わる（月・週・日）。
+    /// <para>年と一覧はまだ無いので、月と同じ扱いにしておく。</para>
+    /// </summary>
     private void GoToPrevious()
     {
-        Month.GoToPreviousMonth();
-        MiniCalendar.GoTo(Month.Month);
-        RaiseHeader();
+        switch (_currentView)
+        {
+            case CalendarView.Week:
+                Week.GoToPreviousWeek();
+                SyncHeaderTo(Week.WeekStart);
+                break;
+
+            case CalendarView.Day:
+                Day.GoToPreviousDay();
+                SyncHeaderTo(Day.Date);
+                break;
+
+            default:
+                Month.GoToPreviousMonth();
+                SyncHeaderTo(Month.Month);
+                break;
+        }
     }
 
     private void GoToNext()
     {
-        Month.GoToNextMonth();
-        MiniCalendar.GoTo(Month.Month);
-        RaiseHeader();
+        switch (_currentView)
+        {
+            case CalendarView.Week:
+                Week.GoToNextWeek();
+                SyncHeaderTo(Week.WeekStart);
+                break;
+
+            case CalendarView.Day:
+                Day.GoToNextDay();
+                SyncHeaderTo(Day.Date);
+                break;
+
+            default:
+                Month.GoToNextMonth();
+                SyncHeaderTo(Month.Month);
+                break;
+        }
     }
 
     private void GoToToday()
     {
         Month.GoToToday();
         SelectedDay.Date = _today;
+        Week.GoToToday();
+        Day.GoToToday();
         MiniCalendar.GoTo(_today);
         MiniCalendar.SelectedDate = _today;
         RaiseHeader();
         Raise(nameof(SelectedDate));
+    }
+
+    /// <summary>
+    /// ツールバーの年月とミニ月暦を、いま見ている日に合わせる。
+    /// <para>週や日を送って月をまたいだとき、見出しだけ前の月に残るのを防ぐ。</para>
+    /// </summary>
+    private void SyncHeaderTo(DateOnly anchor)
+    {
+        Month.GoTo(anchor);
+        MiniCalendar.GoTo(anchor);
+        RaiseHeader();
     }
 
     // ------------------------------------------------------------------
@@ -412,6 +484,8 @@ public sealed class MainViewModel : ObservableObject
     {
         Month.Refresh();
         SelectedDay.Refresh();
+        Week.Refresh();
+        Day.Refresh();
         MiniCalendar.Refresh();
         SourceLists.Refresh();
         RaiseHeader();
