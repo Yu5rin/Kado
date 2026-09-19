@@ -27,7 +27,17 @@ public enum RecurrenceKind
 /// <summary>繰り返しの選択肢1つ。</summary>
 /// <param name="Kind">種類。</param>
 /// <param name="Label">「毎週 木曜日」のような表示。開始日によって変わる。</param>
-public sealed record RecurrenceOption(RecurrenceKind Kind, string Label);
+public sealed record RecurrenceOption(RecurrenceKind Kind, string Label)
+{
+    /// <summary>
+    /// 表示名をそのまま返す。
+    /// <para>
+    /// 選択中の項目をどう描くかはコントロールのテンプレート次第で、レコードの
+    /// 既定の文字列表現（<c>RecurrenceOption { Kind = ... }</c>）が出てしまうことがある。
+    /// </para>
+    /// </summary>
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// 繰り返しの指定文字列（RRULE）と、画面の選択肢を行き来する。

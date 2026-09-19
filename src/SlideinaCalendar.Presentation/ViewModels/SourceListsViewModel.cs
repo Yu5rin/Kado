@@ -19,16 +19,35 @@ public interface ISourceFilter
     bool IncludesTask(TaskItem value);
 }
 
-/// <summary>すべて出す絞り込み。絞り込みを渡さなかったときの既定。</summary>
-public sealed class ShowAllFilter : ISourceFilter
+/// <summary>
+/// カレンダーごとの色。
+/// <para>
+/// 予定の色は<b>所属カレンダーで決まる</b>。1件ずつ選ばせない。Google Calendar と
+/// 同じ考え方で、左パネルの色見本と画面上の帯が同じ色になる。
+/// </para>
+/// </summary>
+public interface ICalendarPalette
 {
-    public static readonly ShowAllFilter Instance = new();
+    /// <summary>そのカレンダーの色（<c>#rrggbb</c>）。決まっていなければ null。</summary>
+    string? ColorOf(string? calendarId);
+}
 
-    private ShowAllFilter() { }
+/// <summary>表示するかどうかと、何色で出すか。</summary>
+public interface ICalendarSources : ISourceFilter, ICalendarPalette;
+
+/// <summary>すべて出し、色は既定に任せる。何も渡さなかったときに使う。</summary>
+public sealed class DefaultCalendarSources : ICalendarSources
+{
+    public static readonly DefaultCalendarSources Instance = new();
+
+    private DefaultCalendarSources() { }
 
     public bool IncludesEvent(CalendarEvent value) => true;
 
     public bool IncludesTask(TaskItem value) => true;
+
+    /// <summary>null を返すと、表示側が既定のアクセント色を使う。</summary>
+    public string? ColorOf(string? calendarId) => null;
 }
 
 /// <summary>左パネルに並べるカレンダー／タスクリスト1件。</summary>
@@ -77,7 +96,7 @@ public sealed class SourceListItemViewModel : ObservableObject
 /// （<see cref="Data.Repositories.EventRepository.CalendarIds"/>）。
 /// </para>
 /// </summary>
-public sealed class SourceListsViewModel : ObservableObject, ISourceFilter
+public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 {
     /// <summary>
     /// 色見本。モックの左パネルで使っている 5 色。
@@ -131,6 +150,12 @@ public sealed class SourceListsViewModel : ObservableObject, ISourceFilter
 
     public bool IncludesTask(TaskItem value) =>
         value.TaskListId is not { Length: > 0 } id || !_hiddenTaskLists.Contains(id);
+
+    /// <summary>カレンダーの色。一覧に無い（＝所属なし）なら null で、既定の色に任せる。</summary>
+    public string? ColorOf(string? calendarId) =>
+        calendarId is { Length: > 0 } id
+            ? _calendars.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal))?.SwatchColor
+            : null;
 
     private IReadOnlyList<SourceListItemViewModel> Build(IReadOnlyList<string> ids, HashSet<string> hidden) =>
         ids.Select(id =>

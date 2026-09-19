@@ -25,14 +25,14 @@ public sealed class TimelineBuilder
     private const double BlockGap = 3;
 
     private readonly CalendarWorkspace _workspace;
-    private readonly ISourceFilter _filter;
+    private readonly ICalendarSources _sources;
 
-    public TimelineBuilder(CalendarWorkspace workspace, ISourceFilter? filter = null,
+    public TimelineBuilder(CalendarWorkspace workspace, ICalendarSources? sources = null,
         TimeOnly? dayStart = null, TimeOnly? dayEnd = null, double hourHeight = WeekHourHeight)
     {
         HourHeight = hourHeight;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-        _filter = filter ?? ShowAllFilter.Instance;
+        _sources = sources ?? DefaultCalendarSources.Instance;
 
         // 表示時間帯は設定で変えられる（要件書 5.5）。既定はモックと同じ 8〜20 時
         DayStart = dayStart ?? new TimeOnly(8, 0);
@@ -78,9 +78,9 @@ public sealed class TimelineBuilder
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             var events = eventsByDate.TryGetValue(date, out var e)
-                ? e.Where(x => _filter.IncludesEvent(x.Source)).ToArray() : [];
+                ? e.Where(x => _sources.IncludesEvent(x.Source)).ToArray() : [];
             var tasks = tasksByDue.TryGetValue(date, out var t)
-                ? t.Where(_filter.IncludesTask).ToArray() : [];
+                ? t.Where(_sources.IncludesTask).ToArray() : [];
             var blocks = blocksByDate.TryGetValue(date, out var b) ? b : [];
 
             columns.Add(new WeekDayColumnViewModel(
@@ -88,7 +88,8 @@ public sealed class TimelineBuilder
                 // 終日はレーン、時刻付きは時間軸と、置き場所が違う
                 events.Where(x => x.Source.IsAllDay).ToArray(),
                 tasks,
-                Layout(events, blocks, titles)));
+                Layout(events, blocks, titles),
+                _sources));
         }
 
         return columns;
@@ -112,7 +113,7 @@ public sealed class TimelineBuilder
             result.Add(new TimeBlockViewModel(
                 scheduled.Source.Id, scheduled.Source.Title, start, end,
                 placed.Top, placed.Height,
-                EventChipViewModel.ResolveAccent(scheduled.Source.Color),
+                _sources.ColorOf(scheduled.Source.CalendarId),
                 isWorkBlock: false, scheduled.Source.Location));
         }
 
@@ -123,7 +124,8 @@ public sealed class TimelineBuilder
             result.Add(new TimeBlockViewModel(
                 block.Id, taskTitles.GetValueOrDefault(block.TaskId, "（削除されたタスク）"),
                 block.StartTime, block.EndTime, placed.Top, placed.Height,
-                EventAccent.Default, isWorkBlock: true, location: null));
+                // 作業時間ブロックはタスクのもの。カレンダーの色は使わず既定に寄せる
+                color: null, isWorkBlock: true, location: null));
         }
 
         return result.OrderBy(b => b.Start).ToArray();
