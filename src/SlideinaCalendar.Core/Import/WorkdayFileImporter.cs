@@ -74,7 +74,7 @@ public sealed class WorkdayFileImporter
             {
                 if (!dateCell.IsEmpty())
                 {
-                    // データが始まる前の非日付セルは見出し行（B5「配布元稼働日」など）なので黙って読み飛ばす。
+                    // データが始まる前の非日付セルは見出し行（B5 の見出しなど）なので黙って読み飛ばす。
                     // データが始まったあとに出てきたものだけ警告する。
                     if (dataStarted)
                     {

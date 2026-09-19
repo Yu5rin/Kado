@@ -14,7 +14,7 @@ public class ImportCommandTests
     private static DateOnly D(int y, int m, int d) => new(y, m, d);
 
     /// <summary>リポジトリに置いてある配布ファイルの実物。</summary>
-    private static string WorkdayFile => Find("実働日ファイル.xlsx");
+    private static string WorkdayFile => Find("実働日サンプル.xlsx");
 
     private static string LegacyFile => Find("inaCalendar-backup-sample.json");
 
@@ -38,8 +38,8 @@ public class ImportCommandTests
         Assert.Contains("実働日を取り込みました", vm.StatusMessage);
         Assert.Contains("稼働日", files.LastReport);
 
-        // 配布ファイルの範囲は 2023/1/5 〜 2026/3/31
-        Assert.True(test.Workspace.WorkingDays.HasDataFor(D(2026, 3, 2)));
+        // サンプルの範囲は 2023/1/5 〜 2025/11/24
+        Assert.True(test.Workspace.WorkingDays.HasDataFor(D(2025, 11, 4)));
         Assert.False(test.Workspace.WorkingDays.HasDataFor(D(2026, 4, 1)));
     }
 
