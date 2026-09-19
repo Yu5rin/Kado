@@ -174,11 +174,12 @@ public static class EventMapper
             var wanted = ToGoogle(value);
             foreach (var pair in wanted)
             {
-                if (!GoogleJson.SameContent(
-                        pair.Value?.ToJsonString(), original[pair.Key]?.ToJsonString()))
-                {
-                    return true;
-                }
+                // 開始と終了は書き方の揺れが大きい。文字列ではなく時刻として比べる
+                var same = pair.Key is "start" or "end"
+                    ? SameMoment(pair.Value, original[pair.Key])
+                    : Same(pair.Value, original[pair.Key]);
+
+                if (!same) return true;
             }
 
             return false;
@@ -189,6 +190,65 @@ public static class EventMapper
             return true;
         }
     }
+
+    /// <summary>
+    /// 送ろうとしている値と、控えてある値が同じか。
+    /// <para>
+    /// <b>「無い」と「空」を同じものとして扱う。</b>Google は繰り返しでない予定に
+    /// <c>recurrence</c> を返さず、場所や説明が空なら項目ごと返さない。こちらは
+    /// 「繰り返さない」を空の配列で、「空欄」を null で表すので、そのまま比べると
+    /// <b>毎回「変わった」と判定して送り返してしまう</b>。
+    /// </para>
+    /// </summary>
+    private static bool Same(JsonNode? wanted, JsonNode? original) =>
+        IsBlank(wanted) && IsBlank(original) ||
+        GoogleJson.SameContent(wanted?.ToJsonString(), original?.ToJsonString());
+
+    /// <summary>
+    /// 開始・終了が同じ時刻を指しているか。
+    /// <para>
+    /// <b>文字列で比べない。</b>同じ時刻でも <c>+09:00</c> と <c>Z</c>、小数秒の桁、
+    /// <c>timeZone</c> の有無で書き方が変わる。そのまま比べると、変えていないのに
+    /// 毎回送り返すことになる。
+    /// </para>
+    /// </summary>
+    private static bool SameMoment(JsonNode? wanted, JsonNode? original)
+    {
+        if (wanted is not JsonObject left || original is not JsonObject right)
+        {
+            return Same(wanted, original);
+        }
+
+        // 終日かどうかが違えば、それは変更
+        var leftDate = Text(left, "date");
+        var rightDate = Text(right, "date");
+
+        if (leftDate is not null || rightDate is not null)
+        {
+            return string.Equals(leftDate, rightDate, StringComparison.Ordinal);
+        }
+
+        var leftMoment = ParseDateTime(Text(left, "dateTime"));
+        var rightMoment = ParseDateTime(Text(right, "dateTime"));
+
+        return leftMoment is not null && rightMoment is not null
+            ? leftMoment.Value.ToUniversalTime() == rightMoment.Value.ToUniversalTime()
+            : Same(wanted, original);
+    }
+
+    private static string? Text(JsonObject node, string name) =>
+        node[name] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 0
+            ? text
+            : null;
+
+    /// <summary>中身が無いとみなせるか。null、空の配列、空文字。</summary>
+    private static bool IsBlank(JsonNode? node) => node switch
+    {
+        null => true,
+        JsonArray array => array.Count == 0,
+        JsonValue value => value.TryGetValue<string>(out var text) && string.IsNullOrEmpty(text),
+        _ => false,
+    };
 
     // ------------------------------------------------------------------
     // 日付と時刻
@@ -203,7 +263,10 @@ public static class EventMapper
 
         if (ParseDateTime(value.Text("dateTime")) is { } moment)
         {
-            return (DateOnly.FromDateTime(moment.DateTime), TimeOnly.FromDateTime(moment.DateTime));
+            // この PC の時刻に直す。書き戻すときもこの PC の時差を付けるので、
+            // ここで合わせておかないと往復するたびに時刻がずれる
+            var local = moment.ToLocalTime();
+            return (DateOnly.FromDateTime(local.DateTime), TimeOnly.FromDateTime(local.DateTime));
         }
 
         return (default, null);
@@ -230,8 +293,9 @@ public static class EventMapper
 
         if (ParseDateTime(value.Text("dateTime")) is not { } moment) return (null, null);
 
-        var endDate = DateOnly.FromDateTime(moment.DateTime);
-        var endTime = TimeOnly.FromDateTime(moment.DateTime);
+        var local = moment.ToLocalTime();
+        var endDate = DateOnly.FromDateTime(local.DateTime);
+        var endTime = TimeOnly.FromDateTime(local.DateTime);
 
         // 時刻つきで日をまたぐ予定。終了日を持たせないと1日目だけの予定に見える
         return (timed && endDate > start ? endDate : null, endTime);
