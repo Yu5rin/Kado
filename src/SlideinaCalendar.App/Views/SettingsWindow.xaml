@@ -21,6 +21,15 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
 
+        <!--
+            選択肢の出し方。
+            項目のどれを出すかを名前で指すやり方は、このアプリの ComboBox の
+            テンプレートでは効かず、型の名前がそのまま出てしまう。決め打ちにする
+        -->
+        <DataTemplate x:Key="ChoiceTemplate">
+            <TextBlock Text="{Binding Label}" />
+        </DataTemplate>
+
         <!-- 節の見出し -->
         <Style x:Key="SectionHeadStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
@@ -64,14 +73,14 @@
 
             <TextBlock Text="配色" Style="{StaticResource FieldLabelStyle}" />
             <ComboBox Style="{StaticResource FieldComboBoxStyle}"
-                      ItemsSource="{Binding Themes}" DisplayMemberPath="Label"
+                      ItemsSource="{Binding Themes}" ItemTemplate="{StaticResource ChoiceTemplate}"
                       SelectedValuePath="Value" SelectedValue="{Binding Theme}" />
 
             <Border Height="12" />
 
             <TextBlock Text="週の始まり" Style="{StaticResource FieldLabelStyle}" />
             <ComboBox Style="{StaticResource FieldComboBoxStyle}"
-                      ItemsSource="{Binding WeekStarts}" DisplayMemberPath="Label"
+                      ItemsSource="{Binding WeekStarts}" ItemTemplate="{StaticResource ChoiceTemplate}"
                       SelectedValuePath="Value" SelectedValue="{Binding WeekStart}" />
             <TextBlock Text="月ビューの列の並びと、ミニ月暦に効きます。" Style="{StaticResource FieldNoteStyle}" />
 
@@ -83,11 +92,11 @@
             <TextBlock Text="表示時間帯" Style="{StaticResource FieldLabelStyle}" />
             <StackPanel Orientation="Horizontal">
                 <ComboBox Width="92" Style="{StaticResource FieldComboBoxStyle}"
-                          ItemsSource="{Binding StartHours}" DisplayMemberPath="Label"
+                          ItemsSource="{Binding StartHours}" ItemTemplate="{StaticResource ChoiceTemplate}"
                           SelectedValuePath="Value" SelectedValue="{Binding DayStartHour}" />
                 <TextBlock Text="〜" VerticalAlignment="Center" Margin="8,0" />
                 <ComboBox Width="92" Style="{StaticResource FieldComboBoxStyle}"
-                          ItemsSource="{Binding EndHours}" DisplayMemberPath="Label"
+                          ItemsSource="{Binding EndHours}" ItemTemplate="{StaticResource ChoiceTemplate}"
                           SelectedValuePath="Value" SelectedValue="{Binding DayEndHour}" />
             </StackPanel>
             <TextBlock Text="この範囲を縦いっぱいに割り付けます。狭めるほど1時間が高くなります。"
@@ -100,7 +109,7 @@
 
             <TextBlock Text="起動したときに開くビュー" Style="{StaticResource FieldLabelStyle}" />
             <ComboBox Style="{StaticResource FieldComboBoxStyle}"
-                      ItemsSource="{Binding StartupViews}" DisplayMemberPath="Label"
+                      ItemsSource="{Binding StartupViews}" ItemTemplate="{StaticResource ChoiceTemplate}"
                       SelectedValuePath="Value" SelectedValue="{Binding StartupView}" />
 
             <StackPanel Visibility="{Binding CanRunAtLogon, Converter={StaticResource BoolToVisibility}}">

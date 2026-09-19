@@ -6,7 +6,11 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 
 /// <summary>設定の選択肢。値と、画面に出す名前の組。</summary>
 /// <typeparam name="T">設定の値の型。</typeparam>
-public sealed record SettingChoice<T>(T Value, string Label);
+public sealed record SettingChoice<T>(T Value, string Label)
+{
+    /// <summary>文字にするときは名前を出す。型の名前がそのまま画面に出るのを防ぐ。</summary>
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// 設定画面。
