@@ -60,9 +60,12 @@
             <TextBlock Text="安全装置の検証" Foreground="#8F96A4" Margin="0,0,0,4" />
             <Button x:Name="CrashButton" Height="30" Content="わざと例外を出す（自動解除を確認）"
                     Click="OnCrashClick" />
+            <Button x:Name="BreakButton" Height="30" Margin="0,6,0,0"
+                    Content="ワークエリアをわざと削る（復旧を確認）" Click="OnBreakClick" />
             <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#8F96A4" FontSize="11">
-                タスクマネージャからの強制終了は例外ハンドラを通りません。<LineBreak />
-                ピン留めしたまま強制終了し、再起動して復旧することを確認してください。
+                強制終了しても Windows 側が自動で戻すことがあります。<LineBreak />
+                上のボタンは壊れた状態を意図的に作り、復旧処理だけを確かめるためのものです。<LineBreak />
+                押したあとアプリを終了し、もう一度起動してください。
             </TextBlock>
         </StackPanel>
     </Grid>
