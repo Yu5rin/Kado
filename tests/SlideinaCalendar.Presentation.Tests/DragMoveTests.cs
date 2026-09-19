@@ -156,4 +156,83 @@ public class DragMoveTests
         Assert.False(main.MoveEventTo(null, Tomorrow));
         Assert.False(main.MoveTaskTo("ない", Tomorrow));
     }
+
+    /// <summary>メールから起こされた予約。Google 側で内容を変えられない。</summary>
+    private static CalendarEvent Locked(string id, DateOnly date) => new()
+    {
+        Id = id, Title = "HotPepper Beauty のサロン予約", Date = date,
+        StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(11, 0),
+        Source = "google", GoogleEventId = "g1",
+        GoogleRaw = """{"id":"g1","summary":"HotPepper Beauty のサロン予約","eventType":"fromGmail","locked":true}""",
+    };
+
+    [Fact]
+    public void 向こうで変えられない予定は動かせない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Locked("g-local", Today));
+
+        var main = Create(test);
+
+        Assert.False(main.MoveEventTo("g-local", Tomorrow));
+        Assert.Equal(Today, test.Workspace.Events.Find("g-local")!.Date);
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void 向こうで変えられない予定でも複製はできる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Locked("g-local", Today));
+
+        // 複製は新しい予定になるので、こちらの好きに扱える
+        Assert.True(Create(test).MoveEventTo("g-local", Tomorrow, copy: true));
+        Assert.Contains(test.Workspace.Events.All(), e => e.Date == Tomorrow && e.Id != "g-local");
+    }
+
+    [Fact]
+    public void 向こうで変えられない予定は編集画面を開かない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Locked("g-local", Today));
+
+        var editors = new FakeEditorPresenter();
+        var main = new MainViewModel(test.Workspace, Today, editors: editors);
+        var chip = main.Month.Cells.Single(c => c.Date == Today).Events.Single();
+
+        main.EditChipCommand.Execute(chip);
+
+        // 開けてしまうと、直せたように見えて向こうには伝わらない
+        Assert.Null(editors.LastEventEditor);
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void ふつうの予定なら編集画面が開く()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        var editors = new FakeEditorPresenter();
+        var main = new MainViewModel(test.Workspace, Today, editors: editors);
+        var chip = main.Month.Cells.Single(c => c.Date == Today).Events.Single();
+
+        main.EditChipCommand.Execute(chip);
+
+        Assert.NotNull(editors.LastEventEditor);
+    }
+
+    [Fact]
+    public void ふつうの予定は変えられないとは見なさない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today) with
+        {
+            Source = "google", GoogleEventId = "g2",
+            GoogleRaw = """{"id":"g2","summary":"打ち合わせ"}""",
+        });
+
+        Assert.False(MainViewModel.IsLocked(test.Workspace.Events.Find("e1")!));
+        Assert.True(Create(test).MoveEventTo("e1", Tomorrow));
+    }
 }
