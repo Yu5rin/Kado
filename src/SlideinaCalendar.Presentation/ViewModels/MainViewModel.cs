@@ -38,6 +38,7 @@ public sealed class MainViewModel : ObservableObject
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
+    private readonly TimeProvider _clock;
     private DateOnly _today;
     private string? _statusMessage;
     private string _searchText = string.Empty;
@@ -45,8 +46,10 @@ public sealed class MainViewModel : ObservableObject
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
         GoogleClientSecretsStore? googleClient = null,
-        Sync.IGoogleSync? google = null)
+        Sync.IGoogleSync? google = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
@@ -698,10 +701,13 @@ public sealed class MainViewModel : ObservableObject
     // 予定とタスクの編集。どれも CalendarWorkspace を通すので Undo が効く
     // ------------------------------------------------------------------
 
+    /// <summary>いまの時刻。新しい予定の既定の開始時刻を決めるのに使う。</summary>
+    private TimeOnly NowTime => TimeOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+
     /// <summary>選択している日に予定を足す。</summary>
     private void AddEvent()
     {
-        var editor = new EventEditorViewModel(SelectedDate, CalendarNames);
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());

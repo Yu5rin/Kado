@@ -7,6 +7,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
         Title="{Binding HeaderText}" Width="380" SizeToContent="Height"
+        Icon="/Assets/app.png"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"

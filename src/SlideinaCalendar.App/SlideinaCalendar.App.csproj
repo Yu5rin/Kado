@@ -6,7 +6,15 @@
     <RootNamespace>SlideinaCalendar.App</RootNamespace>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- exe 自体の絵。エクスプローラとタスクバーはこれを見る -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ウィンドウの左上に出す用。ico から引くより素直に出る -->
+    <Resource Include="Assets\app.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="SlideinaCalendar.App.Tests" />
