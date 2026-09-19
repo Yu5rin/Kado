@@ -81,7 +81,7 @@ public sealed class WeekDayColumnViewModel
     internal WeekDayColumnViewModel(DateOnly date, DateOnly today, WorkingDayCalendar workingDays,
         string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<TaskItem> tasks,
         IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette,
-        IReadOnlyList<Milestone>? milestones = null)
+        IReadOnlyList<MilestoneViewModel>? milestones = null)
     {
         Date = date;
         IsToday = date == today;
@@ -94,7 +94,7 @@ public sealed class WeekDayColumnViewModel
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
-        Milestones = milestones ?? workingDays.MilestonesOn(date);
+        Milestones = milestones ?? [];
         WorkingDayIndex = workingDays.IndexInMonth(date);
     }
 
@@ -129,7 +129,7 @@ public sealed class WeekDayColumnViewModel
     /// <inheritdoc cref="DayCellViewModel.IsWorkingDayLit"/>
     public bool IsWorkingDayLit => HasWorkingDayData && IsWorkingDay;
 
-    public IReadOnlyList<Milestone> Milestones { get; }
+    public IReadOnlyList<MilestoneViewModel> Milestones { get; }
 
     /// <summary>実働日の月内通し番号。</summary>
     public int? WorkingDayIndex { get; }

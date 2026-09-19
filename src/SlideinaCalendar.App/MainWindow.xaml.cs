@@ -66,6 +66,16 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
+    private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if (DataContextOf<MilestoneViewModel>(sender) is not { } milestone) return;
+
+        ViewModel?.EditMilestoneCommand.Execute(milestone);
+        e.Handled = true;
+    }
+
     // ------------------------------------------------------------------
     // 左パネルの並べ替え
     //

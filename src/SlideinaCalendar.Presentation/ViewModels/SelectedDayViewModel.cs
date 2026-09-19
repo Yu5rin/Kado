@@ -185,7 +185,7 @@ public sealed class SelectedDayViewModel : ObservableObject
         _workspace.WorkingDays.HasDataFor(_date) && !_workspace.WorkingDays.IsWorkingDay(_date);
 
     /// <summary>この日のマイルストーン。左パネルのチェックに従う。</summary>
-    public IReadOnlyList<Milestone> Milestones =>
+    public IReadOnlyList<MilestoneViewModel> Milestones =>
         MilestoneRow.For(_date, _workspace.Schedule.EventsInRange(_date, _date), _sources);
 
     /// <summary>この日の予定。</summary>

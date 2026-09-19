@@ -64,4 +64,15 @@ public partial class MonthView : UserControl
 
         return null;
     }
+
+    /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
+    private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if ((sender as FrameworkElement)?.DataContext is not MilestoneViewModel milestone) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        main.EditMilestoneCommand.Execute(milestone);
+        e.Handled = true;
+    }
 }

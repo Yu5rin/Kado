@@ -31,7 +31,7 @@ public sealed class DayCellViewModel : ObservableObject
         string? holidayName = null,
         ICalendarPalette? palette = null,
         int maxChips = DefaultMaxChips,
-        IReadOnlyList<Milestone>? milestones = null)
+        IReadOnlyList<MilestoneViewModel>? milestones = null)
     {
         Date = date;
         IsCurrentMonth = isCurrentMonth;
@@ -68,7 +68,7 @@ public sealed class DayCellViewModel : ObservableObject
         IsWorkingDay = workingDays.IsWorkingDay(date);
         // 日付の行に出すものは呼び出し側が組み立てる（左パネルのチェックを効かせるため）。
         // 渡されなければ実働日データから直に引く
-        Milestones = milestones ?? workingDays.MilestonesOn(date);
+        Milestones = milestones ?? [];
     }
 
     /// <summary>この日。</summary>
@@ -127,7 +127,7 @@ public sealed class DayCellViewModel : ObservableObject
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
 
     /// <summary>この日のマイルストーン。</summary>
-    public IReadOnlyList<Milestone> Milestones { get; }
+    public IReadOnlyList<MilestoneViewModel> Milestones { get; }
 
     /// <summary>マスに並べる予定。溢れたぶんは含まない。</summary>
     public IReadOnlyList<EventChipViewModel> Events { get; }
