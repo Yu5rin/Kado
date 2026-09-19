@@ -83,7 +83,8 @@
                     BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource EventChipMenu}"
-                    MouseLeftButtonDown="OnEventChipClicked">
+                    MouseLeftButtonDown="OnEventChipClicked"
+                    MouseMove="OnChipDragging">
                 <TextBlock Text="{Binding Label}" FontSize="11" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
@@ -98,7 +99,8 @@
             <Border Background="Transparent" Margin="2,2,0,0"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource TaskChipMenu}"
-                    MouseLeftButtonDown="OnTaskChipClicked">
+                    MouseLeftButtonDown="OnTaskChipClicked"
+                    MouseMove="OnChipDragging">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
@@ -170,8 +172,11 @@
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
                             ClipToBounds="True" Cursor="Hand"
-                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー"
-                            MouseLeftButtonDown="OnCellClicked">
+                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー&#10;ドラッグで別の日へ移動 ・ Ctrl＋ドラッグで複製"
+                            MouseLeftButtonDown="OnCellClicked"
+                            AllowDrop="True"
+                            DragOver="OnCellDragOver" DragLeave="OnCellDragLeft"
+                            Drop="OnCellDropped">
                         <!--
                             月ビューは日を選ぶための面でもある。押しても右ペインが動かないと、
                             ミニ月暦からしか日を選べない。InputBinding からは
@@ -272,6 +277,20 @@
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource CellSelectedBrush}" />
+                        </DataTrigger>
+
+                        <!--
+                            落とし先。いちばん最後に置いて、ホバーや選択より強く出す
+                            （後に書いたトリガが勝つ）。掴んだものがどこへ入るのか
+                            分からないと、落とす手が止まる
+                        -->
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter TargetName="Cell" Property="Background"
+                                    Value="{DynamicResource AccentSoftBrush}" />
+                            <Setter TargetName="Cell" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="Cell" Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Cell" Property="Padding" Value="3,1,3,2" />
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>

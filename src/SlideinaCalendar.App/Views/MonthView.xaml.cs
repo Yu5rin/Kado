@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
@@ -15,7 +16,109 @@ namespace SlideinaCalendar.App.Views;
 /// </summary>
 public partial class MonthView : UserControl
 {
+    /// <summary>ドラッグが始まったところ。ここから少し動かすまでは掴んだと見なさない。</summary>
+    private Point _dragOrigin;
+
+    /// <summary>掴んでいるもの。押しただけでは動かさないので、ここに控えておく。</summary>
+    private object? _dragging;
+
     public MonthView() => InitializeComponent();
+
+    // ------------------------------------------------------------------
+    // ドラッグで別の日へ移す
+    //
+    // 掴んで落とすのと、編集画面で日付を打ち直すのとでは手数が違う。
+    // Ctrl を押しながらなら複製になる
+    // ------------------------------------------------------------------
+
+    /// <summary>押した場所を控える。実際に動かすかどうかは <see cref="OnChipDragging"/> で決める。</summary>
+    private void BeginDrag(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 1) return;
+
+        _dragOrigin = e.GetPosition(null);
+        _dragging = (sender as FrameworkElement)?.DataContext;
+    }
+
+    /// <summary>
+    /// 押したまま動かしたらドラッグを始める。
+    /// <para>
+    /// すぐに始めると、選ぼうとしただけの押し込みまで拾う。OS が決めている
+    /// 最小の移動量を超えてからにする。
+    /// </para>
+    /// </summary>
+    private void OnChipDragging(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragging is null) return;
+
+        var now = e.GetPosition(null);
+        if (Math.Abs(now.X - _dragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(now.Y - _dragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var moved = _dragging;
+        _dragging = null;
+
+        DragDrop.DoDragDrop(
+            (DependencyObject)sender, moved, DragDropEffects.Move | DragDropEffects.Copy);
+    }
+
+    /// <summary>マスの上を通っているあいだ。落とせるかどうかをカーソルと面で示す。</summary>
+    private void OnCellDragOver(object sender, DragEventArgs e)
+    {
+        var cell = (sender as FrameworkElement)?.DataContext as DayCellViewModel;
+        var ok = cell is not null && Payload(e) is not null;
+
+        e.Effects = ok ? EffectFor(e) : DragDropEffects.None;
+        e.Handled = true;
+
+        if (cell is not null) cell.IsDropTarget = ok;
+    }
+
+    /// <summary>マスから出たら印を消す。</summary>
+    private void OnCellDragLeft(object sender, DragEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DayCellViewModel cell) cell.IsDropTarget = false;
+    }
+
+    /// <summary>落とされたら、その日へ移す。Ctrl を押していれば複製する。</summary>
+    private void OnCellDropped(object sender, DragEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DayCellViewModel cell) return;
+
+        cell.IsDropTarget = false;
+        e.Handled = true;
+
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        var copy = e.KeyStates.HasFlag(DragDropKeyStates.ControlKey);
+
+        switch (Payload(e))
+        {
+            case EventChipViewModel chip:
+                main.MoveEventTo(chip.Id, cell.Date, copy);
+                break;
+            case TaskItem task:
+                main.MoveTaskTo(task.Id, cell.Date, copy);
+                break;
+        }
+    }
+
+    /// <summary>Ctrl を押していれば複製、押していなければ移動。</summary>
+    private static DragDropEffects EffectFor(DragEventArgs e) =>
+        e.KeyStates.HasFlag(DragDropKeyStates.ControlKey)
+            ? DragDropEffects.Copy
+            : DragDropEffects.Move;
+
+    /// <summary>掴んでいるものを取り出す。予定でもタスクでもなければ null。</summary>
+    private static object? Payload(DragEventArgs e) =>
+        e.Data.GetDataPresent(typeof(EventChipViewModel))
+            ? e.Data.GetData(typeof(EventChipViewModel))
+            : e.Data.GetDataPresent(typeof(TaskItem))
+                ? e.Data.GetData(typeof(TaskItem))
+                : null;
 
     /// <summary>
     /// マスの高さが変わったら、並べる件数を決め直す。
@@ -65,6 +168,9 @@ public partial class MonthView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is not { } item) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        // 1回押しは日を選ぶと同時に、ドラッグの始まりでもある
+        BeginDrag(sender, e);
 
         if (e.ClickCount == 2) open(main, item);
         else if (FindCell(sender as DependencyObject) is { } cell) main.SelectDateCommand.Execute(cell.Date);
