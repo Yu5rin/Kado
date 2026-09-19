@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SlideinaCalendar.Core.WorkingDays;
 
 /// <summary>
@@ -14,5 +16,6 @@ namespace SlideinaCalendar.Core.WorkingDays;
 /// <param name="SourceVersion">取り込み元ファイルのバージョン（例 <c>Ver．25.1</c>）。不明な場合は null。</param>
 public sealed record Milestone(DateOnly Date, string Name, string? SourceVersion = null)
 {
-    public override string ToString() => $"{Date:yyyy/MM/dd} {Name}";
+    public override string ToString() =>
+        $"{Date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture)} {Name}";
 }
