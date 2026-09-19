@@ -39,4 +39,10 @@
     <Color x:Key="MilestoneMFaceColor">#1F3352</Color>
     <Color x:Key="MilestoneMTextColor">#A9C8EE</Color>
 
+    <!-- 実働日データから起こす2つの印。休業日は静かに、休日の実働日は目を引くように -->
+    <Color x:Key="ClosedDayFaceColor">#2A2F38</Color>
+    <Color x:Key="ClosedDayTextColor">#9BA3B2</Color>
+    <Color x:Key="OpenDayFaceColor">#4B3116</Color>
+    <Color x:Key="OpenDayTextColor">#F0BE85</Color>
+
 </ResourceDictionary>

@@ -1,3 +1,4 @@
+using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Presentation;
 using SlideinaCalendar.Presentation.ViewModels;
@@ -355,5 +356,93 @@ public class WorkingDayCalendarImportTests
         using var test = TestWorkspace.Create(withMilestones: true);
 
         Assert.Empty(ClosedDays(test));
+    }
+
+    // ------------------------------------------------------------------
+    // 休日・祝日に稼働する日は「実働日」として入れる
+    //
+    // 暦だけ見ていると休みだと思って予定を入れそこなう。休業日より見落としたくない
+    // ------------------------------------------------------------------
+
+    private static IReadOnlyList<CalendarEvent> OpenDays(TestWorkspace test) =>
+        test.Workspace.Events.All().Where(e => CalendarWorkspace.IsOpenDayId(e.Id)).ToArray();
+
+    [Fact]
+    public void 土曜に稼働するなら実働日として入れる()
+    {
+        // 9月26日（土）まで稼働する月にする
+        var days = Enumerable.Range(1, 30)
+            .Select(d => new DateOnly(2026, 9, d))
+            .Where(d => d.DayOfWeek != DayOfWeek.Sunday)
+            .ToArray();
+
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        Save(test, days);
+
+        test.Workspace.WriteWorkingDayEvents();
+
+        var open = OpenDays(test);
+
+        Assert.All(open, e => Assert.Equal(CalendarWorkspace.OpenDayTitle, e.Title));
+        Assert.Contains(new DateOnly(2026, 9, 26), open.Select(e => e.Date));
+
+        // 平日に稼働するのはふつうのこと。入れると埋もれる
+        Assert.DoesNotContain(new DateOnly(2026, 9, 24), open.Select(e => e.Date));
+    }
+
+    [Fact]
+    public void 祝日に稼働するなら実働日として入れる()
+    {
+        var holiday = new DateOnly(2026, 9, 21);
+        var days = Enumerable.Range(1, 30)
+            .Select(d => new DateOnly(2026, 9, d))
+            .Where(d => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            .ToArray();
+
+        using var test = TestWorkspace.Create(
+            withWorkingDays: false,
+            holidays: new Dictionary<DateOnly, string> { [holiday] = "敬老の日" });
+
+        Save(test, days);
+        test.Workspace.WriteWorkingDayEvents();
+
+        Assert.Contains(holiday, OpenDays(test).Select(e => e.Date));
+    }
+
+    [Fact]
+    public void 休日に稼働しないなら何も入れない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        // 土日は稼働しない月なので、実働日の印は付かない
+        Assert.Empty(OpenDays(test));
+    }
+
+    [Fact]
+    public void 実働日も予定の並びには出さず日付の行に出す()
+    {
+        var days = Enumerable.Range(1, 30)
+            .Select(d => new DateOnly(2026, 9, d))
+            .Where(d => d.DayOfWeek != DayOfWeek.Sunday)
+            .ToArray();
+
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        Save(test, days);
+        test.Workspace.WriteWorkingDayEvents();
+
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 26));
+
+        Assert.Contains(CalendarWorkspace.OpenDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
+        Assert.DoesNotContain(main.SelectedDay.Events, e => e.Title == CalendarWorkspace.OpenDayTitle);
+    }
+
+    /// <summary>稼働日を直に入れる。取り込みを通さずに並びを決めたいとき。</summary>
+    private static void Save(TestWorkspace test, IReadOnlyList<DateOnly> days)
+    {
+        test.Workspace.WorkingDayStore.Save(WorkingDayCalendar.Create(
+            days, days[0], days[^1], [], null, null));
+
+        test.Workspace.ReloadWorkingDays();
     }
 }
