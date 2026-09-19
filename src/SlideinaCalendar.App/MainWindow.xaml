@@ -49,6 +49,36 @@
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
         </ContextMenu>
 
+        <!--
+            カレンダー／タスクリストの1行。「このアプリ」と「Google」で2つずつ
+            並べるので、テンプレートはここに出して使い回す。
+            色を選べるのはカレンダーだけなので、言い添える文だけ分けてある。
+        -->
+        <DataTemplate x:Key="CalendarRowTemplate">
+            <ToggleButton Style="{StaticResource SourceListRowStyle}"
+                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                          ToolTip="右クリックで名前と色を変えられます"
+                          Tag="{Binding DataContext,
+                                RelativeSource={RelativeSource AncestorType=Window}}"
+                          ContextMenu="{StaticResource SourceRowMenu}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="TaskListRowTemplate">
+            <ToggleButton Style="{StaticResource SourceListRowStyle}"
+                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                          ToolTip="右クリックで名前を変えられます"
+                          Tag="{Binding DataContext,
+                                RelativeSource={RelativeSource AncestorType=Window}}"
+                          ContextMenu="{StaticResource SourceRowMenu}" />
+        </DataTemplate>
+
+        <!-- 「このアプリ」「Google」の小見出し（.subsec） -->
+        <Style x:Key="SourceGroupHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,3" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
         <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
@@ -315,18 +345,25 @@
                                         <TextBlock Text="カレンダー" FontSize="11" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Ink3Brush}" />
                                     </DockPanel>
-                                    <ItemsControl ItemsSource="{Binding SourceLists.Calendars}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <ToggleButton Style="{StaticResource SourceListRowStyle}"
-                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                              ToolTip="右クリックで名前と色を変えられます"
-                                                              Tag="{Binding DataContext,
-                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                              ContextMenu="{StaticResource SourceRowMenu}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                    <!--
+                                        このアプリのものと Google のものを分けて並べる。
+                                        混ざっていると、消してよいのはどれか、名前を変えたら
+                                        相手にも伝わるのはどれかが読めない。
+                                        繋いでいないうちは見出しを出さず、今までどおり1列で出す
+                                    -->
+                                    <TextBlock Text="このアプリ"
+                                               Style="{StaticResource SourceGroupHeaderStyle}"
+                                               Visibility="{Binding SourceLists.ShowsCalendarGroups,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                    <ItemsControl ItemsSource="{Binding SourceLists.LocalCalendars}"
+                                                  ItemTemplate="{StaticResource CalendarRowTemplate}" />
+
+                                    <TextBlock Text="Google カレンダー" Margin="0,9,0,3"
+                                               Style="{StaticResource SourceGroupHeaderStyle}"
+                                               Visibility="{Binding SourceLists.ShowsCalendarGroups,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                    <ItemsControl ItemsSource="{Binding SourceLists.GoogleCalendars}"
+                                                  ItemTemplate="{StaticResource CalendarRowTemplate}" />
                                 </StackPanel>
                             </Border>
 
@@ -349,18 +386,19 @@
                                         <TextBlock Text="タスクリスト" FontSize="11" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Ink3Brush}" />
                                     </DockPanel>
-                                    <ItemsControl ItemsSource="{Binding SourceLists.TaskLists}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <ToggleButton Style="{StaticResource SourceListRowStyle}"
-                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                              ToolTip="右クリックで名前を変えられます"
-                                                              Tag="{Binding DataContext,
-                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                              ContextMenu="{StaticResource SourceRowMenu}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                    <TextBlock Text="このアプリ"
+                                               Style="{StaticResource SourceGroupHeaderStyle}"
+                                               Visibility="{Binding SourceLists.ShowsTaskListGroups,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                    <ItemsControl ItemsSource="{Binding SourceLists.LocalTaskLists}"
+                                                  ItemTemplate="{StaticResource TaskListRowTemplate}" />
+
+                                    <TextBlock Text="Google ToDo" Margin="0,9,0,3"
+                                               Style="{StaticResource SourceGroupHeaderStyle}"
+                                               Visibility="{Binding SourceLists.ShowsTaskListGroups,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                    <ItemsControl ItemsSource="{Binding SourceLists.GoogleTaskLists}"
+                                                  ItemTemplate="{StaticResource TaskListRowTemplate}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

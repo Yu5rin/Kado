@@ -175,4 +175,49 @@ public class GoogleSyncServiceTests : IDisposable
         Assert.Single(results, r => r is not null);
         Assert.Single(results, r => r is null);
     }
+
+    [Fact]
+    public async Task このアプリだけのカレンダーは同期しない()
+    {
+        // 既定のカレンダーとタスクリストが用意された状態にする。
+        // 実機で「「マイカレンダー」を同期できません（notFound）」が出た
+        _test.Workspace.EnsureSources();
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        // 行き先の無いものを問い合わせに行かない
+        Assert.DoesNotContain(handler.Seen, url =>
+            url.Contains(CalendarWorkspace.DefaultCalendarName, StringComparison.Ordinal) ||
+            url.Contains(CalendarWorkspace.DefaultTaskListName, StringComparison.Ordinal) ||
+            url.Contains(CalendarWorkspace.LocalIdPrefix, StringComparison.Ordinal));
+
+        // 読めない誕生日カレンダーの1件だけ。こちらのものは警告にならない
+        Assert.Single(report!.Warnings);
+    }
+
+    [Fact]
+    public async Task 印が付く前に作られた既定のカレンダーも同期しない()
+    {
+        // 古い版は local: の印を付けずに作っていた。ID の形で決めると、
+        // 手元に残ったこれを Google に問い合わせに行って notFound になる
+        _test.Workspace.Sources.Upsert(new SlideinaCalendar.Data.Models.CalendarSource
+        {
+            Id = "マイカレンダー", Summary = "マイカレンダー", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Seen, url =>
+            url.Contains("%E3%83%9E%E3%82%A4", StringComparison.Ordinal) ||
+            url.Contains("マイカレンダー", StringComparison.Ordinal));
+
+        Assert.DoesNotContain(report!.Warnings, w =>
+            w.Contains("マイカレンダー", StringComparison.Ordinal));
+    }
 }

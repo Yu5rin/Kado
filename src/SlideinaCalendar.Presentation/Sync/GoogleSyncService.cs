@@ -46,7 +46,7 @@ public sealed class GoogleSyncService(
 
             // 1つが読めないだけで全体を止めない。誕生日のような特殊なカレンダーは
             // 一覧に出ても中身を取れないことがある。そこで止まると、他の予定まで入らない
-            foreach (var calendar in workspace.Sources.Calendars().Where(c => !CalendarWorkspace.IsLocalId(c.Id)))
+            foreach (var calendar in workspace.Sources.Calendars().Where(c => IsOnGoogle(c.GoogleRaw)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -60,7 +60,8 @@ public sealed class GoogleSyncService(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            foreach (var list in Syncable(workspace.Sources.TaskLists().Select(t => t.Id)))
+            foreach (var list in workspace.Sources.TaskLists()
+                         .Where(t => IsOnGoogle(t.GoogleRaw)).Select(t => t.Id).ToArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -83,11 +84,17 @@ public sealed class GoogleSyncService(
     }
 
     /// <summary>
-    /// このアプリの中だけで作ったものは同期しない。
-    /// <para>Google に無いものを送ろうとしても行き先が無い。</para>
+    /// Google 側にあるものか。同期するのはこれだけ。
+    /// <para>
+    /// 判断は<b>最後に受け取った姿を持っているか</b>で行う。一覧の取り込みは必ず
+    /// これを書くので、持っていないものは Google の一覧に載っていない。
+    /// </para>
+    /// <para>
+    /// ID の形では決めない。このアプリの印が付く前に作られた既定のカレンダーが
+    /// 手元に残っていて、それを Google に問い合わせると notFound になっていた。
+    /// </para>
     /// </summary>
-    private static IEnumerable<string> Syncable(IEnumerable<string> ids) =>
-        ids.Where(id => !CalendarWorkspace.IsLocalId(id)).ToArray();
+    private static bool IsOnGoogle(string? googleRaw) => googleRaw is { Length: > 0 };
 
     /// <summary>
     /// 1つぶんを走らせる。転んでも他を巻き添えにしない。
