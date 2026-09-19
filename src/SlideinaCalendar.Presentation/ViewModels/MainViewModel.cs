@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
@@ -31,6 +32,7 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
     private readonly IEditorPresenter _editors;
+    private readonly IFileDialogs _files;
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
@@ -39,10 +41,11 @@ public sealed class MainViewModel : ObservableObject
     private string _searchText = string.Empty;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
-        IEditorPresenter? editors = null)
+        IEditorPresenter? editors = null, IFileDialogs? files = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
+        _files = files ?? NullFileDialogs.Instance;
         _today = today;
 
         SourceLists = new SourceListsViewModel(workspace);
@@ -80,6 +83,9 @@ public sealed class MainViewModel : ObservableObject
 
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
+
+        ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
+        ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -318,6 +324,12 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
+    /// <summary>配布の実働日ファイル（Excel）を取り込む。</summary>
+    public RelayCommand ImportWorkingDaysCommand { get; }
+
+    /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
+    public RelayCommand ImportLegacyBackupCommand { get; }
+
     /// <summary>
     /// 前へ。動く幅は出しているビューで変わる（月・週・日）。
     /// <para>年と一覧はまだ無いので、月と同じ扱いにしておく。</para>
@@ -385,6 +397,96 @@ public sealed class MainViewModel : ObservableObject
         Month.GoTo(anchor);
         MiniCalendar.GoTo(anchor);
         RaiseHeader();
+    }
+
+    // ------------------------------------------------------------------
+    // 取り込み
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 実働日ファイルを取り込む。
+    /// <para>
+    /// この口が無いと、配布の Excel を読み込む手段が無く、実働日の表示も計算も
+    /// 動かないままになる（要件書 4.1）。
+    /// </para>
+    /// </summary>
+    private void ImportWorkingDays()
+    {
+        if (_files.PickOpenFile("実働日ファイルを選ぶ", "Excel ブック (*.xlsx)|*.xlsx|すべてのファイル (*.*)|*.*")
+            is not { } path) return;
+
+        Run(path, "実働日の取り込み", stream =>
+        {
+            var result = _workspace.ImportWorkingDays(stream);
+
+            var lines = new List<string>
+            {
+                $"バージョン: {result.Version}",
+                $"稼働日: {result.WorkingDays.Count} 件"
+                    + $"（{result.WorkingDayRangeStart:yyyy/M/d} 〜 {result.WorkingDayRangeEnd:yyyy/M/d}）",
+                $"マイルストーン: {result.Milestones.Count} 件",
+            };
+
+            if (result.Warnings.Count > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add($"警告 {result.Warnings.Count} 件");
+                lines.AddRange(result.Warnings);
+            }
+
+            return (string.Join(Environment.NewLine, lines),
+                    $"実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）");
+        });
+    }
+
+    /// <summary>旧データを取り込む。まとめて書き込むので、先に断りを入れる。</summary>
+    private void ImportLegacyBackup()
+    {
+        if (!_files.Confirm(
+                "旧データの取り込み",
+                "旧 inaCalendar のバックアップを取り込みます。\n\n" +
+                "同じ識別子の予定とタスクは上書きされます。この操作は元に戻せません。"))
+        {
+            return;
+        }
+
+        if (_files.PickOpenFile("バックアップを選ぶ", "JSON ファイル (*.json)|*.json|すべてのファイル (*.*)|*.*")
+            is not { } path) return;
+
+        Run(path, "旧データの取り込み", stream =>
+        {
+            var result = _workspace.ImportLegacyBackup(stream);
+
+            var summary = $"予定 {result.Events.Count} 件、タスク {result.Tasks.Count} 件"
+                + $"（うち ToDo から変換 {result.ConvertedTaskCount} 件）";
+
+            return ($"{result.SourceApp} v{result.SourceVersion}{Environment.NewLine}"
+                    + $"{summary}{Environment.NewLine}{Environment.NewLine}{result.FormatLog()}",
+                    $"旧データを取り込みました（{summary}）");
+        });
+    }
+
+    /// <summary>
+    /// ファイルを開いて取り込み、結果を見せる。
+    /// <para>読めないファイルを選んでも落とさない。何が起きたかを出して続ける。</para>
+    /// </summary>
+    private void Run(string path, string title, Func<Stream, (string Report, string Status)> import)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var (report, status) = import(stream);
+
+            RefreshViews();
+            StatusMessage = status;
+            _files.ShowReport(title, report);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                  or FormatException or InvalidDataException
+                                  or InvalidOperationException or JsonException)
+        {
+            _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{e.Message}");
+        }
     }
 
     // ------------------------------------------------------------------

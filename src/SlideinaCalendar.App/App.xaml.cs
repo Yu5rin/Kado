@@ -60,10 +60,11 @@ public partial class App : Application
             // 編集画面はウィンドウを親にして出す。その参照は作ったあとでないと渡せない
             MainWindow? window = null;
             var editors = new DialogEditorPresenter(() => window);
+            var files = new ShellFileDialogs(() => window);
 
             window = new MainWindow
             {
-                DataContext = new MainViewModel(workspace, today, editors: editors),
+                DataContext = new MainViewModel(workspace, today, editors: editors, files: files),
             };
 
             MainWindow = window;
