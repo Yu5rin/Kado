@@ -1,5 +1,9 @@
 # 資料
 
+実機で何をどう確かめるかは [`smoke-test.md`](smoke-test.md) に分けてある。
+CI は Linux なので、画面と Windows の仕組みと Google との実際のやり取りは、
+そこを上から辿って確かめる。
+
 | ファイル | 位置づけ |
 |---|---|
 | `SlideinaCalendar-requirements-v1.0.md` | **仕様の正。** 迷ったらこれに従う |
