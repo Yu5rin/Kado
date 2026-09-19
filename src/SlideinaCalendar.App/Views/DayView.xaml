@@ -1,0 +1,145 @@
+<!--
+    日ビュー。寸法は mock-window.html の .day-hd と .dayline に合わせてある。
+
+      .day-hd  日付 18px ・ マイルストーン ・ 実働日 ・ 右端に月末までの残り
+      .dayline 時刻の見出し 56px 幅 / 1時間 56px。列が1本なので週より縦に余裕を取る
+-->
+<UserControl x:Class="SlideinaCalendar.App.Views.DayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
+             xmlns:views="clr-namespace:SlideinaCalendar.App.Views"
+             x:Name="Root"
+             Background="{DynamicResource BackgroundBrush}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
+        <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- 日付ヘッダ。実働日の通し番号を出す場所のひとつ（要件書 4.3） -->
+        <Border DockPanel.Dock="Top" Padding="16,9" Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding RemainingInMonthText}"
+                           FontSize="12" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Ink3Brush}"
+                           Typography.NumeralAlignment="Tabular"
+                           Visibility="{Binding RemainingInMonthText, Converter={StaticResource NullToVisibility}}" />
+
+                <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+
+                <ItemsControl ItemsSource="{Binding Day.Milestones}" Margin="10,0,0,0"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border CornerRadius="3" Padding="5,0" Margin="0,0,4,0"
+                                    Background="{Binding Converter={StaticResource MilestoneBrush},
+                                                ConverterParameter=Face}">
+                                <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
+                                           LineHeight="15"
+                                           Foreground="{Binding Converter={StaticResource MilestoneBrush}}" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="{Binding WorkingDayLabel}" FontSize="12" Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource AccentBrush}"
+                           Typography.NumeralAlignment="Tabular"
+                           Visibility="{Binding WorkingDayLabel, Converter={StaticResource NullToVisibility}}" />
+            </DockPanel>
+        </Border>
+
+        <!-- 終日レーン。ここのタスクを下へドラッグして作業時間にする（要件書 5.4） -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineStrongBrush}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Width="56" Text="終日" FontSize="9.5"
+                           TextAlignment="Right" Padding="0,4,5,0"
+                           Foreground="{DynamicResource Ink3Brush}" />
+                <Border DockPanel.Dock="Right"
+                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+
+                <Border x:Name="AllDay" Padding="3" MinHeight="30"
+                        BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Day.AllDayEvents}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2"
+                                            Background="{DynamicResource AccentSoftBrush}">
+                                        <TextBlock Text="{Binding Label}" FontSize="10.5"
+                                                   Foreground="{DynamicResource InkBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Tooltip}" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <ItemsControl ItemsSource="{Binding Day.Tasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
+                                            Background="{DynamicResource AccentSoftBrush}"
+                                            BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
+                                            ToolTip="時間帯へドラッグすると作業時間を確保します">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="5" Height="5" Margin="0,0,4,0"
+                                                     VerticalAlignment="Center"
+                                                     Stroke="{DynamicResource AccentBrush}"
+                                                     StrokeThickness="1.5" />
+                                            <TextBlock Text="{Binding Title}" FontSize="10.5"
+                                                       Foreground="{DynamicResource InkBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <!-- 時間軸 -->
+        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+            <Grid Height="{Binding TimelineHeight}">
+                <DockPanel>
+                    <ItemsControl DockPanel.Dock="Left" Width="56" ItemsSource="{Binding HourLabels}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}"
+                                           Height="{Binding DataContext.HourHeight, ElementName=Root}"
+                                           FontSize="10" TextAlignment="Right"
+                                           Padding="0,0,6,0" Margin="0,-5,0,0"
+                                           Foreground="{DynamicResource Ink3Brush}"
+                                           Typography.NumeralAlignment="Tabular" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <views:TimelineColumnView DataContext="{Binding Day}"
+                                              HourLabels="{Binding DataContext.HourLabels, ElementName=Root}"
+                                              RowHeight="{Binding DataContext.HourHeight, ElementName=Root}" />
+                </DockPanel>
+
+                <!-- 現在時刻。時刻の見出しぶんだけ右に寄せる -->
+                <Grid VerticalAlignment="Top" Margin="56,0,0,0" IsHitTestVisible="False"
+                      Visibility="{Binding ShowNowLine, Converter={StaticResource BoolToVisibility}}">
+                    <Border Height="1.5" VerticalAlignment="Top" Background="#c4372f"
+                            Margin="{Binding NowOffset, Converter={StaticResource TimelineOffsetToMargin}}" />
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

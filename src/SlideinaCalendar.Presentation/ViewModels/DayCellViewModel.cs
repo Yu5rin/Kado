@@ -29,6 +29,7 @@ public sealed class DayCellViewModel : ObservableObject
         IReadOnlyList<ScheduledEvent> events,
         IReadOnlyList<TaskItem> tasks,
         string? holidayName = null,
+        ICalendarPalette? palette = null,
         int maxChips = DefaultMaxChips)
     {
         Date = date;
@@ -41,7 +42,9 @@ public sealed class DayCellViewModel : ObservableObject
 
         // マスに入る数には限りがある。溢れたぶんは「＋N」でまとめて示し、
         // 件数が分からないまま隠れてしまうのを避ける
-        var chips = events.Select(e => new EventChipViewModel(e)).ToArray();
+        var chips = events
+            .Select(e => new EventChipViewModel(e, palette?.ColorOf(e.Source.CalendarId)))
+            .ToArray();
         var taskChips = tasks;
 
         var total = chips.Length + taskChips.Count;

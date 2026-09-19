@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
+using SlideinaCalendar.Core.Import;
 using SlideinaCalendar.Core.WorkingDays;
+using SlideinaCalendar.Data.Import;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Data.Repositories;
 using SlideinaCalendar.Presentation.Editing;
@@ -16,12 +18,15 @@ namespace SlideinaCalendar.Presentation;
 /// </summary>
 public sealed class CalendarWorkspace
 {
+    private readonly SqliteConnection _connection;
+
     private WorkingDayCalendar _workingDays;
 
     public CalendarWorkspace(SqliteConnection connection, IHolidaySource? holidays = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
+        _connection = connection;
         Holidays = holidays ?? EmptyHolidaySource.Instance;
 
         Events = new EventRepository(connection);
@@ -66,6 +71,42 @@ public sealed class CalendarWorkspace
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath);
         NotifyChanged();
+    }
+
+    // ------------------------------------------------------------------
+    // 取り込み
+    //
+    // どちらも Undo には積まない。まとめて書き込むので、1手で戻せる単位に
+    // ならない。戻したいときはバックアップから復元する
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 配布の実働日ファイル（Excel）を取り込む。
+    /// <para>
+    /// 期間単位で置き換える。古いファイルを誤って読み込んでも、その期間の外は
+    /// 消えない（要件書 4.1）。
+    /// </para>
+    /// </summary>
+    public ImportResult ImportWorkingDays(Stream xlsx)
+    {
+        ArgumentNullException.ThrowIfNull(xlsx);
+
+        var result = new WorkdayFileImporter().Import(xlsx);
+        WorkingDayStore.Apply(result);
+
+        ReloadWorkingDays();
+        return result;
+    }
+
+    /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
+    public LegacyImportResult ImportLegacyBackup(Stream json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+
+        var result = new LegacyBackupMigrator(_connection).Migrate(json);
+
+        ReloadWorkingDays();
+        return result;
     }
 
     // ------------------------------------------------------------------

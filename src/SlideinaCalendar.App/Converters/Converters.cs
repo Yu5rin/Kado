@@ -121,41 +121,55 @@ public sealed class EventTimeConverter : IValueConverter
         throw new NotSupportedException();
 }
 
-/// <summary>予定の系統から帯の色を引く。</summary>
-public sealed class EventAccentBrushConverter : IValueConverter
+/// <summary>
+/// 予定の色から帯のブラシを作る。
+/// <para>
+/// 色は所属カレンダーで決まる（<c>ICalendarPalette</c>）。決まっていなければ
+/// 既定のアクセント色に倒す。
+/// </para>
+/// </summary>
+public sealed class EventColorBrushConverter : IValueConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        Application.Current?.TryFindResource(value switch
-        {
-            EventAccent.Green => "CategoryGreenBrush",
-            EventAccent.Amber => "CategoryAmberBrush",
-            _ => "AccentBrush",
-        });
+        ParseColor(value) is { } color
+            ? new SolidColorBrush(color)
+            : Application.Current?.TryFindResource("AccentBrush");
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
+
+    /// <summary>壊れた色でも表示は続ける。既定の色に倒すだけで済ませる。</summary>
+    internal static Color? ParseColor(object? value)
+    {
+        if (value is not string hex || hex.Length == 0) return null;
+
+        try
+        {
+            return (Color)ColorConverter.ConvertFromString(hex);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>
-/// 予定の系統から面の色を作る。
-/// <para>
-/// 帯の色を薄く敷く。モックは rgba で 10〜12% の不透明度を使っているので、それに合わせる。
-/// 既定の藍だけは専用の面色（AccentSoftBrush）があるのでそちらを使う。
-/// </para>
+/// 予定の色から面のブラシを作る。
+/// <para>帯の色を薄く敷く。モックは rgba で 10〜12% の不透明度を使っている。</para>
 /// </summary>
-public sealed class EventAccentFaceConverter : IValueConverter
+public sealed class EventColorFaceConverter : IValueConverter
 {
     /// <summary>帯の色を敷くときの濃さ。モックの rgba(...,.1) 相当。</summary>
     private const byte FaceAlpha = 28;
 
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is not EventAccent accent) return null;
-
-        if (accent == EventAccent.Default) return Application.Current?.TryFindResource("AccentSoftBrush");
-
-        var key = accent == EventAccent.Green ? "CategoryGreenColor" : "CategoryAmberColor";
-        if (Application.Current?.TryFindResource(key) is not Color color) return null;
+        if (EventColorBrushConverter.ParseColor(value) is not { } color)
+        {
+            // 既定の藍には専用の面色がある
+            return Application.Current?.TryFindResource("AccentSoftBrush");
+        }
 
         return new SolidColorBrush(Color.FromArgb(FaceAlpha, color.R, color.G, color.B));
     }
@@ -214,4 +228,36 @@ public sealed class EnumToBoolConverter : IValueConverter
         value is true && parameter is string name
             ? Enum.Parse(targetType, name)
             : Binding.DoNothing;
+}
+
+/// <summary>
+/// <see cref="DateOnly"/> と <see cref="DateTime"/> をつなぐ。
+/// <para>
+/// WPF の DatePicker は <see cref="DateTime"/> しか扱えない。モデル側を
+/// DateTime に寄せると時刻の無い日付に 0 時が付いて回るので、ここで変換する。
+/// </para>
+/// </summary>
+public sealed class DateOnlyToDateTimeConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DateOnly date ? date.ToDateTime(TimeOnly.MinValue) : null;
+
+    public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DateTime dateTime ? DateOnly.FromDateTime(dateTime) : null;
+}
+
+/// <summary>
+/// 時間軸の上端からの位置を余白に変える。
+/// <para>
+/// ブロックは横に伸ばしたいので Canvas には置けない。上端からの距離を
+/// <see cref="Thickness"/> の上側に入れ、左右は <c>2</c> 空けて重なりを避ける。
+/// </para>
+/// </summary>
+public sealed class TimelineOffsetToMarginConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is double top ? new Thickness(2, top, 2, 0) : new Thickness(2, 0, 2, 0);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
 }

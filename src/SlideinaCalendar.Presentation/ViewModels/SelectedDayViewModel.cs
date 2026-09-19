@@ -72,7 +72,7 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
 /// 場所と長さはその場で判断したい情報なので、開かずに読めるようにする。
 /// </para>
 /// </summary>
-public sealed class DayEventViewModel(ScheduledEvent scheduled)
+public sealed class DayEventViewModel(ScheduledEvent scheduled, string? color = null)
 {
     /// <summary>元の予定。</summary>
     public ScheduledEvent Scheduled { get; } = scheduled;
@@ -85,8 +85,8 @@ public sealed class DayEventViewModel(ScheduledEvent scheduled)
         ? start.ToString("HH:mm", CultureInfo.InvariantCulture)
         : "終日";
 
-    /// <summary>帯の色。</summary>
-    public EventAccent Accent => EventChipViewModel.ResolveAccent(Scheduled.Source.Color);
+    /// <summary>帯の色（<c>#rrggbb</c>）。所属カレンダーで決まる。null なら既定のアクセント色。</summary>
+    public string? Color { get; } = color;
 
     /// <summary>「第2会議室 ・ 1時間30分」。どちらも無ければ null。</summary>
     public string? SubText
@@ -131,7 +131,7 @@ public sealed class DayEventViewModel(ScheduledEvent scheduled)
 public sealed class SelectedDayViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
-    private readonly ISourceFilter _filter;
+    private readonly ICalendarSources _sources;
 
     private DateOnly _date;
     private DateOnly _today;
@@ -139,10 +139,10 @@ public sealed class SelectedDayViewModel : ObservableObject
     private IReadOnlyList<TaskListItemViewModel> _tasks = [];
 
     public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
-        ISourceFilter? filter = null)
+        ICalendarSources? sources = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-        _filter = filter ?? ShowAllFilter.Instance;
+        _sources = sources ?? DefaultCalendarSources.Instance;
         _date = date;
         _today = today;
 
@@ -197,8 +197,11 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>見出しの右に出す予定の件数。</summary>
     public string EventCountText => _events.Count.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>見出しの右に出す「3 / 4」。完了した数と全体。</summary>
-    public string TaskCountText => $"{DoneTaskCount} / {_tasks.Count}";
+    /// <summary>
+    /// 見出しの右に出す「3 / 4」。<b>残っている数と全体</b>。
+    /// <para>片付いた数より、あと何件あるかのほうが知りたい。</para>
+    /// </summary>
+    public string TaskCountText => $"{RemainingTaskCount} / {_tasks.Count}";
 
     /// <summary>
     /// 「月末まで 5実働日」。今日から月末までの残り。データが無ければ null。
@@ -214,32 +217,51 @@ public sealed class SelectedDayViewModel : ObservableObject
         }
     }
 
-    /// <summary>この日が期限のタスク。</summary>
+    /// <summary>
+    /// 右ペインに並べるタスク。
+    /// <para>
+    /// <b>その日が期限のものだけではない。</b>未完了で期限のあるタスクを期限の早い順に
+    /// すべて出し、完了済みは選択日が期限のものだけ添える。先の期限が見えないと、
+    /// 今日やることは分かっても段取りが組めない（モックの右ペインも 10/1 や
+    /// 2027/3/31 期限のタスクを並べている）。
+    /// </para>
+    /// <para>並びは<b>期限の近い順</b>。遅れているものが一番上に来る。</para>
+    /// <para>期限の無いタスクはここには出さない。並べる順番が決まらないため。</para>
+    /// </summary>
     public IReadOnlyList<TaskListItemViewModel> Tasks
     {
         get => _tasks;
         private set => Set(ref _tasks, value);
     }
 
-    /// <summary>「タスク 3/4」の分子。完了した数。</summary>
+    /// <summary>完了した数。</summary>
     public int DoneTaskCount => _tasks.Count(t => t.IsDone);
+
+    /// <summary>まだ残っている数。見出しの分子。</summary>
+    public int RemainingTaskCount => _tasks.Count(t => !t.IsDone);
 
     /// <summary>読み直す。</summary>
     public void Refresh()
     {
         Events = _workspace.Schedule.EventsInRange(_date, _date)
-            .Where(e => _filter.IncludesEvent(e.Source))
-            .Select(e => new DayEventViewModel(e))
+            .Where(e => _sources.IncludesEvent(e.Source))
+            .Select(e => new DayEventViewModel(e, _sources.ColorOf(e.Source.CalendarId)))
             .ToArray();
 
-        Tasks = _workspace.Tasks.DueInRange(_date, _date)
-            .Where(_filter.IncludesTask)
+        Tasks = _workspace.Tasks.All()
+            .Where(_sources.IncludesTask)
+            .Where(t => t.HasDue)
+            // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
+            .Where(t => !t.IsDone || t.Due == _date)
+            // 期限の近い順。遅れているものが一番上に来る
+            .OrderBy(t => t.Due)
+            .ThenBy(t => t.Title, StringComparer.Ordinal)
             .Select(t => new TaskListItemViewModel(
                 t, t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null))
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
-              nameof(Milestones), nameof(DoneTaskCount),
+              nameof(Milestones), nameof(DoneTaskCount), nameof(RemainingTaskCount),
               nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText));
     }
 
