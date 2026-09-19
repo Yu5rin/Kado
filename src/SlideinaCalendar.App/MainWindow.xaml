@@ -29,6 +29,25 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
 
+        <!--
+            カレンダー／タスクリストの行を右クリックしたときのメニュー。
+            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
+            行の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="SourceRowMenu">
+            <MenuItem Header="名前と色を変える"
+                      Command="{Binding PlacementTarget.Tag.EditSourceCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteSourceCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
@@ -251,13 +270,29 @@
                                     BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}"
                                     Visibility="{Binding SourceLists.Calendars, Converter={StaticResource NullToVisibility}}">
                                 <StackPanel>
-                                    <TextBlock Text="カレンダー" FontSize="11" Margin="0,0,0,7"
-                                               Foreground="{DynamicResource Ink3Brush}" />
+                                    <DockPanel Margin="0,0,0,7">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource SmallIconButtonStyle}"
+                                                Command="{Binding AddCalendarCommand}"
+                                                ToolTip="カレンダーを追加">
+                                            <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
+                                                  Width="11" Height="11"
+                                                  Stroke="{Binding Foreground,
+                                                           RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  StrokeThickness="2"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                        </Button>
+                                        <TextBlock Text="カレンダー" FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                    </DockPanel>
                                     <ItemsControl ItemsSource="{Binding SourceLists.Calendars}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <ToggleButton Style="{StaticResource SourceListRowStyle}"
-                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}" />
+                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                              ToolTip="右クリックで名前と色を変えられます"
+                                                              Tag="{Binding DataContext,
+                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              ContextMenu="{StaticResource SourceRowMenu}" />
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -269,13 +304,29 @@
                                     BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}"
                                     Visibility="{Binding SourceLists.TaskLists, Converter={StaticResource NullToVisibility}}">
                                 <StackPanel>
-                                    <TextBlock Text="タスクリスト" FontSize="11" Margin="0,0,0,7"
-                                               Foreground="{DynamicResource Ink3Brush}" />
+                                    <DockPanel Margin="0,0,0,7">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource SmallIconButtonStyle}"
+                                                Command="{Binding AddTaskListCommand}"
+                                                ToolTip="タスクリストを追加">
+                                            <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
+                                                  Width="11" Height="11"
+                                                  Stroke="{Binding Foreground,
+                                                           RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  StrokeThickness="2"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                        </Button>
+                                        <TextBlock Text="タスクリスト" FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                    </DockPanel>
                                     <ItemsControl ItemsSource="{Binding SourceLists.TaskLists}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <ToggleButton Style="{StaticResource SourceListRowStyle}"
-                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}" />
+                                                              IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                              ToolTip="右クリックで名前を変えられます"
+                                                              Tag="{Binding DataContext,
+                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              ContextMenu="{StaticResource SourceRowMenu}" />
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

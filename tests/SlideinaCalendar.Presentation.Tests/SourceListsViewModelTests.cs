@@ -16,19 +16,102 @@ public class SourceListsViewModelTests
         ws.AddEvent(new CalendarEvent { Id = "e3", Title = "所属なし", Date = D(2026, 9, 24) });
 
         ws.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24), TaskListId = "マイタスク" });
+
+        // 取り込みと同じで、持ち込まれた所属を一覧に起こす
+        ws.EnsureSources();
     }
 
     [Fact]
-    public void 一覧は予定とタスクの所属から作られる()
+    public void 何も無ければ既定の分類が用意される()
+    {
+        using var test = TestWorkspace.Create();
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // 予定が1件も無くても分類を先に作れるよう、入れ先を用意しておく
+        Assert.Equal([CalendarWorkspace.DefaultCalendarName], vm.Calendars.Select(c => c.Name));
+        Assert.Equal([CalendarWorkspace.DefaultTaskListName], vm.TaskLists.Select(t => t.Name));
+    }
+
+    [Fact]
+    public void 持ち込まれた所属も一覧に起こされる()
     {
         using var test = TestWorkspace.Create();
         Seed(test);
 
         var vm = new SourceListsViewModel(test.Workspace);
 
-        Assert.Equal(["仕事", "生産ライン"], vm.Calendars.Select(c => c.Name));
-        Assert.Equal(["マイタスク"], vm.TaskLists.Select(t => t.Name));
+        Assert.Contains("仕事", vm.Calendars.Select(c => c.Name));
+        Assert.Contains("生産ライン", vm.Calendars.Select(c => c.Name));
         Assert.All(vm.Calendars, c => Assert.True(c.IsVisible));
+    }
+
+    [Fact]
+    public void カレンダーを作れる()
+    {
+        using var test = TestWorkspace.Create();
+
+        var created = test.Workspace.CreateCalendar("プライベート");
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Contains("プライベート", vm.Calendars.Select(c => c.Name));
+
+        // 既存と同じ色にはしない。並べたときに見分けられなくなる
+        Assert.DoesNotContain(created.BackgroundColor,
+            vm.Calendars.Where(c => c.Id != created.Id).Select(c => c.SwatchColor));
+    }
+
+    [Fact]
+    public void カレンダーの名前と色を変えられる()
+    {
+        using var test = TestWorkspace.Create();
+        var created = test.Workspace.CreateCalendar("仮の名前");
+
+        Assert.True(test.Workspace.UpdateCalendar(created.Id, "私用", "#8f5fa8"));
+
+        var item = new SourceListsViewModel(test.Workspace).Calendars.Single(c => c.Id == created.Id);
+        Assert.Equal("私用", item.Name);
+        Assert.Equal("#8f5fa8", item.SwatchColor);
+    }
+
+    [Fact]
+    public void カレンダーを消すと中の予定は別のカレンダーへ移る()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        var work = ws.CreateCalendar("仕事");
+        ws.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24), CalendarId = work.Id });
+
+        // 分類を消したかっただけなのに中身まで消えるのは行き過ぎ
+        Assert.Equal(1, ws.DeleteCalendar(work.Id));
+
+        Assert.DoesNotContain(work.Id, new SourceListsViewModel(ws).Calendars.Select(c => c.Id));
+        Assert.NotNull(ws.Events.Find("e1"));
+        Assert.NotEqual(work.Id, ws.Events.Find("e1")!.CalendarId);
+    }
+
+    [Fact]
+    public void 最後のカレンダーは消せない()
+    {
+        using var test = TestWorkspace.Create();
+        var only = Assert.Single(test.Workspace.Sources.Calendars());
+
+        // 入れ先が無くなると、予定の所属が消えて分類できなくなる
+        Assert.Null(test.Workspace.DeleteCalendar(only.Id));
+    }
+
+    [Fact]
+    public void タスクリストも同じように作れる()
+    {
+        using var test = TestWorkspace.Create();
+
+        var created = test.Workspace.CreateTaskList("計画業務");
+        Assert.Contains("計画業務", new SourceListsViewModel(test.Workspace).TaskLists.Select(t => t.Name));
+
+        Assert.True(test.Workspace.UpdateTaskList(created.Id, "計画業務（改）"));
+        Assert.Contains("計画業務（改）",
+            new SourceListsViewModel(test.Workspace).TaskLists.Select(t => t.Name));
     }
 
     [Fact]
@@ -154,7 +237,7 @@ public class SourceListsViewModelTests
         var vm = new SourceListsViewModel(test.Workspace);
 
         // 名前も色も Google のものになる
-        var item = Assert.Single(vm.Calendars);
+        var item = vm.Calendars.Single(c => c.Id == "work@example.com");
         Assert.Equal("仕事用カレンダー", item.Name);
         Assert.Equal("#123456", item.SwatchColor);
         Assert.Equal("#123456", vm.ColorOf("work@example.com"));
@@ -170,7 +253,8 @@ public class SourceListsViewModelTests
             Id = "c1", Summary = "本名", SummaryOverride = "呼び名", UpdatedAt = DateTimeOffset.Now,
         });
 
-        Assert.Equal("呼び名", Assert.Single(new SourceListsViewModel(test.Workspace).Calendars).Name);
+        Assert.Equal("呼び名",
+            new SourceListsViewModel(test.Workspace).Calendars.Single(c => c.Id == "c1").Name);
     }
 
     [Fact]
@@ -184,11 +268,11 @@ public class SourceListsViewModelTests
         });
 
         var vm = new SourceListsViewModel(test.Workspace);
-        Assert.Single(vm.Calendars).IsVisible = false;
+        vm.Calendars.Single(c => c.Id == "c1").IsVisible = false;
 
         // 同期のたびにチェックが戻ると使い物にならない（要件書 5.5）
-        Assert.False(Assert.Single(test.Workspace.Sources.Calendars()).IsVisible);
-        Assert.False(Assert.Single(new SourceListsViewModel(test.Workspace).Calendars).IsVisible);
+        Assert.False(test.Workspace.Sources.Calendars().Single(c => c.Id == "c1").IsVisible);
+        Assert.False(new SourceListsViewModel(test.Workspace).Calendars.Single(c => c.Id == "c1").IsVisible);
     }
 
     [Fact]
@@ -203,7 +287,7 @@ public class SourceListsViewModelTests
         });
 
         var vm = new SourceListsViewModel(test.Workspace);
-        Assert.Single(vm.Calendars).IsVisible = false;
+        vm.Calendars.Single(c => c.Id == "仕事").IsVisible = false;
 
         Assert.False(vm.IncludesEvent(new CalendarEvent { Id = "e1", CalendarId = "仕事" }));
         Assert.True(vm.IncludesEvent(new CalendarEvent { Id = "e2", CalendarId = "生産ライン" }));

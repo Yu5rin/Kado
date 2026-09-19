@@ -36,6 +36,8 @@ public sealed class CalendarWorkspace
         Settings = new SettingsRepository(connection);
         Schedule = new ScheduleQuery(Events, Tasks);
 
+        EnsureSources();
+
         _workingDays = WorkingDayStore.Load();
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath);
@@ -78,6 +80,180 @@ public sealed class CalendarWorkspace
     }
 
     // ------------------------------------------------------------------
+    // カレンダーとタスクリスト
+    //
+    // Google に繋がなくても、このアプリだけで分類を作れる。仕事と私用を
+    // 分けて入れたい、というのは連携の有無に関わらず要る
+    // ------------------------------------------------------------------
+
+    /// <summary>既定のカレンダー名。何も無いときに作る。</summary>
+    public const string DefaultCalendarName = "マイカレンダー";
+
+    /// <summary>既定のタスクリスト名。</summary>
+    public const string DefaultTaskListName = "マイタスク";
+
+    /// <summary>カレンダーを作る。</summary>
+    /// <returns>作ったカレンダー。</returns>
+    public CalendarSource CreateCalendar(string name, string? color = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var value = new CalendarSource
+        {
+            // Google 側の ID と衝突しないよう、こちらで作ったものは印を付ける
+            Id = $"local:{Guid.NewGuid():N}"[..21],
+            Summary = name.Trim(),
+            BackgroundColor = color ?? CalendarPalette.NextColor(
+                Sources.Calendars().Select(c => c.BackgroundColor)),
+            SortOrder = Sources.NextCalendarOrder(),
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        Sources.Upsert(value);
+        NotifyChanged();
+
+        return value;
+    }
+
+    /// <summary>タスクリストを作る。</summary>
+    public TaskListSource CreateTaskList(string title)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+
+        var value = new TaskListSource
+        {
+            Id = $"local:{Guid.NewGuid():N}"[..21],
+            Title = title.Trim(),
+            SortOrder = Sources.NextTaskListOrder(),
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        Sources.Upsert(value);
+        NotifyChanged();
+
+        return value;
+    }
+
+    /// <summary>カレンダーの名前と色を変える。</summary>
+    public bool UpdateCalendar(string id, string name, string? color)
+    {
+        if (!Sources.UpdateCalendar(id, name, color)) return false;
+
+        NotifyChanged();
+        return true;
+    }
+
+    /// <summary>タスクリストの名前を変える。</summary>
+    public bool UpdateTaskList(string id, string title)
+    {
+        if (!Sources.UpdateTaskList(id, title)) return false;
+
+        NotifyChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// カレンダーを消す。中の予定は別のカレンダーへ移す。
+    /// <para>分類を消したかっただけなのに中身まで消えるのは行き過ぎ。</para>
+    /// </summary>
+    /// <returns>移した予定の件数。最後の1つは消せないので、そのときは null。</returns>
+    public int? DeleteCalendar(string id)
+    {
+        var remaining = Sources.Calendars()
+            .Where(c => !string.Equals(c.Id, id, StringComparison.Ordinal))
+            .ToArray();
+
+        // 入れ先が無くなると、予定の所属が消えて分類できなくなる
+        if (remaining.Length == 0) return null;
+
+        var moved = Sources.DeleteCalendar(id, remaining[0].Id);
+        NotifyChanged();
+
+        return moved;
+    }
+
+    /// <summary>タスクリストを消す。中のタスクは別のリストへ移す。</summary>
+    public int? DeleteTaskList(string id)
+    {
+        var remaining = Sources.TaskLists()
+            .Where(t => !string.Equals(t.Id, id, StringComparison.Ordinal))
+            .ToArray();
+
+        if (remaining.Length == 0) return null;
+
+        var moved = Sources.DeleteTaskList(id, remaining[0].Id);
+        NotifyChanged();
+
+        return moved;
+    }
+
+    /// <summary>
+    /// 予定やタスクが指している所属を、一覧の表に起こす。
+    /// <para>
+    /// 起動時と、取り込みのあとに呼ぶ。足りないぶんだけ足すので何度呼んでもよい。
+    /// これまでは予定の所属 ID から後付けで拾っていた。表に載せてしまえば、名前も色も
+    /// 変えられるし、予定が1件も無くても分類を先に作れる。
+    /// </para>
+    /// </summary>
+    public void EnsureSources()
+    {
+        var calendars = Sources.Calendars();
+        var known = calendars.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        var order = Sources.NextCalendarOrder();
+
+        foreach (var id in Events.CalendarIds().Where(id => !known.Contains(id)))
+        {
+            Sources.Upsert(new CalendarSource
+            {
+                Id = id,
+                Summary = id,
+                BackgroundColor = CalendarPalette.ColorFor(id),
+                IsPrimary = calendars.Count == 0 && order == 0,
+                SortOrder = order++,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+
+        // 1つも無いと予定の入れ先が決まらない
+        if (order == 0 && calendars.Count == 0)
+        {
+            Sources.Upsert(new CalendarSource
+            {
+                Id = DefaultCalendarName,
+                Summary = DefaultCalendarName,
+                BackgroundColor = CalendarPalette.ColorFor(DefaultCalendarName),
+                IsPrimary = true,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+
+        var taskLists = Sources.TaskLists();
+        var knownLists = taskLists.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+        var listOrder = Sources.NextTaskListOrder();
+
+        foreach (var id in Tasks.TaskListIds().Where(id => !knownLists.Contains(id)))
+        {
+            Sources.Upsert(new TaskListSource
+            {
+                Id = id,
+                Title = id,
+                SortOrder = listOrder++,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+
+        if (listOrder == 0 && taskLists.Count == 0)
+        {
+            Sources.Upsert(new TaskListSource
+            {
+                Id = DefaultTaskListName,
+                Title = DefaultTaskListName,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+    }
+
+    // ------------------------------------------------------------------
     // 取り込み
     //
     // どちらも Undo には積まない。まとめて書き込むので、1手で戻せる単位に
@@ -108,6 +284,9 @@ public sealed class CalendarWorkspace
         ArgumentNullException.ThrowIfNull(json);
 
         var result = new LegacyBackupMigrator(_connection).Migrate(json);
+
+        // 旧データが持ち込んだ所属を一覧に起こす。載せないと左パネルに出ない
+        EnsureSources();
 
         ReloadWorkingDays();
         return result;

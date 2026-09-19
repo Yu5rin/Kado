@@ -8,7 +8,10 @@ public class EventEditorViewModelTests
 {
     private static DateOnly D(int y, int m, int d) => new(y, m, d);
 
-    private static EventEditorViewModel New() => new(D(2026, 9, 24), ["仕事"]);
+    /// <summary>カレンダー欄の候補。名前で選ばせ、保存するのは ID。</summary>
+    private static readonly SourceChoice[] Calendars = [new("local:shigoto", "仕事")];
+
+    private static EventEditorViewModel New() => new(D(2026, 9, 24), Calendars);
 
     [Fact]
     public void タイトルが空なら保存できない()
@@ -114,7 +117,7 @@ public class EventEditorViewModelTests
             Recurrence = "FREQ=WEEKLY", GoogleEventId = "g1", Source = "google",
         };
 
-        var vm = new EventEditorViewModel(source, ["仕事"]);
+        var vm = new EventEditorViewModel(source, Calendars);
         Assert.False(vm.IsNew);
         Assert.Equal("予定の編集", vm.HeaderText);
         Assert.Equal("09:00", vm.StartTimeText);

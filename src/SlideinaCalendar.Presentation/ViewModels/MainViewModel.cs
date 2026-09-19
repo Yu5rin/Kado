@@ -88,6 +88,11 @@ public sealed class MainViewModel : ObservableObject
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
 
+        AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
+        AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
+        EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
+        DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource);
+
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
         ImportGoogleClientCommand = new RelayCommand(ImportGoogleClient, () => _googleClient is not null);
@@ -329,6 +334,18 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
+    /// <summary>カレンダーを作る。</summary>
+    public RelayCommand AddCalendarCommand { get; }
+
+    /// <summary>タスクリストを作る。</summary>
+    public RelayCommand AddTaskListCommand { get; }
+
+    /// <summary>カレンダーまたはタスクリストの名前と色を変える。</summary>
+    public RelayCommand<SourceListItemViewModel?> EditSourceCommand { get; }
+
+    /// <summary>カレンダーまたはタスクリストを消す。</summary>
+    public RelayCommand<SourceListItemViewModel?> DeleteSourceCommand { get; }
+
     /// <summary>配布の実働日ファイル（Excel）を取り込む。</summary>
     public RelayCommand ImportWorkingDaysCommand { get; }
 
@@ -409,6 +426,81 @@ public sealed class MainViewModel : ObservableObject
         MiniCalendar.GoTo(anchor);
         RaiseHeader();
     }
+
+    // ------------------------------------------------------------------
+    // カレンダーとタスクリスト
+    //
+    // Google に繋がなくても、このアプリだけで分類を作れる
+    // ------------------------------------------------------------------
+
+    private void AddSource(bool isTaskList)
+    {
+        var used = isTaskList ? [] : SourceLists.Calendars.Select(c => (string?)c.SwatchColor);
+        var editor = new CalendarEditorViewModel(isTaskList, used);
+
+        if (!_editors.ShowCalendarEditor(editor)) return;
+
+        if (isTaskList)
+        {
+            _workspace.CreateTaskList(editor.TrimmedName);
+            StatusMessage = $"タスクリスト「{editor.TrimmedName}」を作りました";
+        }
+        else
+        {
+            _workspace.CreateCalendar(editor.TrimmedName, editor.Color);
+            StatusMessage = $"カレンダー「{editor.TrimmedName}」を作りました";
+        }
+    }
+
+    private void EditSource(SourceListItemViewModel? target)
+    {
+        if (target is null) return;
+
+        var isTaskList = IsTaskList(target);
+        var editor = new CalendarEditorViewModel(target.Id, target.Name, target.SwatchColor, isTaskList);
+
+        if (!_editors.ShowCalendarEditor(editor)) return;
+
+        var changed = isTaskList
+            ? _workspace.UpdateTaskList(target.Id, editor.TrimmedName)
+            : _workspace.UpdateCalendar(target.Id, editor.TrimmedName, editor.Color);
+
+        StatusMessage = changed ? $"「{editor.TrimmedName}」に変更しました" : "見つかりませんでした";
+    }
+
+    private void DeleteSource(SourceListItemViewModel? target)
+    {
+        if (target is null) return;
+
+        var isTaskList = IsTaskList(target);
+        var count = isTaskList
+            ? _workspace.Sources.TaskCountIn(target.Id)
+            : _workspace.Sources.EventCountIn(target.Id);
+
+        var kind = isTaskList ? "タスクリスト" : "カレンダー";
+        var contents = isTaskList ? "タスク" : "予定";
+
+        // 中身ごと消さない。分類を消したかっただけなのに中身まで消えるのは行き過ぎ
+        var message = count > 0
+            ? $"{kind}「{target.Name}」を削除します。{Environment.NewLine}{Environment.NewLine}"
+              + $"入っている{contents} {count} 件は、別の{kind}へ移ります。削除はされません。"
+            : $"{kind}「{target.Name}」を削除します。";
+
+        if (!_editors.Confirm($"{kind}の削除", message)) return;
+
+        var moved = isTaskList ? _workspace.DeleteTaskList(target.Id) : _workspace.DeleteCalendar(target.Id);
+
+        StatusMessage = moved switch
+        {
+            null => $"最後の{kind}は削除できません",
+            0 => $"{kind}「{target.Name}」を削除しました",
+            var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を移しました",
+        };
+    }
+
+    /// <summary>タスクリスト側の項目か。一覧に含まれているかで見分ける。</summary>
+    private bool IsTaskList(SourceListItemViewModel target) =>
+        SourceLists.TaskLists.Any(t => ReferenceEquals(t, target));
 
     // ------------------------------------------------------------------
     // 取り込み
@@ -623,12 +715,12 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
     }
 
-    /// <summary>編集画面に出すカレンダーの候補。</summary>
-    private IReadOnlyList<string> CalendarNames =>
-        SourceLists.Calendars.Select(c => c.Id).ToArray();
+    /// <summary>編集画面に出すカレンダーの候補。名前で選ばせ、保存するのは ID。</summary>
+    private IReadOnlyList<SourceChoice> CalendarNames =>
+        SourceLists.Calendars.Select(c => new SourceChoice(c.Id, c.Name)).ToArray();
 
-    private IReadOnlyList<string> TaskListNames =>
-        SourceLists.TaskLists.Select(t => t.Id).ToArray();
+    private IReadOnlyList<SourceChoice> TaskListNames =>
+        SourceLists.TaskLists.Select(t => new SourceChoice(t.Id, t.Name)).ToArray();
 
     private void Undo()
     {

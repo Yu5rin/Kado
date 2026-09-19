@@ -7,10 +7,13 @@ public class TaskEditorViewModelTests
 {
     private static DateOnly D(int y, int m, int d) => new(y, m, d);
 
+    /// <summary>タスクリスト欄の候補。</summary>
+    private static readonly SourceChoice[] TaskLists = [new("local:mytasks", "マイタスク")];
+
     [Fact]
     public void タイトルが空なら保存できない()
     {
-        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"], D(2026, 9, 24));
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), TaskLists, D(2026, 9, 24));
 
         Assert.False(vm.CanSave);
 
@@ -21,7 +24,7 @@ public class TaskEditorViewModelTests
     [Fact]
     public void 期限を外せる()
     {
-        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"], D(2026, 9, 24)) { Title = "いつかやる" };
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), TaskLists, D(2026, 9, 24)) { Title = "いつかやる" };
 
         Assert.Equal(D(2026, 9, 24), vm.ToModel().Due);
 
@@ -61,7 +64,7 @@ public class TaskEditorViewModelTests
             GoogleTaskId = "g1", GoogleTaskListId = "gl1", Source = "google",
         };
 
-        var vm = new TaskEditorViewModel(source, ["マイタスク"], D(2026, 9, 24)) { Title = "集計（変更）" };
+        var vm = new TaskEditorViewModel(source, TaskLists, D(2026, 9, 24)) { Title = "集計（変更）" };
         var model = vm.ToModel();
 
         Assert.Equal("t1", model.Id);

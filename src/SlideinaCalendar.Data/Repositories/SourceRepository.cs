@@ -28,6 +28,11 @@ public sealed class SourceRepository(SqliteConnection connection)
         google_raw AS GoogleRaw, updated_at AS UpdatedAt
         """;
 
+    /// <summary>1件取る。無ければ null。</summary>
+    public CalendarSource? FindCalendar(string id) =>
+        _connection.QuerySingleOrDefault<CalendarSource>(
+            $"SELECT {CalendarColumns} FROM calendars WHERE id = @id;", new { id });
+
     /// <summary>カレンダーを並び順で取る。</summary>
     public IReadOnlyList<CalendarSource> Calendars() =>
         _connection.Query<CalendarSource>(
@@ -77,6 +82,98 @@ public sealed class SourceRepository(SqliteConnection connection)
             """,
             value);
     }
+
+    /// <summary>
+    /// 名前と色を書き換える。
+    /// <para>
+    /// Google から取り込んだカレンダーでも、こちら側の表示名として
+    /// <c>summary_override</c> に入れる。元の名前は上書きしない。次の同期で戻ってしまう。
+    /// </para>
+    /// </summary>
+    /// <returns>対象が見つかって書き換えたら true。</returns>
+    public bool UpdateCalendar(string id, string name, string? backgroundColor)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        return _connection.Execute(
+            """
+            UPDATE calendars
+            SET summary_override = @name, background_color = @backgroundColor, updated_at = @updatedAt
+            WHERE id = @id;
+            """,
+            new { id, name = name.Trim(), backgroundColor, updatedAt = DateTimeOffset.Now }) > 0;
+    }
+
+    /// <summary>タスクリストの名前を書き換える。</summary>
+    public bool UpdateTaskList(string id, string title)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+
+        return _connection.Execute(
+            "UPDATE task_lists SET title = @title, updated_at = @updatedAt WHERE id = @id;",
+            new { id, title = title.Trim(), updatedAt = DateTimeOffset.Now }) > 0;
+    }
+
+    /// <summary>
+    /// カレンダーを消し、そこに入っていた予定を別のカレンダーへ移す。
+    /// <para>
+    /// 予定ごと消さない。分類を消したかっただけなのに中身まで消えるのは行き過ぎで、
+    /// しかも Undo に積めない（まとめて書き換えるため）。
+    /// </para>
+    /// </summary>
+    /// <returns>移した予定の件数。</returns>
+    public int DeleteCalendar(string id, string? moveEventsTo)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        using var transaction = _connection.BeginTransaction();
+
+        var moved = _connection.Execute(
+            "UPDATE events SET calendar_id = @moveEventsTo WHERE calendar_id = @id;",
+            new { id, moveEventsTo }, transaction);
+
+        _connection.Execute("DELETE FROM calendars WHERE id = @id;", new { id }, transaction);
+        transaction.Commit();
+
+        return moved;
+    }
+
+    /// <summary>タスクリストを消し、そこに入っていたタスクを別のリストへ移す。</summary>
+    /// <returns>移したタスクの件数。</returns>
+    public int DeleteTaskList(string id, string? moveTasksTo)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        using var transaction = _connection.BeginTransaction();
+
+        var moved = _connection.Execute(
+            "UPDATE tasks SET task_list_id = @moveTasksTo WHERE task_list_id = @id;",
+            new { id, moveTasksTo }, transaction);
+
+        _connection.Execute("DELETE FROM task_lists WHERE id = @id;", new { id }, transaction);
+        transaction.Commit();
+
+        return moved;
+    }
+
+    /// <summary>そのカレンダーに入っている予定の件数。消す前に知らせるために使う。</summary>
+    public int EventCountIn(string calendarId) =>
+        _connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM events WHERE calendar_id = @calendarId;", new { calendarId });
+
+    /// <summary>そのタスクリストに入っているタスクの件数。</summary>
+    public int TaskCountIn(string taskListId) =>
+        _connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM tasks WHERE task_list_id = @taskListId;", new { taskListId });
+
+    /// <summary>次に足すときの並び順。末尾に置く。</summary>
+    public int NextCalendarOrder() =>
+        _connection.ExecuteScalar<int?>("SELECT MAX(sort_order) FROM calendars;") + 1 ?? 0;
+
+    public int NextTaskListOrder() =>
+        _connection.ExecuteScalar<int?>("SELECT MAX(sort_order) FROM task_lists;") + 1 ?? 0;
 
     /// <summary>
     /// 表示のチェックを切り替える。

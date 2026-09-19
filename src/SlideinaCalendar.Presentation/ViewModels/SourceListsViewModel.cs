@@ -72,8 +72,8 @@ public sealed class SourceListItemViewModel : ObservableObject
     /// <summary>
     /// 表示名。
     /// <para>
-    /// 同期して一覧を取り込めば Google 側の名前になる。それまでは予定の所属 ID を
-    /// そのまま出す（旧データからの移行では「仕事」のような日本語が入っている）。
+    /// 自分で作ったものは付けた名前、同期して取り込んだものは Google 側の名前。
+    /// 名前を変えても ID は変わらないので、予定の所属は付け替えなくてよい。
     /// </para>
     /// </summary>
     public string Name { get; }
@@ -98,19 +98,13 @@ public sealed class SourceListItemViewModel : ObservableObject
 /// <summary>
 /// 左パネルのカレンダー一覧とタスクリスト一覧。
 /// <para>
-/// カレンダー自体の表は持たないので、予定とタスクが持つ所属 ID から組み立てる
-/// （<see cref="Data.Repositories.EventRepository.CalendarIds"/>）。
+/// 一覧は必ず <c>calendars</c> / <c>task_lists</c> の表から作る。以前は予定が持つ
+/// 所属 ID から後付けで拾っていたが、それでは名前も色も変えられず、予定が1件も無い
+/// うちは分類を先に作ることもできなかった。
 /// </para>
 /// </summary>
 public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 {
-    /// <summary>
-    /// 色見本。モックの左パネルで使っている 5 色。
-    /// <para>名前から決まる添字で選ぶので、同じ名前には常に同じ色が付く。</para>
-    /// </summary>
-    private static readonly string[] Palette =
-        ["#27528f", "#2f7d5b", "#c2762b", "#8f5fa8", "#3b6ea8"];
-
     private readonly CalendarWorkspace _workspace;
 
     // 取り込み前は表が空なので、隠している ID をここで覚える。
@@ -147,19 +141,17 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>一覧を読み直す。チェックの状態は引き継ぐ。</summary>
     public void Refresh()
     {
-        // 取り込み済みならそちらが正。名前も色も Google のものになる
-        var calendars = _workspace.Sources.Calendars();
-        Calendars = calendars.Count > 0
-            ? calendars.Select(c => new SourceListItemViewModel(
-                  c.Id, c.DisplayName, c.BackgroundColor ?? ColorFor(c.Id), c.IsVisible,
-                  OnCalendarToggled)).ToArray()
-            : Build(_workspace.Events.CalendarIds(), _hiddenCalendars, OnCalendarToggled);
+        // 一覧は必ず表から作る。CalendarWorkspace が起動時に用意するので空にはならない
+        Calendars = _workspace.Sources.Calendars()
+            .Select(c => new SourceListItemViewModel(
+                c.Id, c.DisplayName, c.BackgroundColor ?? CalendarPalette.ColorFor(c.Id),
+                c.IsVisible, OnCalendarToggled))
+            .ToArray();
 
-        var taskLists = _workspace.Sources.TaskLists();
-        TaskLists = taskLists.Count > 0
-            ? taskLists.Select(t => new SourceListItemViewModel(
-                  t.Id, t.DisplayName, ColorFor(t.Id), t.IsVisible, OnTaskListToggled)).ToArray()
-            : Build(_workspace.Tasks.TaskListIds(), _hiddenTaskLists, OnTaskListToggled);
+        TaskLists = _workspace.Sources.TaskLists()
+            .Select(t => new SourceListItemViewModel(
+                t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible, OnTaskListToggled))
+            .ToArray();
 
         RebuildHidden();
     }
@@ -177,16 +169,10 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
             ? _calendars.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal))?.SwatchColor
             : null;
 
-    private IReadOnlyList<SourceListItemViewModel> Build(
-        IReadOnlyList<string> ids, HashSet<string> hidden, Action<SourceListItemViewModel> onToggled) =>
-        ids.Select(id => new SourceListItemViewModel(
-                id, id, ColorFor(id), !hidden.Contains(id), onToggled))
-            .ToArray();
-
     private void OnCalendarToggled(SourceListItemViewModel item)
     {
-        // 表があるならそちらへ。終了しても残す（要件書 5.5）
-        if (!_workspace.Sources.SetCalendarVisible(item.Id, item.IsVisible)) Remember(_hiddenCalendars, item);
+        // 終了しても残す（要件書 5.5）
+        _workspace.Sources.SetCalendarVisible(item.Id, item.IsVisible);
 
         RebuildHidden();
         VisibilityChanged?.Invoke(this, EventArgs.Empty);
@@ -194,16 +180,10 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 
     private void OnTaskListToggled(SourceListItemViewModel item)
     {
-        if (!_workspace.Sources.SetTaskListVisible(item.Id, item.IsVisible)) Remember(_hiddenTaskLists, item);
+        _workspace.Sources.SetTaskListVisible(item.Id, item.IsVisible);
 
         RebuildHidden();
         VisibilityChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private static void Remember(HashSet<string> hidden, SourceListItemViewModel item)
-    {
-        if (item.IsVisible) hidden.Remove(item.Id);
-        else hidden.Add(item.Id);
     }
 
     /// <summary>いま隠している ID を、一覧の状態から作り直す。絞り込みはこれを見る。</summary>
@@ -220,16 +200,5 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
                 else hidden.Add(item.Id);
             }
         }
-    }
-
-    /// <summary>
-    /// 名前から色を決める。取り込み前と、色を持たないタスクリストで使う。
-    /// <para>string.GetHashCode は実行ごとに変わるので使えない。同じ名前には常に同じ色。</para>
-    /// </summary>
-    private static string ColorFor(string name)
-    {
-        var hash = 17;
-        foreach (var c in name) hash = unchecked(hash * 31 + c);
-        return Palette[Math.Abs(hash % Palette.Length)];
     }
 }
