@@ -83,8 +83,6 @@ internal static class NativeMethods
     /// <summary>DWM に「実際に見えている」ウィンドウ境界を問い合わせる属性。</summary>
     public const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
-    /// <summary>ドロップシャドウ用マージンとして妥当な上限。これを超える値は異常とみなす。</summary>
-    private const int MaxShadowPadding = 64;
 
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
 
@@ -169,40 +167,24 @@ internal static class NativeMethods
     }
 
     /// <summary>
-    /// ウィンドウ矩形に含まれる「見えない余白」の大きさ。
+    /// ウィンドウの「実際に見えている」境界。
     /// <para>
     /// Windows 10 以降、<c>GetWindowRect</c> が返す矩形にはドロップシャドウ用の
-    /// 不可視マージンが含まれる。AppBar から割り当てられた矩形へ素直に
-    /// <c>SetWindowPos</c> すると、この分だけ画面端との間に隙間が空いて見える。
-    /// DWM に実際の可視境界を問い合わせ、その差を余白として返す。
+    /// 不可視マージンが含まれる。画面端にぴったり寄せたいときに見るべきなのは
+    /// こちらの可視境界のほう。
     /// </para>
+    /// <para>DWM が答えられない場合はウィンドウ矩形をそのまま返す。</para>
     /// </summary>
-    /// <returns>余白を測れたら true。測れない場合や値が不自然な場合は false。</returns>
-    public static bool TryGetShadowPadding(
-        IntPtr hwnd, out (int Left, int Top, int Right, int Bottom) padding)
+    public static RECT GetVisibleBounds(IntPtr hwnd)
     {
-        padding = default;
-
-        if (!GetWindowRect(hwnd, out var window)) return false;
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var visible,
-                Marshal.SizeOf<RECT>()) != 0)
+                Marshal.SizeOf<RECT>()) == 0
+            && visible.Width > 0 && visible.Height > 0)
         {
-            return false;
+            return visible;
         }
 
-        var result = (
-            Left: visible.Left - window.Left,
-            Top: visible.Top - window.Top,
-            Right: window.Right - visible.Right,
-            Bottom: window.Bottom - visible.Bottom);
-
-        // 想定外の値で配置を壊さないよう、妥当な範囲に収まるときだけ採用する
-        foreach (var v in new[] { result.Left, result.Top, result.Right, result.Bottom })
-        {
-            if (v < 0 || v > MaxShadowPadding) return false;
-        }
-
-        padding = result;
-        return true;
+        GetWindowRect(hwnd, out var window);
+        return window;
     }
 }
