@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
+using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
 
@@ -36,7 +38,11 @@ public sealed class MainViewModel : ObservableObject
     private readonly IFileDialogs _files;
     private readonly GoogleClientSecretsStore? _googleClient;
 
+    private readonly AppSettings? _settings;
+    private readonly IStartupRegistration _startup;
+
     private CalendarView _currentView = CalendarView.Month;
+    private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
     private readonly TimeProvider _clock;
     private DateOnly _today;
@@ -49,7 +55,9 @@ public sealed class MainViewModel : ObservableObject
         IEditorPresenter? editors = null, IFileDialogs? files = null,
         GoogleClientSecretsStore? googleClient = null,
         Sync.IGoogleSync? google = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        AppSettings? settings = null,
+        IStartupRegistration? startup = null)
     {
         _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
@@ -61,12 +69,27 @@ public sealed class MainViewModel : ObservableObject
         _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
         _detailPaneWidth = ReadWidth(DetailPaneWidthKey, DefaultDetailPaneWidth, MinDetailPaneWidth, MaxDetailPaneWidth);
 
+        // 設定を渡されていれば、そちらが週の始まりを決める。渡されないのはテストと、
+        // 設定を持たない画面。その場合は引数のままにする
+        _settings = settings;
+        _startup = startup ?? NullStartupRegistration.Instance;
+        _weekStart = settings?.WeekStart ?? weekStart;
+
         SourceLists = new SourceListsViewModel(workspace);
-        Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
-        MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
-        Week = new WeekViewModel(workspace, today, today, weekStart, SourceLists);
-        Day = new DayViewModel(workspace, today, today, SourceLists);
+        BuildViews(today, today);
+
+        if (settings is not null)
+        {
+            // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
+            settings.Changed += (_, _) =>
+            {
+                _weekStart = settings.WeekStart;
+                RebuildViews();
+            };
+
+            CurrentView = settings.StartupView;
+        }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
         NextCommand = new RelayCommand(GoToNext);
@@ -105,6 +128,11 @@ public sealed class MainViewModel : ObservableObject
 
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
+
+        // 設定を持たない組み立て方（テストなど）では開けない
+        OpenSettingsCommand = new RelayCommand(
+            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup)),
+            () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
@@ -160,19 +188,19 @@ public sealed class MainViewModel : ObservableObject
     // ------------------------------------------------------------------
 
     /// <summary>月ビュー。</summary>
-    public MonthViewModel Month { get; }
+    public MonthViewModel Month { get; private set; }
 
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
 
     /// <summary>週ビュー。</summary>
-    public WeekViewModel Week { get; }
+    public WeekViewModel Week { get; private set; }
 
     /// <summary>日ビュー。</summary>
-    public DayViewModel Day { get; }
+    public DayViewModel Day { get; private set; }
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
-    public MiniCalendarViewModel MiniCalendar { get; }
+    public MiniCalendarViewModel MiniCalendar { get; private set; }
 
     /// <summary>左パネルのカレンダー一覧とタスクリスト一覧。</summary>
     public SourceListsViewModel SourceLists { get; }
@@ -468,6 +496,9 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
+
+    /// <summary>設定画面を開く。</summary>
+    public RelayCommand OpenSettingsCommand { get; }
 
     /// <summary>カレンダーを作る。</summary>
     public RelayCommand AddCalendarCommand { get; }
@@ -1059,6 +1090,40 @@ public sealed class MainViewModel : ObservableObject
         Day.Refresh();
         MiniCalendar.Refresh();
         RaiseHeader();
+    }
+
+    /// <summary>
+    /// 月・週・日・ミニ月暦を組み立てる。
+    /// <para>
+    /// 週の始まりと表示時間帯はそれぞれの ViewModel が作られるときに決まるので、
+    /// 設定が変わったときは組み直す。
+    /// </para>
+    /// </summary>
+    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day))]
+    private void BuildViews(DateOnly month, DateOnly selected)
+    {
+        var start = _settings?.DayStart;
+        var end = _settings?.DayEnd;
+
+        Month = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+        {
+            SelectedDate = selected,
+        };
+        MiniCalendar = new MiniCalendarViewModel(_workspace, month, _today, _weekStart)
+        {
+            SelectedDate = selected,
+        };
+        Week = new WeekViewModel(_workspace, selected, _today, _weekStart, SourceLists, start, end);
+        Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end);
+    }
+
+    /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
+    private void RebuildViews()
+    {
+        BuildViews(Month.Month, SelectedDate);
+
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+        RefreshViews();
     }
 
     private void RaiseHeader() => Raise(

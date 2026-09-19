@@ -6,7 +6,9 @@ using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Google;
 using SlideinaCalendar.App.Update;
 using SlideinaCalendar.App.Views;
+using SlideinaCalendar.App.Settings;
 using SlideinaCalendar.App.Themes;
+using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Data;
 using SlideinaCalendar.Presentation;
 using SlideinaCalendar.Presentation.Sync;
@@ -68,8 +70,9 @@ public partial class App : Application
             Shutdown(1);
         };
 
-        // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく
-        ThemeManager.Apply(AppTheme.Auto);
+        // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく。
+        // 設定を読むにはデータベースが要るので、ここでは Windows に合わせておく
+        ThemeManager.Apply(ThemeChoice.Auto);
 
         try
         {
@@ -87,6 +90,11 @@ public partial class App : Application
 
         var workspace = new CalendarWorkspace(_connection);
         var today = DateOnly.FromDateTime(DateTime.Today);
+
+        // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない
+        var settings = new AppSettings(workspace.Settings);
+        ThemeManager.Apply(settings.Theme);
+        settings.Changed += (_, _) => ThemeManager.Apply(settings.Theme);
 
         try
         {
@@ -114,7 +122,8 @@ public partial class App : Application
             {
                 DataContext = new MainViewModel(
                     workspace, today, editors: editors, files: files,
-                    googleClient: googleClient, google: _google),
+                    googleClient: googleClient, google: _google,
+                    settings: settings, startup: new StartupRegistration()),
             };
 
             MainWindow = window;

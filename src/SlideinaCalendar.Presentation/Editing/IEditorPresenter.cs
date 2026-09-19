@@ -28,6 +28,9 @@ public interface IEditorPresenter
     /// <summary>文言を指定して尋ねる。消したあとの行き先など、断りが要るとき。</summary>
     /// <returns>進めてよければ true。</returns>
     bool Confirm(string title, string message);
+
+    /// <summary>設定画面を出す。変えたその場で効くので、結果は返さない。</summary>
+    void ShowSettings(ViewModels.SettingsViewModel settings);
 }
 
 /// <summary>何も出さない実装。編集画面を用意していない画面で使う。</summary>
@@ -46,4 +49,6 @@ public sealed class NullEditorPresenter : IEditorPresenter
     public bool ConfirmDelete(string title) => false;
 
     public bool Confirm(string title, string message) => false;
+
+    public void ShowSettings(ViewModels.SettingsViewModel settings) { }
 }

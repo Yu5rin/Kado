@@ -39,4 +39,17 @@ public partial class WeekView : UserControl
         main.EditMilestoneCommand.Execute(milestone);
         e.Handled = true;
     }
+
+    /// <summary>
+    /// 時間軸に使える高さが変わったら、1時間の高さを決め直す。
+    /// <para>
+    /// 選んだ時間帯を縦いっぱいに割り付ける。高さは表示側にしか分からないので、
+    /// ここで測って ViewModel へ渡す（月ビューのマスと同じ考え方）。
+    /// </para>
+    /// </summary>
+    private void OnTimelineResized(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.HeightChanged) return;
+        if (DataContext is WeekViewModel week) week.ViewportHeight = e.NewSize.Height;
+    }
 }

@@ -15,7 +15,7 @@ public sealed class DayViewModel : ObservableObject
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];
 
     private readonly CalendarWorkspace _workspace;
-    private readonly TimelineBuilder _timeline;
+    private TimelineBuilder _timeline;
 
     private DateOnly _date;
     private DateOnly _today;
@@ -111,10 +111,26 @@ public sealed class DayViewModel : ObservableObject
     }
 
     /// <summary>読み直す。</summary>
+    /// <inheritdoc cref="WeekViewModel.ViewportHeight"/>
+    public double ViewportHeight
+    {
+        set
+        {
+            if (double.IsNaN(value) || value <= 0) return;
+
+            var height = _timeline.HourHeightFor(value);
+            if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;
+
+            _timeline = _timeline.WithHourHeight(height);
+            Refresh();
+        }
+    }
+
     public void Refresh()
     {
         Day = _timeline.Build(_date, _date, _today)[0];
 
-        Raise(nameof(Title), nameof(WorkingDayLabel), nameof(RemainingInMonthText));
+        Raise(nameof(Title), nameof(WorkingDayLabel), nameof(RemainingInMonthText),
+              nameof(HourLabels), nameof(HourHeight), nameof(TimelineHeight));
     }
 }

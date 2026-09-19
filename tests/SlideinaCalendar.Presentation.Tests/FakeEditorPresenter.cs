@@ -1,4 +1,5 @@
 using SlideinaCalendar.Presentation.Editing;
+using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.Presentation.Tests;
 
@@ -67,4 +68,9 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
         LastConfirmMessage = message;
         return Confirms;
     }
+
+    /// <summary>出された設定画面。開いたかどうかを見るために控える。</summary>
+    public SettingsViewModel? LastSettings { get; private set; }
+
+    public void ShowSettings(SettingsViewModel settings) => LastSettings = settings;
 }
