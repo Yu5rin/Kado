@@ -261,3 +261,32 @@ public sealed class TimelineOffsetToMarginConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// 同期の状態を丸印の色にする。
+/// <para>
+/// 文字を読まなくても状態が分かるようにする。ただし色だけに頼らせない。
+/// 隣の文字にも同じ内容を出してある。
+/// </para>
+/// </summary>
+public sealed class SyncStateBrushConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var key = value as SyncState? switch
+        {
+            SyncState.Idle => "CategoryGreenBrush",
+            SyncState.Running => "AccentBrush",
+            SyncState.Warned => "CategoryAmberBrush",
+            SyncState.Failed => "SundayBrush",
+
+            // 繋いでいないときは目立たせない。異常ではないため
+            _ => "Ink3Brush",
+        };
+
+        return Application.Current?.TryFindResource(key) ?? Application.Current?.TryFindResource("Ink3Brush");
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

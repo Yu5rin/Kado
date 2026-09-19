@@ -38,6 +38,11 @@ public sealed class SourceRepository(SqliteConnection connection)
         _connection.Query<CalendarSource>(
             $"SELECT {CalendarColumns} FROM calendars ORDER BY sort_order, summary;").ToArray();
 
+    /// <summary>タスクリストを1件取る。無ければ null。</summary>
+    public TaskListSource? FindTaskList(string id) =>
+        _connection.QuerySingleOrDefault<TaskListSource>(
+            $"SELECT {TaskListColumns} FROM task_lists WHERE id = @id;", new { id });
+
     /// <summary>タスクリストを並び順で取る。</summary>
     public IReadOnlyList<TaskListSource> TaskLists() =>
         _connection.Query<TaskListSource>(
