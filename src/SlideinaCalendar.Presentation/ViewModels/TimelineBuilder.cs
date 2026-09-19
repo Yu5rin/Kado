@@ -77,8 +77,8 @@ public sealed class TimelineBuilder
         var columns = new List<WeekDayColumnViewModel>();
         for (var date = from; date <= to; date = date.AddDays(1))
         {
-            var events = eventsByDate.TryGetValue(date, out var e)
-                ? e.Where(x => _sources.IncludesEvent(x.Source)).ToArray() : [];
+            var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
+            var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
             var blocks = blocksByDate.TryGetValue(date, out var b) ? b : [];
@@ -89,7 +89,8 @@ public sealed class TimelineBuilder
                 events.Where(x => x.Source.IsAllDay).ToArray(),
                 tasks,
                 Layout(events, blocks, titles),
-                _sources));
+                _sources,
+                MilestoneRow.For(date, all, _sources)));
         }
 
         return columns;
@@ -125,7 +126,7 @@ public sealed class TimelineBuilder
                 block.Id, taskTitles.GetValueOrDefault(block.TaskId, "（削除されたタスク）"),
                 block.StartTime, block.EndTime, placed.Top, placed.Height,
                 // 作業時間ブロックはタスクのもの。カレンダーの色は使わず既定に寄せる
-                color: null, isWorkBlock: true, location: null));
+                color: null, isWorkBlock: true, location: null, taskId: block.TaskId));
         }
 
         return result.OrderBy(b => b.Start).ToArray();

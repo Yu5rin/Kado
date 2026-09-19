@@ -1,4 +1,5 @@
 using System.Globalization;
+using SlideinaCalendar.Presentation;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -82,6 +83,11 @@ public sealed class MilestoneBrushConverter : IValueConverter
         "1次GO" => wantFace ? "MilestoneGoFaceBrush" : "MilestoneGoTextBrush",
         "S中日程" => wantFace ? "MilestoneSFaceBrush" : "MilestoneSTextBrush",
         "M中日程" => wantFace ? "MilestoneMFaceBrush" : "MilestoneMTextBrush",
+
+        // 実働日データから起こす2つの印。名前のハッシュ任せにすると、
+        // 他の名前と同じ色になったり、種類の追加で色が入れ替わったりする
+        CalendarWorkspace.ClosedDayTitle => wantFace ? "ClosedDayFaceBrush" : "ClosedDayTextBrush",
+        CalendarWorkspace.OpenDayTitle => wantFace ? "OpenDayFaceBrush" : "OpenDayTextBrush",
 
         // 知らない名前。名前から決まる添字を使い、同じ名前には常に同じ色を割り当てる
         _ => (wantFace ? FallbackFaceKeys : FallbackTextKeys)[StableIndex(name, FallbackFaceKeys.Length)],

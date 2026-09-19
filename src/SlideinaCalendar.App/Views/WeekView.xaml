@@ -19,14 +19,66 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
+
+        <!-- 日付の行のラベルの右クリックメニュー。Tag 経由で MainViewModel を引く -->
+        <ContextMenu x:Key="MilestoneMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
+
+
+        <!--
+            終日レーンの右クリックメニュー。ContextMenu は画面の木から外れて出るので、
+            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="AllDayEventMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="AllDayTaskMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
 
         <!-- 終日レーンのタスク。点線の丸印で予定と区別する -->
         <DataTemplate x:Key="AllDayTaskTemplate">
             <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
                     Background="{DynamicResource AccentSoftBrush}"
                     BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
-                    ToolTip="時間帯へドラッグすると作業時間を確保します">
+                    ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AllDayTaskMenu}"
+                    MouseLeftButtonDown="OnAllDayTaskClicked">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
@@ -38,7 +90,10 @@
         </DataTemplate>
 
         <DataTemplate x:Key="AllDayEventTemplate">
-            <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2"
+            <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AllDayEventMenu}"
+                    MouseLeftButtonDown="OnAllDayEventClicked"
                     Background="{DynamicResource AccentSoftBrush}">
                 <TextBlock Text="{Binding Label}" FontSize="10.5"
                            Foreground="{DynamicResource InkBrush}"
@@ -51,7 +106,8 @@
             <Border x:Name="Head" Padding="0,5,0,6"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
-                    <TextBlock x:Name="DayName" Text="{Binding HeaderText}" FontSize="10.5"
+                    <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
+                    <TextBlock x:Name="DayName" Text="{Binding DayName}" FontSize="10.5"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource Ink3Brush}" />
 
@@ -62,6 +118,15 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular" />
                     </Border>
+
+                    <!--
+                        祝日名。予定としてではなく、日付の添え書きとして出す。
+                        Google の「日本の祝日」カレンダーを引くと予定の並びに混ざる
+                    -->
+                    <TextBlock Text="{Binding HolidayName}" FontSize="9.5"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SundayBrush}"
+                               Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
                     <!-- 週ビューの日付ヘッダは実働日の通し番号を出す場所（要件書 4.3） -->
                     <TextBlock Text="{Binding WorkingDayLabel}" FontSize="9.5"
@@ -75,11 +140,17 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border CornerRadius="3" Padding="5,0" Margin="0,0,0,1"
-                                        Background="{Binding Converter={StaticResource MilestoneBrush},
+                                        Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
+                                        Tag="{Binding DataContext,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ContextMenu="{StaticResource MilestoneMenu}"
+                                        MouseLeftButtonDown="OnMilestoneClicked"
+                                        Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                     ConverterParameter=Face}">
                                     <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
                                                LineHeight="15"
-                                               Foreground="{Binding Converter={StaticResource MilestoneBrush}}" />
+                                               Foreground="{Binding Name,
+                                                           Converter={StaticResource MilestoneBrush}}" />
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -88,17 +159,23 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                    <Setter TargetName="Head" Property="Background" Value="{DynamicResource WorkingDayBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSunday}" Value="True">
-                    <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SundayBrush}" />
-                    <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SundayBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
                     <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
                 </DataTrigger>
+
+                <!-- 祝日は曜日に関わらず赤。土曜より後に置いてこちらを勝たせる -->
+                <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                    <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                    <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+
                 <!-- 今日は日にちを丸で囲う -->
                 <DataTrigger Binding="{Binding IsToday}" Value="True">
                     <Setter TargetName="NumberFace" Property="Background" Value="{DynamicResource AccentBrush}" />
@@ -122,6 +199,9 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                    <Setter TargetName="Cell" Property="Background" Value="{DynamicResource WorkingDayBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Cell" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>

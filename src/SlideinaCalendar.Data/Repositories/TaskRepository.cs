@@ -44,6 +44,23 @@ public sealed class TaskRepository(SqliteConnection connection)
             ORDER BY task_list_id;
             """).ToArray();
 
+    /// <summary>
+    /// 所属リストを持たないタスクを、指定のリストへ入れる。
+    /// <para>理由は <see cref="EventRepository.AdoptOrphans"/> と同じ。</para>
+    /// </summary>
+    /// <returns>入れ直した件数。</returns>
+    public int AdoptOrphans(string taskListId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskListId);
+
+        return _connection.Execute(
+            """
+            UPDATE tasks SET task_list_id = @taskListId
+            WHERE task_list_id IS NULL OR task_list_id = '';
+            """,
+            new { taskListId });
+    }
+
     /// <summary>期限が期間内にあるタスク。期限なしは含まない。</summary>
     public IReadOnlyList<TaskItem> DueInRange(DateOnly from, DateOnly to) =>
         _connection.Query<TaskItem>(

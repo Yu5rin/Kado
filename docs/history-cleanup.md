@@ -21,8 +21,12 @@
 社内情報なし）。
 
 ```
-tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx
+tests/SlideinaCalendar.Core.Tests/TestData/（会社配布 Excel）.xlsx
 ```
+
+**この手順書に実際のファイル名を書かない。** 書けば、消したはずの名前が
+手順書のほうに残ってしまう。下では `$Path` に入れて扱い、実際の名前は
+実行するときに与える。
 
 ## 作業
 
@@ -36,6 +40,9 @@ Windows なら PowerShell、Mac／Linux なら端末で。**5分ほど。**
 # 1. 道具を入れる（入っていれば飛ばされる）
 pip install git-filter-repo
 
+# 消したいファイルの、リポジトリ内での位置。ここだけ書き換えて使う
+$Path = "tests/SlideinaCalendar.Core.Tests/TestData/（実際のファイル名）.xlsx"
+
 # 2. 前に試したものが残っていれば片付ける
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
@@ -46,10 +53,10 @@ git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
 cd cleanup
 
 # 4. 履歴から消す
-git filter-repo --invert-paths --path "tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx"
+git filter-repo --invert-paths --path "$Path"
 
 # 5. 消えたか確かめる（何も出なければ成功）
-git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日ファイル.xlsx"
+git log --all --oneline -- "$Path"
 
 # 6. 差し替えた合成版は残っているか（1行出れば正しい）
 git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日サンプル.xlsx"
@@ -72,6 +79,58 @@ git push --force --tags origin
 **手順4がいちばんの要。** ここが通らないまま7まで進んでも、リモートは何も変わらない。
 手順4を実行したあとは、すべてのコミットの ID が変わる。`git log --oneline` で見て、
 `334f6e4` のような見覚えのある ID が消えていれば、書き換わっている。
+
+## 追加：本文に残った語を消す
+
+ファイルを丸ごと消すのとは別に、**本文に書かれた語**を履歴から消したいことがある。
+会社の略称のように、現在の内容からは消しても過去のコミットに残るもの。
+
+`--replace-text` を使う。手順は上と同じ流れで、4だけ差し替える。
+
+**この手順書自身に消したい語を書かない。** 書いてしまうと、置換のあとに
+「A==>A」という意味の通らない文が残る。下では `$Word` に入れて扱い、
+実際の語は手順書の外（実行するときの入力）で与える。
+
+**置換の指定ファイルは clone の外に作る。** 中に作ると未追跡ファイルになり、
+filter-repo が「新鮮な clone ではない」と言って中止する
+（`Aborting: ... (you have untracked changes)`）。
+
+```powershell
+pip install git-filter-repo
+
+# 消したい語と、置き換え後の語。ここだけ書き換えて使う
+$Word = "（消したい語）"
+$Into = "（置き換え後の語）"
+
+# 置換の指定を clone の外に作る。
+# BOM が付くと filter-repo が読めないので、付かない形で書く
+[System.IO.File]::WriteAllText(
+  "$HOME\replacements.txt",
+  "$Word==>$Into`n",
+  [System.Text.UTF8Encoding]::new($false))
+
+cd $HOME
+Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
+git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
+cd cleanup
+
+git filter-repo --replace-text "$HOME\replacements.txt"
+
+# 消えたか（何も出なければ成功）
+git grep -l "$Word" $(git rev-list --all)
+
+git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
+git push --force --all origin
+```
+
+`==>` の左が消したい語、右が置き換え後。置き換え後を空にすると
+`***REMOVED***` に置き換わるので、読める言葉を入れておくほうがよい。
+
+指定ファイル（`replacements.txt`）は履歴には入らない。filter-repo が処理の前に
+読むだけで、コミットの対象にはならない。
+
+> この手順は実際に走らせて確かめてある。対象の語が 123 件あった状態から 0 件になり、
+> 置き換え後も「見出し『◯◯稼働日』が入っている」という文がそのまま通ることを見ている。
 
 ## 済んだあと
 

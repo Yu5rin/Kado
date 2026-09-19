@@ -3,8 +3,8 @@ namespace SlideinaCalendar.Presentation;
 /// <summary>
 /// 祝日の名前を引く。
 /// <para>
-/// 実際の取得（内閣府の公開 CSV）は Phase 6。それまでは何も返さない実装を挿しておき、
-/// 表示側の口だけ通しておく。あとから差し替えるときに月ビューへ手を入れずに済む。
+/// 既定は <see cref="JapaneseHolidaySource"/>。アプリの中で計算するので、データファイルも
+/// 通信も要らない。取り込んだ一覧を使いたいときは <see cref="HolidayTable"/> を挿す。
 /// </para>
 /// <para>
 /// 祝日は非稼働日の判定とは別物である点に注意。実働日データは会社の稼働日であり、
@@ -34,4 +34,20 @@ public sealed class HolidayTable(IReadOnlyDictionary<DateOnly, string> holidays)
         holidays ?? throw new ArgumentNullException(nameof(holidays));
 
     public string? NameOf(DateOnly date) => _holidays.GetValueOrDefault(date);
+}
+
+/// <summary>
+/// アプリの中で計算する実装。既定。
+/// <para>
+/// Google の「日本の祝日」カレンダーは使わない。あれは予定として降りてくるので、
+/// 予定の並びに祝日が混ざってしまう。祝日は予定ではなく、日付の添え書きとして出す。
+/// </para>
+/// </summary>
+public sealed class JapaneseHolidaySource : IHolidaySource
+{
+    public static JapaneseHolidaySource Instance { get; } = new();
+
+    private JapaneseHolidaySource() { }
+
+    public string? NameOf(DateOnly date) => Core.WorkingDays.JapaneseHolidays.NameOf(date);
 }

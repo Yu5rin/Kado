@@ -22,7 +22,12 @@
     <Color x:Key="SundayColor">#E0827C</Color>
     <Color x:Key="SaturdayColor">#7AA5DF</Color>
 
-    <Color x:Key="OffDayColor">#171A20</Color>
+    <Color x:Key="WorkingDayColor">#242A34</Color>
+    <Color x:Key="OffDayColor">#12151A</Color>
+
+    <!-- マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること -->
+    <Color x:Key="CellHoverColor">#2B3444</Color>
+    <Color x:Key="CellSelectedColor">#31486B</Color>
 
     <Color x:Key="CategoryGreenColor">#5FB08A</Color>
     <Color x:Key="CategoryAmberColor">#D59A55</Color>
@@ -37,5 +42,11 @@
     <Color x:Key="MilestoneSTextColor">#8FD3B4</Color>
     <Color x:Key="MilestoneMFaceColor">#1F3352</Color>
     <Color x:Key="MilestoneMTextColor">#A9C8EE</Color>
+
+    <!-- 実働日データから起こす2つの印。休業日は静かに、休日の実働日は目を引くように -->
+    <Color x:Key="ClosedDayFaceColor">#2A2F38</Color>
+    <Color x:Key="ClosedDayTextColor">#9BA3B2</Color>
+    <Color x:Key="OpenDayFaceColor">#4B3116</Color>
+    <Color x:Key="OpenDayTextColor">#F0BE85</Color>
 
 </ResourceDictionary>

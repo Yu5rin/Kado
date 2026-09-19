@@ -220,11 +220,13 @@
                             <Setter Property="Opacity" Value="0.5" />
                         </DataTrigger>
 
-                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
-                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
+                        </DataTrigger>
+
+                        <!-- 祝日は曜日に関わらず赤。土曜より後に置いてこちらを勝たせる -->
+                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
                         <!-- 選択日は内枠。今日より先に置いて、今日の塗りに負けるようにする -->
@@ -264,6 +266,19 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
+                  <Grid>
+                    <!--
+                        並べ替えの最中に、落とすとどこへ入るかを示す線。
+                        面の上に重ねて出すので、行の高さは動かない。枠線で出すと
+                        中身が 2px ずれて、掴むたびに行が揺れる
+                    -->
+                    <Border x:Name="DropAbove" Height="2" VerticalAlignment="Top"
+                            Background="{DynamicResource AccentBrush}"
+                            Visibility="Collapsed" Panel.ZIndex="1" />
+                    <Border x:Name="DropBelow" Height="2" VerticalAlignment="Bottom"
+                            Background="{DynamicResource AccentBrush}"
+                            Visibility="Collapsed" Panel.ZIndex="1" />
+
                     <Border Background="Transparent" Padding="0,3.5">
                         <DockPanel>
                             <Border x:Name="Swatch" DockPanel.Dock="Left"
@@ -272,9 +287,17 @@
                                     Background="{Binding SwatchColor, Converter={StaticResource HexBrush}}"
                                     BorderThickness="0" BorderBrush="{DynamicResource LineStrongBrush}" />
 
-                            <TextBlock DockPanel.Dock="Right" Text="⋮⋮" FontSize="11"
-                                       VerticalAlignment="Center" Margin="6,0,0,0"
-                                       Foreground="{DynamicResource LineStrongBrush}" />
+                            <!--
+                                並べ替えの取っ手。ここを掴んだときだけ動かす。
+                                行のどこでも掴めるようにすると、チェックを入り切りする
+                                ふつうの押し下げと区別が付かない
+                            -->
+                            <Border x:Name="Grip" DockPanel.Dock="Right"
+                                    Background="Transparent" Padding="4,0,0,0"
+                                    Cursor="SizeNS" ToolTip="ドラッグで並べ替え">
+                                <TextBlock Text="⋮⋮" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource LineStrongBrush}" />
+                            </Border>
 
                             <TextBlock x:Name="Label" Text="{Binding Name}"
                                        VerticalAlignment="Center"
@@ -282,7 +305,15 @@
                                        TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                     </Border>
+                  </Grid>
                     <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding DropHint}" Value="Above">
+                            <Setter TargetName="DropAbove" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding DropHint}" Value="Below">
+                            <Setter TargetName="DropBelow" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+
                         <Trigger Property="IsChecked" Value="False">
                             <Setter TargetName="Swatch" Property="Background" Value="Transparent" />
                             <Setter TargetName="Swatch" Property="BorderThickness" Value="1.5" />
@@ -290,6 +321,9 @@
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger SourceName="Grip" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Grip" Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -614,6 +648,43 @@
                             <Setter Property="Opacity" Value="0.75" />
                             <Setter TargetName="Root" Property="Background" Value="Transparent" />
                             <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        ペインの境目（.splitter）。
+        つまんで幅を変えられることが分かるよう、線の上に乗せて左右の矢印を出す。
+        当たりは 6px。見えている線は 1px のままで、残りは透明な余白
+    -->
+    <Style x:Key="PaneSplitterStyle" TargetType="GridSplitter">
+        <Setter Property="Width" Value="6" />
+        <!-- 向きは既定だと見た目から推し量られる。左右に動くことを明示しておく -->
+        <Setter Property="ResizeDirection" Value="Columns" />
+        <Setter Property="ResizeBehavior" Value="PreviousAndNext" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Cursor" Value="SizeWE" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border x:Name="Root" Background="{TemplateBinding Background}">
+                        <Rectangle x:Name="Line" Width="1" Fill="{DynamicResource LineBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Line" Property="Width" Value="2" />
+                            <Setter TargetName="Line" Property="Fill" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Line" Property="Width" Value="2" />
+                            <Setter TargetName="Line" Property="Fill" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

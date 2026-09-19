@@ -180,12 +180,16 @@ public sealed class SelectedDayViewModel : ObservableObject
     public string? WorkingDayLabel =>
         _workspace.WorkingDays.IndexInMonth(_date) is { } index ? $"実働 {index}日目" : null;
 
+    /// <summary>この日の祝日名。祝日でなければ null。予定ではなく添え書きとして出す。</summary>
+    public string? HolidayName => _workspace.Holidays.NameOf(_date);
+
     /// <summary>非稼働日か。データ範囲外は false（判断できないため）。</summary>
     public bool IsNonWorkingDay =>
         _workspace.WorkingDays.HasDataFor(_date) && !_workspace.WorkingDays.IsWorkingDay(_date);
 
-    /// <summary>この日のマイルストーン。</summary>
-    public IReadOnlyList<Milestone> Milestones => _workspace.WorkingDays.MilestonesOn(_date);
+    /// <summary>この日のマイルストーン。左パネルのチェックに従う。</summary>
+    public IReadOnlyList<MilestoneViewModel> Milestones =>
+        MilestoneRow.For(_date, _workspace.Schedule.EventsInRange(_date, _date), _sources);
 
     /// <summary>この日の予定。</summary>
     public IReadOnlyList<DayEventViewModel> Events
@@ -243,8 +247,9 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>読み直す。</summary>
     public void Refresh()
     {
-        Events = _workspace.Schedule.EventsInRange(_date, _date)
-            .Where(e => _sources.IncludesEvent(e.Source))
+        Events = EventOrder
+            .Sort(_workspace.Schedule.EventsInRange(_date, _date)
+                .Where(e => _sources.IncludesEvent(e.Source)), _sources)
             .Select(e => new DayEventViewModel(e, _sources.ColorOf(e.Source.CalendarId)))
             .ToArray();
 
@@ -261,7 +266,7 @@ public sealed class SelectedDayViewModel : ObservableObject
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
-              nameof(Milestones), nameof(DoneTaskCount), nameof(RemainingTaskCount),
+              nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
               nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText));
     }
 

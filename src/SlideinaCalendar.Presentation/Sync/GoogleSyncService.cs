@@ -43,10 +43,11 @@ public sealed class GoogleSyncService(
         {
             var report = await ImportCalendarListAsync(cancellationToken).ConfigureAwait(false);
             report += await ImportTaskListsAsync(cancellationToken).ConfigureAwait(false);
+            report += await MoveWorkingDayCalendarToGoogleAsync(cancellationToken).ConfigureAwait(false);
 
             // 1つが読めないだけで全体を止めない。誕生日のような特殊なカレンダーは
             // 一覧に出ても中身を取れないことがある。そこで止まると、他の予定まで入らない
-            foreach (var calendar in workspace.Sources.Calendars().Where(c => !CalendarWorkspace.IsLocalId(c.Id)))
+            foreach (var calendar in workspace.Sources.Calendars().Where(c => IsOnGoogle(c.GoogleRaw)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -60,7 +61,8 @@ public sealed class GoogleSyncService(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            foreach (var list in Syncable(workspace.Sources.TaskLists().Select(t => t.Id)))
+            foreach (var list in workspace.Sources.TaskLists()
+                         .Where(t => IsOnGoogle(t.GoogleRaw)).Select(t => t.Id).ToArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -83,11 +85,84 @@ public sealed class GoogleSyncService(
     }
 
     /// <summary>
-    /// このアプリの中だけで作ったものは同期しない。
-    /// <para>Google に無いものを送ろうとしても行き先が無い。</para>
+    /// 実働日データの入れ先を Google 側へ移す。
+    /// <para>
+    /// 繋ぐ前に取り込むと、マイルストーンはこのアプリの中の「inaCalendar」に入る。繋いだ
+    /// あとは Google 側の同じ名前のカレンダーへ集めたい。旧 inaCalendar と同じ場所になり、
+    /// 他の端末やブラウザからも見える。
+    /// </para>
+    /// <para>
+    /// Google 側に同じ名前のカレンダーが無ければ作る。<b>こちらに入れ先が無いときは何もしない。</b>
+    /// 実働日データを使わない人のために、空のカレンダーを勝手に作らない。
+    /// </para>
     /// </summary>
-    private static IEnumerable<string> Syncable(IEnumerable<string> ids) =>
-        ids.Where(id => !CalendarWorkspace.IsLocalId(id)).ToArray();
+    private async Task<SyncReport> MoveWorkingDayCalendarToGoogleAsync(CancellationToken cancellationToken)
+    {
+        var named = workspace.WorkingDayCalendars();
+
+        // すでに Google 側にある。移す先ができているので何もしない
+        if (named.Any(c => !CalendarWorkspace.IsLocal(c))) return new SyncReport();
+
+        if (named.FirstOrDefault() is not { } local) return new SyncReport();
+
+        try
+        {
+            var created = await calendars
+                .InsertCalendarAsync(CalendarWorkspace.WorkingDayCalendarName, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (created.Text("id") is not { Length: > 0 } id) return new SyncReport();
+
+            workspace.Sources.Upsert(new CalendarSource
+            {
+                Id = id,
+                // 頼んだ名前をそのまま控える。日付の行に出すかどうかは名前で見分けているので、
+                // 相手が違う名前を返してきたら特別な表示が黙って止まる
+                Summary = CalendarWorkspace.WorkingDayCalendarName,
+                BackgroundColor = local.BackgroundColor,
+                SortOrder = local.SortOrder,
+                GoogleRaw = GoogleJson.Normalize(created),
+                UpdatedAt = DateTimeOffset.Now,
+            });
+
+            // 中の予定ごと移して、こちらの分は畳む。名前が同じものが2つ並ばないようにする
+            var moved = workspace.Sources.DeleteCalendar(local.Id, id);
+
+            return new SyncReport
+            {
+                CreatedRemote = 1,
+                Warnings = [$"実働日の入れ先を Google の「{CalendarWorkspace.WorkingDayCalendarName}」に移しました（{moved} 件）"],
+            };
+        }
+        catch (GoogleApiException ex)
+        {
+            // 作れなくても、こちらの中には入れ先がある。次の同期でまた試す
+            return new SyncReport
+            {
+                Warnings = [$"Google に「{CalendarWorkspace.WorkingDayCalendarName}」を作れませんでした（{ex.Reason}）"],
+            };
+        }
+    }
+
+    /// <summary>
+    /// Google が配っている祝日のカレンダーか。
+    /// <para>「日本の祝日」などの ID は <c>...#holiday@group.v.calendar.google.com</c> の形。</para>
+    /// </summary>
+    private static bool IsHolidayCalendar(string id) =>
+        id.Contains("#holiday@", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Google 側にあるものか。同期するのはこれだけ。
+    /// <para>
+    /// 判断は<b>最後に受け取った姿を持っているか</b>で行う。一覧の取り込みは必ず
+    /// これを書くので、持っていないものは Google の一覧に載っていない。
+    /// </para>
+    /// <para>
+    /// ID の形では決めない。このアプリの印が付く前に作られた既定のカレンダーが
+    /// 手元に残っていて、それを Google に問い合わせると notFound になっていた。
+    /// </para>
+    /// </summary>
+    private static bool IsOnGoogle(string? googleRaw) => googleRaw is { Length: > 0 };
 
     /// <summary>
     /// 1つぶんを走らせる。転んでも他を巻き添えにしない。
@@ -200,8 +275,11 @@ public sealed class GoogleSyncService(
                         ForegroundColor = item.Text("foregroundColor") ?? existing?.ForegroundColor,
                         IsPrimary = item.Flag("primary"),
 
-                        // チェックを外したカレンダーが同期のたびに戻らないようにする
-                        IsVisible = existing?.IsVisible ?? true,
+                        // チェックを外したカレンダーが同期のたびに戻らないようにする。
+                        // 祝日のカレンダーだけ、初めて取り込むときは外しておく。祝日は
+                        // アプリの中で計算して日付の添え書きとして出すので、予定としても
+                        // 並ぶと二重になる。見たければチェックを入れればよい
+                        IsVisible = existing?.IsVisible ?? !IsHolidayCalendar(id),
 
                         SortOrder = existing?.SortOrder ?? order++,
                         GoogleRaw = GoogleJson.Normalize(item),

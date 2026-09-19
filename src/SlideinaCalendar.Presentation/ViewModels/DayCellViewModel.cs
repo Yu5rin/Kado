@@ -16,8 +16,32 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public sealed class DayCellViewModel : ObservableObject
 {
-    /// <summary>マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。</summary>
+    /// <summary>
+    /// マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。
+    /// <para>実際の数はマスの高さから決める（<see cref="CapacityFor"/>）。これは最低限。</para>
+    /// </summary>
     public const int DefaultMaxChips = 3;
+
+    /// <summary>1件ぶんの高さ。チップの行の高さ 16 に上の余白 2 を足したもの。</summary>
+    private const double ChipHeight = 18;
+
+    /// <summary>日付の行と「＋N」に要る高さ。上下の余白を含む。</summary>
+    private const double Reserved = 40;
+
+    /// <summary>
+    /// この高さのマスに何件並べられるか。
+    /// <para>
+    /// 固定の3件だと、画面を広げてもマスの下が空いたまま「＋1」と出る。実機で
+    /// 「こんなにスペースがあるのに全て表示されない」という指摘があった。
+    /// </para>
+    /// <para>高さが分からないうちは <see cref="DefaultMaxChips"/>。</para>
+    /// </summary>
+    public static int CapacityFor(double cellHeight)
+    {
+        if (double.IsNaN(cellHeight) || cellHeight <= 0) return DefaultMaxChips;
+
+        return Math.Max(1, (int)((cellHeight - Reserved) / ChipHeight));
+    }
 
     private bool _isSelected;
 
@@ -30,7 +54,8 @@ public sealed class DayCellViewModel : ObservableObject
         IReadOnlyList<TaskItem> tasks,
         string? holidayName = null,
         ICalendarPalette? palette = null,
-        int maxChips = DefaultMaxChips)
+        int maxChips = DefaultMaxChips,
+        IReadOnlyList<MilestoneViewModel>? milestones = null)
     {
         Date = date;
         IsCurrentMonth = isCurrentMonth;
@@ -65,7 +90,9 @@ public sealed class DayCellViewModel : ObservableObject
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
-        Milestones = workingDays.MilestonesOn(date);
+        // 日付の行に出すものは呼び出し側が組み立てる（左パネルのチェックを効かせるため）。
+        // 渡されなければ実働日データから直に引く
+        Milestones = milestones ?? [];
     }
 
     /// <summary>この日。</summary>
@@ -99,14 +126,32 @@ public sealed class DayCellViewModel : ObservableObject
     /// </summary>
     public bool IsDimmed => HasWorkingDayData && !IsWorkingDay;
 
+    /// <summary>
+    /// 稼働する日として面を起こすか。
+    /// <para>
+    /// 休業日と見分けるため。<b>データが無い日とも見分ける</b>ので、どこまで登録済みかが
+    /// 面の色だけで読める。
+    /// </para>
+    /// </summary>
+    public bool IsWorkingDayLit => HasWorkingDayData && IsWorkingDay;
+
     /// <summary>日曜か。</summary>
     public bool IsSunday => Date.DayOfWeek == DayOfWeek.Sunday;
+
+    /// <summary>
+    /// 日曜と同じ赤で出すか。日曜と祝日。
+    /// <para>
+    /// 祝日は曜日に関わらず赤。土曜に重なっても赤を採る。祝日であることのほうが、
+    /// その日の予定の立て方に効く。
+    /// </para>
+    /// </summary>
+    public bool IsSundayLike => IsSunday || HolidayName is { Length: > 0 };
 
     /// <summary>土曜か。</summary>
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
 
     /// <summary>この日のマイルストーン。</summary>
-    public IReadOnlyList<Milestone> Milestones { get; }
+    public IReadOnlyList<MilestoneViewModel> Milestones { get; }
 
     /// <summary>マスに並べる予定。溢れたぶんは含まない。</summary>
     public IReadOnlyList<EventChipViewModel> Events { get; }
