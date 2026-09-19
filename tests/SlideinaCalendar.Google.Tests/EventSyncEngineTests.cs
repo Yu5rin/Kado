@@ -445,6 +445,45 @@ public class EventSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 読むだけのカレンダーには送らない()
+    {
+        // 祝日や誕生日、他人から共有されたカレンダーは書けない。送れば断られる
+        Events.Upsert(new CalendarEvent
+        {
+            Id = "e1", Title = "こちらで入れた予定", Date = D(2026, 9, 24), CalendarId = "local:shigoto",
+        });
+
+        var report = await Engine.SyncAsync("primary", "local:shigoto", readOnly: true);
+
+        Assert.Equal(0, report.CreatedRemote);
+        Assert.Empty(_remote.Items);
+    }
+
+    [Fact]
+    public async Task 読むだけでも取り込みはする()
+    {
+        _remote.Add("g1", "海の日", "2026-07-20");
+
+        var report = await Engine.SyncAsync("primary", "local:shukujitsu", readOnly: true);
+
+        // 祝日カレンダーは読めないと意味がない
+        Assert.Equal(1, report.CreatedLocal);
+        Assert.Equal("海の日", Events.All().Single().Title);
+    }
+
+    [Fact]
+    public async Task 読むだけなら削除も伝えない()
+    {
+        Tombstones.Record("e1", TombstoneRepository.EventKind, "g1", DateTimeOffset.Now);
+
+        await Engine.SyncAsync("primary", "local:shukujitsu", readOnly: true);
+
+        // 消せないカレンダーへ消しに行っても断られる。記録は残しておく
+        Assert.Empty(_remote.Deleted);
+        Assert.Equal(1, Tombstones.Count());
+    }
+
+    [Fact]
     public async Task 終日予定は往復しても日付が動かない()
     {
         // 同期のたびに1日ずつ伸びる不具合を防ぐ

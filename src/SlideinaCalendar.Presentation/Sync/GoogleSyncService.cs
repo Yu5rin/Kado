@@ -44,7 +44,9 @@ public sealed class GoogleSyncService(
             var report = await ImportCalendarListAsync(cancellationToken).ConfigureAwait(false);
             report += await ImportTaskListsAsync(cancellationToken).ConfigureAwait(false);
 
-            foreach (var calendar in Syncable(workspace.Sources.Calendars().Select(c => c.Id)))
+            // 1つが読めないだけで全体を止めない。誕生日のような特殊なカレンダーは
+            // 一覧に出ても中身を取れないことがある。そこで止まると、他の予定まで入らない
+            foreach (var calendar in workspace.Sources.Calendars().Where(c => !CalendarWorkspace.IsLocalId(c.Id)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -52,7 +54,10 @@ public sealed class GoogleSyncService(
                     workspace.Events, workspace.Tombstones, workspace.Settings,
                     new CalendarApiGateway(calendars, from));
 
-                report += await engine.SyncAsync(calendar, calendar, cancellationToken).ConfigureAwait(false);
+                report += await RunAsync(
+                    () => engine.SyncAsync(calendar.Id, calendar.Id, cancellationToken, IsReadOnly(calendar)),
+                    calendar.DisplayName,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var list in Syncable(workspace.Sources.TaskLists().Select(t => t.Id)))
@@ -63,7 +68,9 @@ public sealed class GoogleSyncService(
                     workspace.Tasks, workspace.Tombstones, workspace.Settings,
                     new TasksApiGateway(tasks));
 
-                report += await engine.SyncAsync(list, list, cancellationToken).ConfigureAwait(false);
+                report += await RunAsync(
+                    () => engine.SyncAsync(list, list, cancellationToken), list, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             return report;
@@ -81,6 +88,69 @@ public sealed class GoogleSyncService(
     /// </summary>
     private static IEnumerable<string> Syncable(IEnumerable<string> ids) =>
         ids.Where(id => !CalendarWorkspace.IsLocalId(id)).ToArray();
+
+    /// <summary>
+    /// 1つぶんを走らせる。転んでも他を巻き添えにしない。
+    /// <para>
+    /// カレンダーは1つずつ独立している。1つが読めないからといって、他のカレンダーの
+    /// 予定まで入らないのは困る。何が起きたかは残したうえで次へ進む。
+    /// </para>
+    /// </summary>
+    private static async Task<SyncReport> RunAsync(
+        Func<Task<SyncReport>> work, string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await work().ConfigureAwait(false);
+        }
+        catch (GoogleApiException ex)
+        {
+            return new SyncReport { Warnings = [$"「{name}」を同期できません（{ex.Reason}）"] };
+        }
+        catch (HttpRequestException ex)
+        {
+            return new SyncReport { Warnings = [$"「{name}」に繋がりません（{ex.Message}）"] };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 止めたのはこちら。握り潰さず上へ返す
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 想定していない転び方をしても、他のカレンダーは続ける。
+            // 1つのつまずきで一件も入らないより、入るものを入れて何が起きたかを残す
+            return new SyncReport { Warnings = [$"「{name}」で想定外の失敗（{ex.GetType().Name}: {ex.Message}）"] };
+        }
+    }
+
+    /// <summary>
+    /// こちらから書けないカレンダーか。
+    /// <para>
+    /// 祝日・誕生日・他人から共有されたものは読むだけ。送ろうとしても断られる。
+    /// 判断は取り込んだときの <c>accessRole</c> で行う。
+    /// </para>
+    /// </summary>
+    private static bool IsReadOnly(CalendarSource calendar)
+    {
+        if (calendar.GoogleRaw is not { Length: > 0 } raw) return false;
+
+        try
+        {
+            var role = JsonDocument.Parse(raw).RootElement.Text("accessRole");
+
+            // owner と writer だけが書ける。reader / freeBusyReader は読むだけ
+            return role is not null &&
+                   !string.Equals(role, "owner", StringComparison.Ordinal) &&
+                   !string.Equals(role, "writer", StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // 読めないなら書けると見なす。書けないものへ送れば断られるだけで、
+            // 書けるものを読み取り専用にしてしまうより害が小さい
+            return false;
+        }
+    }
 
     /// <summary>
     /// Google のカレンダー一覧を取り込む。
