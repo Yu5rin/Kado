@@ -198,6 +198,24 @@ public sealed class CalendarWorkspace
     /// <returns>移した予定の件数。最後の1つは消せないので、そのときは null。</returns>
     public int? DeleteCalendar(string id)
     {
+        if (MoveTargetFor(id) is not { } target) return null;
+
+        var moved = Sources.DeleteCalendar(id, target.Id);
+        NotifyChanged();
+
+        return moved;
+    }
+
+    /// <summary>
+    /// このカレンダーを消したら、中の予定はどこへ移るか。
+    /// <para>
+    /// <b>必ずこのアプリの中だけのカレンダーへ移す。</b>残っているものの先頭に入れると
+    /// Google のカレンダーになることがあり、手元の予定が次の同期で勝手に相手へ送られる。
+    /// </para>
+    /// <para>移せる先が1つも無ければ null。最後の1つは消させない。</para>
+    /// </summary>
+    public CalendarSource? MoveTargetFor(string id)
+    {
         var remaining = Sources.Calendars()
             .Where(c => !string.Equals(c.Id, id, StringComparison.Ordinal))
             .ToArray();
@@ -205,14 +223,12 @@ public sealed class CalendarWorkspace
         // 入れ先が無くなると、予定の所属が消えて分類できなくなる
         if (remaining.Length == 0) return null;
 
-        var moved = Sources.DeleteCalendar(id, remaining[0].Id);
-        NotifyChanged();
-
-        return moved;
+        return remaining.FirstOrDefault(IsLocal) ?? EnsureLocalCalendar();
     }
 
-    /// <summary>タスクリストを消す。中のタスクは別のリストへ移す。</summary>
-    public int? DeleteTaskList(string id)
+    /// <summary>このタスクリストを消したら、中のタスクはどこへ移るか。</summary>
+    /// <inheritdoc cref="MoveTargetFor(string)" path="/summary/para"/>
+    public TaskListSource? TaskMoveTargetFor(string id)
     {
         var remaining = Sources.TaskLists()
             .Where(t => !string.Equals(t.Id, id, StringComparison.Ordinal))
@@ -220,7 +236,15 @@ public sealed class CalendarWorkspace
 
         if (remaining.Length == 0) return null;
 
-        var moved = Sources.DeleteTaskList(id, remaining[0].Id);
+        return remaining.FirstOrDefault(IsLocal) ?? EnsureLocalTaskList();
+    }
+
+    /// <summary>タスクリストを消す。中のタスクは別のリストへ移す。</summary>
+    public int? DeleteTaskList(string id)
+    {
+        if (TaskMoveTargetFor(id) is not { } target) return null;
+
+        var moved = Sources.DeleteTaskList(id, target.Id);
         NotifyChanged();
 
         return moved;

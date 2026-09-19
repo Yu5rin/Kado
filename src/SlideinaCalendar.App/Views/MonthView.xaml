@@ -38,12 +38,52 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!--
+            マスに並ぶ予定・タスクの右クリックメニュー。
+            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
+            行の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="EventChipMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="TaskChipMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
         <DataTemplate x:Key="EventChipTemplate">
+            <!--
+                ダブルクリックでその予定を開く。マス側の受け手が先に取ると
+                「この日に予定を足す」になってしまうので、ここで止める
+            -->
             <Border CornerRadius="3" Padding="5,1" Margin="0,2,0,0"
                     Background="{Binding Color, Converter={StaticResource EventColorFace}}"
                     BorderThickness="3,0,0,0"
-                    BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}">
+                    BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource EventChipMenu}"
+                    MouseLeftButtonDown="OnEventChipClicked">
                 <TextBlock Text="{Binding Label}" FontSize="11" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
@@ -54,13 +94,19 @@
 
         <!-- タスクは帯を持たず、丸印を添えて予定と区別する -->
         <DataTemplate x:Key="TaskChipTemplate">
-            <StackPanel Orientation="Horizontal" Margin="2,2,0,0">
-                <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
-                         Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
-                <TextBlock Text="{Binding Title}" FontSize="11" LineHeight="16"
-                           Foreground="{DynamicResource Ink2Brush}"
-                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
-            </StackPanel>
+            <!-- 押せる面を作るため Background を敷く。透明でも当たり判定は残る -->
+            <Border Background="Transparent" Margin="2,2,0,0"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource TaskChipMenu}"
+                    MouseLeftButtonDown="OnTaskChipClicked">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
+                             Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
+                    <TextBlock Text="{Binding Title}" FontSize="11" LineHeight="16"
+                               Foreground="{DynamicResource Ink2Brush}"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                </StackPanel>
+            </Border>
         </DataTemplate>
 
         <!-- マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2） -->
@@ -98,7 +144,7 @@
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
                             ClipToBounds="True" Cursor="Hand"
-                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加"
+                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー"
                             MouseLeftButtonDown="OnCellClicked">
                         <!--
                             月ビューは日を選ぶための面でもある。押しても右ペインが動かないと、

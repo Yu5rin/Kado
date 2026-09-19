@@ -327,4 +327,56 @@ public class MainViewModelSourceTests
         // 右ペインも同じ色を引く
         Assert.Equal(wanted, vm.SelectedDay.Events.Single(e => e.Id == "e1").Color);
     }
+
+    [Fact]
+    public void 消したカレンダーの予定は_Google_へ移さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 残っているものの先頭に入れると、手元の予定が次の同期で勝手に相手へ送られる
+        AddGoogleCalendar(test, "aaa@group.calendar.google.com", "仕事");
+
+        var (vm, editors) = Create(test);
+
+        editors.OnCalendar = editor => { editor.Name = "私用"; return true; };
+        vm.AddCalendarCommand.Execute(null);
+
+        var target = vm.SourceLists.LocalCalendars.Single(c => c.Name == "私用");
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "歯医者", Date = D(2026, 9, 24), CalendarId = target.Id,
+        });
+
+        vm.DeleteSourceCommand.Execute(vm.SourceLists.Calendars.Single(c => c.Id == target.Id));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        var home = test.Workspace.Sources.FindCalendar(moved.CalendarId!);
+
+        Assert.NotNull(home);
+        Assert.True(CalendarWorkspace.IsLocal(home));
+    }
+
+    [Fact]
+    public void 削除の確認では移った先を名前で言う()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        editors.OnCalendar = editor => { editor.Name = "私用"; return true; };
+        vm.AddCalendarCommand.Execute(null);
+
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "私用");
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "歯医者", Date = D(2026, 9, 24), CalendarId = target.Id,
+        });
+
+        vm.DeleteSourceCommand.Execute(vm.SourceLists.Calendars.Single(c => c.Id == target.Id));
+
+        // 「別のカレンダーへ移ります」だけでは、どこを見ればよいのか分からない
+        Assert.Contains(CalendarWorkspace.DefaultCalendarName, editors.LastConfirmMessage, StringComparison.Ordinal);
+        Assert.Contains(CalendarWorkspace.DefaultCalendarName, vm.StatusMessage!, StringComparison.Ordinal);
+    }
 }

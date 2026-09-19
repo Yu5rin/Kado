@@ -216,4 +216,112 @@ public class MainViewModelEditingTests
         // 既定の入れ先に加えて、予定が指している所属も候補に出る
         Assert.Contains(editors.LastEventEditor!.Calendars, c => c.Name == "仕事");
     }
+
+    // ------------------------------------------------------------------
+    // 月ビューのマスに並ぶ予定・タスク
+    //
+    // 実機で、マスの予定をダブルクリックしても編集画面にならず、右クリックの
+    // メニューも無かった。右ペインの行とは別の型なので、別の入口が要る
+    // ------------------------------------------------------------------
+
+    private static EventChipViewModel Chip(MainViewModel vm, string id) =>
+        vm.Month.Cells.SelectMany(c => c.Events).First(e => e.Id == id);
+
+    [Fact]
+    public void マスの予定を開いて直せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        editors.OnEvent = editor => { editor.Title = "定例（変更）"; return true; };
+        vm.EditChipCommand.Execute(Chip(vm, "e1"));
+
+        Assert.Equal("定例（変更）", test.Workspace.Events.Find("e1")!.Title);
+    }
+
+    [Fact]
+    public void マスの予定を消せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        var chip = Chip(vm, "e1");
+        vm.DeleteChipCommand.Execute(chip);
+
+        // 何を消すのか名前で尋ねる
+        Assert.Equal("定例", editors.LastConfirmedTitle);
+        Assert.Null(test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public void 消すのを断れば残る()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        editors.ConfirmsDelete = false;
+        vm.DeleteChipCommand.Execute(Chip(vm, "e1"));
+
+        Assert.NotNull(test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public void マスのタスクを開いて直せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+
+        var task = vm.Month.Cells.SelectMany(c => c.Tasks).First(t => t.Id == "t1");
+
+        editors.OnTask = editor => { editor.Title = "提出（変更）"; return true; };
+        vm.EditTaskChipCommand.Execute(task);
+
+        Assert.Equal("提出（変更）", test.Workspace.Tasks.Find("t1")!.Title);
+    }
+
+    [Fact]
+    public void マスのタスクを消せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, _) = Create(test);
+
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+
+        var task = vm.Month.Cells.SelectMany(c => c.Tasks).First(t => t.Id == "t1");
+        vm.DeleteTaskChipCommand.Execute(task);
+
+        Assert.Null(test.Workspace.Tasks.Find("t1"));
+    }
+
+    [Fact]
+    public void すでに無いものを開こうとしても落ちない()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, _) = Create(test);
+
+        vm.EditChipCommand.Execute(null);
+        vm.DeleteChipCommand.Execute(null);
+        vm.EditTaskChipCommand.Execute(null);
+        vm.DeleteTaskChipCommand.Execute(null);
+    }
 }
