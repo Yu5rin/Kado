@@ -17,6 +17,10 @@
     <SolidColorBrush x:Key="SundayBrush" Color="{DynamicResource SundayColor}" />
     <SolidColorBrush x:Key="SaturdayBrush" Color="{DynamicResource SaturdayColor}" />
     <SolidColorBrush x:Key="OffDayBrush" Color="{DynamicResource OffDayColor}" />
+    <SolidColorBrush x:Key="SunkenBrush" Color="{DynamicResource SunkenColor}" />
+    <SolidColorBrush x:Key="CategoryGreenBrush" Color="{DynamicResource CategoryGreenColor}" />
+    <SolidColorBrush x:Key="CategoryAmberBrush" Color="{DynamicResource CategoryAmberColor}" />
+    <SolidColorBrush x:Key="DoneBrush" Color="{DynamicResource DoneColor}" />
 
     <SolidColorBrush x:Key="MilestoneSpecFaceBrush" Color="{DynamicResource MilestoneSpecFaceColor}" />
     <SolidColorBrush x:Key="MilestoneSpecTextBrush" Color="{DynamicResource MilestoneSpecTextColor}" />

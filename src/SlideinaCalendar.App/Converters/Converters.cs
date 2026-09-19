@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media;
 using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Presentation.ViewModels;
 
@@ -115,6 +116,49 @@ public sealed class EventTimeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is TimeOnly time ? time.ToString("HH:mm", CultureInfo.InvariantCulture) : "終日";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>予定の系統から帯の色を引く。</summary>
+public sealed class EventAccentBrushConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        Application.Current?.TryFindResource(value switch
+        {
+            EventAccent.Green => "CategoryGreenBrush",
+            EventAccent.Amber => "CategoryAmberBrush",
+            _ => "AccentBrush",
+        });
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 予定の系統から面の色を作る。
+/// <para>
+/// 帯の色を薄く敷く。モックは rgba で 10〜12% の不透明度を使っているので、それに合わせる。
+/// 既定の藍だけは専用の面色（AccentSoftBrush）があるのでそちらを使う。
+/// </para>
+/// </summary>
+public sealed class EventAccentFaceConverter : IValueConverter
+{
+    /// <summary>帯の色を敷くときの濃さ。モックの rgba(...,.1) 相当。</summary>
+    private const byte FaceAlpha = 28;
+
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not EventAccent accent) return null;
+
+        if (accent == EventAccent.Default) return Application.Current?.TryFindResource("AccentSoftBrush");
+
+        var key = accent == EventAccent.Green ? "CategoryGreenColor" : "CategoryAmberColor";
+        if (Application.Current?.TryFindResource(key) is not Color color) return null;
+
+        return new SolidColorBrush(Color.FromArgb(FaceAlpha, color.R, color.G, color.B));
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
