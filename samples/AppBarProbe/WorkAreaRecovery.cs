@@ -123,17 +123,14 @@ internal static class WorkAreaRecovery
         var target = saved.ToRect();
 
         NativeMethods.NudgeAppBarRegistry(hwnd);
-        NativeMethods.SetWorkArea(target);
+        var ok = NativeMethods.SetWorkAreaWithFallback(target, out var detail);
 
         var after = NativeMethods.GetWorkArea();
         MarkUnregistered();
 
-        var verdict = after.Left == target.Left && after.Top == target.Top
-                   && after.Right == target.Right && after.Bottom == target.Bottom
-            ? "復旧しました"
-            : "復旧を試みましたが、期待どおりになっていません";
+        var verdict = ok ? "復旧しました" : "復旧を試みましたが、期待どおりになっていません";
 
         return $"前回の異常終了を検知しました。ワークエリアを {before} → {after} に{verdict}"
-             + $"（控えた日時: {saved.SavedAt}、目標: {target}）。";
+             + $"（控えた日時: {saved.SavedAt}、目標: {target}、書き戻し: {detail}）。";
     }
 }

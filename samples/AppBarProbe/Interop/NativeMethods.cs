@@ -152,9 +152,53 @@ internal static class NativeMethods
 
     /// <summary>
     /// ワークエリアを書き戻す。<paramref name="notify"/> を立てると全ウィンドウへ変更が通知される。
+    /// <para>
+    /// <b>通知を立てると Explorer が再計算して元に戻してしまうことがある。</b>
+    /// 実機で確認済みの挙動なので、効かなかった場合は通知なしで試し直すこと
+    /// （<see cref="SetWorkAreaWithFallback"/>）。
+    /// </para>
     /// </summary>
     public static bool SetWorkArea(RECT rect, bool notify = true)
         => SystemParametersInfo(SPI_SETWORKAREA, 0, ref rect, notify ? SPIF_SENDCHANGE : 0);
+
+    /// <summary>
+    /// ワークエリアを書き戻し、結果を確かめる。通知ありで効かなければ通知なしでも試す。
+    /// </summary>
+    /// <param name="rect">設定したい矩形。</param>
+    /// <param name="detail">何が起きたかの説明。ログに出して原因を追えるようにする。</param>
+    /// <returns>最終的に <paramref name="rect"/> どおりになったか。</returns>
+    public static bool SetWorkAreaWithFallback(RECT rect, out string detail)
+    {
+        var withNotify = SystemParametersInfo(SPI_SETWORKAREA, 0, ref rect, SPIF_SENDCHANGE);
+        var errorWithNotify = withNotify ? 0 : Marshal.GetLastWin32Error();
+
+        if (Matches(GetWorkArea(), rect))
+        {
+            detail = "通知ありで成功";
+            return true;
+        }
+
+        // Explorer が WM_SETTINGCHANGE に反応して再計算し、元に戻したとみられる。
+        // 通知なしなら Explorer を起こさずに済むことがある。
+        var silent = SystemParametersInfo(SPI_SETWORKAREA, 0, ref rect, 0);
+        var errorSilent = silent ? 0 : Marshal.GetLastWin32Error();
+
+        var current = GetWorkArea();
+        if (Matches(current, rect))
+        {
+            detail = "通知ありでは戻されたため、通知なしで成功";
+            return true;
+        }
+
+        detail = $"失敗（通知あり: {Describe(withNotify, errorWithNotify)}、"
+               + $"通知なし: {Describe(silent, errorSilent)}、現在値: {current}）";
+        return false;
+
+        static bool Matches(RECT a, RECT b) =>
+            a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
+
+        static string Describe(bool ok, int error) => ok ? "API は成功" : $"API 失敗 error={error}";
+    }
 
     /// <summary>ウィンドウが乗っているモニタの矩形とワークエリア。</summary>
     public static MONITORINFO GetMonitorInfoFor(IntPtr hwnd)
