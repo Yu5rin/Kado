@@ -6,6 +6,7 @@
 | `mock-window.html` | ウィンドウモードの UI モック（参考） |
 | `mock-sidebar.html` | サイドバーモードの UI モック（参考） |
 | `google-field-gap.md` | Google 側の入力項目と、この実装との差分。Phase 4 の計画に使う |
+| `google-setup.md` | Google 連携の下ごしらえ。クライアント ID の発行手順 |
 
 ## 食い違いの調査結果
 

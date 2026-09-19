@@ -139,6 +139,10 @@
                             <MenuItem Header="旧 inaCalendar のバックアップを取り込む…（JSON）"
                                       Command="{Binding ImportLegacyBackupCommand}" />
                             <Separator />
+                            <MenuItem Header="Google のクライアント設定を読み込む…（JSON）"
+                                      Command="{Binding ImportGoogleClientCommand}"
+                                      ToolTip="Google Cloud Console で「デスクトップアプリ」型として発行し、落としたファイルを選びます" />
+                            <Separator />
                             <MenuItem Header="設定" IsEnabled="False"
                                       ToolTip="このあとのフェーズで実装します" />
                         </ContextMenu>

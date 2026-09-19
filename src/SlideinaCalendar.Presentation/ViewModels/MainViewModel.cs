@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
 
@@ -33,6 +34,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly CalendarWorkspace _workspace;
     private readonly IEditorPresenter _editors;
     private readonly IFileDialogs _files;
+    private readonly GoogleClientSecretsStore? _googleClient;
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
@@ -41,8 +43,10 @@ public sealed class MainViewModel : ObservableObject
     private string _searchText = string.Empty;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
-        IEditorPresenter? editors = null, IFileDialogs? files = null)
+        IEditorPresenter? editors = null, IFileDialogs? files = null,
+        GoogleClientSecretsStore? googleClient = null)
     {
+        _googleClient = googleClient;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
         _files = files ?? NullFileDialogs.Instance;
@@ -86,6 +90,7 @@ public sealed class MainViewModel : ObservableObject
 
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
+        ImportGoogleClientCommand = new RelayCommand(ImportGoogleClient, () => _googleClient is not null);
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -330,6 +335,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
     public RelayCommand ImportLegacyBackupCommand { get; }
 
+    /// <summary>Google Cloud Console から落としたクライアント設定を取り込む。</summary>
+    public RelayCommand ImportGoogleClientCommand { get; }
+
+    /// <summary>Google 連携の下ごしらえが済んでいるか。</summary>
+    public bool HasGoogleClient => _googleClient?.Exists ?? false;
+
     /// <summary>
     /// 前へ。動く幅は出しているビューで変わる（月・週・日）。
     /// <para>年と一覧はまだ無いので、月と同じ扱いにしておく。</para>
@@ -437,6 +448,51 @@ public sealed class MainViewModel : ObservableObject
             return (string.Join(Environment.NewLine, lines),
                     $"実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）");
         });
+    }
+
+    /// <summary>
+    /// クライアント設定を取り込む。
+    /// <para>
+    /// クライアント ID とシークレットを手で写させない。長い文字列の写し間違いは
+    /// 認可が通らない形でしか現れず、原因が分かりにくい。
+    /// </para>
+    /// </summary>
+    private void ImportGoogleClient()
+    {
+        if (_googleClient is null) return;
+
+        if (_files.PickOpenFile(
+                "クライアント設定を選ぶ（client_secret_….json）",
+                "Google のクライアント設定 (*.json)|*.json|すべてのファイル (*.*)|*.*")
+            is not { } path) return;
+
+        try
+        {
+            var options = _googleClient.Import(path);
+
+            StatusMessage = "Google のクライアント設定を取り込みました";
+            Raise(nameof(HasGoogleClient));
+
+            _files.ShowReport(
+                "Google 連携の準備",
+                $"""
+                 クライアント ID: {options.ClientId}
+
+                 保存先: {_googleClient.Path}
+
+                 同期そのものはこのあとのフェーズで実装します。
+
+                 なお、OAuth 同意画面の公開ステータスが「テスト」のままだと、
+                 更新トークンが7日で失効します。毎週つなぎ直すことになるので、
+                 ご自身専用でも「本番」に切り替えてください。
+                 """);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException)
+        {
+            _files.ShowReport(
+                "Google 連携の準備",
+                $"読み込めませんでした。{Environment.NewLine}{Environment.NewLine}{e.Message}");
+        }
     }
 
     /// <summary>旧データを取り込む。まとめて書き込むので、先に断りを入れる。</summary>
