@@ -84,6 +84,10 @@ git push --force --tags origin
 「A==>A」という意味の通らない文が残る。下では `$Word` に入れて扱い、
 実際の語は手順書の外（実行するときの入力）で与える。
 
+**置換の指定ファイルは clone の外に作る。** 中に作ると未追跡ファイルになり、
+filter-repo が「新鮮な clone ではない」と言って中止する
+（`Aborting: ... (you have untracked changes)`）。
+
 ```powershell
 pip install git-filter-repo
 
@@ -91,18 +95,19 @@ pip install git-filter-repo
 $Word = "（消したい語）"
 $Into = "（置き換え後の語）"
 
+# 置換の指定を clone の外に作る。
+# BOM が付くと filter-repo が読めないので、付かない形で書く
+[System.IO.File]::WriteAllText(
+  "$HOME\replacements.txt",
+  "$Word==>$Into`n",
+  [System.Text.UTF8Encoding]::new($false))
+
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
 git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
 cd cleanup
 
-# 置換の指定を作る。BOM が付くと filter-repo が読めないので、付かない形で書く
-[System.IO.File]::WriteAllText(
-  "$PWD\replacements.txt",
-  "$Word==>$Into`n",
-  [System.Text.UTF8Encoding]::new($false))
-
-git filter-repo --replace-text replacements.txt
+git filter-repo --replace-text "$HOME\replacements.txt"
 
 # 消えたか（何も出なければ成功）
 git grep -l "$Word" $(git rev-list --all)
