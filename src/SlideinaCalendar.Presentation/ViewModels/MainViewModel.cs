@@ -92,7 +92,7 @@ public sealed class MainViewModel : ObservableObject
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
         EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
-        DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource);
+        DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
 
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
@@ -506,6 +506,18 @@ public sealed class MainViewModel : ObservableObject
 
         StatusMessage = changed ? $"「{editor.TrimmedName}」に変更しました" : "見つかりませんでした";
     }
+
+    /// <summary>
+    /// 消せるのはこのアプリのものだけ。
+    /// <para>
+    /// Google のものを手元から消しても、次の同期で一覧から戻ってくる。そのうえ中の予定は
+    /// 別のカレンダーへ移されたまま取り残される（相手が変わっていなければ取り込みが
+    /// 素通りするため）。消えたように見えて消えていない、いちばん分かりにくい形になる。
+    /// </para>
+    /// <para>見せたくないだけなら、左パネルのチェックを外せばよい。</para>
+    /// </summary>
+    private static bool CanDeleteSource(SourceListItemViewModel? target) =>
+        target is not null && !target.IsGoogle;
 
     private void DeleteSource(SourceListItemViewModel? target)
     {

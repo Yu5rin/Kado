@@ -239,4 +239,58 @@ public class MainViewModelSourceTests
         Assert.NotEqual(choice.Id, choice.Name);
         Assert.Equal("仕事", choice.ToString());
     }
+
+    // ------------------------------------------------------------------
+    // Google のものは消させない
+    //
+    // 手元から消しても次の同期で一覧から戻ってくる。そのうえ中の予定は別の
+    // カレンダーへ移されたまま取り残される。消えたように見えて消えていない
+    // ------------------------------------------------------------------
+
+    /// <summary>Google から取り込んだ体のカレンダーを1件足す。</summary>
+    private static void AddGoogleCalendar(TestWorkspace test, string id, string name) =>
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = id,
+            Summary = name,
+            GoogleRaw = $$"""{"id":"{{id}}","summary":"{{name}}","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+    [Fact]
+    public void Google_のカレンダーは消せない()
+    {
+        using var test = TestWorkspace.Create();
+        AddGoogleCalendar(test, "shigoto@group.calendar.google.com", "仕事");
+
+        var (vm, _) = Create(test);
+        var target = vm.SourceLists.GoogleCalendars.Single(c => c.Name == "仕事");
+
+        // 画面ではメニューに出さない。押せてしまっても動かないようにしておく
+        Assert.False(vm.DeleteSourceCommand.CanExecute(target));
+
+        vm.DeleteSourceCommand.Execute(target);
+
+        Assert.Contains(vm.SourceLists.Calendars, c => c.Id == target.Id);
+    }
+
+    [Fact]
+    public void このアプリのカレンダーは今までどおり消せる()
+    {
+        using var test = TestWorkspace.Create();
+        AddGoogleCalendar(test, "shigoto@group.calendar.google.com", "仕事");
+
+        var (vm, editors) = Create(test);
+
+        editors.OnCalendar = editor => { editor.Name = "私用"; return true; };
+        vm.AddCalendarCommand.Execute(null);
+
+        var target = vm.SourceLists.LocalCalendars.Single(c => c.Name == "私用");
+
+        Assert.True(vm.DeleteSourceCommand.CanExecute(target));
+
+        vm.DeleteSourceCommand.Execute(target);
+
+        Assert.DoesNotContain(vm.SourceLists.Calendars, c => c.Id == target.Id);
+    }
 }
