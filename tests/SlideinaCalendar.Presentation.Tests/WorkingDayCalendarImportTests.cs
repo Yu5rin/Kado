@@ -359,16 +359,17 @@ public class WorkingDayCalendarImportTests
     }
 
     // ------------------------------------------------------------------
-    // 休日・祝日に稼働する日は「実働日」として入れる
+    // 休日・祝日に稼働する日は「特別出勤」として入れる
     //
-    // 暦だけ見ていると休みだと思って予定を入れそこなう。休業日より見落としたくない
+    // 暦だけ見ていると休みだと思って予定を入れそこなう。休業日より見落としたくない。
+    // 呼び名は旧 inaCalendar に合わせてある
     // ------------------------------------------------------------------
 
     private static IReadOnlyList<CalendarEvent> OpenDays(TestWorkspace test) =>
         test.Workspace.Events.All().Where(e => CalendarWorkspace.IsOpenDayId(e.Id)).ToArray();
 
     [Fact]
-    public void 土曜に稼働するなら実働日として入れる()
+    public void 土曜に稼働するなら特別出勤として入れる()
     {
         // 9月26日（土）まで稼働する月にする
         var days = Enumerable.Range(1, 30)
@@ -391,7 +392,7 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
-    public void 祝日に稼働するなら実働日として入れる()
+    public void 祝日に稼働するなら特別出勤として入れる()
     {
         var holiday = new DateOnly(2026, 9, 21);
         var days = Enumerable.Range(1, 30)
@@ -410,17 +411,17 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
-    public void 休日に稼働しないなら何も入れない()
+    public void 休日に稼働しないなら特別出勤は入れない()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.WriteWorkingDayEvents();
 
-        // 土日は稼働しない月なので、実働日の印は付かない
+        // 土日は稼働しない月なので、特別出勤の印は付かない
         Assert.Empty(OpenDays(test));
     }
 
     [Fact]
-    public void 実働日も予定の並びには出さず日付の行に出す()
+    public void 特別出勤も予定の並びには出さず日付の行に出す()
     {
         var days = Enumerable.Range(1, 30)
             .Select(d => new DateOnly(2026, 9, d))
@@ -444,5 +445,31 @@ public class WorkingDayCalendarImportTests
             days, days[0], days[^1], [], null, null));
 
         test.Workspace.ReloadWorkingDays();
+    }
+
+    [Fact]
+    public void すでに同じ印があれば作らない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 旧 inaCalendar が Google に書き込んだ分が、同期で降りてきている体
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "google:abc", Title = CalendarWorkspace.ClosedDayTitle,
+            Date = Closed[0], CalendarId = ina.Id, Source = "google",
+        });
+
+        test.Workspace.WriteWorkingDayEvents();
+
+        // こちらでも作ると、次の同期で Google 側に同じ予定が2つ並ぶ
+        Assert.DoesNotContain(Closed[0], ClosedDays(test).Select(e => e.Date));
+
+        // 印の無い日には今までどおり作る
+        Assert.Contains(Closed[1], ClosedDays(test).Select(e => e.Date));
+
+        // 日付の行には1つだけ出る
+        var main = new MainViewModel(test.Workspace, today: Closed[0]);
+        Assert.Single(main.SelectedDay.Milestones, m => m.Name == CalendarWorkspace.ClosedDayTitle);
     }
 }
