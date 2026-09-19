@@ -53,6 +53,30 @@ public sealed class EventRepository(SqliteConnection connection)
             """).ToArray();
 
     /// <summary>
+    /// 所属カレンダーを持たない予定を、指定のカレンダーへ入れる。
+    /// <para>
+    /// 所属が無いと左パネルに受け皿が無く、<b>チェックを外しても消せない</b>。実機で
+    /// 全部のチェックを外しても一部の予定が残り、操作が効かないように見えた。
+    /// </para>
+    /// <para>
+    /// 入れ先には必ず<b>このアプリの中だけのカレンダー</b>を渡すこと。Google のものへ
+    /// 入れると、次の同期で勝手に相手へ送られてしまう。
+    /// </para>
+    /// </summary>
+    /// <returns>入れ直した件数。</returns>
+    public int AdoptOrphans(string calendarId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(calendarId);
+
+        return _connection.Execute(
+            """
+            UPDATE events SET calendar_id = @calendarId
+            WHERE calendar_id IS NULL OR calendar_id = '';
+            """,
+            new { calendarId });
+    }
+
+    /// <summary>
     /// 期間に重なる<b>単発の</b>予定。複数日予定は終了日まで見て判定する。
     /// 繰り返し予定は <see cref="AllRecurring"/> で取ること。
     /// </summary>

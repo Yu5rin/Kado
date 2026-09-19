@@ -38,20 +38,28 @@ public sealed class MainViewModel : ObservableObject
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
+    private readonly TimeProvider _clock;
     private DateOnly _today;
     private string? _statusMessage;
     private string _searchText = string.Empty;
+    private double _sidePanelWidth;
+    private double _detailPaneWidth;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
         GoogleClientSecretsStore? googleClient = null,
-        Sync.IGoogleSync? google = null)
+        Sync.IGoogleSync? google = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
         _files = files ?? NullFileDialogs.Instance;
         _today = today;
+
+        _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
+        _detailPaneWidth = ReadWidth(DetailPaneWidthKey, DefaultDetailPaneWidth, MinDetailPaneWidth, MaxDetailPaneWidth);
 
         SourceLists = new SourceListsViewModel(workspace);
         Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
@@ -81,6 +89,15 @@ public sealed class MainViewModel : ObservableObject
         });
         AddTaskCommand = new RelayCommand(AddTask);
         EditEventCommand = new RelayCommand<DayEventViewModel?>(EditEvent);
+        EditChipCommand = new RelayCommand<EventChipViewModel?>(chip => EditEventBy(chip?.Id));
+        DeleteChipCommand = new RelayCommand<EventChipViewModel?>(chip => DeleteEventBy(chip?.Id));
+        EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
+        DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
+        EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(EditBlock);
+        EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
+        DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
+        DeleteBlockCommand = new RelayCommand<TimeBlockViewModel?>(
+            block => DeleteEventBy(block?.IsWorkBlock == false ? block.Id : null));
         DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
         EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
@@ -92,7 +109,7 @@ public sealed class MainViewModel : ObservableObject
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
         EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
-        DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource);
+        DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
 
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
@@ -109,7 +126,11 @@ public sealed class MainViewModel : ObservableObject
         Sync.Synced += (_, _) =>
         {
             _workspace.EnsureSources();
-            RefreshViews();
+
+            // 「inaCalendar」の印も同期で増減する。実働日を組み立て直さないと、
+            // 他の端末で取り込んだ分がこちらでは「未登録」のままになる。
+            // この中から DataChanged が飛ぶので、画面はそれで引き直される
+            _workspace.ReloadWorkingDays();
         };
 
         // 右上の表示は Sync が持つ。こちらは伝えるだけ
@@ -190,7 +211,7 @@ public sealed class MainViewModel : ObservableObject
             Week.GoTo(SelectedDate);
             Day.Date = SelectedDate;
 
-            Raise(nameof(HintText), nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
+            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
         }
     }
 
@@ -207,6 +228,70 @@ public sealed class MainViewModel : ObservableObject
         get => _isSidePanelOpen;
         set => Set(ref _isSidePanelOpen, value);
     }
+
+    // ------------------------------------------------------------------
+    // 3ペインの幅
+    //
+    // 両端は手で決めた幅のまま置く。ウィンドウを広げたぶんは中央が受け取る。
+    // 左パネルの一覧も右ペインの予定も、幅が増えて嬉しいのは中央のほう
+    // ------------------------------------------------------------------
+
+    private const string SidePanelWidthKey = "ui.side_panel_width";
+    private const string DetailPaneWidthKey = "ui.detail_pane_width";
+
+    /// <summary>左パネルの幅の既定値。モックの .side と同じ。</summary>
+    public const double DefaultSidePanelWidth = 216;
+
+    /// <summary>右ペインの幅の既定値。モックの .detail と同じ。</summary>
+    public const double DefaultDetailPaneWidth = 296;
+
+    /// <summary>左パネルの幅の下限。これより狭いとカレンダー名が読めない。</summary>
+    public const double MinSidePanelWidth = 160;
+
+    /// <summary>左パネルの幅の上限。</summary>
+    public const double MaxSidePanelWidth = 480;
+
+    /// <summary>右ペインの幅の下限。</summary>
+    public const double MinDetailPaneWidth = 200;
+
+    /// <summary>右ペインの幅の上限。</summary>
+    public const double MaxDetailPaneWidth = 640;
+
+    /// <summary>左パネルの幅。手で変えた値をそのまま次回に持ち越す。</summary>
+    public double SidePanelWidth
+    {
+        get => _sidePanelWidth;
+        set => SetWidth(ref _sidePanelWidth, value, MinSidePanelWidth, MaxSidePanelWidth,
+            SidePanelWidthKey, nameof(SidePanelWidth));
+    }
+
+    /// <summary>右ペインの幅。手で変えた値をそのまま次回に持ち越す。</summary>
+    public double DetailPaneWidth
+    {
+        get => _detailPaneWidth;
+        set => SetWidth(ref _detailPaneWidth, value, MinDetailPaneWidth, MaxDetailPaneWidth,
+            DetailPaneWidthKey, nameof(DetailPaneWidth));
+    }
+
+    /// <summary>幅を収まる範囲に丸めてから覚える。範囲外の値が保存に残らないようにする。</summary>
+    private void SetWidth(
+        ref double field, double value, double min, double max, string key, string name)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value)) return;
+
+        var rounded = Math.Clamp(Math.Round(value), min, max);
+        if (Math.Abs(rounded - field) < 0.5) return;
+
+        field = rounded;
+        _workspace.Settings.Set(key, rounded.ToString(CultureInfo.InvariantCulture));
+        Raise(name);
+    }
+
+    /// <summary>保存されている幅を読む。読めなければ既定値。</summary>
+    private double ReadWidth(string key, double fallback, double min, double max) =>
+        double.TryParse(_workspace.Settings.Get(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var saved)
+            ? Math.Clamp(saved, min, max)
+            : fallback;
 
     /// <summary>今日。日付が変わったら差し替える。</summary>
     public DateOnly Today
@@ -297,16 +382,6 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>同期できているか。丸印の色を変える。</summary>
     public bool IsSynced => Sync.IsConnected;
 
-    /// <summary>本体ビューの下に出す凡例。ビューごとに変える。</summary>
-    public string HintText => _currentView switch
-    {
-        CalendarView.Week => "終日レーンのタスクを時間帯へドラッグすると、作業時間としてブロックが置かれる",
-        CalendarView.Day => "空き時間をドラッグすると予定を追加 ・ タスクをドロップすると作業時間を確保",
-        CalendarView.Year => "1行が1か月 ・ 日付の上の横棒がマイルストーン ・ 右端は月の実働日数",
-        CalendarView.Agenda => "予定とタスクを時系列で表示 ・ 予定のない休みはまとめて折りたたむ",
-        _ => "色付きラベルは実働日データから取り込んだマイルストーン（編集不可） ・ ドラッグで期間選択 ・ Ctrl＋ドラッグで複製",
-    };
-
     /// <summary>
     /// 「実働 20 ／ 残り 6」のサマリー。
     /// <para>
@@ -364,6 +439,30 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<DateOnly?> AddEventOnCommand { get; }
     public RelayCommand AddTaskCommand { get; }
     public RelayCommand<DayEventViewModel?> EditEventCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶ予定を開く。右ペインの行とは別の型なので分けてある。</summary>
+    public RelayCommand<EventChipViewModel?> EditChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶ予定を消す。</summary>
+    public RelayCommand<EventChipViewModel?> DeleteChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶタスクを開く。</summary>
+    public RelayCommand<TaskItem?> EditTaskChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
+    public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
+
+    /// <summary>日付の行のラベルを開く。実働日データから起こした予定も直せる。</summary>
+    public RelayCommand<MilestoneViewModel?> EditMilestoneCommand { get; }
+
+    /// <summary>日付の行のラベルを消す。</summary>
+    public RelayCommand<MilestoneViewModel?> DeleteMilestoneCommand { get; }
+
+    /// <summary>週ビュー・日ビューの時間軸に置かれた1件を開く。</summary>
+    public RelayCommand<TimeBlockViewModel?> EditBlockCommand { get; }
+
+    /// <summary>週ビュー・日ビューの時間軸に置かれた予定を消す。作業時間ブロックは対象外。</summary>
+    public RelayCommand<TimeBlockViewModel?> DeleteBlockCommand { get; }
     public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
@@ -496,16 +595,36 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
 
         var isTaskList = IsTaskList(target);
-        var editor = new CalendarEditorViewModel(target.Id, target.Name, target.SwatchColor, isTaskList);
+        // 「inaCalendar」は名前で見分けて日付の行に出している。変えられると黙って止まる
+        var locked = !isTaskList && string.Equals(
+            target.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+
+        var editor = new CalendarEditorViewModel(
+            target.Id, target.Name, target.SwatchColor, isTaskList, locked);
 
         if (!_editors.ShowCalendarEditor(editor)) return;
 
-        var changed = isTaskList
-            ? _workspace.UpdateTaskList(target.Id, editor.TrimmedName)
-            : _workspace.UpdateCalendar(target.Id, editor.TrimmedName, editor.Color);
+        // 画面で止めていても、名前は元のものを使う。入口が増えても崩れないようにする
+        var name = locked ? target.Name : editor.TrimmedName;
 
-        StatusMessage = changed ? $"「{editor.TrimmedName}」に変更しました" : "見つかりませんでした";
+        var changed = isTaskList
+            ? _workspace.UpdateTaskList(target.Id, name)
+            : _workspace.UpdateCalendar(target.Id, name, editor.Color);
+
+        StatusMessage = changed ? $"「{name}」に変更しました" : "見つかりませんでした";
     }
+
+    /// <summary>
+    /// 消せるのはこのアプリのものだけ。
+    /// <para>
+    /// Google のものを手元から消しても、次の同期で一覧から戻ってくる。そのうえ中の予定は
+    /// 別のカレンダーへ移されたまま取り残される（相手が変わっていなければ取り込みが
+    /// 素通りするため）。消えたように見えて消えていない、いちばん分かりにくい形になる。
+    /// </para>
+    /// <para>見せたくないだけなら、左パネルのチェックを外せばよい。</para>
+    /// </summary>
+    private static bool CanDeleteSource(SourceListItemViewModel? target) =>
+        target is not null && !target.IsGoogle;
 
     private void DeleteSource(SourceListItemViewModel? target)
     {
@@ -519,10 +638,16 @@ public sealed class MainViewModel : ObservableObject
         var kind = isTaskList ? "タスクリスト" : "カレンダー";
         var contents = isTaskList ? "タスク" : "予定";
 
+        // 移った先を名前で言う。「別のカレンダーへ移ります」だけだと、
+        // 消したあとどこを見ればよいのか分からない
+        var destination = isTaskList
+            ? _workspace.TaskMoveTargetFor(target.Id)?.DisplayName
+            : _workspace.MoveTargetFor(target.Id)?.DisplayName;
+
         // 中身ごと消さない。分類を消したかっただけなのに中身まで消えるのは行き過ぎ
-        var message = count > 0
+        var message = count > 0 && destination is not null
             ? $"{kind}「{target.Name}」を削除します。{Environment.NewLine}{Environment.NewLine}"
-              + $"入っている{contents} {count} 件は、別の{kind}へ移ります。削除はされません。"
+              + $"入っている{contents} {count} 件は「{destination}」へ移ります。削除はされません。"
             : $"{kind}「{target.Name}」を削除します。";
 
         if (!_editors.Confirm($"{kind}の削除", message)) return;
@@ -533,9 +658,71 @@ public sealed class MainViewModel : ObservableObject
         {
             null => $"最後の{kind}は削除できません",
             0 => $"{kind}「{target.Name}」を削除しました",
-            var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を移しました",
+            var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を「{destination}」へ移しました",
         };
     }
+
+    /// <summary>
+    /// 左パネルの並べ替え。<paramref name="moved"/> を <paramref name="target"/> の位置へ移す。
+    /// <para>
+    /// 並び順は時刻を持たない予定の並びにも効く（要件どおり、旧 inaCalendar と同じ）ので、
+    /// 見た目だけの話ではない。
+    /// </para>
+    /// <para>
+    /// カレンダーとタスクリストの間では動かさない。別の一覧なので、混ぜる意味がない。
+    /// </para>
+    /// </summary>
+    /// <param name="above">true なら target の上、false なら下に入れる。</param>
+    /// <returns>実際に動いたら true。</returns>
+    public bool MoveSource(
+        SourceListItemViewModel? moved, SourceListItemViewModel? target, bool above = true)
+    {
+        ShowDropHint(null, above: false);
+
+        if (!CanMoveSource(moved, target)) return false;
+
+        var isTaskList = IsTaskList(moved!);
+
+        var items = isTaskList ? SourceLists.TaskLists : SourceLists.Calendars;
+
+        var ids = items.Select(i => i.Id).ToList();
+        if (!ids.Remove(moved!.Id)) return false;
+
+        // 抜いたあとに数え直す。先に位置を控えると、上へ動かすときに1つずれる
+        var to = ids.IndexOf(target!.Id);
+        if (to < 0) return false;
+
+        ids.Insert(above ? to : to + 1, moved.Id);
+
+        if (isTaskList) _workspace.Sources.SetTaskListOrder(ids);
+        else _workspace.Sources.SetCalendarOrder(ids);
+
+        // 並び順は予定の並びにも効くので、画面をまるごと引き直す
+        RefreshViews();
+
+        StatusMessage = $"「{moved.Name}」の位置を変えました";
+        return true;
+    }
+
+    /// <summary>
+    /// 並べ替えの最中に、落ちる位置を示す。
+    /// <para>掴んだまま動かすたびに呼ぶ。<paramref name="target"/> が null なら消す。</para>
+    /// </summary>
+    public void ShowDropHint(SourceListItemViewModel? target, bool above)
+    {
+        foreach (var item in SourceLists.Calendars.Concat(SourceLists.TaskLists))
+        {
+            item.DropHint = ReferenceEquals(item, target)
+                ? above ? DropHint.Above : DropHint.Below
+                : DropHint.None;
+        }
+    }
+
+    /// <summary>並べ替えとして成り立つ組み合わせか。落とせる先かどうかの判断に使う。</summary>
+    public bool CanMoveSource(SourceListItemViewModel? moved, SourceListItemViewModel? target) =>
+        moved is not null && target is not null &&
+        !ReferenceEquals(moved, target) &&
+        IsTaskList(moved) == IsTaskList(target);
 
     /// <summary>タスクリスト側の項目か。一覧に含まれているかで見分ける。</summary>
     private bool IsTaskList(SourceListItemViewModel target) =>
@@ -686,22 +873,34 @@ public sealed class MainViewModel : ObservableObject
     // 予定とタスクの編集。どれも CalendarWorkspace を通すので Undo が効く
     // ------------------------------------------------------------------
 
+    /// <summary>いまの時刻。新しい予定の既定の開始時刻を決めるのに使う。</summary>
+    private TimeOnly NowTime => TimeOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+
     /// <summary>選択している日に予定を足す。</summary>
     private void AddEvent()
     {
-        var editor = new EventEditorViewModel(SelectedDate, CalendarNames);
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
         StatusMessage = "予定を追加しました";
     }
 
-    private void EditEvent(DayEventViewModel? target)
+    private void EditEvent(DayEventViewModel? target) => EditEventBy(target?.Id);
+
+    /// <summary>
+    /// 識別子だけで予定を開く。
+    /// <para>
+    /// 月ビューのマスに並ぶ予定は右ペインの行とは別の型なので、識別子で受ける。
+    /// 画面ごとに同じ処理を書くと、片方だけ直し忘れる。
+    /// </para>
+    /// </summary>
+    private void EditEventBy(string? id)
     {
-        if (target is null) return;
+        if (id is not { Length: > 0 }) return;
 
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
-        if (_workspace.Events.Find(target.Id) is not { } stored) return;
+        if (_workspace.Events.Find(id) is not { } stored) return;
 
         var editor = new EventEditorViewModel(stored, CalendarNames);
         if (!_editors.ShowEventEditor(editor)) return;
@@ -718,6 +917,56 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = _workspace.DeleteEvent(target.Id)
             ? "予定を削除しました"
             : "予定が見つかりませんでした";
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void DeleteEventBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } stored) return;
+        if (!_editors.ConfirmDelete(stored.Title)) return;
+
+        StatusMessage = _workspace.DeleteEvent(id)
+            ? "予定を削除しました"
+            : "予定が見つかりませんでした";
+    }
+
+    /// <summary>
+    /// 時間軸の1件を開く。
+    /// <para>
+    /// 作業時間ブロックは予定ではないので、もとになったタスクのほうを開く。
+    /// ブロック自身の識別子で予定を探しても見つからない。
+    /// </para>
+    /// </summary>
+    private void EditBlock(TimeBlockViewModel? target)
+    {
+        if (target is null) return;
+
+        if (target.IsWorkBlock) EditTaskBy(target.TaskId);
+        else EditEventBy(target.Id);
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void EditTaskBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
+
+        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateTask(editor.ToModel())
+            ? "タスクを変更しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void DeleteTaskBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
+        if (!_editors.ConfirmDelete(stored.Title)) return;
+
+        StatusMessage = _workspace.DeleteTask(id)
+            ? "タスクを削除しました"
+            : "タスクが見つかりませんでした";
     }
 
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
@@ -791,15 +1040,24 @@ public sealed class MainViewModel : ObservableObject
         Day.UpdateNowLine(time);
     }
 
-    /// <summary>データが変わったので表示を引き直す。</summary>
+    /// <summary>
+    /// データが変わったので表示を引き直す。
+    /// <para>
+    /// <b>カレンダー一覧を先に読み直す。</b>各ビューは予定の帯の色と、出すかどうかの
+    /// 判断をこの一覧から引くので、
+    /// 順番が逆だと、色を変えた直後の引き直しに古い色が使われる。実機で、カレンダーの色を
+    /// 変えても月ビューの帯が変わらなかった。
+    /// </para>
+    /// </summary>
     private void RefreshViews()
     {
+        SourceLists.Refresh();
+
         Month.Refresh();
         SelectedDay.Refresh();
         Week.Refresh();
         Day.Refresh();
         MiniCalendar.Refresh();
-        SourceLists.Refresh();
         RaiseHeader();
     }
 

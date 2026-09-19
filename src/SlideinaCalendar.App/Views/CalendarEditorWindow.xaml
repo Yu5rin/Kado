@@ -7,6 +7,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
         Title="{Binding HeaderText}" Width="380" SizeToContent="Height"
+        Icon="/Assets/app.png"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
@@ -45,8 +46,28 @@
 
         <StackPanel Margin="16,14">
             <TextBlock Text="名前" Style="{StaticResource FieldLabelStyle}" />
-            <TextBox x:Name="NameBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
-                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBox x:Name="NameBox"
+                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                     IsReadOnly="{Binding IsNameLocked}">
+                <TextBox.Style>
+                    <!-- 変えられないときは文字を薄くする。読んだりコピーはできる -->
+                    <Style TargetType="TextBox" BasedOn="{StaticResource FieldTextBoxStyle}">
+                        <Style.Triggers>
+                            <Trigger Property="IsReadOnly" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBox.Style>
+            </TextBox>
+
+            <!-- なぜ変えられないのかを書く。灰色の欄だけでは理由が分からない -->
+            <TextBlock Text="{Binding NameLockReason}" FontSize="10.5" Margin="0,3,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource Ink3Brush}"
+                       Visibility="{Binding NameLockReason, Converter={StaticResource NullToVisibility}}" />
+
+            <Border Height="12" />
 
             <!-- タスクリストは色を持たない。Google Tasks 側にも色の概念が無い -->
             <StackPanel Visibility="{Binding HasColor, Converter={StaticResource BoolToVisibility}}">

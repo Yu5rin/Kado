@@ -35,16 +35,36 @@ public sealed class CalendarEditorViewModel : ObservableObject
     }
 
     /// <summary>すでにあるものを直す。</summary>
-    public CalendarEditorViewModel(string id, string name, string? color, bool isTaskList = false)
+    /// <param name="isNameLocked">
+    /// 名前を変えさせないか。「inaCalendar」は名前で見分けて日付の行に出しているので、
+    /// 変えられると特別な表示が黙って止まる。
+    /// </param>
+    public CalendarEditorViewModel(
+        string id, string name, string? color, bool isTaskList = false, bool isNameLocked = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         Id = id;
         IsNew = false;
         IsTaskList = isTaskList;
+        IsNameLocked = isNameLocked;
         _name = name;
         _color = color ?? CalendarPalette.ColorFor(name);
     }
+
+    /// <summary>
+    /// 名前を変えられないか。
+    /// <para>
+    /// 「inaCalendar」だけ。名前で見分けて日付の行に出しているので、変えられると
+    /// 特別な表示が黙って止まる。色は変えられる。
+    /// </para>
+    /// </summary>
+    public bool IsNameLocked { get; }
+
+    /// <summary>名前欄に添える断り。変えられるときは null。</summary>
+    public string? NameLockReason => IsNameLocked
+        ? "実働日データの入れ先なので、名前は変えられません"
+        : null;
 
     /// <summary>直す対象。新規なら null。</summary>
     public string? Id { get; }

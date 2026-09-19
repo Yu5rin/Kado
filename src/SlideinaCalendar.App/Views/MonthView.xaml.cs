@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
@@ -16,6 +17,24 @@ public partial class MonthView : UserControl
 {
     public MonthView() => InitializeComponent();
 
+    /// <summary>
+    /// マスの高さが変わったら、並べる件数を決め直す。
+    /// <para>
+    /// 固定の件数だと、画面を広げてもマスの下が空いたまま「＋N」と出る。高さは
+    /// 表示側にしか分からないので、ここで測って ViewModel へ渡す。
+    /// </para>
+    /// </summary>
+    private void OnCellsResized(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.HeightChanged) return;
+        if (DataContext is not MonthViewModel month || month.Cells.Count == 0) return;
+
+        var rows = month.Cells.Count / 7;
+        if (rows <= 0) return;
+
+        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(e.NewSize.Height / rows);
+    }
+
     /// <summary>1回押しでその日を選び、2回でその日に予定を足す。</summary>
     private void OnCellClicked(object sender, MouseButtonEventArgs e)
     {
@@ -25,6 +44,53 @@ public partial class MonthView : UserControl
         if (e.ClickCount == 2) main.AddEventOnCommand.Execute(cell.Date);
         else main.SelectDateCommand.Execute(cell.Date);
 
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// マスに並ぶ予定を2回押すとその予定を開く。
+    /// <para>
+    /// ここで止めないとマス側の受け手に流れ、その日に新しい予定を足すことになる。
+    /// 1回押しはマスと同じでその日を選ぶ。
+    /// </para>
+    /// </summary>
+    private void OnEventChipClicked(object sender, MouseButtonEventArgs e) =>
+        Handle(sender, e, (main, item) => main.EditChipCommand.Execute(item));
+
+    /// <inheritdoc cref="OnEventChipClicked"/>
+    private void OnTaskChipClicked(object sender, MouseButtonEventArgs e) =>
+        Handle(sender, e, (main, item) => main.EditTaskChipCommand.Execute(item));
+
+    private void Handle(object sender, MouseButtonEventArgs e, Action<MainViewModel, object> open)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not { } item) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        if (e.ClickCount == 2) open(main, item);
+        else if (FindCell(sender as DependencyObject) is { } cell) main.SelectDateCommand.Execute(cell.Date);
+
+        e.Handled = true;
+    }
+
+    /// <summary>その予定が乗っているマス。日を選ぶのに要る。</summary>
+    private static DayCellViewModel? FindCell(DependencyObject? from)
+    {
+        for (var node = from; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is FrameworkElement { DataContext: DayCellViewModel cell }) return cell;
+        }
+
+        return null;
+    }
+
+    /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
+    private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if ((sender as FrameworkElement)?.DataContext is not MilestoneViewModel milestone) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        main.EditMilestoneCommand.Execute(milestone);
         e.Handled = true;
     }
 }

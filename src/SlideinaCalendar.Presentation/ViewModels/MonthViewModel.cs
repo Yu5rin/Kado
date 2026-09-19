@@ -38,6 +38,7 @@ public sealed class MonthViewModel : ObservableObject
     private readonly ICalendarSources _sources;
 
     private DateOnly _month;
+    private int _maxChipsPerCell = DayCellViewModel.DefaultMaxChips;
     private DateOnly _today;
     private DateOnly? _selectedDate;
     private IReadOnlyList<DayCellViewModel> _cells = [];
@@ -86,6 +87,25 @@ public sealed class MonthViewModel : ObservableObject
     }
 
     /// <summary>並べるマス。左上から右下へ、週の数だけ。</summary>
+    /// <summary>
+    /// 1つのマスに並べる件数。
+    /// <para>
+    /// 画面の大きさで変わるので、表示側がマスの高さから決めて渡す。固定にすると、
+    /// 画面を広げてもマスの下が空いたまま「＋N」と出る。
+    /// </para>
+    /// </summary>
+    public int MaxChipsPerCell
+    {
+        get => _maxChipsPerCell;
+        set
+        {
+            if (value < 1 || value == _maxChipsPerCell) return;
+
+            _maxChipsPerCell = value;
+            Refresh();
+        }
+    }
+
     public IReadOnlyList<DayCellViewModel> Cells
     {
         get => _cells;
@@ -148,8 +168,8 @@ public sealed class MonthViewModel : ObservableObject
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             // 左パネルでチェックを外したカレンダーは、ここで落とす
-            var events = eventsByDate.TryGetValue(date, out var e)
-                ? e.Where(x => _sources.IncludesEvent(x.Source)).ToArray() : [];
+            var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
+            var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
 
@@ -161,7 +181,9 @@ public sealed class MonthViewModel : ObservableObject
                 events,
                 tasks,
                 _workspace.Holidays.NameOf(date),
-                _sources));
+                _sources,
+                _maxChipsPerCell,
+                milestones: MilestoneRow.For(date, all, _sources)));
         }
 
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;

@@ -77,4 +77,41 @@ public class TimeInputTests
         Assert.Equal("00:15", choices[1]);
         Assert.Equal("23:45", choices[^1]);
     }
+
+    // ------------------------------------------------------------------
+    // 新しい予定の既定の時刻
+    //
+    // 固定の 9:00 だと、いつ足してもまず時刻を直すことになる
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(9, 0, 9, 30)]     // ちょうど区切りなら次へ送る。もう過ぎた時刻は出さない
+    [InlineData(9, 1, 9, 30)]
+    [InlineData(9, 29, 9, 30)]
+    [InlineData(9, 30, 10, 0)]
+    [InlineData(9, 31, 10, 0)]
+    [InlineData(0, 0, 0, 30)]
+    [InlineData(23, 29, 23, 30)]
+    [InlineData(23, 30, 0, 0)]    // 日をまたぐ。日付は呼び出し側が持っている
+    [InlineData(23, 59, 0, 0)]
+    public void いまの時刻の次の30分区切りを返す(int hour, int minute, int wantHour, int wantMinute)
+    {
+        Assert.Equal(
+            new TimeOnly(wantHour, wantMinute),
+            TimeInput.NextHalfHour(new TimeOnly(hour, minute)));
+    }
+
+    [Theory]
+    [InlineData(9, 0, 10, 0)]
+    [InlineData(22, 59, 23, 59)]
+    [InlineData(23, 0, 23, 59)]   // 1時間足すと 0:00 になって逆転する
+    [InlineData(23, 30, 23, 59)]
+    public void 終了は開始より後になる(int hour, int minute, int wantHour, int wantMinute)
+    {
+        var start = new TimeOnly(hour, minute);
+        var end = TimeInput.OneHourAfter(start);
+
+        Assert.Equal(new TimeOnly(wantHour, wantMinute), end);
+        Assert.True(end > start);
+    }
 }

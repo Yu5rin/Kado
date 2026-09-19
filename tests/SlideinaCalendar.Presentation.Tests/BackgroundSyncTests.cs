@@ -11,8 +11,27 @@ public class BackgroundSyncTests
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
 
-    /// <summary>走り終わるまで待つ。時計を進めてから中の処理が終わるのを待つ。</summary>
+    /// <summary>
+    /// 何も起きないことを確かめるための待ち。
+    /// <para>起きないことは待っても分からないので、少しだけ待って打ち切る。</para>
+    /// </summary>
     private static async Task SettleAsync() => await Task.Delay(50);
+
+    /// <summary>
+    /// そうなるまで待つ。
+    /// <para>
+    /// 時計を進めても、中の処理は別の流れで走る。実時間を決め打ちで待つと、
+    /// 混んでいる機械では間に合わずに落ちる（Windows の CI で実際に落ちた）。
+    /// 起きたらすぐ進み、いつまでも起きなければ打ち切って、落ちた理由を
+    /// 呼び出し側の Assert に語らせる。
+    /// </para>
+    /// </summary>
+    private static async Task WaitUntilAsync(Func<bool> until)
+    {
+        var deadline = Environment.TickCount64 + 5000;
+
+        while (!until() && Environment.TickCount64 < deadline) await Task.Delay(5);
+    }
 
     [Fact]
     public async Task 間隔ごとに走る()
@@ -24,12 +43,12 @@ public class BackgroundSyncTests
         sync.Start();
 
         clock.Advance(Interval);
-        await SettleAsync();
+        await WaitUntilAsync(() => runs >= 1);
 
         Assert.Equal(1, runs);
 
         clock.Advance(Interval);
-        await SettleAsync();
+        await WaitUntilAsync(() => runs >= 2);
 
         Assert.Equal(2, runs);
     }
@@ -89,7 +108,7 @@ public class BackgroundSyncTests
         Assert.Equal(Interval, sync.CurrentDelay);
 
         clock.Advance(Interval);
-        await SettleAsync();
+        await WaitUntilAsync(() => sync.CurrentDelay > Interval);
 
         // 繋がらないのに同じ間隔で叩き続けても、電池と回線を使うだけ
         Assert.True(sync.CurrentDelay > Interval);
@@ -105,12 +124,12 @@ public class BackgroundSyncTests
         sync.Start();
 
         clock.Advance(Interval);
-        await SettleAsync();
+        await WaitUntilAsync(() => sync.CurrentDelay > Interval);
         Assert.True(sync.CurrentDelay > Interval);
 
         succeed = true;
         clock.Advance(sync.CurrentDelay);
-        await SettleAsync();
+        await WaitUntilAsync(() => sync.CurrentDelay == Interval);
 
         Assert.Equal(Interval, sync.CurrentDelay);
     }
@@ -143,14 +162,17 @@ public class BackgroundSyncTests
         sync.Start();
 
         clock.Advance(Interval);
-        await SettleAsync();
+
+        // 走り終わるだけでなく、次の間隔が決まるまで待つ。決まる前に時計を進めると、
+        // 古い間隔ぶんしか進まず次の回が来ない
+        await WaitUntilAsync(() => runs >= 1 && sync.CurrentDelay > Interval);
 
         // 頼まれていない同期で落ちるのがいちばん困る
         Assert.Equal(1, runs);
         Assert.True(sync.IsRunning);
 
         clock.Advance(sync.CurrentDelay);
-        await SettleAsync();
+        await WaitUntilAsync(() => runs >= 2);
 
         Assert.Equal(2, runs);
     }
@@ -165,7 +187,7 @@ public class BackgroundSyncTests
 
         sync.Start();
         clock.Advance(Interval);
-        await SettleAsync();
+        await WaitUntilAsync(() => sync.CurrentDelay > Interval);
 
         Assert.True(sync.CurrentDelay > Interval);
     }

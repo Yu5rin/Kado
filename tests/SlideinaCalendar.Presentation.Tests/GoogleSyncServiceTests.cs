@@ -42,6 +42,17 @@ public class GoogleSyncServiceTests : IDisposable
             {
                 Wrote.Add(url);
 
+                // カレンダーを作ったときの応答。イベントとは形が違う
+                if (url.EndsWith("/calendars", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{"id":"created-cal","summary":"inaCalendar","accessRole":"owner"}""",
+                            System.Text.Encoding.UTF8, "application/json"),
+                    };
+                }
+
                 // 作った・直したときの応答。id を返さないと、控えを更新できない
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -174,5 +185,142 @@ public class GoogleSyncServiceTests : IDisposable
         // 後から来たほうは何もせず引き下がる
         Assert.Single(results, r => r is not null);
         Assert.Single(results, r => r is null);
+    }
+
+    [Fact]
+    public async Task このアプリだけのカレンダーは同期しない()
+    {
+        // 既定のカレンダーとタスクリストが用意された状態にする。
+        // 実機で「「マイカレンダー」を同期できません（notFound）」が出た
+        _test.Workspace.EnsureSources();
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        // 行き先の無いものを問い合わせに行かない
+        Assert.DoesNotContain(handler.Seen, url =>
+            url.Contains(CalendarWorkspace.DefaultCalendarName, StringComparison.Ordinal) ||
+            url.Contains(CalendarWorkspace.DefaultTaskListName, StringComparison.Ordinal) ||
+            url.Contains(CalendarWorkspace.LocalIdPrefix, StringComparison.Ordinal));
+
+        // 読めない誕生日カレンダーの1件だけ。こちらのものは警告にならない
+        Assert.Single(report!.Warnings);
+    }
+
+    [Fact]
+    public async Task 印が付く前に作られた既定のカレンダーも同期しない()
+    {
+        // 古い版は local: の印を付けずに作っていた。ID の形で決めると、
+        // 手元に残ったこれを Google に問い合わせに行って notFound になる
+        _test.Workspace.Sources.Upsert(new SlideinaCalendar.Data.Models.CalendarSource
+        {
+            Id = "マイカレンダー", Summary = "マイカレンダー", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Seen, url =>
+            url.Contains("%E3%83%9E%E3%82%A4", StringComparison.Ordinal) ||
+            url.Contains("マイカレンダー", StringComparison.Ordinal));
+
+        Assert.DoesNotContain(report!.Warnings, w =>
+            w.Contains("マイカレンダー", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------------
+    // 実働日の入れ先を Google 側へ移す
+    //
+    // 繋ぐ前に取り込むとこのアプリの中に入る。繋いだあとは Google の同じ名前の
+    // カレンダーへ集めたい。旧 inaCalendar と同じ場所になる
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 繋いだら実働日の入れ先を_Google_に作って移す()
+    {
+        var ina = _test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        _test.Workspace.AddEvent(new SlideinaCalendar.Data.Models.CalendarEvent
+        {
+            Id = "workingday:20260924:仕様期限", Title = "仕様期限",
+            Date = new DateOnly(2026, 9, 24), CalendarId = ina.Id,
+            Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        // 作りに行っている
+        Assert.Contains(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
+
+        // 名前が同じものが2つ並ばない。こちらの分は畳む
+        var named = _test.Workspace.WorkingDayCalendars();
+        var moved = Assert.Single(named);
+        Assert.False(CalendarWorkspace.IsLocal(moved));
+
+        // 中の予定ごと移っている
+        Assert.Equal(moved.Id, _test.Workspace.Events.Find("workingday:20260924:仕様期限")!.CalendarId);
+    }
+
+    [Fact]
+    public async Task 実働日の入れ先が無ければ_Google_に作らない()
+    {
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        // 実働日データを使わない人のために、空のカレンダーを勝手に作らない
+        Assert.DoesNotContain(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task すでに_Google_にあれば作らない()
+    {
+        _test.Workspace.Sources.Upsert(new SlideinaCalendar.Data.Models.CalendarSource
+        {
+            Id = "ina@group.calendar.google.com",
+            Summary = CalendarWorkspace.WorkingDayCalendarName,
+            GoogleRaw = """{"id":"ina@group.calendar.google.com","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 祝日のカレンダーは初めから外しておく()
+    {
+        var handler = new RoutingHandler(url => url.Contains("calendarList", StringComparison.Ordinal)
+            ? (HttpStatusCode.OK, """
+                {"items":[
+                  {"id":"ja.japanese#holiday@group.v.calendar.google.com","summary":"日本の祝日",
+                   "accessRole":"reader"},
+                  {"id":"shigoto@group.calendar.google.com","summary":"仕事","accessRole":"owner"}
+                ]}
+                """)
+            : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        // 祝日はアプリの中で計算して添え書きとして出す。予定としても並ぶと二重になる
+        var holidays = _test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == "日本の祝日");
+
+        Assert.False(holidays.IsVisible);
+
+        // ほかのカレンダーは今までどおり出す
+        Assert.True(_test.Workspace.Sources.Calendars().Single(c => c.DisplayName == "仕事").IsVisible);
     }
 }

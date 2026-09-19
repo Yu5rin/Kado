@@ -126,6 +126,28 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
             body, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// カレンダーを作る。
+    /// <para>
+    /// 実働日データの入れ先（inaCalendar）が Google 側に無いときに使う。要求している
+    /// 権限のうち <c>calendar.app.created</c> が、このアプリが作ったカレンダーの
+    /// 作成と管理を許している。他人のカレンダーには触れない。
+    /// </para>
+    /// <para>作ったものは自分の一覧にも載るので、次の同期で降りてくる。</para>
+    /// </summary>
+    /// <returns>作られたカレンダー。<c>id</c> を持つ。</returns>
+    public async Task<JsonElement> InsertCalendarAsync(
+        string summary, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        return await SendAsync(
+            HttpMethod.Post,
+            $"{Root}/calendars",
+            new JsonObject { ["summary"] = summary },
+            cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>イベントを作る。</summary>
     public async Task<JsonElement> InsertEventAsync(
         string calendarId, JsonObject body, CancellationToken cancellationToken = default)

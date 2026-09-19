@@ -306,14 +306,35 @@ public static class EventMapper
             ? new JsonObject { ["date"] = Format(value.Date) }
             : new JsonObject { ["dateTime"] = FormatDateTime(value.Date, value.StartTime!.Value) };
 
-    /// <summary>終日予定は<b>翌日</b>を送る。Google 側が排他で解釈するため。</summary>
+    /// <summary>
+    /// 終日予定は<b>翌日</b>を送る。Google 側が排他で解釈するため。
+    /// <para>
+    /// 時刻付きの予定では、<b>終了が開始より後であることを必ず満たす</b>。Google は
+    /// 長さ 0 の範囲も逆転した範囲も受け付けず、400（badRequest）で断る。以前は
+    /// 終了時刻が無い予定を「開始と同じ時刻」で送っていたので、そういう予定が1件でも
+    /// あると送信が断られ、そのカレンダーの同期が丸ごと止まっていた。
+    /// </para>
+    /// <para>
+    /// 終了時刻を持たない予定は1時間として送る。編集画面の既定（9:00〜10:00）と
+    /// 同じ長さで、送ったあとは相手からその終了時刻が戻ってくる。
+    /// </para>
+    /// </summary>
     private static JsonObject WriteEnd(CalendarEvent value)
     {
         if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.LastDate.AddDays(1)) };
 
-        // 終了時刻が無ければ開始と同じ。Google は end を必須で要求する
-        var time = value.EndTime ?? value.StartTime!.Value;
-        return new JsonObject { ["dateTime"] = FormatDateTime(value.EndDate ?? value.Date, time) };
+        var startAt = value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
+
+        var endAt = value.EndTime is { } endTime
+            ? (value.EndDate ?? value.Date).ToDateTime(endTime, DateTimeKind.Unspecified)
+            : startAt.AddHours(1);
+
+        if (endAt <= startAt) endAt = startAt.AddHours(1);
+
+        return new JsonObject
+        {
+            ["dateTime"] = FormatDateTime(DateOnly.FromDateTime(endAt), TimeOnly.FromDateTime(endAt)),
+        };
     }
 
     private static DateOnly ParseDate(string text) =>

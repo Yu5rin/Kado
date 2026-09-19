@@ -218,8 +218,10 @@ public class SourceListsViewModelTests
         Assert.Equal(expected,
             main.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).Events.Single(e => e.Id == "e1").Color);
 
-        // 所属なしの予定は既定の色に任せる
-        Assert.Null(main.SelectedDay.Events.Single(e => e.Id == "e3").Color);
+        // 所属の無い予定は、このアプリのカレンダーが引き取る。引き取らないと
+        // 左パネルに受け皿が無く、チェックを外しても消せない
+        var orphan = main.SelectedDay.Events.Single(e => e.Id == "e3");
+        Assert.Equal(main.SourceLists.LocalCalendars[0].SwatchColor, orphan.Color);
     }
 
     [Fact]
@@ -291,5 +293,240 @@ public class SourceListsViewModelTests
 
         Assert.False(vm.IncludesEvent(new CalendarEvent { Id = "e1", CalendarId = "仕事" }));
         Assert.True(vm.IncludesEvent(new CalendarEvent { Id = "e2", CalendarId = "生産ライン" }));
+    }
+
+    // ------------------------------------------------------------------
+    // このアプリのものと Google のもの
+    //
+    // 左パネルで混ざっていると、消してよいのはどれか、名前を変えたら相手にも
+    // 伝わるのはどれかが読めない。実機で見分けが付かないという指摘があった
+    // ------------------------------------------------------------------
+
+    /// <summary>Google から取り込んだ体のカレンダーを1件足す。</summary>
+    private static void AddGoogleCalendar(TestWorkspace test, string id, string name) =>
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = id,
+            Summary = name,
+            BackgroundColor = "#2f6fed",
+
+            // 取り込みは必ずこれを書く。これを持っているかどうかで見分ける
+            GoogleRaw = $$"""{"id":"{{id}}","summary":"{{name}}","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+    [Fact]
+    public void このアプリのものと_Google_のものを分けて並べる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.EnsureSources();
+        AddGoogleCalendar(test, "yomeru@group.calendar.google.com", "仕事");
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Equal([CalendarWorkspace.DefaultCalendarName], vm.LocalCalendars.Select(c => c.Name));
+        Assert.Equal(["仕事"], vm.GoogleCalendars.Select(c => c.Name));
+
+        // 全部入りの一覧は今までどおり両方を持つ。色引きがこれを見ている
+        Assert.Equal(2, vm.Calendars.Count);
+    }
+
+    [Fact]
+    public void 両方あるときだけ見出しを出す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.EnsureSources();
+
+        var before = new SourceListsViewModel(test.Workspace);
+
+        // 繋ぐ前は全部がこのアプリのもの。見出しが1つだけ立っても助けにならない
+        Assert.False(before.ShowsCalendarGroups);
+
+        AddGoogleCalendar(test, "yomeru@group.calendar.google.com", "仕事");
+        var after = new SourceListsViewModel(test.Workspace);
+
+        Assert.True(after.ShowsCalendarGroups);
+    }
+
+    [Fact]
+    public void 印が付く前に作られたものもこのアプリのものと見なす()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 古い版は既定のカレンダーに local: の印を付けずに作っていた。
+        // ID の形で決めると、これを Google のものと取り違える
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "マイカレンダー", Summary = "マイカレンダー", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Contains("マイカレンダー", vm.LocalCalendars.Select(c => c.Id));
+        Assert.Empty(vm.GoogleCalendars);
+    }
+
+    // ------------------------------------------------------------------
+    // チェックを外したら必ず消える
+    //
+    // 実機で全部のチェックを外しても一部の予定が残り、操作が効かないように見えた。
+    // 所属を持たない予定を「消す理由が無い」として常に出していたため
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 所属の無い予定はこのアプリのカレンダーが引き取る()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "所属なし", Date = D(2026, 9, 24) });
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "所属なし", Due = D(2026, 9, 24) });
+        test.Workspace.EnsureSources();
+
+        var home = test.Workspace.Sources.Calendars().First(CalendarWorkspace.IsLocal);
+        var list = test.Workspace.Sources.TaskLists().First(CalendarWorkspace.IsLocal);
+
+        Assert.Equal(home.Id, test.Workspace.Events.Find("e1")!.CalendarId);
+        Assert.Equal(list.Id, test.Workspace.Tasks.All().Single(t => t.Id == "t1").TaskListId);
+    }
+
+    [Fact]
+    public void 全部のチェックを外せば1件も残らない()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.NotEmpty(main.SelectedDay.Events);
+
+        foreach (var calendar in main.SourceLists.Calendars) calendar.IsVisible = false;
+        foreach (var list in main.SourceLists.TaskLists) list.IsVisible = false;
+
+        Assert.Empty(main.SelectedDay.Events);
+        Assert.Empty(main.SelectedDay.Tasks);
+        Assert.Empty(main.Month.Cells.SelectMany(c => c.Events));
+        Assert.Empty(main.Month.Cells.SelectMany(c => c.Tasks));
+    }
+
+    [Fact]
+    public void 引き取り先に_Google_のカレンダーは選ばない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // Google のものへ入れると、次の同期で勝手に相手へ送られてしまう
+        AddGoogleCalendar(test, "shigoto@group.calendar.google.com", "仕事");
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "所属なし", Date = D(2026, 9, 24) });
+        test.Workspace.EnsureSources();
+
+        var home = test.Workspace.Sources.FindCalendar(test.Workspace.Events.Find("e1")!.CalendarId!);
+
+        Assert.NotNull(home);
+        Assert.True(CalendarWorkspace.IsLocal(home));
+    }
+
+    // ------------------------------------------------------------------
+    // inaCalendar という名前のカレンダーは日付の行に出す
+    //
+    // 旧 inaCalendar と同じ見え方にする。名前で見分けるので、このアプリで作った
+    // ものでも Google から取り込んだものでも同じ扱いになる
+    // ------------------------------------------------------------------
+
+    private static CalendarEvent Milestone(string id, string title, string calendarId) => new()
+    {
+        Id = id, Title = title, Date = D(2026, 9, 24), CalendarId = calendarId,
+    };
+
+    [Fact]
+    public void 名前が_inaCalendar_なら日付の行に出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", ina.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var cell = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+
+        Assert.Equal(["仕様期限"], cell.Milestones.Select(m => m.Name));
+
+        // 日付の行に出したものは、予定の並びからは外す。二度出さないため
+        Assert.DoesNotContain(cell.Events, e => e.Id == "e1");
+        Assert.DoesNotContain(main.SelectedDay.Events, e => e.Id == "e1");
+    }
+
+    [Fact]
+    public void _Google_から取り込んだ_inaCalendar_も同じ扱いにする()
+    {
+        using var test = TestWorkspace.Create();
+
+        AddGoogleCalendar(test, "ina@group.calendar.google.com", CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "MAD5", "ina@group.calendar.google.com"));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Equal(["MAD5"], main.SelectedDay.Milestones.Select(m => m.Name));
+    }
+
+    [Fact]
+    public void 名前が違えばふつうの予定として出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 「inaCalendar 予定」は名前が違うので対象外
+        var other = test.Workspace.CreateCalendar("inaCalendar 予定");
+        test.Workspace.AddEvent(Milestone("e1", "打ち合わせ", other.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var cell = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+
+        Assert.Empty(cell.Milestones);
+        Assert.Contains(cell.Events, e => e.Id == "e1");
+    }
+
+    [Fact]
+    public void チェックを外せば日付の行からも消える()
+    {
+        using var test = TestWorkspace.Create();
+
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", ina.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        Assert.NotEmpty(main.SelectedDay.Milestones);
+
+        main.SourceLists.Calendars.Single(c => c.Id == ina.Id).IsVisible = false;
+
+        Assert.Empty(main.SelectedDay.Milestones);
+        Assert.Empty(main.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).Milestones);
+    }
+
+    [Fact]
+    public void 同じ名前が二つあっても一度しか出さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 旧 inaCalendar は Google 側にも同じ内容を書き込んでいた
+        var mine = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        AddGoogleCalendar(test, "ina@group.calendar.google.com", CalendarWorkspace.WorkingDayCalendarName);
+
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", mine.Id));
+        test.Workspace.AddEvent(Milestone("e2", "仕様期限", "ina@group.calendar.google.com"));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Single(main.SelectedDay.Milestones);
+    }
+
+    [Fact]
+    public void 実働日データだけでも日付の行に出る()
+    {
+        // 書き出しをするようになる前に取り込んだデータは予定を持たない。起動時に補う
+        using var test = TestWorkspace.Create(withMilestones: true);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 14));
+
+        Assert.Equal(["仕様期限"], main.SelectedDay.Milestones.Select(m => m.Name));
+        Assert.Contains(test.Workspace.Sources.Calendars(),
+            c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
     }
 }

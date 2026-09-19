@@ -213,6 +213,23 @@ public sealed class SourceRepository(SqliteConnection connection)
         transaction.Commit();
     }
 
+    /// <summary>タスクリストの並び順を入れ替える。</summary>
+    public void SetTaskListOrder(IReadOnlyList<string> idsInOrder)
+    {
+        ArgumentNullException.ThrowIfNull(idsInOrder);
+
+        using var transaction = _connection.BeginTransaction();
+
+        for (var i = 0; i < idsInOrder.Count; i++)
+        {
+            _connection.Execute(
+                "UPDATE task_lists SET sort_order = @order WHERE id = @id;",
+                new { id = idsInOrder[i], order = i }, transaction);
+        }
+
+        transaction.Commit();
+    }
+
     /// <summary>Google から消えたカレンダーを落とす。予定そのものは消さない。</summary>
     public int RemoveCalendarsExcept(IReadOnlyList<string> keepIds)
     {

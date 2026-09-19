@@ -361,6 +361,15 @@ public sealed class EventSyncEngine(
             {
                 warnings.Add($"送れませんでした（{value.Title}）: {ex.Reason}");
             }
+            catch (GoogleApiException ex)
+            {
+                // 1件が受け付けられないだけで、そのカレンダーの同期全体を止めない。
+                // 実機で、送れない予定が1件あるだけで他の予定まで一切動かなくなった。
+                // どの予定が、なぜ断られたのかを残して次へ進む
+                warnings.Add(ex.Description is { Length: > 0 } detail
+                    ? $"送れませんでした（{value.Title}）: {ex.Reason} — {detail}"
+                    : $"送れませんでした（{value.Title}）: {ex.Reason}");
+            }
         }
 
         return new SyncReport

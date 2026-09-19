@@ -29,8 +29,22 @@
     <Color x:Key="SundayColor">#B03A34</Color>
     <Color x:Key="SaturdayColor">#3B6EA8</Color>
 
-    <!-- 非稼働日の面。色を足すのではなく背景を落とす引き算（要件書 4.3） -->
-    <Color x:Key="OffDayColor">#ECEEF2</Color>
+    <!--
+        実働日データを持つ日の面。稼働する日と休業する日で分ける。
+        どちらも色を足すのではなく面の明るさで示す（要件書 4.3）。
+        データを持たない日は PanelColor のまま。ここを見れば「登録済みかどうか」も分かる
+    -->
+    <Color x:Key="WorkingDayColor">#FBFCFE</Color>
+    <Color x:Key="OffDayColor">#E3E7EE</Color>
+
+    <!--
+        マスを押したときと、マウスを載せたときの面。
+        前後の月（SunkenColor）と同じにすると、載せているのか月の外なのか読めない。
+        選択は休業日（OffDayColor）と近いと紛れるので、はっきり青に寄せる。
+        4つ（前後の月・休業日・ホバー・選択）が互いに見分けられることが要る
+    -->
+    <Color x:Key="CellHoverColor">#E6EFFA</Color>
+    <Color x:Key="CellSelectedColor">#C7DCF7</Color>
 
     <!-- 予定のカテゴリ色。モックの ok / amber の変数に対応する -->
     <Color x:Key="CategoryGreenColor">#2F7D5B</Color>
@@ -48,5 +62,15 @@
     <Color x:Key="MilestoneSTextColor">#1F6347</Color>
     <Color x:Key="MilestoneMFaceColor">#DDE6F4</Color>
     <Color x:Key="MilestoneMTextColor">#1F4A83</Color>
+
+    <!--
+        実働日データから起こす2つの印。
+        休業日は静かに、休日の実働日は目を引くように。後者は暦だけ見ていると
+        休みだと思って予定を入れそこなう日なので、埋もれては意味がない
+    -->
+    <Color x:Key="ClosedDayFaceColor">#E7EAEF</Color>
+    <Color x:Key="ClosedDayTextColor">#5C6474</Color>
+    <Color x:Key="OpenDayFaceColor">#FBE3CE</Color>
+    <Color x:Key="OpenDayTextColor">#8A4B12</Color>
 
 </ResourceDictionary>

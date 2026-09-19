@@ -16,9 +16,11 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, string? color, bool isWorkBlock, string? location)
+        double top, double height, string? color, bool isWorkBlock, string? location,
+        string? taskId = null)
     {
         Id = id;
+        TaskId = taskId;
         Title = title;
         Start = start;
         End = end;
@@ -52,6 +54,12 @@ public sealed class TimeBlockViewModel
     /// </summary>
     public bool IsWorkBlock { get; }
 
+    /// <summary>
+    /// 作業時間ブロックなら、そのもとになったタスク。予定なら null。
+    /// <para>ブロック自身の識別子とは別物。押したときに開くのはタスクのほう。</para>
+    /// </summary>
+    public string? TaskId { get; }
+
     public string? Location { get; }
 
     /// <summary>「09:00」。ブロックの頭に出す。</summary>
@@ -72,7 +80,8 @@ public sealed class WeekDayColumnViewModel
 
     internal WeekDayColumnViewModel(DateOnly date, DateOnly today, WorkingDayCalendar workingDays,
         string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<TaskItem> tasks,
-        IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette)
+        IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette,
+        IReadOnlyList<MilestoneViewModel>? milestones = null)
     {
         Date = date;
         IsToday = date == today;
@@ -85,7 +94,7 @@ public sealed class WeekDayColumnViewModel
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
-        Milestones = workingDays.MilestonesOn(date);
+        Milestones = milestones ?? [];
         WorkingDayIndex = workingDays.IndexInMonth(date);
     }
 
@@ -105,6 +114,9 @@ public sealed class WeekDayColumnViewModel
 
     public bool IsSunday => Date.DayOfWeek == DayOfWeek.Sunday;
 
+    /// <inheritdoc cref="DayCellViewModel.IsSundayLike"/>
+    public bool IsSundayLike => IsSunday || HolidayName is { Length: > 0 };
+
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
 
     public bool HasWorkingDayData { get; }
@@ -114,7 +126,10 @@ public sealed class WeekDayColumnViewModel
     /// <summary>非稼働日は面を沈める。データ範囲外は判断できないので沈めない。</summary>
     public bool IsDimmed => HasWorkingDayData && !IsWorkingDay;
 
-    public IReadOnlyList<Milestone> Milestones { get; }
+    /// <inheritdoc cref="DayCellViewModel.IsWorkingDayLit"/>
+    public bool IsWorkingDayLit => HasWorkingDayData && IsWorkingDay;
+
+    public IReadOnlyList<MilestoneViewModel> Milestones { get; }
 
     /// <summary>実働日の月内通し番号。</summary>
     public int? WorkingDayIndex { get; }

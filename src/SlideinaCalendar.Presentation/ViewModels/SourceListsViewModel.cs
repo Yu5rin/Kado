@@ -12,8 +12,17 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public interface ISourceFilter
 {
-    /// <summary>この予定を出すか。</summary>
+    /// <summary>この予定を、予定の並びに出すか。</summary>
     bool IncludesEvent(CalendarEvent value);
+
+    /// <summary>
+    /// この予定を、日付の行にマイルストーンとして出すか。
+    /// <para>
+    /// <see cref="IncludesEvent"/> とは排他。同じものを二度出さないため、
+    /// こちらに出るものは予定の並びからは外れる。
+    /// </para>
+    /// </summary>
+    bool IncludesMilestone(CalendarEvent value);
 
     /// <summary>このタスクを出すか。</summary>
     bool IncludesTask(TaskItem value);
@@ -30,6 +39,15 @@ public interface ICalendarPalette
 {
     /// <summary>そのカレンダーの色（<c>#rrggbb</c>）。決まっていなければ null。</summary>
     string? ColorOf(string? calendarId);
+
+    /// <summary>
+    /// 左パネルでの並び順。小さいほど上。
+    /// <para>
+    /// 時刻を持たない予定は時刻で並べられないので、代わりにこれで並べる。
+    /// 知らないカレンダーは最後に回す。
+    /// </para>
+    /// </summary>
+    int OrderOf(string? calendarId);
 }
 
 /// <summary>表示するかどうかと、何色で出すか。</summary>
@@ -42,12 +60,30 @@ public sealed class DefaultCalendarSources : ICalendarSources
 
     private DefaultCalendarSources() { }
 
-    public bool IncludesEvent(CalendarEvent value) => true;
+    public bool IncludesEvent(CalendarEvent value) => !CalendarWorkspace.IsMilestoneMark(value);
+
+    public bool IncludesMilestone(CalendarEvent value) => CalendarWorkspace.IsMilestoneMark(value);
 
     public bool IncludesTask(TaskItem value) => true;
 
     /// <summary>null を返すと、表示側が既定のアクセント色を使う。</summary>
     public string? ColorOf(string? calendarId) => null;
+
+    /// <summary>並び順を持たないので、すべて同じ扱いにする。</summary>
+    public int OrderOf(string? calendarId) => 0;
+}
+
+/// <summary>並べ替えのとき、落とすと行のどちら側に入るか。</summary>
+public enum DropHint
+{
+    /// <summary>いまは示さない。</summary>
+    None,
+
+    /// <summary>この行の上に入る。</summary>
+    Above,
+
+    /// <summary>この行の下に入る。</summary>
+    Below,
 }
 
 /// <summary>左パネルに並べるカレンダー／タスクリスト1件。</summary>
@@ -55,16 +91,31 @@ public sealed class SourceListItemViewModel : ObservableObject
 {
     private readonly Action<SourceListItemViewModel> _onToggled;
     private bool _isVisible = true;
+    private DropHint _dropHint;
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
-        bool isVisible, Action<SourceListItemViewModel> onToggled)
+        bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled)
     {
         Id = id;
         Name = name;
         SwatchColor = swatchColor;
         _isVisible = isVisible;
+        IsGoogle = isGoogle;
         _onToggled = onToggled;
     }
+
+    /// <summary>
+    /// Google 側にあるものか。
+    /// <para>
+    /// 左パネルはこれで二つに分ける。混ざっていると、消してよいのはどれか、
+    /// 名前を変えたら相手にも伝わるのはどれかが読めない。
+    /// </para>
+    /// <para>
+    /// 判断は<b>最後に Google から受け取った姿を持っているか</b>で行う。ID の形では
+    /// 決めない。このアプリの印が付く前に作られたものが手元に残っているため。
+    /// </para>
+    /// </summary>
+    public bool IsGoogle { get; }
 
     /// <summary>カレンダー ID またはタスクリスト ID。</summary>
     public string Id { get; }
@@ -83,6 +134,19 @@ public sealed class SourceListItemViewModel : ObservableObject
     /// <para>取り込み済みなら Google の色、そうでなければ名前から決まる色。</para>
     /// </summary>
     public string SwatchColor { get; }
+
+    /// <summary>
+    /// 並べ替えの最中、この行のどちら側に入るか。
+    /// <para>
+    /// 掴んだものを落としたときにどこへ入るのかが分からないと、何度もやり直すことになる。
+    /// 行の上端・下端に線を出して示す。
+    /// </para>
+    /// </summary>
+    public DropHint DropHint
+    {
+        get => _dropHint;
+        set => Set(ref _dropHint, value);
+    }
 
     /// <summary>チェックが入っているか。外すと月ビューと右ペインから消える。</summary>
     public bool IsVisible
@@ -112,8 +176,16 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     private readonly HashSet<string> _hiddenCalendars = new(StringComparer.Ordinal);
     private readonly HashSet<string> _hiddenTaskLists = new(StringComparer.Ordinal);
 
+    // 日付の行に出すカレンダー。名前で見分ける（要望どおり）。このアプリで作ったものでも
+    // Google から取り込んだものでも、名前が合えば同じ扱いにする
+    private readonly HashSet<string> _milestoneCalendars = new(StringComparer.Ordinal);
+
     private IReadOnlyList<SourceListItemViewModel> _calendars = [];
     private IReadOnlyList<SourceListItemViewModel> _taskLists = [];
+    private IReadOnlyList<SourceListItemViewModel> _localCalendars = [];
+    private IReadOnlyList<SourceListItemViewModel> _googleCalendars = [];
+    private IReadOnlyList<SourceListItemViewModel> _localTaskLists = [];
+    private IReadOnlyList<SourceListItemViewModel> _googleTaskLists = [];
 
     public SourceListsViewModel(CalendarWorkspace workspace)
     {
@@ -138,6 +210,46 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         private set => Set(ref _taskLists, value);
     }
 
+    /// <summary>このアプリの中だけにあるカレンダー。</summary>
+    public IReadOnlyList<SourceListItemViewModel> LocalCalendars
+    {
+        get => _localCalendars;
+        private set => Set(ref _localCalendars, value);
+    }
+
+    /// <summary>Google から取り込んだカレンダー。</summary>
+    public IReadOnlyList<SourceListItemViewModel> GoogleCalendars
+    {
+        get => _googleCalendars;
+        private set => Set(ref _googleCalendars, value);
+    }
+
+    /// <summary>このアプリの中だけにあるタスクリスト。</summary>
+    public IReadOnlyList<SourceListItemViewModel> LocalTaskLists
+    {
+        get => _localTaskLists;
+        private set => Set(ref _localTaskLists, value);
+    }
+
+    /// <summary>Google から取り込んだタスクリスト。</summary>
+    public IReadOnlyList<SourceListItemViewModel> GoogleTaskLists
+    {
+        get => _googleTaskLists;
+        private set => Set(ref _googleTaskLists, value);
+    }
+
+    /// <summary>
+    /// カレンダーを「このアプリ」と「Google」に分けて見出しを出すか。
+    /// <para>
+    /// 両方にあるときだけ分ける。繋いでいないうちは全部がこのアプリのものなので、
+    /// 見出しが1つだけ立っても読む人の助けにならない。
+    /// </para>
+    /// </summary>
+    public bool ShowsCalendarGroups => _localCalendars.Count > 0 && _googleCalendars.Count > 0;
+
+    /// <summary>タスクリストを分けて見出しを出すか。</summary>
+    public bool ShowsTaskListGroups => _localTaskLists.Count > 0 && _googleTaskLists.Count > 0;
+
     /// <summary>一覧を読み直す。チェックの状態は引き継ぐ。</summary>
     public void Refresh()
     {
@@ -145,32 +257,71 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         Calendars = _workspace.Sources.Calendars()
             .Select(c => new SourceListItemViewModel(
                 c.Id, c.DisplayName, c.BackgroundColor ?? CalendarPalette.ColorFor(c.Id),
-                c.IsVisible, OnCalendarToggled))
+                c.IsVisible, IsFromGoogle(c.GoogleRaw), OnCalendarToggled))
             .ToArray();
 
         TaskLists = _workspace.Sources.TaskLists()
             .Select(t => new SourceListItemViewModel(
-                t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible, OnTaskListToggled))
+                t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible,
+                IsFromGoogle(t.GoogleRaw), OnTaskListToggled))
             .ToArray();
+
+        LocalCalendars = _calendars.Where(c => !c.IsGoogle).ToArray();
+        GoogleCalendars = _calendars.Where(c => c.IsGoogle).ToArray();
+        LocalTaskLists = _taskLists.Where(t => !t.IsGoogle).ToArray();
+        GoogleTaskLists = _taskLists.Where(t => t.IsGoogle).ToArray();
+
+        Raise(nameof(ShowsCalendarGroups));
+        Raise(nameof(ShowsTaskListGroups));
 
         RebuildHidden();
     }
 
     /// <summary>
+    /// 日付の行に出す扱いか。
+    /// <para>
+    /// 実働日データから起こしたマイルストーンと、<b>「inaCalendar」という名前の
+    /// カレンダーに入っている予定</b>。名前で見分けるので、このアプリで作ったものでも
+    /// Google から取り込んだものでも同じ扱いになる。
+    /// </para>
+    /// <para>
+    /// 名前で決めているので、カレンダーの名前を変えると外れる。逆に、別のカレンダーを
+    /// この名前にすれば日付の行に出る。
+    /// </para>
+    /// </summary>
+    public bool IsMilestoneEvent(CalendarEvent value) =>
+        CalendarWorkspace.IsMilestoneMark(value) ||
+        (value.CalendarId is { Length: > 0 } id && _milestoneCalendars.Contains(id));
+
+    /// <summary>
     /// 所属が無い予定は常に出す。どこにも属していないだけで、消す理由にはならない。
     /// <para>
-    /// ただし実働日データから起こしたマイルストーンは、<b>日付の行に別途出している</b>ので
-    /// 予定の並びからは外す。外さないと同じ日に二度出る。所属カレンダーのチェックは
-    /// 効くので、左パネルで消せば日付の行からも消える。
+    /// ただし日付の行に出すものは、<b>予定の並びからは外す</b>。外さないと同じ日に二度出る。
     /// </para>
     /// </summary>
     public bool IncludesEvent(CalendarEvent value) =>
-        !IsMilestone(value) &&
+        !IsMilestoneEvent(value) &&
         (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
 
-    /// <summary>実働日データから起こしたマイルストーンか。</summary>
-    public static bool IsMilestone(CalendarEvent value) =>
-        string.Equals(value.Source, CalendarWorkspace.WorkingDaySource, StringComparison.Ordinal);
+    /// <summary>
+    /// 日付の行に出すか。
+    /// <para>チェックを外したカレンダーのものは出さない。日付の行も左パネルに従う。</para>
+    /// </summary>
+    public bool IncludesMilestone(CalendarEvent value) =>
+        IsMilestoneEvent(value) &&
+        (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
+
+    /// <summary>
+    /// Google 側にあるものか。
+    /// <para>
+    /// 最後に受け取った姿を持っていれば、Google の一覧に載っていたということ。
+    /// 取り込みは必ずこれを書くので、持っていないものは Google に無い。
+    /// </para>
+    /// </summary>
+    public static bool IsFromGoogle(string? googleRaw) => googleRaw is { Length: > 0 };
+
+    /// <inheritdoc cref="CalendarWorkspace.IsMilestoneMark"/>
+    public static bool IsMilestone(CalendarEvent value) => CalendarWorkspace.IsMilestoneMark(value);
 
     public bool IncludesTask(TaskItem value) =>
         value.TaskListId is not { Length: > 0 } id || !_hiddenTaskLists.Contains(id);
@@ -180,6 +331,23 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         calendarId is { Length: > 0 } id
             ? _calendars.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal))?.SwatchColor
             : null;
+
+    /// <summary>
+    /// 左パネルでの並び順。
+    /// <para>一覧はすでに並び順で読んであるので、その位置をそのまま使う。</para>
+    /// </summary>
+    public int OrderOf(string? calendarId)
+    {
+        if (calendarId is not { Length: > 0 }) return int.MaxValue;
+
+        for (var i = 0; i < _calendars.Count; i++)
+        {
+            if (string.Equals(_calendars[i].Id, calendarId, StringComparison.Ordinal)) return i;
+        }
+
+        // 一覧に無いものは最後に回す。順番を決める手がかりが無い
+        return int.MaxValue;
+    }
 
     private void OnCalendarToggled(SourceListItemViewModel item)
     {
@@ -198,11 +366,18 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         VisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>日付の行に出すカレンダーか。名前で見分ける。</summary>
+    private static bool IsMilestoneCalendar(SourceListItemViewModel item) =>
+        string.Equals(item.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+
     /// <summary>いま隠している ID を、一覧の状態から作り直す。絞り込みはこれを見る。</summary>
     private void RebuildHidden()
     {
         Sync(_hiddenCalendars, _calendars);
         Sync(_hiddenTaskLists, _taskLists);
+
+        _milestoneCalendars.Clear();
+        foreach (var calendar in _calendars.Where(IsMilestoneCalendar)) _milestoneCalendars.Add(calendar.Id);
 
         static void Sync(HashSet<string> hidden, IReadOnlyList<SourceListItemViewModel> items)
         {

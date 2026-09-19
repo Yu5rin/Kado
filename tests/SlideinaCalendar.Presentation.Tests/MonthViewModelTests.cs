@@ -158,7 +158,7 @@ public class MonthViewModelTests
     [Fact]
     public void マイルストーンがマスに出る()
     {
-        using var test = TestWorkspace.Create();
+        using var test = TestWorkspace.Create(withMilestones: true);
         var vm = Create(test);
 
         Assert.Equal("仕様期限", Assert.Single(Cell(vm, D(2026, 9, 14)).Milestones).Name);
@@ -368,11 +368,25 @@ public class MonthViewModelTests
     }
 
     [Fact]
-    public void 祝日データが無ければ名前は出ない()
+    public void 祝日はアプリの中で持つ()
     {
         using var test = TestWorkspace.Create();
 
-        // 取り込むまでは何も返さない実装が入る
+        // Google の「日本の祝日」カレンダーには頼らない。繋いでいなくても出る
+        Assert.Equal("敬老の日", Cell(Create(test), D(2026, 9, 21)).HolidayName);
+        Assert.Equal("国民の休日", Cell(Create(test), D(2026, 9, 22)).HolidayName);
+        Assert.Equal("秋分の日", Cell(Create(test), D(2026, 9, 23)).HolidayName);
+        Assert.Null(Cell(Create(test), D(2026, 9, 24)).HolidayName);
+    }
+
+    [Fact]
+    public void 祝日の一覧を差し替えられる()
+    {
+        // 取り込んだ一覧を使いたいときのため。既定はアプリの中の計算
+        using var test = TestWorkspace.Create(
+            holidays: new Dictionary<DateOnly, string> { [D(2026, 9, 24)] = "創立記念日" });
+
+        Assert.Equal("創立記念日", Cell(Create(test), D(2026, 9, 24)).HolidayName);
         Assert.Null(Cell(Create(test), D(2026, 9, 21)).HolidayName);
     }
 
@@ -387,6 +401,90 @@ public class MonthViewModelTests
 
     private static DayCellViewModel Cell(MonthViewModel vm, DateOnly date) =>
         vm.Cells.Single(c => c.Date == date);
+
+    [Fact]
+    public void 実働日と休業日とデータ無しで面を分ける()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 稼働する日
+        var working = Cell(vm, D(2026, 9, 24));
+        Assert.True(working.IsWorkingDayLit);
+        Assert.False(working.IsDimmed);
+
+        // 休業する日（敬老の日）
+        var closed = Cell(vm, D(2026, 9, 21));
+        Assert.False(closed.IsWorkingDayLit);
+        Assert.True(closed.IsDimmed);
+
+        // データを持たない日は、どちらでもない。どこまで登録済みかが面の色で読める
+        var unknown = Cell(vm, D(2026, 8, 31));
+        Assert.False(unknown.IsWorkingDayLit);
+        Assert.False(unknown.IsDimmed);
+    }
+
+    [Fact]
+    public void 祝日は日付を赤で出す()
+    {
+        // モックに合わせる。曜日に関わらず赤。土曜に重なっても赤を採る
+        using var test = TestWorkspace.Create(holidays: new Dictionary<DateOnly, string>
+        {
+            [D(2026, 9, 21)] = "敬老の日",
+            [D(2026, 9, 26)] = "土曜の祝日",
+        });
+
+        var vm = Create(test);
+
+        Assert.True(Cell(vm, D(2026, 9, 21)).IsSundayLike);
+        Assert.True(Cell(vm, D(2026, 9, 26)).IsSundayLike);
+
+        // ふつうの平日と土曜は変わらない
+        Assert.False(Cell(vm, D(2026, 9, 24)).IsSundayLike);
+        Assert.False(Cell(vm, D(2026, 9, 19)).IsSundayLike);
+
+        // 日曜は今までどおり
+        Assert.True(Cell(vm, D(2026, 9, 20)).IsSundayLike);
+    }
+
+    [Theory]
+    [InlineData(0, 3)]        // 高さが分からないうちは既定
+    [InlineData(-1, 3)]
+    [InlineData(100, 3)]      // (100-40)/18 = 3
+    [InlineData(150, 6)]
+    [InlineData(200, 8)]
+    [InlineData(50, 1)]       // どんなに狭くても1件は出す
+    public void マスの高さで並べる件数が決まる(double height, int expected)
+    {
+        Assert.Equal(expected, DayCellViewModel.CapacityFor(height));
+    }
+
+    [Fact]
+    public void 件数を増やすと溢れが減る()
+    {
+        using var test = TestWorkspace.Create();
+
+        for (var i = 0; i < 6; i++)
+        {
+            test.Workspace.AddEvent(new CalendarEvent
+            {
+                Id = $"e{i}", Title = $"予定{i}", Date = D(2026, 9, 24),
+                StartTime = new TimeOnly(9 + i, 0), EndTime = new TimeOnly(10 + i, 0),
+            });
+        }
+
+        var vm = Create(test);
+
+        // 既定は3件。画面が広いのに下が空いたまま「＋3」と出ていた
+        Assert.Equal(3, Cell(vm, D(2026, 9, 24)).Events.Count);
+        Assert.Equal(3, Cell(vm, D(2026, 9, 24)).OverflowCount);
+
+        vm.MaxChipsPerCell = 6;
+
+        Assert.Equal(6, Cell(vm, D(2026, 9, 24)).Events.Count);
+        Assert.Equal(0, Cell(vm, D(2026, 9, 24)).OverflowCount);
+        Assert.Null(Cell(vm, D(2026, 9, 24)).OverflowLabel);
+    }
 }
 
 /// <summary>読みやすさのための小さな拡張。</summary>

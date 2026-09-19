@@ -16,7 +16,56 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
+
+        <!-- 日付の行のラベルの右クリックメニュー。Tag 経由で MainViewModel を引く -->
+        <ContextMenu x:Key="MilestoneMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
+
+        <!--
+            終日レーンの右クリックメニュー。ContextMenu は画面の木から外れて出るので、
+            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="AllDayEventMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="AllDayTaskMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
     </UserControl.Resources>
 
     <DockPanel>
@@ -33,6 +82,13 @@
                 <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
                            VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
 
+                <!-- 祝日名。予定ではなく日付の添え書きとして出す -->
+                <TextBlock Text="{Binding Day.HolidayName}" FontSize="11" Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SundayBrush}"
+                           Visibility="{Binding Day.HolidayName,
+                                       Converter={StaticResource NullToVisibility}}" />
+
                 <ItemsControl ItemsSource="{Binding Day.Milestones}" Margin="10,0,0,0"
                               VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
@@ -41,11 +97,17 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border CornerRadius="3" Padding="5,0" Margin="0,0,4,0"
-                                    Background="{Binding Converter={StaticResource MilestoneBrush},
+                                    Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
+                                    Tag="{Binding DataContext,
+                                          RelativeSource={RelativeSource AncestorType=Window}}"
+                                    ContextMenu="{StaticResource MilestoneMenu}"
+                                    MouseLeftButtonDown="OnMilestoneClicked"
+                                    Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                 ConverterParameter=Face}">
                                 <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
                                            LineHeight="15"
-                                           Foreground="{Binding Converter={StaticResource MilestoneBrush}}" />
+                                           Foreground="{Binding Name,
+                                                       Converter={StaticResource MilestoneBrush}}" />
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -75,7 +137,11 @@
                         <ItemsControl ItemsSource="{Binding Day.AllDayEvents}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2"
+                                    <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="Hand"
+                                            Tag="{Binding DataContext,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ContextMenu="{StaticResource AllDayEventMenu}"
+                                            MouseLeftButtonDown="OnAllDayEventClicked"
                                             Background="{DynamicResource AccentSoftBrush}">
                                         <TextBlock Text="{Binding Label}" FontSize="10.5"
                                                    Foreground="{DynamicResource InkBrush}"
@@ -92,7 +158,11 @@
                                     <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
                                             Background="{DynamicResource AccentSoftBrush}"
                                             BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
-                                            ToolTip="時間帯へドラッグすると作業時間を確保します">
+                                            Tag="{Binding DataContext,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ContextMenu="{StaticResource AllDayTaskMenu}"
+                                            MouseLeftButtonDown="OnAllDayTaskClicked"
+                                            ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します">
                                         <StackPanel Orientation="Horizontal">
                                             <Ellipse Width="5" Height="5" Margin="0,0,4,0"
                                                      VerticalAlignment="Center"
