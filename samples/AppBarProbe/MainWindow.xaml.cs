@@ -56,12 +56,14 @@ public partial class MainWindow : Window
     {
         _appBar.Edge = EdgeBox.SelectedIndex == 0 ? AppBarEdge.Left : AppBarEdge.Right;
         _appBar.DesiredWidth = ParseWidth();
+        _appBar.EdgeOverlap = ParseOverlap();
 
         _appBar.Register();
 
         PinButton.Content = "ピンを外す（AppBar 解除）";
         EdgeBox.IsEnabled = false;
         WidthBox.IsEnabled = false;
+        OverlapBox.IsEnabled = false;
 
         Log($"登録後のワークエリア: {NativeMethods.GetWorkArea()}");
     }
@@ -73,6 +75,7 @@ public partial class MainWindow : Window
         PinButton.Content = "ピン留めする（AppBar 登録）";
         EdgeBox.IsEnabled = true;
         WidthBox.IsEnabled = true;
+        OverlapBox.IsEnabled = true;
 
         Log($"解除後のワークエリア: {NativeMethods.GetWorkArea()}");
     }
@@ -119,6 +122,23 @@ public partial class MainWindow : Window
         Log($"幅の指定が不正です（'{WidthBox.Text}'）。既定の 352px を使います。");
         WidthBox.Text = "352";
         return 352;
+    }
+
+    /// <summary>
+    /// 隣のウィンドウとの隙間を埋める量。0 なら埋めない。
+    /// 影のマージンは通常 10px 程度なので、それを超える値は受け付けない。
+    /// </summary>
+    private int ParseOverlap()
+    {
+        if (int.TryParse(OverlapBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+            && v is >= 0 and <= 32)
+        {
+            return v;
+        }
+
+        Log($"隙間埋めの指定が不正です（'{OverlapBox.Text}'）。0 として扱います。");
+        OverlapBox.Text = "0";
+        return 0;
     }
 
     private void Log(string message)
