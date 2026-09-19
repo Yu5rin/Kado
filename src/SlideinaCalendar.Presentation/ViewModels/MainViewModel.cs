@@ -425,7 +425,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
     private void AddTask()
     {
-        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames);
+        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
@@ -437,7 +437,7 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
         if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
 
-        var editor = new TaskEditorViewModel(stored, TaskListNames, SelectedDate);
+        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         StatusMessage = _workspace.UpdateTask(editor.ToModel())

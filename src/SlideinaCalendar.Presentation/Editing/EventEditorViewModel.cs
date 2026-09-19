@@ -1,19 +1,31 @@
-using System.Globalization;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Presentation.Infrastructure;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.Presentation.Editing;
 
+/// <summary>終了時刻の候補1つ。長さを添えて、何時間の予定になるかを選ぶ前に見せる。</summary>
+/// <param name="Time">「10:30」。</param>
+/// <param name="Label">「10:30（1時間30分）」。</param>
+public sealed record EndTimeOption(string Time, string Label);
+
 /// <summary>
 /// 予定の編集内容。
 /// <para>
-/// 時刻は文字列で受ける。WPF に時刻の入力欄が無く、日付欄を2つ並べるより
-/// 「9:00」と打てるほうが速い。読めない文字列は保存させず、理由をその場で出す。
+/// 項目は Google Calendar のイベントに合わせてある（タイトル＝summary、説明＝description、
+/// 場所＝location、繰り返し＝recurrence、カレンダー＝calendarId）。Phase 4 で同期を
+/// 始めたときに、こちらにしか無い項目・あちらにしか無い項目が出ないようにするため。
+/// </para>
+/// <para>
+/// 時刻は文字列で受ける。「9」「930」「9:30」のどれでも読むので（<see cref="TimeInput"/>）、
+/// 打っても選んでも入る。
 /// </para>
 /// </summary>
 public sealed class EventEditorViewModel : ObservableObject
 {
+    /// <summary>終了時刻の候補をどこまで出すか。半日ぶんあれば足りる。</summary>
+    private const int EndChoiceCount = 48;
+
     private readonly CalendarEvent? _original;
 
     private string _title = string.Empty;
@@ -27,6 +39,7 @@ public sealed class EventEditorViewModel : ObservableObject
     private string? _note;
     private string? _calendarId;
     private EventAccent _accent;
+    private RecurrenceKind _recurrence;
 
     /// <summary>新しく作る。</summary>
     public EventEditorViewModel(DateOnly date, IReadOnlyList<string> calendars)
@@ -52,9 +65,10 @@ public sealed class EventEditorViewModel : ObservableObject
         _note = value.Note;
         _calendarId = value.CalendarId;
         _accent = EventChipViewModel.ResolveAccent(value.Color);
+        _recurrence = RecurrenceChoice.KindOf(value.Recurrence, value.Date);
 
-        if (value.StartTime is { } start) _startTimeText = Format(start);
-        if (value.EndTime is { } end) _endTimeText = Format(end);
+        if (value.StartTime is { } start) _startTimeText = TimeInput.Format(start);
+        if (value.EndTime is { } end) _endTimeText = TimeInput.Format(end);
 
         _isMultiDay = value.EndDate is { } endDate && endDate > value.Date;
         _endDate = value.EndDate ?? value.Date;
@@ -84,6 +98,9 @@ public sealed class EventEditorViewModel : ObservableObject
 
             // 終了日が開始日より前に取り残されるのを防ぐ
             if (_endDate < _date) EndDate = _date;
+
+            // 「毎週 木曜日」は開始日で決まる。日付を動かしたら表示も付いてくる
+            Raise(nameof(RecurrenceOptions));
         }
     }
 
@@ -94,18 +111,68 @@ public sealed class EventEditorViewModel : ObservableObject
         set => SetAndRevalidate(ref _isAllDay, value);
     }
 
-    /// <summary>「09:00」。終日なら使わない。</summary>
+    /// <summary>
+    /// 開始時刻。「9」「930」「9:30」のどれでも読む。
+    /// <para>動かすと終了時刻も同じ長さを保ったまま付いてくる。</para>
+    /// </summary>
     public string StartTimeText
     {
         get => _startTimeText;
-        set => SetAndRevalidate(ref _startTimeText, value ?? string.Empty);
+        set
+        {
+            var before = TimeInput.Parse(_startTimeText);
+            if (!SetAndRevalidate(ref _startTimeText, Tidy(value))) return;
+
+            ShiftEnd(before);
+            Raise(nameof(EndTimeOptions), nameof(DurationText));
+        }
     }
 
+    /// <summary>終了時刻。候補から選んだ「10:30（1時間30分）」もそのまま読む。</summary>
     public string EndTimeText
     {
         get => _endTimeText;
-        set => SetAndRevalidate(ref _endTimeText, value ?? string.Empty);
+        set
+        {
+            if (SetAndRevalidate(ref _endTimeText, Tidy(value))) Raise(nameof(DurationText));
+        }
     }
+
+    /// <summary>時刻の候補。15分刻み。</summary>
+    public IReadOnlyList<string> StartTimeOptions { get; } = TimeInput.EveryQuarterHour();
+
+    /// <summary>
+    /// 終了時刻の候補。開始時刻の後ろだけを、長さを添えて並べる。
+    /// <para>「何時まで」より「何時間の予定か」で決めることが多い。</para>
+    /// </summary>
+    public IReadOnlyList<EndTimeOption> EndTimeOptions
+    {
+        get
+        {
+            if (TimeInput.Parse(_startTimeText) is not { } start) return [];
+
+            var options = new List<EndTimeOption>(EndChoiceCount);
+            for (var i = 1; i <= EndChoiceCount; i++)
+            {
+                var candidate = start.AddMinutes(15 * i);
+
+                // 日をまたぐぶんは終了日のほうで表す。候補には出さない
+                if (candidate <= start) break;
+
+                var text = TimeInput.Format(candidate);
+                options.Add(new EndTimeOption(
+                    text, $"{text}（{TimeInput.FormatDuration(start, candidate)}）"));
+            }
+
+            return options;
+        }
+    }
+
+    /// <summary>「1時間30分」。いまの入力での長さ。読めなければ null。</summary>
+    public string? DurationText =>
+        TimeInput.Parse(_startTimeText) is { } start && TimeInput.Parse(_endTimeText) is { } end
+            ? TimeInput.FormatDuration(start, end)
+            : null;
 
     /// <summary>複数日にまたがるか。</summary>
     public bool IsMultiDay
@@ -120,12 +187,25 @@ public sealed class EventEditorViewModel : ObservableObject
         set => SetAndRevalidate(ref _endDate, value);
     }
 
+    /// <summary>繰り返し。Google Calendar の <c>recurrence</c> にあたる。</summary>
+    public RecurrenceKind Recurrence
+    {
+        get => _recurrence;
+        set => Set(ref _recurrence, value);
+    }
+
+    /// <summary>繰り返しの選択肢。開始日に合わせて文言が変わる。</summary>
+    public IReadOnlyList<RecurrenceOption> RecurrenceOptions =>
+        RecurrenceChoice.OptionsFor(_date, includeCustom: _recurrence == RecurrenceKind.Custom);
+
+    /// <summary>場所。Google Calendar の <c>location</c>。</summary>
     public string? Location
     {
         get => _location;
         set => Set(ref _location, value);
     }
 
+    /// <summary>説明。Google Calendar の <c>description</c>。</summary>
     public string? Note
     {
         get => _note;
@@ -160,8 +240,8 @@ public sealed class EventEditorViewModel : ObservableObject
 
             if (!_isAllDay)
             {
-                if (ParseTime(_startTimeText) is not { } start) return "開始時刻は「9:00」の形で入れてください。";
-                if (ParseTime(_endTimeText) is not { } end) return "終了時刻は「9:00」の形で入れてください。";
+                if (TimeInput.Parse(_startTimeText) is not { } start) return "開始時刻を「9:30」の形で入れてください。";
+                if (TimeInput.Parse(_endTimeText) is not { } end) return "終了時刻を「9:30」の形で入れてください。";
 
                 // 日をまたぐ予定は終了日のほうで表す。時刻の逆転は打ち間違いとみなす
                 if (!_isMultiDay && end <= start) return "終了時刻は開始時刻より後にしてください。";
@@ -172,6 +252,16 @@ public sealed class EventEditorViewModel : ObservableObject
             return null;
         }
     }
+
+    /// <summary>
+    /// 開始・終了時刻を分単位で動かす。
+    /// <para>上下キーやホイールで刻む。1文字ずつ打ち直すより速い。</para>
+    /// </summary>
+    public void NudgeStart(int minutes) =>
+        StartTimeText = TimeInput.Format((TimeInput.Parse(_startTimeText) ?? new TimeOnly(9, 0)).AddMinutes(minutes));
+
+    public void NudgeEnd(int minutes) =>
+        EndTimeText = TimeInput.Format((TimeInput.Parse(_endTimeText) ?? new TimeOnly(10, 0)).AddMinutes(minutes));
 
     /// <summary>入力から予定を組み立てる。<see cref="CanSave"/> が true のときだけ呼ぶ。</summary>
     public CalendarEvent ToModel()
@@ -185,15 +275,19 @@ public sealed class EventEditorViewModel : ObservableObject
             Title = _title.Trim(),
             Date = _date,
             EndDate = _isMultiDay && _endDate > _date ? _endDate : null,
-            StartTime = _isAllDay ? null : ParseTime(_startTimeText),
-            EndTime = _isAllDay ? null : ParseTime(_endTimeText),
+            StartTime = _isAllDay ? null : TimeInput.Parse(_startTimeText),
+            EndTime = _isAllDay ? null : TimeInput.Parse(_endTimeText),
             Location = Blank(_location),
             Note = Blank(_note),
             Color = ColorOf(_accent),
             CalendarId = _calendarId,
 
-            // 繰り返しと Google 側の情報は編集画面で触らない。消さずに引き継ぐ
-            Recurrence = _original?.Recurrence,
+            // 選択肢で表せない指定は、元の文字列をそのまま持ち続ける
+            Recurrence = _recurrence == RecurrenceKind.Custom
+                ? _original?.Recurrence
+                : RecurrenceChoice.ToSpec(_recurrence, _date),
+
+            // Google 側の情報は編集画面で触らない。消さずに引き継ぐ
             GoogleEventId = _original?.GoogleEventId,
             GoogleUpdated = _original?.GoogleUpdated,
             Source = _original?.Source,
@@ -201,11 +295,29 @@ public sealed class EventEditorViewModel : ObservableObject
         };
     }
 
-    /// <summary>入力の形を確かめるためだけに使う。</summary>
-    internal static TimeOnly? ParseTime(string text) =>
-        TimeOnly.TryParse(text?.Trim(), CultureInfo.InvariantCulture, out var time) ? time : null;
+    /// <summary>
+    /// 読めた入力は「09:30」の形に揃える。
+    /// <para>
+    /// 候補から選ぶと「10:30（1時間30分）」が入るので、長さの添え字を落とす。
+    /// 読めない入力はそのまま残す。打ちかけを消されると直せない。
+    /// </para>
+    /// </summary>
+    private static string Tidy(string? value) =>
+        TimeInput.Parse(value) is { } time ? TimeInput.Format(time) : value ?? string.Empty;
 
-    private static string Format(TimeOnly time) => time.ToString("HH:mm", CultureInfo.InvariantCulture);
+    /// <summary>開始時刻が動いたぶん、終了時刻も動かして長さを保つ。</summary>
+    private void ShiftEnd(TimeOnly? before)
+    {
+        if (before is not { } previous ||
+            TimeInput.Parse(_startTimeText) is not { } start ||
+            TimeInput.Parse(_endTimeText) is not { } end) return;
+
+        // 元から逆転していたら触らない。直そうとしている最中かもしれない
+        if (end <= previous) return;
+
+        var length = end - previous;
+        EndTimeText = TimeInput.Format(start.Add(length));
+    }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
