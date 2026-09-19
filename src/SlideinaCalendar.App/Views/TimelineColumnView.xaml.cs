@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
 
@@ -34,5 +35,19 @@ public partial class TimelineColumnView : UserControl
     {
         get => (System.Collections.IEnumerable?)GetValue(HourLabelsProperty);
         set => SetValue(HourLabelsProperty, value);
+    }
+
+    /// <summary>
+    /// 時間軸の1件を2回押すと開く。
+    /// <para>作業時間ブロックは予定ではないので、もとになったタスクのほうが開く。</para>
+    /// </summary>
+    private void OnBlockClicked(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if ((sender as FrameworkElement)?.DataContext is not TimeBlockViewModel block) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        main.EditBlockCommand.Execute(block);
+        e.Handled = true;
     }
 }

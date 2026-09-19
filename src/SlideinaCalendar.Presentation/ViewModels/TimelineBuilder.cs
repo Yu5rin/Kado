@@ -126,7 +126,7 @@ public sealed class TimelineBuilder
                 block.Id, taskTitles.GetValueOrDefault(block.TaskId, "（削除されたタスク）"),
                 block.StartTime, block.EndTime, placed.Top, placed.Height,
                 // 作業時間ブロックはタスクのもの。カレンダーの色は使わず既定に寄せる
-                color: null, isWorkBlock: true, location: null));
+                color: null, isWorkBlock: true, location: null, taskId: block.TaskId));
         }
 
         return result.OrderBy(b => b.Start).ToArray();

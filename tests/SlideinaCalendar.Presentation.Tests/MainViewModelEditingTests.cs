@@ -324,4 +324,90 @@ public class MainViewModelEditingTests
         vm.EditTaskChipCommand.Execute(null);
         vm.DeleteTaskChipCommand.Execute(null);
     }
+
+    // ------------------------------------------------------------------
+    // 週ビュー・日ビューの時間軸
+    // ------------------------------------------------------------------
+
+    private static TimeBlockViewModel Block(MainViewModel vm, string id) =>
+        vm.Week.Days.SelectMany(d => d.Blocks).First(b => b.Id == id);
+
+    [Fact]
+    public void 時間軸の予定を開いて直せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        editors.OnEvent = editor => { editor.Title = "定例（変更）"; return true; };
+        vm.EditBlockCommand.Execute(Block(vm, "e1"));
+
+        Assert.Equal("定例（変更）", test.Workspace.Events.Find("e1")!.Title);
+    }
+
+    [Fact]
+    public void 時間軸の予定を消せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        vm.DeleteBlockCommand.Execute(Block(vm, "e1"));
+
+        Assert.Equal("定例", editors.LastConfirmedTitle);
+        Assert.Null(test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public void 作業時間ブロックはもとのタスクが開く()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+        test.Workspace.Tasks.UpsertBlock(new WorkBlock
+        {
+            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(13, 0), DurationMinutes = 60,
+        });
+
+        var (vm, editors) = Create(test);
+        var block = Block(vm, "b1");
+        Assert.True(block.IsWorkBlock);
+
+        // ブロック自身の識別子で予定を探しても見つからない
+        editors.OnTask = editor => { editor.Title = "提出（変更）"; return true; };
+        vm.EditBlockCommand.Execute(block);
+
+        Assert.Equal("提出（変更）", test.Workspace.Tasks.Find("t1")!.Title);
+    }
+
+    [Fact]
+    public void 作業時間ブロックは消せない()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+        test.Workspace.Tasks.UpsertBlock(new WorkBlock
+        {
+            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(13, 0), DurationMinutes = 60,
+        });
+
+        var (vm, _) = Create(test);
+
+        // 予定ではないので、予定の削除は動かない。タスクも消えない
+        vm.DeleteBlockCommand.Execute(Block(vm, "b1"));
+
+        Assert.NotNull(test.Workspace.Tasks.Find("t1"));
+    }
 }
