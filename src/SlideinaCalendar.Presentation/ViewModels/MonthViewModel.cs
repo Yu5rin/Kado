@@ -35,7 +35,7 @@ public sealed class MonthViewModel : ObservableObject
 
     private readonly CalendarWorkspace _workspace;
     private readonly DayOfWeek _weekStart;
-    private readonly ISourceFilter _filter;
+    private readonly ICalendarSources _sources;
 
     private DateOnly _month;
     private DateOnly _today;
@@ -43,11 +43,11 @@ public sealed class MonthViewModel : ObservableObject
     private IReadOnlyList<DayCellViewModel> _cells = [];
 
     public MonthViewModel(CalendarWorkspace workspace, DateOnly month, DateOnly today,
-        DayOfWeek weekStart = DayOfWeek.Sunday, ISourceFilter? filter = null)
+        DayOfWeek weekStart = DayOfWeek.Sunday, ICalendarSources? sources = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _weekStart = weekStart;
-        _filter = filter ?? ShowAllFilter.Instance;
+        _sources = sources ?? DefaultCalendarSources.Instance;
         _month = new DateOnly(month.Year, month.Month, 1);
         _today = today;
 
@@ -149,9 +149,9 @@ public sealed class MonthViewModel : ObservableObject
         {
             // 左パネルでチェックを外したカレンダーは、ここで落とす
             var events = eventsByDate.TryGetValue(date, out var e)
-                ? e.Where(x => _filter.IncludesEvent(x.Source)).ToArray() : [];
+                ? e.Where(x => _sources.IncludesEvent(x.Source)).ToArray() : [];
             var tasks = tasksByDue.TryGetValue(date, out var t)
-                ? t.Where(_filter.IncludesTask).ToArray() : [];
+                ? t.Where(_sources.IncludesTask).ToArray() : [];
 
             cells.Add(new DayCellViewModel(
                 date,
@@ -160,7 +160,8 @@ public sealed class MonthViewModel : ObservableObject
                 workingDays,
                 events,
                 tasks,
-                _workspace.Holidays.NameOf(date)));
+                _workspace.Holidays.NameOf(date),
+                _sources));
         }
 
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;

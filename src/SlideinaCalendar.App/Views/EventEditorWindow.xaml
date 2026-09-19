@@ -8,6 +8,8 @@
       ・上下キーとホイールで15分ずつ動かせる
       ・終了の候補は「10:30（1時間30分）」と長さを添える
       ・開始を動かすと終了も同じ長さのまま付いてくる
+
+    色の欄は置かない。所属カレンダーで決まるので1件ずつは選ばせない。
 -->
 <Window x:Class="SlideinaCalendar.App.Views.EventEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -24,7 +26,6 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
-        <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:DateOnlyToDateTimeConverter x:Key="DateOnlyToDateTime" />
     </Window.Resources>
 
@@ -83,7 +84,7 @@
 
                 <StackPanel Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
                     <TextBlock Text="終了" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox Tag="End" Width="150" Style="{StaticResource TimeComboBoxStyle}"
+                    <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
                               Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
                               PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel"
@@ -120,7 +121,7 @@
 
                     <StackPanel>
                         <TextBlock Text="終了時刻" Style="{StaticResource FieldLabelStyle}" />
-                        <ComboBox Tag="End" Width="150" Style="{StaticResource TimeComboBoxStyle}"
+                        <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                                   ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
                                   Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
                                   PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
@@ -145,34 +146,14 @@
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <StackPanel Margin="0,0,10,0">
-                    <TextBlock Text="場所" Style="{StaticResource FieldLabelStyle}" />
-                    <TextBox Width="246" Style="{StaticResource FieldTextBoxStyle}"
-                             Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" />
-                </StackPanel>
+            <TextBlock Text="場所" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
+                     Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" />
 
-                <StackPanel>
-                    <TextBlock Text="色" Style="{StaticResource FieldLabelStyle}" />
-                    <Border CornerRadius="5" ClipToBounds="True" Height="28"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton Content="藍" Style="{StaticResource SegmentButtonStyle}"
-                                         GroupName="Accent" Padding="10,0"
-                                         IsChecked="{Binding Accent, Converter={StaticResource EnumToBool},
-                                                     ConverterParameter=Default}" />
-                            <RadioButton Content="緑" Style="{StaticResource SegmentButtonStyle}"
-                                         GroupName="Accent" Padding="10,0"
-                                         IsChecked="{Binding Accent, Converter={StaticResource EnumToBool},
-                                                     ConverterParameter=Green}" />
-                            <RadioButton Content="琥珀" Style="{StaticResource SegmentButtonStyle}"
-                                         GroupName="Accent" Padding="10,0" BorderThickness="0"
-                                         IsChecked="{Binding Accent, Converter={StaticResource EnumToBool},
-                                                     ConverterParameter=Amber}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </StackPanel>
+            <!-- 資料や図面の置き場所。説明欄に書くと本文と混ざって拾いにくい -->
+            <TextBlock Text="URL" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
+                     Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
 
             <TextBlock Text="説明" Style="{StaticResource FieldLabelStyle}" />
             <TextBox Style="{StaticResource FieldNoteBoxStyle}"

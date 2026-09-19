@@ -7,14 +7,22 @@ namespace SlideinaCalendar.Presentation.Editing;
 /// <summary>終了時刻の候補1つ。長さを添えて、何時間の予定になるかを選ぶ前に見せる。</summary>
 /// <param name="Time">「10:30」。</param>
 /// <param name="Label">「10:30（1時間30分）」。</param>
-public sealed record EndTimeOption(string Time, string Label);
+public sealed record EndTimeOption(string Time, string Label)
+{
+    /// <summary>表示名をそのまま返す。理由は <see cref="RecurrenceOption.ToString"/> と同じ。</summary>
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// 予定の編集内容。
 /// <para>
 /// 項目は Google Calendar のイベントに合わせてある（タイトル＝summary、説明＝description、
-/// 場所＝location、繰り返し＝recurrence、カレンダー＝calendarId）。Phase 4 で同期を
-/// 始めたときに、こちらにしか無い項目・あちらにしか無い項目が出ないようにするため。
+/// 場所＝location、URL＝source.url、繰り返し＝recurrence、カレンダー＝calendarId）。
+/// Phase 4 で同期を始めたときに、こちらにしか無い項目・あちらにしか無い項目が
+/// 出ないようにするため。
+/// </para>
+/// <para>
+/// <b>色は置かない。</b>所属カレンダーで決まるので1件ずつは選ばせない。
 /// </para>
 /// <para>
 /// 時刻は文字列で受ける。「9」「930」「9:30」のどれでも読むので（<see cref="TimeInput"/>）、
@@ -38,7 +46,7 @@ public sealed class EventEditorViewModel : ObservableObject
     private string? _location;
     private string? _note;
     private string? _calendarId;
-    private EventAccent _accent;
+    private string? _url;
     private RecurrenceKind _recurrence;
 
     /// <summary>新しく作る。</summary>
@@ -64,7 +72,7 @@ public sealed class EventEditorViewModel : ObservableObject
         _location = value.Location;
         _note = value.Note;
         _calendarId = value.CalendarId;
-        _accent = EventChipViewModel.ResolveAccent(value.Color);
+        _url = value.Url;
         _recurrence = RecurrenceChoice.KindOf(value.Recurrence, value.Date);
 
         if (value.StartTime is { } start) _startTimeText = TimeInput.Format(start);
@@ -218,11 +226,14 @@ public sealed class EventEditorViewModel : ObservableObject
         set => Set(ref _calendarId, value);
     }
 
-    /// <summary>帯の色。月ビューのチップと右ペインの縦棒に出る。</summary>
-    public EventAccent Accent
+    /// <summary>
+    /// 関連する URL。Google Calendar の <c>source.url</c>。
+    /// <para>資料や図面の置き場所。説明欄に書くと本文と混ざって拾いにくい。</para>
+    /// </summary>
+    public string? Url
     {
-        get => _accent;
-        set => Set(ref _accent, value);
+        get => _url;
+        set => Set(ref _url, value);
     }
 
     /// <summary>保存できるか。</summary>
@@ -279,8 +290,12 @@ public sealed class EventEditorViewModel : ObservableObject
             EndTime = _isAllDay ? null : TimeInput.Parse(_endTimeText),
             Location = Blank(_location),
             Note = Blank(_note),
-            Color = ColorOf(_accent),
+            Url = Blank(_url),
             CalendarId = _calendarId,
+
+            // 色は所属カレンダーで決まる。1件ずつは選ばせない。
+            // 取り込んだ予定が持っている色は、上書きせずそのまま残す
+            Color = _original?.Color,
 
             // 選択肢で表せない指定は、元の文字列をそのまま持ち続ける
             Recurrence = _recurrence == RecurrenceKind.Custom
@@ -320,20 +335,6 @@ public sealed class EventEditorViewModel : ObservableObject
     }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    /// <summary>
-    /// 系統から保存する色を決める。
-    /// <para>
-    /// <see cref="EventChipViewModel.ResolveAccent"/> と対になる。読むときと書くときで
-    /// 別の対応表を持つと、保存し直すたびに色が変わる。
-    /// </para>
-    /// </summary>
-    internal static string? ColorOf(EventAccent accent) => accent switch
-    {
-        EventAccent.Green => "#d1fae5",
-        EventAccent.Amber => "#fef3c7",
-        _ => null,
-    };
 
     private static string NewId() => Guid.NewGuid().ToString("N")[..15];
 

@@ -46,7 +46,7 @@ public sealed class MainViewModel : ObservableObject
         _today = today;
 
         SourceLists = new SourceListsViewModel(workspace);
-        Month = new MonthViewModel(workspace, today, today, weekStart, SourceLists) { SelectedDate = today };
+        Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
         Week = new WeekViewModel(workspace, today, today, weekStart, SourceLists);
@@ -78,8 +78,8 @@ public sealed class MainViewModel : ObservableObject
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
         ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
 
-        OpenWorkingDayCalculatorCommand =
-            new RelayCommand(() => StatusMessage = "実働日計算の画面はこのあとのフェーズで実装します");
+        // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
+        OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -193,10 +193,7 @@ public sealed class MainViewModel : ObservableObject
     public string? StatusMessage
     {
         get => _statusMessage;
-        private set
-        {
-            if (Set(ref _statusMessage, value)) Raise(nameof(SyncStatusText));
-        }
+        private set => Set(ref _statusMessage, value);
     }
 
     // ------------------------------------------------------------------
@@ -223,8 +220,11 @@ public sealed class MainViewModel : ObservableObject
     public string RemainingWorkingDaysText =>
         Month.RemainingWorkingDays?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
-    /// <summary>実働日バッジに残りを出すか。今日を含む月だけ。</summary>
-    public bool HasRemainingWorkingDays => Month.RemainingWorkingDays is not null;
+    /// <summary>
+    /// 実働日バッジに残りを出すか。実働日データがあり、かつ今日を含む月だけ。
+    /// <para>データが無いのに「残り 0 日」と出ると、実数だと思われる。</para>
+    /// </summary>
+    public bool HasRemainingWorkingDays => HasWorkingDayData && Month.RemainingWorkingDays is not null;
 
     /// <summary>検索語。</summary>
     public string SearchText
@@ -234,10 +234,13 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 同期の状態。Google 同期は Phase 5 なので、いまは未接続であることを出す。
-    /// 状態表示が入っているときはそちらを優先する（置き場所を増やさない）。
+    /// 同期の状態。
+    /// <para>
+    /// ここに出すのは同期の状態だけ。操作の結果や未実装の断り書きを混ぜると、
+    /// 同期できているのかどうかが読み取れなくなる。
+    /// </para>
     /// </summary>
-    public string SyncStatusText => _statusMessage ?? "Google 未接続";
+    public string SyncStatusText => IsSynced ? "同期済み" : "Google 未接続";
 
     /// <summary>同期できているか。丸印の色を変える。</summary>
     public bool IsSynced => false;
@@ -477,6 +480,20 @@ public sealed class MainViewModel : ObservableObject
     private void Redo()
     {
         if (_workspace.RedoLast() is { } description) StatusMessage = $"{description}をやり直しました";
+    }
+
+    /// <summary>
+    /// いまの時刻を伝える。週・日ビューの現在時刻の線が動く。
+    /// <para>日付が変わっていたら「今日」も差し替える。起動しっぱなしで日をまたぐため。</para>
+    /// </summary>
+    public void UpdateNow(DateTime now)
+    {
+        var date = DateOnly.FromDateTime(now);
+        if (date != _today) Today = date;
+
+        var time = TimeOnly.FromDateTime(now);
+        Week.UpdateNowLine(time);
+        Day.UpdateNowLine(time);
     }
 
     /// <summary>データが変わったので表示を引き直す。</summary>
