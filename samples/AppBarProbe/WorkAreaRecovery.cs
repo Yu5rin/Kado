@@ -42,8 +42,11 @@ internal static class WorkAreaRecovery
     // 記録
     // ------------------------------------------------------------------
 
-    /// <summary>AppBar 登録の直前に、現在のワークエリアを控える。</summary>
-    public static void MarkRegistered(RECT workAreaBeforeRegister)
+    /// <summary>
+    /// AppBar 登録の直前に、現在のワークエリアを控える。
+    /// </summary>
+    /// <returns>控えを書けたら true。書けなければ異常終了しても復旧できない。</returns>
+    public static bool MarkRegistered(RECT workAreaBeforeRegister)
     {
         try
         {
@@ -59,10 +62,12 @@ internal static class WorkAreaRecovery
             var temp = StateFile + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(saved));
             File.Move(temp, StateFile, overwrite: true);
+            return File.Exists(StateFile);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // 控えが取れなくても AppBar 自体は動かす。復旧できないリスクだけが残る。
+            return false;
         }
     }
 
