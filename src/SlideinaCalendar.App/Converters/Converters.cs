@@ -163,3 +163,55 @@ public sealed class EventAccentFaceConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// <c>#rrggbb</c> の文字列からブラシを作る。
+/// <para>カレンダーの色見本に使う。色はデータ側が文字列で持っているため。</para>
+/// </summary>
+public sealed class HexBrushConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string hex || hex.Length == 0) return null;
+
+        try
+        {
+            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        }
+        catch (FormatException)
+        {
+            // 取り込んだ色が壊れていても表示は続ける。見本が出ないだけで済ませる
+            return null;
+        }
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>false なら表示、true なら畳む。</summary>
+public sealed class InverseBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is Visibility.Collapsed;
+}
+
+/// <summary>
+/// 列挙値が <c>ConverterParameter</c> と一致するか。
+/// <para>ビュー切替のセグメントを、コマンドを挟まずに双方向で結ぶのに使う。</para>
+/// </summary>
+public sealed class EnumToBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is not null && parameter is string name &&
+        string.Equals(value.ToString(), name, StringComparison.Ordinal);
+
+    /// <summary>チェックが入ったときだけ値を返す。外れたときは他のボタンが値を入れる。</summary>
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true && parameter is string name
+            ? Enum.Parse(targetType, name)
+            : Binding.DoNothing;
+}

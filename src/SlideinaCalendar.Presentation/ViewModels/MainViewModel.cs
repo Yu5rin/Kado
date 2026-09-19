@@ -1,3 +1,4 @@
+using System.Globalization;
 using SlideinaCalendar.Presentation.Infrastructure;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -32,14 +33,17 @@ public sealed class MainViewModel : ObservableObject
     private bool _isSidePanelOpen = true;
     private DateOnly _today;
     private string? _statusMessage;
+    private string _searchText = string.Empty;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _today = today;
 
-        Month = new MonthViewModel(workspace, today, today, weekStart) { SelectedDate = today };
-        SelectedDay = new SelectedDayViewModel(workspace, today, today);
+        SourceLists = new SourceListsViewModel(workspace);
+        Month = new MonthViewModel(workspace, today, today, weekStart, SourceLists) { SelectedDate = today };
+        SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
+        MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
 
         PreviousCommand = new RelayCommand(GoToPrevious);
         NextCommand = new RelayCommand(GoToNext);
@@ -50,8 +54,25 @@ public sealed class MainViewModel : ObservableObject
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
         SwitchViewCommand = new RelayCommand<CalendarView?>(view => { if (view is { } v) CurrentView = v; });
 
+        MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
+        MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
+
+        // 追加の画面はこのあとのフェーズで作る。押しても無反応だと壊れて見えるので、
+        // いまは何が起きていないかを状態表示で伝える
+        AddEventCommand = new RelayCommand(() => StatusMessage = "予定の追加画面はこのあとのフェーズで実装します");
+        AddTaskCommand = new RelayCommand(() => StatusMessage = "タスクの追加画面はこのあとのフェーズで実装します");
+        OpenWorkingDayCalculatorCommand =
+            new RelayCommand(() => StatusMessage = "実働日計算の画面はこのあとのフェーズで実装します");
+
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
+
+        // 左パネルのチェックを外したら、月ビューと右ペインからも消す
+        SourceLists.VisibilityChanged += (_, _) =>
+        {
+            Month.Refresh();
+            SelectedDay.Refresh();
+        };
     }
 
     // ------------------------------------------------------------------
@@ -63,6 +84,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
+
+    /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
+    public MiniCalendarViewModel MiniCalendar { get; }
+
+    /// <summary>左パネルのカレンダー一覧とタスクリスト一覧。</summary>
+    public SourceListsViewModel SourceLists { get; }
 
     // ------------------------------------------------------------------
     // 状態
@@ -78,7 +105,10 @@ public sealed class MainViewModel : ObservableObject
     public CalendarView CurrentView
     {
         get => _currentView;
-        set => Set(ref _currentView, value);
+        set
+        {
+            if (Set(ref _currentView, value)) Raise(nameof(HintText));
+        }
     }
 
     /// <summary>左サイドパネルを開いているか。終了時に保存して次回復元する。</summary>
@@ -98,6 +128,7 @@ public sealed class MainViewModel : ObservableObject
 
             Month.Today = value;
             SelectedDay.Today = value;
+            MiniCalendar.Today = value;
         }
     }
 
@@ -111,6 +142,7 @@ public sealed class MainViewModel : ObservableObject
 
             Month.SelectedDate = value;
             SelectedDay.Date = value;
+            MiniCalendar.SelectedDate = value;
             Raise();
         }
     }
@@ -119,7 +151,10 @@ public sealed class MainViewModel : ObservableObject
     public string? StatusMessage
     {
         get => _statusMessage;
-        private set => Set(ref _statusMessage, value);
+        private set
+        {
+            if (Set(ref _statusMessage, value)) Raise(nameof(SyncStatusText));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -128,6 +163,52 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>「2026年9月」。</summary>
     public string Title => Month.Title;
+
+    /// <summary>ツールバーの年。月より一段小さく、薄く出す。</summary>
+    public string TitleYear => Month.Month.Year.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>ツールバーの月。「9月」。</summary>
+    public string TitleMonth => Month.Month.ToString("M月", CultureInfo.InvariantCulture);
+
+    /// <summary>実働日バッジを出せるか。データが無い月では数字を出さない。</summary>
+    public bool HasWorkingDayData => Month.HasFullWorkingDayData;
+
+    /// <summary>実働日バッジの実働日数。</summary>
+    public string WorkingDayCountText =>
+        Month.WorkingDayCount.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>実働日バッジの残り日数。今日を含まない月では空。</summary>
+    public string RemainingWorkingDaysText =>
+        Month.RemainingWorkingDays?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+    /// <summary>実働日バッジに残りを出すか。今日を含む月だけ。</summary>
+    public bool HasRemainingWorkingDays => Month.RemainingWorkingDays is not null;
+
+    /// <summary>検索語。</summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set => Set(ref _searchText, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// 同期の状態。Google 同期は Phase 5 なので、いまは未接続であることを出す。
+    /// 状態表示が入っているときはそちらを優先する（置き場所を増やさない）。
+    /// </summary>
+    public string SyncStatusText => _statusMessage ?? "Google 未接続";
+
+    /// <summary>同期できているか。丸印の色を変える。</summary>
+    public bool IsSynced => false;
+
+    /// <summary>本体ビューの下に出す凡例。ビューごとに変える。</summary>
+    public string HintText => _currentView switch
+    {
+        CalendarView.Week => "終日レーンのタスクを時間帯へドラッグすると、作業時間としてブロックが置かれる",
+        CalendarView.Day => "空き時間をドラッグすると予定を追加 ・ タスクをドロップすると作業時間を確保",
+        CalendarView.Year => "1行が1か月 ・ 日付の上の横棒がマイルストーン ・ 右端は月の実働日数",
+        CalendarView.Agenda => "予定とタスクを時系列で表示 ・ 予定のない休みはまとめて折りたたむ",
+        _ => "色付きラベルは実働日データから取り込んだマイルストーン（編集不可） ・ ドラッグで期間選択 ・ Ctrl＋ドラッグで複製",
+    };
 
     /// <summary>
     /// 「実働 20 ／ 残り 6」のサマリー。
@@ -178,16 +259,23 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand RedoCommand { get; }
     public RelayCommand<DateOnly?> SelectDateCommand { get; }
     public RelayCommand<CalendarView?> SwitchViewCommand { get; }
+    public RelayCommand MiniPreviousCommand { get; }
+    public RelayCommand MiniNextCommand { get; }
+    public RelayCommand AddEventCommand { get; }
+    public RelayCommand AddTaskCommand { get; }
+    public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
     private void GoToPrevious()
     {
         Month.GoToPreviousMonth();
+        MiniCalendar.GoTo(Month.Month);
         RaiseHeader();
     }
 
     private void GoToNext()
     {
         Month.GoToNextMonth();
+        MiniCalendar.GoTo(Month.Month);
         RaiseHeader();
     }
 
@@ -195,6 +283,8 @@ public sealed class MainViewModel : ObservableObject
     {
         Month.GoToToday();
         SelectedDay.Date = _today;
+        MiniCalendar.GoTo(_today);
+        MiniCalendar.SelectedDate = _today;
         RaiseHeader();
         Raise(nameof(SelectedDate));
     }
@@ -214,10 +304,15 @@ public sealed class MainViewModel : ObservableObject
     {
         Month.Refresh();
         SelectedDay.Refresh();
+        MiniCalendar.Refresh();
+        SourceLists.Refresh();
         RaiseHeader();
     }
 
-    private void RaiseHeader() => Raise(nameof(Title), nameof(WorkingDaySummary));
+    private void RaiseHeader() => Raise(
+        nameof(Title), nameof(TitleYear), nameof(TitleMonth), nameof(WorkingDaySummary),
+        nameof(HasWorkingDayData), nameof(WorkingDayCountText),
+        nameof(RemainingWorkingDaysText), nameof(HasRemainingWorkingDays));
 
     private void RaiseUndoState()
     {

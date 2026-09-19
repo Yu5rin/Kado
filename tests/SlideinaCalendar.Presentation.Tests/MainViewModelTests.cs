@@ -189,4 +189,95 @@ public class MainViewModelTests
         Assert.True(vm.Month.Cells.Single(c => c.Date == D(2026, 9, 25)).IsToday);
         Assert.Equal(3, vm.Month.RemainingWorkingDays);   // 28・29・30
     }
+
+    [Fact]
+    public void ツールバーは年と月を分けて出す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // モックの .month は年を一段小さく薄く出す
+        Assert.Equal("2026", vm.TitleYear);
+        Assert.Equal("9月", vm.TitleMonth);
+    }
+
+    [Fact]
+    public void 実働日バッジは実働日数と残りを別々に出す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.True(vm.HasWorkingDayData);
+        Assert.Equal("19", vm.WorkingDayCountText);      // 2026年9月の稼働日
+        Assert.True(vm.HasRemainingWorkingDays);
+        Assert.Equal("4", vm.RemainingWorkingDaysText);  // 9/24 の翌日から月末まで（25・28・29・30）
+    }
+
+    [Fact]
+    public void 実働日データが無い月はバッジを出さない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        var vm = Create(test);
+
+        // 数字だけ出すと、登録範囲外なのに実数だと思われる
+        Assert.False(vm.HasWorkingDayData);
+    }
+
+    [Fact]
+    public void 別の月へ動くと残りは出さない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.NextCommand.Execute(null);
+
+        Assert.False(vm.HasRemainingWorkingDays);
+        Assert.Equal(string.Empty, vm.RemainingWorkingDaysText);
+    }
+
+    [Fact]
+    public void 凡例はビューごとに変わる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Contains("マイルストーン", vm.HintText);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        Assert.Contains("終日レーン", vm.HintText);
+    }
+
+    [Fact]
+    public void ミニ月暦は中央と独立して月を送れる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.MiniNextCommand.Execute(null);
+
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
+        Assert.Equal("2026年9月", vm.Title);   // 中央は動かない
+    }
+
+    [Fact]
+    public void 中央の月を送るとミニ月暦も合わせる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.NextCommand.Execute(null);
+
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
+    }
+
+    [Fact]
+    public void 日を選ぶとミニ月暦の印も動く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SelectDateCommand.Execute(D(2026, 9, 14));
+
+        Assert.Equal(D(2026, 9, 14), vm.MiniCalendar.SelectedDate);
+    }
 }

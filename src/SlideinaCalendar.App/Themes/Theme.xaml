@@ -9,5 +9,7 @@
         <ResourceDictionary Source="Light.xaml" />
         <ResourceDictionary Source="Brushes.xaml" />
         <ResourceDictionary Source="Typography.xaml" />
+        <ResourceDictionary Source="Icons.xaml" />
+        <ResourceDictionary Source="Controls.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

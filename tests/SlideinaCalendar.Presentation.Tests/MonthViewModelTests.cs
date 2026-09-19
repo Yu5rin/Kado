@@ -46,8 +46,12 @@ public class MonthViewModelTests
         var sunday = Create(test, DayOfWeek.Sunday);
         var monday = Create(test, DayOfWeek.Monday);
 
-        Assert.Equal(["日", "月", "火", "水", "木", "金", "土"], sunday.WeekDayHeaders);
-        Assert.Equal(["月", "火", "水", "木", "金", "土", "日"], monday.WeekDayHeaders);
+        Assert.Equal(["日", "月", "火", "水", "木", "金", "土"], sunday.WeekDayHeaders.Select(h => h.Name));
+        Assert.Equal(["月", "火", "水", "木", "金", "土", "日"], monday.WeekDayHeaders.Select(h => h.Name));
+
+        // 色を付けるために曜日そのものも持つ。並び順からは決められない
+        Assert.True(monday.WeekDayHeaders[6].IsSunday);
+        Assert.True(monday.WeekDayHeaders[5].IsSaturday);
 
         Assert.Equal(DayOfWeek.Sunday, sunday.Cells[0].Date.DayOfWeek);
         Assert.Equal(DayOfWeek.Monday, monday.Cells[0].Date.DayOfWeek);
