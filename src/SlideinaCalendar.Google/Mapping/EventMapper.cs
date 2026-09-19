@@ -86,6 +86,33 @@ public static class EventMapper
         };
     }
 
+    /// <summary>
+    /// 繰り返しのうち1回だけを差し替えたものか。
+    /// <para>
+    /// Google は繰り返しを<b>親と例外回に分けて</b>持つ。親は <c>RRULE</c> だけを持ち、
+    /// 「この回だけ時間を変えた」「この回は中止」は別のイベントとして流れてくる。
+    /// これを気づかず取り込むと、<b>同じ日に親の回と例外回が二重に出る</b>。
+    /// </para>
+    /// </summary>
+    public static string? RecurringEventIdOf(JsonElement element) => element.Text("recurringEventId");
+
+    /// <summary>
+    /// その回が本来あった日。
+    /// <para>親の繰り返しから除く日として使う（<c>EXDATE</c>）。</para>
+    /// </summary>
+    public static DateOnly? OriginalStartDateOf(JsonElement element)
+    {
+        if (element.Child("originalStartTime") is not { } original) return null;
+
+        if (original.Text("date") is { } date) return ParseDate(date) is var parsed && parsed != default
+            ? parsed
+            : null;
+
+        return ParseDateTime(original.Text("dateTime")) is { } moment
+            ? DateOnly.FromDateTime(moment.DateTime)
+            : null;
+    }
+
     /// <summary>このイベントは取り消されたか。Google は削除を <c>cancelled</c> で流す。</summary>
     public static bool IsCancelled(JsonElement element) =>
         string.Equals(element.Text("status"), CancelledStatus, StringComparison.OrdinalIgnoreCase);
