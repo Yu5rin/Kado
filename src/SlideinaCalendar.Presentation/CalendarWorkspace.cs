@@ -437,6 +437,10 @@ public sealed class CalendarWorkspace
     /// 本当に見たい年末年始や連休が埋もれる。
     /// </para>
     /// <para>
+    /// 逆に、土日や祝日なのに稼働する日は「実働日」として入れる。暦だけ見ていると
+    /// 休みだと思って予定を入れそこなうので、休業日より見落としたくない。
+    /// </para>
+    /// <para>
     /// 見るのは<b>いま取り込んだファイルの期間だけ</b>。保存済みの期間は複数のファイルを
     /// 合わせた外枠なので、間にデータの無い隙間があると、そこまで休業日にしてしまう。
     /// </para>
@@ -447,36 +451,67 @@ public sealed class CalendarWorkspace
     {
         var calendar = EnsureWorkingDayCalendar();
         var now = DateTimeOffset.Now;
-        var wanted = new List<CalendarEvent>();
+
+        var closed = new List<CalendarEvent>();
+        var open = new List<CalendarEvent>();
 
         for (var date = from; date <= to; date = date.AddDays(1))
         {
-            if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
-            if (WorkingDays.IsWorkingDay(date)) continue;
+            var working = WorkingDays.IsWorkingDay(date);
 
-            wanted.Add(new CalendarEvent
+            if (working)
             {
-                Id = $"{ClosedDayIdPrefix}{date:yyyyMMdd}",
-                Title = ClosedDayTitle,
-                Date = date,
-                CalendarId = calendar.Id,
-                Source = WorkingDaySource,
-                UpdatedAt = now,
-            });
+                // 休みのはずの日に動く。暦だけ見ていると予定を入れそこなうので、
+                // これはむしろ休業日より見落としたくない
+                if (IsRestDay(date))
+                {
+                    open.Add(Mark(OpenDayIdPrefix, OpenDayTitle, date, calendar.Id, now));
+                }
+            }
+            else if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            {
+                closed.Add(Mark(ClosedDayIdPrefix, ClosedDayTitle, date, calendar.Id, now));
+            }
         }
 
-        Replace(wanted, from, to, IsClosedDayId, calendar.Id, now);
+        Replace(closed, from, to, IsClosedDayId, calendar.Id, now);
+        Replace(open, from, to, IsOpenDayId, calendar.Id, now);
+
         NotifyChanged();
     }
 
+    /// <summary>暦のうえでは休みの日か。土日と祝日。</summary>
+    private bool IsRestDay(DateOnly date) =>
+        date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ||
+        Holidays.NameOf(date) is { Length: > 0 };
+
+    private static CalendarEvent Mark(
+        string prefix, string title, DateOnly date, string calendarId, DateTimeOffset now) => new()
+    {
+        Id = $"{prefix}{date:yyyyMMdd}",
+        Title = title,
+        Date = date,
+        CalendarId = calendarId,
+        Source = WorkingDaySource,
+        UpdatedAt = now,
+    };
+
     /// <summary>休業日の予定に付ける題。</summary>
     public const string ClosedDayTitle = "休業日";
+
+    /// <summary>休日・祝日に稼働する日の予定に付ける題。</summary>
+    public const string OpenDayTitle = "実働日";
 
     /// <summary>休業日の予定か。</summary>
     public static bool IsClosedDayId(string? id) =>
         id is not null && id.StartsWith(ClosedDayIdPrefix, StringComparison.Ordinal);
 
+    /// <summary>休日・祝日に稼働する日の予定か。</summary>
+    public static bool IsOpenDayId(string? id) =>
+        id is not null && id.StartsWith(OpenDayIdPrefix, StringComparison.Ordinal);
+
     private const string ClosedDayIdPrefix = "closedday:";
+    private const string OpenDayIdPrefix = "openday:";
 
     private void WriteMilestones(
         IReadOnlyList<Milestone> milestones, DateOnly? rangeStart, DateOnly? rangeEnd)

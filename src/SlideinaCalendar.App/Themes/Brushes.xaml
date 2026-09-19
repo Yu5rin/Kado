@@ -31,5 +31,9 @@
     <SolidColorBrush x:Key="MilestoneSTextBrush" Color="{DynamicResource MilestoneSTextColor}" />
     <SolidColorBrush x:Key="MilestoneMFaceBrush" Color="{DynamicResource MilestoneMFaceColor}" />
     <SolidColorBrush x:Key="MilestoneMTextBrush" Color="{DynamicResource MilestoneMTextColor}" />
+    <SolidColorBrush x:Key="ClosedDayFaceBrush" Color="{DynamicResource ClosedDayFaceColor}" />
+    <SolidColorBrush x:Key="ClosedDayTextBrush" Color="{DynamicResource ClosedDayTextColor}" />
+    <SolidColorBrush x:Key="OpenDayFaceBrush" Color="{DynamicResource OpenDayFaceColor}" />
+    <SolidColorBrush x:Key="OpenDayTextBrush" Color="{DynamicResource OpenDayTextColor}" />
 
 </ResourceDictionary>
