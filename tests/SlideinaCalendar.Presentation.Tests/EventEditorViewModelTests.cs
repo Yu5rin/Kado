@@ -331,4 +331,40 @@ public class EventEditorViewModelTests
         // 勝手に直すと打ち直せなくなる
         Assert.Equal("9:", vm.StartTimeText);
     }
+
+    [Fact]
+    public void 新しい予定の開始はいまの次の30分区切り()
+    {
+        var vm = new EventEditorViewModel(new DateOnly(2026, 9, 24), Calendars, new TimeOnly(14, 12))
+        {
+            Title = "打ち合わせ",
+        };
+
+        Assert.Equal("14:30", vm.StartTimeText);
+        Assert.Equal("15:30", vm.EndTimeText);
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 夜遅くに足しても終了が開始より前にならない()
+    {
+        // 23:30 に1時間足すと 0:30 になって逆転し、保存できなくなる
+        var vm = new EventEditorViewModel(new DateOnly(2026, 9, 24), Calendars, new TimeOnly(23, 10))
+        {
+            Title = "夜の作業",
+        };
+
+        Assert.Equal("23:30", vm.StartTimeText);
+        Assert.Equal("23:59", vm.EndTimeText);
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 時刻を渡さなければ今までどおり()
+    {
+        var vm = new EventEditorViewModel(new DateOnly(2026, 9, 24), Calendars);
+
+        Assert.Equal("09:00", vm.StartTimeText);
+        Assert.Equal("10:00", vm.EndTimeText);
+    }
 }

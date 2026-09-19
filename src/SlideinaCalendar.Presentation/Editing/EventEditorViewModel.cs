@@ -49,13 +49,28 @@ public sealed class EventEditorViewModel : ObservableObject
     private string? _url;
     private RecurrenceKind _recurrence;
 
-    /// <summary>新しく作る。</summary>
-    public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars)
+    /// <summary>
+    /// 新しく作る。
+    /// <para>
+    /// 開始は<b>いまの時刻の次の30分区切り</b>、終了はその1時間後。固定の 9:00 だと、
+    /// いつ足してもまず時刻を直すことになる。
+    /// </para>
+    /// </summary>
+    /// <param name="now">いまの時刻。渡さなければ 9:00〜10:00 のまま。</param>
+    public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars, TimeOnly? now = null)
     {
         Calendars = calendars;
         _date = date;
         _endDate = date;
         _calendarId = calendars.Count > 0 ? calendars[0].Id : null;
+
+        if (now is { } value)
+        {
+            var start = TimeInput.NextHalfHour(value);
+
+            _startTimeText = TimeInput.Format(start);
+            _endTimeText = TimeInput.Format(TimeInput.OneHourAfter(start));
+        }
     }
 
     /// <summary>すでにある予定を直す。</summary>

@@ -80,6 +80,38 @@ public static class TimeInput
         };
     }
 
+    /// <summary>
+    /// いまの時刻の次の30分区切り。
+    /// <para>
+    /// 新しい予定の開始時刻に使う。固定の 9:00 だと、いつ足してもまず直すことになる。
+    /// 9:00 ちょうどなら 9:30、9:01 でも 9:30、9:30 ちょうどなら 10:00。
+    /// <b>必ずいまより先へ進める</b>ので、もう過ぎた時刻が既定になることはない。
+    /// </para>
+    /// <para>日をまたぐときは 0:00 に回り込む。日付は呼び出し側が持っている。</para>
+    /// </summary>
+    public static TimeOnly NextHalfHour(TimeOnly now)
+    {
+        // 秒は切り捨てたうえで1分足す。ちょうど区切りの時刻なら次の区切りへ送る
+        var minutes = (now.Hour * 60) + now.Minute + 1;
+        var rounded = (minutes + 29) / 30 * 30;
+
+        return rounded >= 24 * 60 ? new TimeOnly(0, 0) : new TimeOnly(rounded / 60, rounded % 60);
+    }
+
+    /// <summary>
+    /// 開始から1時間後。日をまたぐなら、その日の終わりまで。
+    /// <para>
+    /// 終了は開始より後でなければならない（編集画面の検査と Google の両方が拒む）。
+    /// 23:30 に1時間足すと 0:30 になって逆転するので、そこだけ 23:59 に寄せる。
+    /// </para>
+    /// </summary>
+    public static TimeOnly OneHourAfter(TimeOnly start)
+    {
+        var end = start.AddHours(1);
+
+        return end > start ? end : new TimeOnly(23, 59);
+    }
+
     /// <summary>15分刻みの候補。打つより選ぶほうが速いときのため。</summary>
     public static IReadOnlyList<string> EveryQuarterHour()
     {
