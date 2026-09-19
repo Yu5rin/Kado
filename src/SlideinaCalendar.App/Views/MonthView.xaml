@@ -23,12 +23,20 @@
         <conv:EventAccentBrushConverter x:Key="EventAccentBrush" />
         <conv:EventAccentFaceConverter x:Key="EventAccentFace" />
 
-        <Style x:Key="WeekDayHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="Padding" Value="0,3" />
-        </Style>
+        <!-- 曜日ヘッダ（.dow）。日曜は赤、土曜は青。週の開始曜日は設定で変わるので位置では決めない -->
+        <DataTemplate x:Key="WeekDayHeaderTemplate">
+            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="11" Padding="0,5"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource Ink3Brush}" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSunday}" Value="True">
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSaturday}" Value="True">
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
         <DataTemplate x:Key="EventChipTemplate">
@@ -66,18 +74,17 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding WeekDayHeaders}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Rows="1" Columns="7" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}" Style="{StaticResource WeekDayHeaderStyle}" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <ItemsControl ItemsSource="{Binding WeekDayHeaders}"
+                          ItemTemplate="{StaticResource WeekDayHeaderTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" Columns="7" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </Border>
 
         <ItemsControl ItemsSource="{Binding Cells}" Background="{DynamicResource LineBrush}">
             <ItemsControl.ItemsPanel>

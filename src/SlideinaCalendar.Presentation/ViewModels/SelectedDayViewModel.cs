@@ -33,6 +33,16 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
     /// <summary>「残り 3実働日」などの表示。期限が無ければ null。</summary>
     public string? DueText => due?.Text;
 
+    /// <summary>
+    /// 期限の右に添える文字。モックは期限日そのものかタスクリスト名を出している。
+    /// 「残り 5実働日」だけでは何日なのか分からないため。
+    /// </summary>
+    public string? DueSubText => Task.Due is { } d && due is { Kind: not DueKind.Today }
+        ? d.ToString("yyyy/M/d", CultureInfo.InvariantCulture) is var full && d.Year == DateTime.Today.Year
+            ? d.ToString("M/d", CultureInfo.InvariantCulture)
+            : full
+        : Task.TaskListId;
+
     /// <summary>期限の強調度。</summary>
     public DueEmphasis Emphasis => due?.Kind switch
     {
@@ -56,21 +66,83 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
 }
 
 /// <summary>
+/// 右ペインに並べる予定1件。
+/// <para>
+/// モックは時刻・縦棒・タイトルの下に「第2会議室 ・ 1時間30分」という補助行を出す。
+/// 場所と長さはその場で判断したい情報なので、開かずに読めるようにする。
+/// </para>
+/// </summary>
+public sealed class DayEventViewModel(ScheduledEvent scheduled)
+{
+    /// <summary>元の予定。</summary>
+    public ScheduledEvent Scheduled { get; } = scheduled;
+
+    public string Id => Scheduled.Source.Id;
+    public string Title => Scheduled.Source.Title;
+
+    /// <summary>「09:00」。終日なら「終日」。</summary>
+    public string TimeText => Scheduled.Source.StartTime is { } start
+        ? start.ToString("HH:mm", CultureInfo.InvariantCulture)
+        : "終日";
+
+    /// <summary>帯の色。</summary>
+    public EventAccent Accent => EventChipViewModel.ResolveAccent(Scheduled.Source.Color);
+
+    /// <summary>「第2会議室 ・ 1時間30分」。どちらも無ければ null。</summary>
+    public string? SubText
+    {
+        get
+        {
+            var parts = new List<string>(2);
+
+            if (Scheduled.Source.Location is { Length: > 0 } location) parts.Add(location);
+            if (DurationText is { } duration) parts.Add(duration);
+
+            return parts.Count > 0 ? string.Join(" ・ ", parts) : null;
+        }
+    }
+
+    /// <summary>「1時間30分」。時刻が入っていなければ null。</summary>
+    private string? DurationText
+    {
+        get
+        {
+            if (Scheduled.Source.StartTime is not { } start ||
+                Scheduled.Source.EndTime is not { } end) return null;
+
+            var minutes = (int)(end - start).TotalMinutes;
+            if (minutes <= 0) return null;
+
+            var (h, m) = (minutes / 60, minutes % 60);
+            return (h, m) switch
+            {
+                (0, _) => $"{m}分",
+                (_, 0) => $"{h}時間",
+                _ => $"{h}時間{m}分",
+            };
+        }
+    }
+}
+
+/// <summary>
 /// 右ペイン。選択した日の予定とタスクを<b>上下に同時表示</b>する（要件書 5.2）。
 /// 幅があるのでタブにはしない。
 /// </summary>
 public sealed class SelectedDayViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
+    private readonly ISourceFilter _filter;
 
     private DateOnly _date;
     private DateOnly _today;
-    private IReadOnlyList<ScheduledEvent> _events = [];
+    private IReadOnlyList<DayEventViewModel> _events = [];
     private IReadOnlyList<TaskListItemViewModel> _tasks = [];
 
-    public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today)
+    public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
+        ISourceFilter? filter = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _filter = filter ?? ShowAllFilter.Instance;
         _date = date;
         _today = today;
 
@@ -116,10 +188,30 @@ public sealed class SelectedDayViewModel : ObservableObject
     public IReadOnlyList<Milestone> Milestones => _workspace.WorkingDays.MilestonesOn(_date);
 
     /// <summary>この日の予定。</summary>
-    public IReadOnlyList<ScheduledEvent> Events
+    public IReadOnlyList<DayEventViewModel> Events
     {
         get => _events;
         private set => Set(ref _events, value);
+    }
+
+    /// <summary>見出しの右に出す予定の件数。</summary>
+    public string EventCountText => _events.Count.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>見出しの右に出す「3 / 4」。完了した数と全体。</summary>
+    public string TaskCountText => $"{DoneTaskCount} / {_tasks.Count}";
+
+    /// <summary>
+    /// 「月末まで 5実働日」。今日から月末までの残り。データが無ければ null。
+    /// <para>選択日ではなく今日を起点にする。あとどれだけ働けるかを知りたいので。</para>
+    /// </summary>
+    public string? RemainingInMonthText
+    {
+        get
+        {
+            if (!_workspace.WorkingDays.IsMonthFullyCovered(_today.Year, _today.Month)) return null;
+
+            return $"月末まで {_workspace.WorkingDays.RemainingInMonth(_today)}実働日";
+        }
     }
 
     /// <summary>この日が期限のタスク。</summary>
@@ -135,15 +227,20 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>読み直す。</summary>
     public void Refresh()
     {
-        Events = _workspace.Schedule.EventsInRange(_date, _date);
+        Events = _workspace.Schedule.EventsInRange(_date, _date)
+            .Where(e => _filter.IncludesEvent(e.Source))
+            .Select(e => new DayEventViewModel(e))
+            .ToArray();
 
         Tasks = _workspace.Tasks.DueInRange(_date, _date)
+            .Where(_filter.IncludesTask)
             .Select(t => new TaskListItemViewModel(
                 t, t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null))
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
-              nameof(Milestones), nameof(DoneTaskCount));
+              nameof(Milestones), nameof(DoneTaskCount),
+              nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText));
     }
 
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];
