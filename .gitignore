@@ -21,3 +21,9 @@ coverage*.json
 # NuGet
 *.nupkg
 packages/
+
+# Google のクライアント設定。リポジトリには置かない。
+# 配布物へは GitHub の Secrets から組み立て時に焼き込む（docs/google-setup.md）
+client_secret*.json
+google-client.json
+google-tokens.dat

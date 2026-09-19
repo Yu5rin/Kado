@@ -73,16 +73,47 @@ jobs:
       - name: テスト
         run: dotnet test --configuration Release --no-build --verbosity normal
 
+      # 焼き込む設定が登録されていなければ、その旨を残して先へ進む。
+      # 配布物は作れるが、受け取った人は自分でクライアント設定を入れることになる
+      - name: 焼き込む設定があるか見る
+        id: client
+        shell: pwsh
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CLIENT_ID)) {
+            Write-Host '::warning::GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET が未登録です。受け取った人が自分でクライアント設定を入れる必要があります。'
+            "embed=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "embed=true" >> $env:GITHUB_OUTPUT
+          }
+
+      # 既定のクライアント設定を焼き込む。ソースには書かないので、
+      # リポジトリを公開しても出ない。配布物からは読めるが、デスクトップアプリ型の
+      # シークレットはもともと秘密として扱えず、横取りへの備えは PKCE が受け持つ
       - name: 発行
-        run: >
-          dotnet publish src/SlideinaCalendar.App/SlideinaCalendar.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          --output publish
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:Version=${{ steps.version.outputs.value }}
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        shell: pwsh
+        run: |
+          $args = @(
+            'publish', 'src/SlideinaCalendar.App/SlideinaCalendar.App.csproj',
+            '--configuration', 'Release',
+            '--runtime', 'win-x64',
+            '--self-contained', 'true',
+            '--output', 'publish',
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true',
+            "-p:Version=${{ steps.version.outputs.value }}"
+          )
+
+          if ('${{ steps.client.outputs.embed }}' -eq 'true') {
+            $args += "-p:GoogleClientId=$env:CLIENT_ID"
+            $args += "-p:GoogleClientSecret=$env:CLIENT_SECRET"
+          }
+
+          dotnet @args
 
       - name: ZIP にまとめる
         id: package

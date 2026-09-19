@@ -84,12 +84,14 @@ public class GoogleClientSecretsTests
         File.WriteAllText(source, Downloaded);
 
         var store = new GoogleClientSecretsStore(Path.Combine(directory.Path, "store", "google-client.json"));
-        Assert.False(store.Exists);
+        Assert.False(store.HasOwnFile);
 
         var imported = store.Import(source);
 
         Assert.Equal("123-abc.apps.googleusercontent.com", imported.ClientId);
-        Assert.True(store.Exists);
+        Assert.True(store.HasOwnFile);
+
+        // 自分で入れたものは、焼き込んである既定より優先される
         Assert.Equal("123-abc.apps.googleusercontent.com", store.Load()!.ClientId);
     }
 
@@ -106,15 +108,21 @@ public class GoogleClientSecretsTests
         Assert.Throws<FormatException>(() => store.Import(source));
 
         // 置いてしまうと、次に開いたときに失敗する
-        Assert.False(store.Exists);
+        Assert.False(store.HasOwnFile);
     }
 
     [Fact]
-    public void 入れていなければnull()
+    public void 入れていなければ焼き込んである既定になる()
     {
         using var directory = new TempDirectory();
 
-        Assert.Null(new GoogleClientSecretsStore(Path.Combine(directory.Path, "無い.json")).Load());
+        var store = new GoogleClientSecretsStore(Path.Combine(directory.Path, "無い.json"));
+
+        Assert.False(store.HasOwnFile);
+
+        // 焼き込んで組み立てていれば、利用者が何も入れなくても繋げる。
+        // 焼き込まずに組み立てていれば、これまでどおり入れてもらう必要がある
+        Assert.Equal(EmbeddedClientSettings.Options, store.Load());
     }
 
     [Fact]
@@ -129,7 +137,9 @@ public class GoogleClientSecretsTests
         store.Import(source);
         store.Clear();
 
-        Assert.False(store.Exists);
+        // 消えるのは自分で入れたぶんだけ。焼き込んである既定は残る
+        Assert.False(store.HasOwnFile);
+        Assert.Equal(EmbeddedClientSettings.Exists, store.Exists);
     }
 
     private sealed class TempDirectory : IDisposable
