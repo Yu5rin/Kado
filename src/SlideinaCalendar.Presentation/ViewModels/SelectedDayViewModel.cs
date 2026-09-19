@@ -225,6 +225,7 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// 今日やることは分かっても段取りが組めない（モックの右ペインも 10/1 や
     /// 2027/3/31 期限のタスクを並べている）。
     /// </para>
+    /// <para>並びは<b>期限の近い順</b>。遅れているものが一番上に来る。</para>
     /// <para>期限の無いタスクはここには出さない。並べる順番が決まらないため。</para>
     /// </summary>
     public IReadOnlyList<TaskListItemViewModel> Tasks
@@ -252,8 +253,8 @@ public sealed class SelectedDayViewModel : ObservableObject
             .Where(t => t.HasDue)
             // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
             .Where(t => !t.IsDone || t.Due == _date)
-            .OrderBy(t => t.IsDone)
-            .ThenBy(t => t.Due)
+            // 期限の近い順。遅れているものが一番上に来る
+            .OrderBy(t => t.Due)
             .ThenBy(t => t.Title, StringComparer.Ordinal)
             .Select(t => new TaskListItemViewModel(
                 t, t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null))
