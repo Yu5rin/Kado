@@ -5,21 +5,41 @@
 
 作業は一度だけ。10分ほど。
 
+## リンク一覧（先に開いておくと早い）
+
+| やること | URL |
+|---|---|
+| 1. プロジェクトを作る | https://console.cloud.google.com/projectcreate |
+| 2. Calendar API を有効にする | https://console.cloud.google.com/apis/library/calendar-json.googleapis.com |
+| 2. Tasks API を有効にする | https://console.cloud.google.com/apis/library/tasks.googleapis.com |
+| 3. 同意画面（ブランディング） | https://console.cloud.google.com/auth/branding |
+| 3. 公開ステータス（対象） | https://console.cloud.google.com/auth/audience |
+| 4. クライアント ID を発行する | https://console.cloud.google.com/auth/clients |
+
+2 以降は**プロジェクトを選んだ状態で**開くこと。違うプロジェクトで有効化しても効かない。
+URL の末尾に `?project=プロジェクトID` を付けると確実。
+
+---
+
 ## 1. プロジェクトを作る
 
-[Google Cloud Console](https://console.cloud.google.com/) で新しいプロジェクトを作る。
-名前は何でもよい（例：`slideina-calendar`）。
+https://console.cloud.google.com/projectcreate
+
+名前は何でもよい（例：`slideina-calendar`）。作ったら、以降の画面で**そのプロジェクトが
+選ばれていること**を上部の選択欄で確かめる。
 
 ## 2. API を有効にする
 
-「API とサービス」→「ライブラリ」から2つ有効にする。
+2つとも「有効にする」を押す。
 
-- **Google Calendar API**
-- **Google Tasks API**
+- Google Calendar API … https://console.cloud.google.com/apis/library/calendar-json.googleapis.com
+- Google Tasks API … https://console.cloud.google.com/apis/library/tasks.googleapis.com
+
+参考：[Google Workspace API を有効にする](https://developers.google.com/workspace/guides/enable-apis)
 
 ## 3. OAuth 同意画面を作る
 
-「Google Auth Platform」→「ブランディング」。
+https://console.cloud.google.com/auth/branding
 
 - User Type は **外部**（Workspace アカウントなら「内部」でもよい）
 - アプリ名・サポートメール・デベロッパーの連絡先を埋める
@@ -29,7 +49,9 @@
 **「テスト」のままだと、更新トークンが7日で失効する。** 毎週つなぎ直すことになる。
 ご自身しか使わなくても「本番」に切り替える。
 
-「対象」→「アプリを公開」。Calendar と Tasks は機密スコープなので、初回の認可時に
+https://console.cloud.google.com/auth/audience →「アプリを公開」。
+
+Calendar と Tasks は機密スコープなので、初回の認可時に
 「確認されていないアプリ」の警告が出る。自分で作ったものなので「詳細」→「安全ではない
 ページに移動」で進んでよい。
 
@@ -39,7 +61,7 @@
 
 ## 4. クライアント ID を発行する
 
-「Google Auth Platform」→「クライアント」→「クライアントを作成」。
+https://console.cloud.google.com/auth/clients →「クライアントを作成」
 
 - **アプリケーションの種類は「デスクトップアプリ」**
 
