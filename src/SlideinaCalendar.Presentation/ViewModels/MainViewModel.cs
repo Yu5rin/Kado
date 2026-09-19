@@ -98,6 +98,11 @@ public sealed class MainViewModel : ObservableObject
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
         ImportGoogleClientCommand = new RelayCommand(ImportGoogleClient, () => _googleClient is not null);
 
+        CheckForUpdateCommand = new AsyncRelayCommand(
+            () => CheckForUpdate?.Invoke() ?? Task.CompletedTask,
+            () => CheckForUpdate is not null,
+            ex => StatusMessage = $"更新を確かめられませんでした（{ex.Message}）");
+
         Sync = new SyncViewModel(google);
 
         // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す
@@ -153,6 +158,15 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>右上の同期表示と、その操作。</summary>
     public SyncViewModel Sync { get; }
+
+    /// <summary>
+    /// 新しい版を確かめる。
+    /// <para>
+    /// 中身は Windows 側の仕事（実行ファイルの入れ替え）なので、ここでは呼び口だけ持つ。
+    /// 入っていなければメニューを押せなくする。
+    /// </para>
+    /// </summary>
+    public Func<Task>? CheckForUpdate { get; set; }
 
     // ------------------------------------------------------------------
     // 状態
@@ -367,6 +381,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>カレンダーまたはタスクリストを消す。</summary>
     public RelayCommand<SourceListItemViewModel?> DeleteSourceCommand { get; }
+
+    /// <summary>新しい版があるか確かめる。</summary>
+    public AsyncRelayCommand CheckForUpdateCommand { get; }
 
     /// <summary>配布の実働日ファイル（Excel）を取り込む。</summary>
     public RelayCommand ImportWorkingDaysCommand { get; }
