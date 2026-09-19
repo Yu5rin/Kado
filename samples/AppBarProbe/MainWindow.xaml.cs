@@ -12,6 +12,9 @@ namespace AppBarProbe;
 /// </summary>
 public partial class MainWindow : Window
 {
+    /// <summary>復旧の検証用に、わざと削るワークエリアの幅。</summary>
+    private const int BrokenWidth = 352;
+
     private readonly AppBarController _appBar;
     private readonly StringBuilder _log = new();
 
@@ -90,6 +93,38 @@ public partial class MainWindow : Window
 
     private void OnCrashClick(object sender, RoutedEventArgs e)
         => throw new InvalidOperationException("安全装置の検証のために投げた例外です。");
+
+    /// <summary>
+    /// 安全装置3だけを単独で確かめる。
+    /// <para>
+    /// 強制終了しても Windows 側が AppBar の登録を掃除してワークエリアを戻すことがあり、
+    /// その場合「削られたまま残る」状況を再現できない。復旧処理が本当に効くのかを
+    /// 確かめられないので、壊れた状態を意図的に作れるようにしてある。
+    /// </para>
+    /// </summary>
+    private void OnBreakClick(object sender, RoutedEventArgs e)
+    {
+        if (_appBar.IsRegistered)
+        {
+            Log("先にピンを外してください。ピン留め中は実行できません。");
+            return;
+        }
+
+        var current = NativeMethods.GetWorkArea();
+
+        if (!WorkAreaRecovery.MarkRegistered(current))
+        {
+            Log("控えを保存できませんでした。この状態で削ると戻せないので中止します。");
+            return;
+        }
+
+        // 異常終了でワークエリアが削られたまま残った状態を作る
+        var broken = current with { Left = current.Left + BrokenWidth };
+        NativeMethods.SetWorkArea(broken);
+
+        Log($"ワークエリアを {current} → {NativeMethods.GetWorkArea()} に削り、控えを残しました。");
+        Log("このままアプリを終了し、もう一度起動してください。復旧すれば安全装置3は正しく効いています。");
+    }
 
     /// <summary>
     /// 例外で AppBar が緊急解除されたあとの後始末。
