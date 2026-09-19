@@ -1,0 +1,52 @@
+<!--
+    ライトテーマの色。値は要件書 5.6 のデザイントークン表と 4.2 のマイルストーン配色から取る。
+    ここと Dark.xaml でキーを揃えておき、切り替えは ResourceDictionary の差し替えで行う。
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 背景・面 -->
+    <Color x:Key="BackgroundColor">#FBFBFC</Color>
+    <Color x:Key="PanelColor">#FFFFFF</Color>
+    <!-- 一段沈めた面。ホバーと、前後の月にはみ出したマスに使う。
+         要件書 5.6 の表には無いが、モックが使っているので値をそこから取る -->
+    <Color x:Key="SunkenColor">#F1F2F5</Color>
+
+    <!-- 罫線 -->
+    <Color x:Key="LineColor">#E2E4EA</Color>
+    <Color x:Key="LineStrongColor">#C8CCD6</Color>
+
+    <!-- 文字（主／副／補助） -->
+    <Color x:Key="InkColor">#1C2029</Color>
+    <Color x:Key="Ink2Color">#585F6E</Color>
+    <Color x:Key="Ink3Color">#8F96A4</Color>
+
+    <!-- アクセント（藍） -->
+    <Color x:Key="AccentColor">#27528F</Color>
+    <Color x:Key="AccentSoftColor">#E8EEF7</Color>
+
+    <!-- 日曜・祝日 / 土曜 -->
+    <Color x:Key="SundayColor">#B03A34</Color>
+    <Color x:Key="SaturdayColor">#3B6EA8</Color>
+
+    <!-- 非稼働日の面。色を足すのではなく背景を落とす引き算（要件書 4.3） -->
+    <Color x:Key="OffDayColor">#ECEEF2</Color>
+
+    <!-- 予定のカテゴリ色。モックの ok / amber の変数に対応する -->
+    <Color x:Key="CategoryGreenColor">#2F7D5B</Color>
+    <Color x:Key="CategoryAmberColor">#C2762B</Color>
+
+    <!-- 完了したタスクの文字色 -->
+    <Color x:Key="DoneColor">#A3A9B5</Color>
+
+    <!-- マイルストーン（要件書 4.2）。面と文字は対にして使う -->
+    <Color x:Key="MilestoneSpecFaceColor">#FAEDC4</Color>
+    <Color x:Key="MilestoneSpecTextColor">#7A5600</Color>
+    <Color x:Key="MilestoneGoFaceColor">#F6DDDA</Color>
+    <Color x:Key="MilestoneGoTextColor">#8F2F28</Color>
+    <Color x:Key="MilestoneSFaceColor">#D7EBE0</Color>
+    <Color x:Key="MilestoneSTextColor">#1F6347</Color>
+    <Color x:Key="MilestoneMFaceColor">#DDE6F4</Color>
+    <Color x:Key="MilestoneMTextColor">#1F4A83</Color>
+
+</ResourceDictionary>

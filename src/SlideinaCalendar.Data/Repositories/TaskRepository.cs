@@ -30,6 +30,18 @@ public sealed class TaskRepository(SqliteConnection connection)
         _connection.Query<TaskItem>(
             $"SELECT {Columns} FROM tasks ORDER BY due IS NULL, due, title;").ToArray();
 
+    /// <summary>
+    /// 使われているタスクリスト ID を重複なく返す。
+    /// <para>リスト自体の表は持たない。理由は <see cref="EventRepository.CalendarIds"/> と同じ。</para>
+    /// </summary>
+    public IReadOnlyList<string> TaskListIds() =>
+        _connection.Query<string>(
+            """
+            SELECT DISTINCT task_list_id FROM tasks
+            WHERE task_list_id IS NOT NULL AND task_list_id <> ''
+            ORDER BY task_list_id;
+            """).ToArray();
+
     /// <summary>期限が期間内にあるタスク。期限なしは含まない。</summary>
     public IReadOnlyList<TaskItem> DueInRange(DateOnly from, DateOnly to) =>
         _connection.Query<TaskItem>(

@@ -1,0 +1,108 @@
+using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Presentation.ViewModels;
+
+namespace SlideinaCalendar.Presentation.Tests;
+
+public class SourceListsViewModelTests
+{
+    private static DateOnly D(int y, int m, int d) => new(y, m, d);
+
+    private static void Seed(TestWorkspace test)
+    {
+        var ws = test.Workspace;
+
+        ws.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24), CalendarId = "仕事" });
+        ws.AddEvent(new CalendarEvent { Id = "e2", Title = "点検", Date = D(2026, 9, 24), CalendarId = "生産ライン" });
+        ws.AddEvent(new CalendarEvent { Id = "e3", Title = "所属なし", Date = D(2026, 9, 24) });
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24), TaskListId = "マイタスク" });
+    }
+
+    [Fact]
+    public void 一覧は予定とタスクの所属から作られる()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Equal(["仕事", "生産ライン"], vm.Calendars.Select(c => c.Name));
+        Assert.Equal(["マイタスク"], vm.TaskLists.Select(t => t.Name));
+        Assert.All(vm.Calendars, c => Assert.True(c.IsVisible));
+    }
+
+    [Fact]
+    public void 色見本は同じ名前なら常に同じ色になる()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var first = new SourceListsViewModel(test.Workspace);
+        var second = new SourceListsViewModel(test.Workspace);
+
+        Assert.Equal(first.Calendars[0].SwatchColor, second.Calendars[0].SwatchColor);
+        Assert.StartsWith("#", first.Calendars[0].SwatchColor);
+    }
+
+    [Fact]
+    public void チェックを外すとその所属の予定が落ちる()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        vm.Calendars.Single(c => c.Name == "仕事").IsVisible = false;
+
+        var events = test.Workspace.Schedule.EventsInRange(D(2026, 9, 24), D(2026, 9, 24));
+
+        Assert.DoesNotContain(events.Where(e => vm.IncludesEvent(e.Source)), e => e.Source.Id == "e1");
+        Assert.Contains(events.Where(e => vm.IncludesEvent(e.Source)), e => e.Source.Id == "e2");
+    }
+
+    [Fact]
+    public void 所属の無い予定は消さない()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        foreach (var calendar in vm.Calendars) calendar.IsVisible = false;
+
+        // どこにも属していないだけで、消す理由にはならない
+        Assert.True(vm.IncludesEvent(new CalendarEvent { Id = "e3", Date = D(2026, 9, 24) }));
+    }
+
+    [Fact]
+    public void 読み直してもチェックの状態は残る()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        vm.Calendars.Single(c => c.Name == "仕事").IsVisible = false;
+
+        vm.Refresh();
+
+        Assert.False(vm.Calendars.Single(c => c.Name == "仕事").IsVisible);
+        Assert.True(vm.Calendars.Single(c => c.Name == "生産ライン").IsVisible);
+    }
+
+    [Fact]
+    public void チェックを外すと月ビューと右ペインから消える()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var cell = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+
+        Assert.Equal(3, cell.AllEvents.Count);
+        Assert.Equal(3, main.SelectedDay.Events.Count);
+
+        main.SourceLists.Calendars.Single(c => c.Name == "仕事").IsVisible = false;
+
+        var after = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+        Assert.Equal(2, after.AllEvents.Count);
+        Assert.Equal(2, main.SelectedDay.Events.Count);
+    }
+}
