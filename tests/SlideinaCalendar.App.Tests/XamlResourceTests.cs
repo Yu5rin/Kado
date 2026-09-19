@@ -43,6 +43,7 @@ public class XamlResourceTests
         ["BasedOn"] = ["Style"],
         ["ItemTemplate"] = ["DataTemplate"],
         ["FontFamily"] = ["FontFamily"],
+        ["ContextMenu"] = ["ContextMenu"],
     };
 
     [Fact]

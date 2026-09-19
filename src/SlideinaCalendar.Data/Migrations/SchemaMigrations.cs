@@ -123,11 +123,70 @@ public static class SchemaMigrations
         ALTER TABLE events ADD COLUMN url TEXT;
         """;
 
+
+    /// <summary>
+    /// 同期の受け皿を用意する。
+    /// <para>
+    /// 書き戻しは <c>patch</c> で行う。指定しなかった項目は Google 側でそのまま
+    /// 残るので、ゲストや通知を列で抱えなくても消えない。ここで足すのは
+    /// <b>差分の判定に要るもの</b>と、<b>カレンダー一覧そのもの</b>。
+    /// </para>
+    /// </summary>
+    private const string V3 = """
+        -- 最後に Google から受け取った姿。キーをソートした JSON を入れる。
+        -- 並び順の違いで「変わった」と誤判定するのを防ぐ（要件書 6.3）
+        ALTER TABLE events ADD COLUMN google_raw TEXT;
+
+        -- confirmed / tentative / cancelled。cancelled は削除として扱う
+        ALTER TABLE events ADD COLUMN status TEXT;
+
+        -- source は url と title の対。url だけ持っていると書き戻せない
+        ALTER TABLE events ADD COLUMN source_title TEXT;
+
+        ALTER TABLE tasks ADD COLUMN google_raw TEXT;
+
+        -- 完了した日時。完了したことだけでは、どちらが新しいか判定できない
+        ALTER TABLE tasks ADD COLUMN completed_at INTEGER;
+
+        -- サブタスクの親と、同じ階層での並び順。どちらも Google 側では
+        -- move でしか変えられないので、読んで持っておく
+        ALTER TABLE tasks ADD COLUMN parent_id TEXT;
+        ALTER TABLE tasks ADD COLUMN position TEXT;
+
+        CREATE INDEX ix_tasks_parent ON tasks (parent_id);
+
+        -- カレンダー一覧。これまでは予定の calendar_id から名前を拾い、
+        -- 色は名前から作っていた。取り込めば本物の名前と色になる（要件書 6.3）
+        CREATE TABLE calendars (
+            id               TEXT    NOT NULL PRIMARY KEY,
+            summary          TEXT    NOT NULL,
+            summary_override TEXT,               -- 利用者が付け替えた表示名
+            background_color TEXT,               -- #rrggbb
+            foreground_color TEXT,
+            is_primary       INTEGER NOT NULL DEFAULT 0,
+            is_visible       INTEGER NOT NULL DEFAULT 1,   -- 左パネルのチェック
+            sort_order       INTEGER NOT NULL DEFAULT 0,
+            google_raw       TEXT,
+            updated_at       INTEGER NOT NULL
+        );
+
+        -- タスクリスト。カレンダーとは独立した同期経路なので表も分ける
+        CREATE TABLE task_lists (
+            id         TEXT    NOT NULL PRIMARY KEY,
+            title      TEXT    NOT NULL,
+            is_visible INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            google_raw TEXT,
+            updated_at INTEGER NOT NULL
+        );
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
         new(1, "予定・タスク・実働日・マイルストーン・設定・同期状態の初版", V1),
         new(2, "予定に URL を足す", V2),
+        new(3, "同期の受け皿（差分判定用の生データ、カレンダー一覧、タスクリスト）", V3),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>
