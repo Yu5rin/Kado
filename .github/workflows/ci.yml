@@ -47,11 +47,15 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: テスト
-        # 実働日の実ファイル（ツール用実働日.xlsx）を使う統合テストを含む
+        # 実働日の実ファイル（ツール用実働日.xlsx）や旧バックアップを使う統合テストを含む。
+        #
+        # LogFileName で名前を固定すると、テストプロジェクトごとに同じファイルへ書き込んで
+        # 最後の1つしか残らない。LogFilePrefix ならプロジェクト名とフレームワークが
+        # 名前に入るので、全プロジェクトの結果がそろう。
         run: >
           dotnet test --no-build --configuration Release
           --logger "console;verbosity=normal"
-          --logger "trx;LogFileName=test-results.trx"
+          --logger "trx;LogFilePrefix=test-results"
           --results-directory TestResults
 
       - name: テスト結果の保存
