@@ -1,0 +1,12 @@
+<Window x:Class="SlideinaCalendar.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SlideinaCalendar" Height="720" Width="1100"
+        FontFamily="Yu Gothic UI, Segoe UI">
+    <!-- Phase 3 でウィンドウモード（3ペイン構成）を実装する。要件書 5.2 を参照 -->
+    <Grid>
+        <TextBlock Text="Phase 3 で実装予定"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#8f96a4" FontSize="14" />
+    </Grid>
+</Window>
