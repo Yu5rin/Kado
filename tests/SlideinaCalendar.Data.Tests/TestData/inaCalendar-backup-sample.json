@@ -1,0 +1,4539 @@
+{
+ "app": "inaCalendar",
+ "version": 3,
+ "exportedAt": "2026-09-19T10:04:45.362Z",
+ "userEvents": {
+  "2023-05-01": [
+   {
+    "text": "定例会議-0000",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2023-05-02",
+    "uid": "gmu0ja70zmpxhij",
+    "updatedAt": 1789346598253,
+    "gcalId": "g7ea9948ee893eff9f2498a4d4",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:18.253Z"
+   }
+  ],
+  "2023-07-24": [
+   {
+    "text": "生産計画レビュー-0001",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2023-07-25",
+    "uid": "gmu0ja70zm5kr4a",
+    "updatedAt": 1789346601007,
+    "gcalId": "g242260c657c6dac763eba6c60",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:21.007Z"
+   }
+  ],
+  "2023-08-14": [
+   {
+    "text": "ライン切替立ち会い-0002",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2023-08-16",
+    "uid": "gmu0ja70z5v1y7d",
+    "updatedAt": 1789346602356,
+    "gcalId": "g99fdbca4993caa8c1b633cecb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:22.356Z"
+   }
+  ],
+  "2023-12-28": [
+   {
+    "text": "棚卸-0003",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2023-12-29",
+    "uid": "gmu0ja70zymuurm",
+    "updatedAt": 1789346604092,
+    "gcalId": "g0337449cc0eddaa6dfc51fa7a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:24.092Z"
+   }
+  ],
+  "2024-01-02": [
+   {
+    "text": "部品入荷確認-0004",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2024-01-04",
+    "uid": "gmu0ja70zldx1qz",
+    "updatedAt": 1789346604875,
+    "gcalId": "gf0219253c4f39c42c2a43316f",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:24.875Z"
+   }
+  ],
+  "2024-04-30": [
+   {
+    "text": "工程会議-0005",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2024-05-02",
+    "uid": "gmu0ja70z7fi60f",
+    "updatedAt": 1789346607494,
+    "gcalId": "ga3370e2942ce8608d0265ee4e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:27.494Z"
+   }
+  ],
+  "2024-07-15": [
+   {
+    "text": "設備点検-0006",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmu0ja710wom2lz",
+    "updatedAt": 1789346636119,
+    "gcalId": "gfd430b09e182c1d0284ab38f3",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:56.119Z"
+   }
+  ],
+  "2024-07-22": [
+   {
+    "text": "月次報告-0007",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2024-07-23",
+    "uid": "gmu0ja710jhz6km",
+    "updatedAt": 1789346610110,
+    "gcalId": "g5319415219ff7c59e3a2fdafa",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:30.110Z"
+   }
+  ],
+  "2024-08-13": [
+   {
+    "text": "客先訪問-0008",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2024-08-14",
+    "uid": "gmu0ja710ilfglo",
+    "updatedAt": 1789346611815,
+    "gcalId": "g0d1e16c5dc4a4216cd376fa2d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:31.815Z"
+   }
+  ],
+  "2024-12-30": [
+   {
+    "text": "研修-0009",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2024-12-31",
+    "uid": "gmu0ja7101yxyyc",
+    "updatedAt": 1789346614509,
+    "gcalId": "g10750077c2dcab5312064a209",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:34.509Z"
+   }
+  ],
+  "2025-01-02": [
+   {
+    "text": "打ち合わせ-0010",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2025-01-03",
+    "uid": "gmu0ja7103oil41",
+    "updatedAt": 1789346615234,
+    "gcalId": "g938a61f08f0b4d7316db085b5",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:35.234Z"
+   }
+  ],
+  "2025-04-30": [
+   {
+    "text": "出張-0011",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2025-05-02",
+    "uid": "gmu0ja710gzm9ar",
+    "updatedAt": 1789346617401,
+    "gcalId": "g9f67e9ddd6a62636e480e5eed",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:37.401Z"
+   }
+  ],
+  "2025-07-22": [
+   {
+    "text": "定例会議-0012",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2025-07-23",
+    "uid": "gmu0ja710cja87b",
+    "updatedAt": 1789346619714,
+    "gcalId": "g459ea78cfd1d3f1e200993bf6",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:39.714Z"
+   }
+  ],
+  "2025-08-03": [
+   {
+    "text": "生産計画レビュー-0013",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmu880sfy114gvv",
+    "updatedAt": 1789354341983,
+    "gcalId": "g2f5fe0d611ae3f41774665e5dd4ccb42cb0a1c3f41554a949e7bf36a457545b0",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-14T02:52:21.983Z"
+   }
+  ],
+  "2025-08-13": [
+   {
+    "text": "ライン切替立ち会い-0014",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2025-08-15",
+    "uid": "gmu0ja710h1al5d",
+    "updatedAt": 1789346620517,
+    "gcalId": "g02ad3d0e3722a7e419c9e0e97",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:40.517Z"
+   }
+  ],
+  "2025-09-14": [
+   {
+    "text": "棚卸-0015",
+    "color": "#cffafe",
+    "start": "13:20",
+    "end": "14:57",
+    "location": "本社",
+    "endDate": null,
+    "uid": "gmt4ax2p2v13i9p",
+    "updatedAt": 1757216322827,
+    "note": "メモ0015",
+    "gcalId": "g58ef737a62349f2eae88ee0e1",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2025-09-07T03:38:42.827Z"
+   }
+  ],
+  "2025-09-15": [
+   {
+    "text": "部品入荷確認-0016",
+    "color": "#cffafe",
+    "start": "18:39",
+    "end": "19:56",
+    "location": "現地",
+    "endDate": null,
+    "uid": "gmt4ax2p26jh0gm",
+    "updatedAt": 1757927308547,
+    "note": "メモ0016",
+    "gcalId": "g792d698025456079b7c818365",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2025-09-15T09:08:28.547Z"
+   }
+  ],
+  "2025-09-19": [
+   {
+    "text": "工程会議-0017",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynyvz6hp8",
+    "updatedAt": 1788241462682,
+    "gcalId": "g982fffb43467a2bc41099e679",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:44:22.682Z"
+   }
+  ],
+  "2025-10-11": [
+   {
+    "text": "設備点検-0018",
+    "color": "#cffafe",
+    "start": "17:00",
+    "end": "18:00",
+    "location": "第1会議室",
+    "endDate": null,
+    "uid": "gmt4ax2p2e801xa",
+    "updatedAt": 1760061251544,
+    "note": "メモ0018",
+    "gcalId": "g817e1efbb1dca94626a3dc73f",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2025-10-10T01:54:11.544Z"
+   }
+  ],
+  "2025-10-19": [
+   {
+    "text": "月次報告-0019",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s1tfuy466v",
+    "updatedAt": 1789247472016,
+    "gcalId": "g0bde9ed494b4513cb49d64b7378be613152090453485454984db6c1f1ddbf930",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:11:12.016Z"
+   }
+  ],
+  "2025-11-11": [
+   {
+    "text": "客先訪問-0020",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynybh425r",
+    "updatedAt": 1788241475701,
+    "gcalId": "g9b1a510af2079d01684d48010",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:44:35.701Z"
+   }
+  ],
+  "2025-12-03": [
+   {
+    "text": "研修-0021",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynynhvrac",
+    "updatedAt": 1788241481397,
+    "gcalId": "g3057a3ac73c26275cdd9d3fdf",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:44:41.397Z"
+   }
+  ],
+  "2025-12-29": [
+   {
+    "text": "打ち合わせ-0022",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2025-12-31",
+    "uid": "gmty3tynzimfra2",
+    "updatedAt": 1789346622134,
+    "gcalId": "g12f6f3e060b077aa9e5ac1927",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:42.134Z"
+   }
+  ],
+  "2025-12-30": [
+   {
+    "text": "出張-0023",
+    "color": "#cffafe",
+    "start": "15:17",
+    "end": "15:51",
+    "location": null,
+    "endDate": null,
+    "uid": "gmt4ax2p2vzxpck",
+    "updatedAt": 1767073559878,
+    "note": "メモ0023",
+    "gcalId": "gaf3fd266dc220de9bc1ed5625",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2025-12-30T05:45:59.878Z"
+   }
+  ],
+  "2026-01-01": [
+   {
+    "text": "定例会議-0024",
+    "color": "#cffafe",
+    "start": "13:39",
+    "end": "14:13",
+    "location": "第1会議室",
+    "endDate": null,
+    "uid": "gmt4ax2p2jiecxb",
+    "updatedAt": 1767240516669,
+    "note": "メモ0024",
+    "gcalId": "g17bc4a0d2617004546b86dfd0",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2026-01-01T04:08:36.669Z"
+   }
+  ],
+  "2026-01-02": [
+   {
+    "text": "生産計画レビュー-0025",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynz49liml",
+    "updatedAt": 1789346623051,
+    "gcalId": "g19269e3402569ab9ad8926f2c",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:43.051Z"
+   }
+  ],
+  "2026-01-14": [
+   {
+    "text": "ライン切替立ち会い-0026",
+    "color": "#cffafe",
+    "start": "18:03",
+    "end": "18:29",
+    "location": null,
+    "endDate": null,
+    "uid": "gmt4ax2p2wetah5",
+    "updatedAt": 1768294588431,
+    "note": "メモ0026",
+    "gcalId": "g1b63287119622ccf1a9f66fb4",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2026-01-13T08:56:28.431Z"
+   }
+  ],
+  "2026-01-28": [
+   {
+    "text": "棚卸-0027",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynyoo26bi",
+    "updatedAt": 1788241494369,
+    "gcalId": "gad8e52e32fddf6910574a8f8e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:44:54.369Z"
+   }
+  ],
+  "2026-02-14": [
+   {
+    "text": "部品入荷確認-0028",
+    "color": "#cffafe",
+    "start": "13:00",
+    "end": "14:00",
+    "location": "現地",
+    "endDate": null,
+    "uid": "gmt4ax2p2mdfwbs",
+    "updatedAt": 1770947578210,
+    "note": "メモ0028",
+    "gcalId": "g18f0ca3d77afd1579b5e0760a",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2026-02-13T01:52:58.210Z"
+   }
+  ],
+  "2026-02-19": [
+   {
+    "text": "工程会議-0029",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tyny4kv9cg",
+    "updatedAt": 1788241500124,
+    "gcalId": "g81339a33d4645961ad8c54e37",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:00.124Z"
+   }
+  ],
+  "2026-03-23": [
+   {
+    "text": "設備点検-0030",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesj50ke6a",
+    "updatedAt": 1788241509625,
+    "gcalId": "g9d25203659c8943cf944713f0",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:09.625Z"
+   }
+  ],
+  "2026-04-11": [
+   {
+    "text": "月次報告-0031",
+    "color": "#cffafe",
+    "start": "13:00",
+    "end": "14:00",
+    "location": "第2会議室",
+    "endDate": null,
+    "uid": "gmt4ax2p2a3bdx2",
+    "updatedAt": 1775785436144,
+    "note": "メモ0031",
+    "gcalId": "g760e621e092c51ccc818abd4d",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2026-04-10T01:43:56.144Z"
+   }
+  ],
+  "2026-04-16": [
+   {
+    "text": "客先訪問-0032",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesjt228s8",
+    "updatedAt": 1788241519335,
+    "gcalId": "g6a778d5db6adc2f94a9a3a209",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:19.335Z"
+   }
+  ],
+  "2026-04-30": [
+   {
+    "text": "研修-0033",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-05-01",
+    "uid": "gmty3tynz2hgys9",
+    "updatedAt": 1789346624779,
+    "gcalId": "g9a0c0d1b74aed6c027f262066",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:44.779Z"
+   }
+  ],
+  "2026-05-07": [
+   {
+    "text": "打ち合わせ-0034",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-05-08",
+    "uid": "gmtzynh268l3sr8",
+    "updatedAt": 1789263548557,
+    "gcalId": "gf4124a51ac51df84aec8afcc7",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:39:08.557Z"
+   }
+  ],
+  "2026-05-12": [
+   {
+    "text": "出張-0035",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh26ue72wa",
+    "updatedAt": 1789263633172,
+    "gcalId": "gd390400ec148f037b555fe6bc",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:40:33.172Z"
+   }
+  ],
+  "2026-05-21": [
+   {
+    "text": "定例会議-0036",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesjgvwnw3",
+    "updatedAt": 1788241532545,
+    "gcalId": "ga821827bae195bf2fa61e7587",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:32.545Z"
+   }
+  ],
+  "2026-05-30": [
+   {
+    "text": "生産計画レビュー-0037",
+    "color": "#cffafe",
+    "start": "12:00",
+    "end": "13:00",
+    "location": "第2会議室",
+    "endDate": null,
+    "uid": "gmt4ax2p2imogrh",
+    "updatedAt": 1780020770390,
+    "note": "メモ0037",
+    "gcalId": "g45b16db8e78f04ab21e6d1edb",
+    "calId": "c51ab1517daa48a065",
+    "gUpdated": "2026-05-29T02:12:50.390Z"
+   }
+  ],
+  "2026-06-02": [
+   {
+    "text": "ライン切替立ち会い-0038",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesjuu23xb",
+    "updatedAt": 1788241538653,
+    "gcalId": "g4c74af51c45fd2fde03af5799",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:38.653Z"
+   }
+  ],
+  "2026-06-29": [
+   {
+    "text": "棚卸-0039",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesjl01mm9",
+    "updatedAt": 1788241546505,
+    "gcalId": "gb1d5153caff4f7cbcd9861eeb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:46.505Z"
+   }
+  ],
+  "2026-07-16": [
+   {
+    "text": "部品入荷確認-0040",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrwesjbnsqvp",
+    "updatedAt": 1788241554991,
+    "gcalId": "g2a960e5285caf249071d2ca88",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:45:54.991Z"
+   }
+  ],
+  "2026-07-21": [
+   {
+    "text": "工程会議-0041",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-07-22",
+    "uid": "gmty3tynzy70vel",
+    "updatedAt": 1789346627427,
+    "gcalId": "g0b3d3a381a524d2ef1df68dbc",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:47.427Z"
+   }
+  ],
+  "2026-07-23": [
+   {
+    "text": "設備点検-0042",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-07-24",
+    "uid": "gmtzynh26broeaf",
+    "updatedAt": 1789263473931,
+    "gcalId": "g1774abd2992096f519eaf71f7",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:37:53.931Z"
+   }
+  ],
+  "2026-07-31": [
+   {
+    "text": "月次報告-0043",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": "第2会議室",
+    "endDate": null,
+    "uid": "lmtz4mp4brk2z72",
+    "updatedAt": 1789262413450,
+    "gcalId": "g7713696b84dfcc709b1f3f4ef",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:20:13.450Z"
+   }
+  ],
+  "2026-08-12": [
+   {
+    "text": "客先訪問-0044",
+    "color": "#d1fae5",
+    "start": "14:05",
+    "end": "14:39",
+    "location": "第3工場",
+    "endDate": null,
+    "uid": "lmtz4nlij6bp2xw",
+    "updatedAt": 1789262454476,
+    "note": "メモ0044",
+    "gcalId": "g5a9e82f595fd925daf2a07fbe",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:20:54.476Z"
+   },
+   {
+    "text": "研修-0045",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-08-14",
+    "uid": "gmty3tynzob37gh",
+    "updatedAt": 1789346628227,
+    "gcalId": "g9ac3387cfcf881a4cda438d82",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:48.227Z"
+   }
+  ],
+  "2026-08-13": [
+   {
+    "text": "打ち合わせ-0046",
+    "color": "#d1fae5",
+    "start": "15:45",
+    "end": "16:18",
+    "location": "現地",
+    "endDate": null,
+    "uid": "lmtz4nqtsfahg32",
+    "updatedAt": 1789262461443,
+    "note": "メモ0046",
+    "gcalId": "g67855307af635ab21b0118045",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:21:01.443Z"
+   }
+  ],
+  "2026-08-17": [
+   {
+    "text": "出張-0047",
+    "color": "#fee2e2",
+    "start": "09:30",
+    "end": "10:00",
+    "location": null,
+    "endDate": null,
+    "uid": "lmtz4p4p5lpxqo7",
+    "updatedAt": 1789262526819,
+    "gcalId": "gfd1a199610b5f4fda313b3622",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:22:06.819Z"
+   }
+  ],
+  "2026-08-24": [
+   {
+    "text": "定例会議-0048",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nbuure4",
+    "updatedAt": 1789263233576,
+    "gcalId": "g8e0cadc4cfe38d3881ca21d70bf71b9dcdb26833228f5134c42d70812a94e0de",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2026-08-25": [
+   {
+    "text": "生産計画レビュー-0049",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt6yyfzaayiu0m",
+    "updatedAt": 1789201203822,
+    "todo": true,
+    "done": true
+   },
+   {
+    "text": "ライン切替立ち会い-0050",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmtyuh1gofk7q1z",
+    "updatedAt": 1789201204076,
+    "todo": true,
+    "done": true,
+    "gtaskId": "tcfdbc5959811ba9a65b17",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-12T08:20:04.076Z"
+   },
+   {
+    "text": "棚卸-0051",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmtyuh1go6pcbmk",
+    "updatedAt": 1789201203822,
+    "todo": true,
+    "done": true,
+    "gtaskId": "te190ba57520dc12da2aaf",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-12T08:20:03.822Z"
+   }
+  ],
+  "2026-09-03": [
+   {
+    "text": "部品入荷確認-0052",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtcoyo9rllsg6p",
+    "updatedAt": 1789201204310,
+    "todo": true,
+    "done": true
+   }
+  ],
+  "2026-09-04": [
+   {
+    "text": "工程会議-0053",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmtyuh1gounaosn",
+    "updatedAt": 1789245573400,
+    "todo": true,
+    "done": true,
+    "gtaskId": "t6b2e436d033cd0dece14d",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-12T20:39:33.400Z"
+   }
+  ],
+  "2026-09-07": [
+   {
+    "text": "設備点検-0054",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrweskhl6qrf",
+    "updatedAt": 1788241573918,
+    "gcalId": "g3ade4834dd9f140a4887c8942",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:46:13.918Z"
+   },
+   {
+    "text": "月次報告-0055",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmtyuh1gop0zlml",
+    "updatedAt": 1789245573705,
+    "todo": true,
+    "done": true,
+    "gtaskId": "t7f66edfb9751bc899b4d7",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-12T20:39:33.705Z"
+   }
+  ],
+  "2026-09-15": [
+   {
+    "text": "客先訪問-0056",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu0kcxlczg8c0z",
+    "updatedAt": 1789431342832,
+    "note": "メモ0056",
+    "todo": true,
+    "done": true,
+    "gtaskId": "tf6bbafe33481411a9c6e2",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-15T00:15:42.832Z"
+   },
+   {
+    "text": "研修-0057",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu0sa8fkmr6mxr",
+    "updatedAt": 1789434196444,
+    "note": "メモ0057",
+    "todo": true,
+    "done": true,
+    "gtaskId": "t43bd7eb7acd18f0be3bf4",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-15T01:03:16.444Z"
+   },
+   {
+    "text": "打ち合わせ-0058",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh262uu345",
+    "updatedAt": 1789372067206,
+    "gcalId": "g28841632e1afbd5501ff1dd99",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-14T07:47:47.206Z"
+   },
+   {
+    "text": "出張-0059",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu0yzu7a1q18gi",
+    "updatedAt": 1789431347294,
+    "note": "メモ0059",
+    "todo": true,
+    "done": true,
+    "gtaskId": "tfb01c1c8acaa65aa078c6",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-15T00:15:47.294Z"
+   }
+  ],
+  "2026-09-17": [
+   {
+    "text": "定例会議-0060",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu3va986s4vizq",
+    "updatedAt": 1789627732773,
+    "note": "メモ0060",
+    "todo": true,
+    "done": true,
+    "gtaskId": "t373c52eccf4ed85f6679b",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-17T06:48:52.773Z"
+   }
+  ],
+  "2026-09-18": [
+   {
+    "text": "生産計画レビュー-0061",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu5bbajmpc9amv",
+    "updatedAt": 1789732052421,
+    "todo": true,
+    "done": true,
+    "gtaskId": "tdee068d1f2a0811fea7c4",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-18T11:47:32.421Z"
+   }
+  ],
+  "2026-09-24": [
+   {
+    "text": "ライン切替立ち会い-0062",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu6w8pdfqj37ik",
+    "updatedAt": 1789732053135,
+    "todo": true,
+    "gtaskId": "tfb664345e679e92b5f195",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-18T11:47:33.135Z"
+   },
+   {
+    "text": "棚卸-0063",
+    "color": "#dbeafe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "tmu6w8pdfd39zu4",
+    "updatedAt": 1789732052875,
+    "todo": true,
+    "gtaskId": "td391008c0359244c2fa58",
+    "gtaskListId": "l007523b8b77157cf58794c9bea1107c",
+    "gtaskUpdated": "2026-09-18T11:47:32.875Z"
+   }
+  ],
+  "2026-09-27": [
+   {
+    "text": "部品入荷確認-0064",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxsb41j1e",
+    "updatedAt": 1789263226561,
+    "gcalId": "g7f41f817322bf39e0d6eadc24eff88873dda66a476a508f7c3a68d9d398601a0",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2026-10-05": [
+   {
+    "text": "工程会議-0065",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nq7ivvk",
+    "updatedAt": 1789263233576,
+    "gcalId": "ga16b4917bc622ee91a1cab1127d95b33fe583edf1ba66e9ebf2303290c466216",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2026-10-14": [
+   {
+    "text": "設備点検-0066",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmu0w5g2k0f8fbk",
+    "updatedAt": 1789369096114,
+    "gcalId": "gdc7b5ada073751ec607ae7a35",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-14T06:58:16.114Z"
+   }
+  ],
+  "2026-10-23": [
+   {
+    "text": "月次報告-0067",
+    "color": "#fee2e2",
+    "start": "09:30",
+    "end": "10:00",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh26xycfka",
+    "updatedAt": 1789263735472,
+    "gcalId": "ga6d253663cadf199451eb7604",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:42:15.472Z"
+   }
+  ],
+  "2026-11-03": [
+   {
+    "text": "客先訪問-0068",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynz8z6e23",
+    "updatedAt": 1789346641564,
+    "gcalId": "g49884e67545b7d1fb245ec573",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:44:01.564Z"
+   }
+  ],
+  "2026-11-12": [
+   {
+    "text": "研修-0069",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh26kmoe8t",
+    "updatedAt": 1789263751668,
+    "gcalId": "gdb4d02294ac4373c032e76fc4",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:42:31.668Z"
+   }
+  ],
+  "2026-11-24": [
+   {
+    "text": "打ち合わせ-0070",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrweskaztfsm",
+    "updatedAt": 1788241605305,
+    "gcalId": "g1bbf66c781355f394a4c9e534",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:46:45.305Z"
+   }
+  ],
+  "2026-12-02": [
+   {
+    "text": "出張-0071",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s2stptvyhy",
+    "updatedAt": 1789247714116,
+    "gcalId": "g041dda1bd00fe2ed0d44395b244fc6efb992bfa498395bb9fee56e828989bafa",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:15:14.116Z"
+   }
+  ],
+  "2026-12-09": [
+   {
+    "text": "定例会議-0072",
+    "color": "#fee2e2",
+    "start": "09:30",
+    "end": "10:00",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh264hmnpm",
+    "updatedAt": 1789263255662,
+    "gcalId": "gddbae5f0c8a0a7555e5a2e419",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:34:15.662Z"
+   }
+  ],
+  "2026-12-21": [
+   {
+    "text": "生産計画レビュー-0073",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrweskjg8759",
+    "updatedAt": 1788241619361,
+    "gcalId": "ge526661a310c319582a1140cb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:46:59.361Z"
+   }
+  ],
+  "2026-12-29": [
+   {
+    "text": "ライン切替立ち会い-0074",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2026-12-31",
+    "uid": "gmty3tynzynoqkg",
+    "updatedAt": 1789346630480,
+    "gcalId": "ga10c0e4b5de97f94a048ed1ed",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:43:50.480Z"
+   }
+  ],
+  "2027-01-04": [
+   {
+    "text": "棚卸-0075",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s4kyhn71ll",
+    "updatedAt": 1789248173363,
+    "gcalId": "gebcf41daf3ca5e43e6b2c3115b3ed498f8",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:22:53.363Z"
+   }
+  ],
+  "2027-01-06": [
+   {
+    "text": "部品入荷確認-0076",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2027-01-07",
+    "uid": "gmtzynh260enxgt",
+    "updatedAt": 1789263819894,
+    "gcalId": "g8656d3e7bcda5357c904a3642",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:43:39.894Z"
+   }
+  ],
+  "2027-01-18": [
+   {
+    "text": "工程会議-0077",
+    "color": "#fee2e2",
+    "start": "09:30",
+    "end": "10:00",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtzynh26nc02sy",
+    "updatedAt": 1789263842863,
+    "gcalId": "g673f7c3b80328beee7490aa34",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:44:02.863Z"
+   }
+  ],
+  "2027-02-01": [
+   {
+    "text": "設備点検-0078",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nehkxj5",
+    "updatedAt": 1789263233576,
+    "gcalId": "g407a24cdaf621390575c504ad4c86aedefe174715211c193ea61f4ccf8824ff7",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2027-02-11": [
+   {
+    "text": "月次報告-0079",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynz99rdhh",
+    "updatedAt": 1789346642435,
+    "gcalId": "g61e8f3a1b9fc15f85e040d646",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:44:02.435Z"
+   }
+  ],
+  "2027-02-15": [
+   {
+    "text": "客先訪問-0080",
+    "color": "#fee2e2",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": "2027-02-16",
+    "uid": "gmtzynh26h9crmf",
+    "updatedAt": 1789263877136,
+    "gcalId": "g93325b94522007f964f197e7b",
+    "calId": "c7ea7103fc2892d6951f31615c725f7fa21f3d4ae7ed9a5fa3eefa346085b10e3",
+    "gUpdated": "2026-09-13T01:44:37.136Z"
+   }
+  ],
+  "2027-02-23": [
+   {
+    "text": "研修-0081",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmty3tynzs8tdng",
+    "updatedAt": 1789346643319,
+    "gcalId": "g55888aa1eb07398e3a7e7d55e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-14T00:44:03.319Z"
+   }
+  ],
+  "2027-03-11": [
+   {
+    "text": "打ち合わせ-0082",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrweskdkd8uf",
+    "updatedAt": 1788241645476,
+    "gcalId": "g285b4a4cfa023406365357688",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:47:25.476Z"
+   }
+  ],
+  "2027-03-25": [
+   {
+    "text": "出張-0083",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "lmswrweska0vehk",
+    "updatedAt": 1788241649896,
+    "gcalId": "ge41ec957475c22d2878f65333",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-01T05:47:29.896Z"
+   }
+  ],
+  "2027-04-25": [
+   {
+    "text": "定例会議-0084",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxse3j7es",
+    "updatedAt": 1789263226561,
+    "gcalId": "g0b31a623a5627ef44bd3c4d6c0cf8d2ac4001fabb539e13227b84f4707020f49",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2027-05-30": [
+   {
+    "text": "生産計画レビュー-0085",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxswckel7",
+    "updatedAt": 1789263226561,
+    "gcalId": "gb8d751553d3045f97e6e2efde2677c8ed10d52cf9693ad901bcb8990976d1bcb",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2027-06-28": [
+   {
+    "text": "ライン切替立ち会い-0086",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s3lpwgev19",
+    "updatedAt": 1789247895046,
+    "gcalId": "g34c102663415c15bff88aa13482fedefb5",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:18:15.046Z"
+   }
+  ],
+  "2027-07-26": [
+   {
+    "text": "棚卸-0087",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nctuej9",
+    "updatedAt": 1789263233576,
+    "gcalId": "gb3b9655400dca76c7be430cad0a63be601bb6b6cef603c7b69b5c3ccb24d46e6",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2027-08-20": [
+   {
+    "text": "部品入荷確認-0088",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s3z7p72nyf",
+    "updatedAt": 1789247918074,
+    "gcalId": "gfea8e02dea70712988e220af211a5df115",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:18:38.074Z"
+   }
+  ],
+  "2027-09-27": [
+   {
+    "text": "工程会議-0089",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8ndw58ux",
+    "updatedAt": 1789263233576,
+    "gcalId": "g931947edaab9e2fe9636094723eecfab7a03823910c6bde08e09d8f4d8fd3137",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2027-10-28": [
+   {
+    "text": "設備点検-0090",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s26mkzai71",
+    "updatedAt": 1789354343988,
+    "gcalId": "gb2781d59fff5efe61b34706f21d94c52f95bab062c3a4816aa4435a77269b356",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-14T02:52:23.988Z"
+   }
+  ],
+  "2027-11-24": [
+   {
+    "text": "月次報告-0091",
+    "color": "#ede9fe",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz1s45nw2jqfl",
+    "updatedAt": 1789247928030,
+    "gcalId": "g8893e6a296171187d5494e9c0124e6d4df",
+    "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+    "gUpdated": "2026-09-12T21:18:48.030Z"
+   }
+  ],
+  "2027-12-19": [
+   {
+    "text": "客先訪問-0092",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxsygkkaz",
+    "updatedAt": 1789263226561,
+    "gcalId": "g1e723d4aba4efb371422a7ad707a8cf515d120dc8d7a0c5d376d3778f6e0d254",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2028-01-24": [
+   {
+    "text": "研修-0093",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8npqzz0c",
+    "updatedAt": 1789263233576,
+    "gcalId": "ge4728a75995f658d5b13bec9b412eea086c59b6d8e137669bf253c62539cace1",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2028-02-28": [
+   {
+    "text": "打ち合わせ-0094",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nyhhjag",
+    "updatedAt": 1789263233576,
+    "gcalId": "gdcf51622f29f6a17d31638294586cb745f2c8e402921048d760bf491e47481b5",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2028-04-10": [
+   {
+    "text": "出張-0095",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nj8zpyi",
+    "updatedAt": 1789263233576,
+    "gcalId": "g029d1789d239fb3e98b0d58c947f1744f836da7c1917256740b25ec053ff095c",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2028-05-21": [
+   {
+    "text": "定例会議-0096",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxsdnyckh",
+    "updatedAt": 1789263226561,
+    "gcalId": "g2fb6e054490717fbd2c2912065d1f83f48608aaaa5c46eca9c2a14235282d36b",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2028-06-25": [
+   {
+    "text": "生産計画レビュー-0097",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxs7ingso",
+    "updatedAt": 1789263226561,
+    "gcalId": "g558141932693af27e2ac1995409e1e91e0d79639dd620179dc69f1a0b36b20bc",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2028-07-24": [
+   {
+    "text": "ライン切替立ち会い-0098",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5os8nodkc7a",
+    "updatedAt": 1789263233576,
+    "gcalId": "g21e929c1874f8d88a797d0e82e4e8148cd485d233f0c672e12b2dc09af71aee5",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:53.576Z"
+   }
+  ],
+  "2028-08-20": [
+   {
+    "text": "棚卸-0099",
+    "color": "#d1fae5",
+    "start": "23:00",
+    "end": "23:55",
+    "location": null,
+    "endDate": null,
+    "uid": "gmtz5orxsecpxwp",
+    "updatedAt": 1789263226561,
+    "gcalId": "ga7fdf2d3ae21f85de7b511dd55c0be4b0ef7626bf4e9c1a1342b78cf6ad23363",
+    "calId": "c97c8fe564ed5a4f0af0a1db527b297d82a8c4866cdaf1c6143633f167b38d818",
+    "gUpdated": "2026-09-13T01:33:46.561Z"
+   }
+  ],
+  "2033-11-24": [
+   {
+    "text": "部品入荷確認-0100",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt3rbozv",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g94685a8e75fe00bd15e7999ea",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:08.398Z"
+   }
+  ],
+  "2033-12-04": [
+   {
+    "text": "工程会議-0101",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohte6ad0z",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gffa6ae5de82018fcef9295a35",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:09.733Z"
+   }
+  ],
+  "2034-11-24": [
+   {
+    "text": "設備点検-0102",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt1qgnhz",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g23bd7f9a61754467f855fb371",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:10.933Z"
+   }
+  ],
+  "2034-12-04": [
+   {
+    "text": "月次報告-0103",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohthwyh94",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g3e35fc1cc0f633dc8474fb338",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:12.204Z"
+   }
+  ],
+  "2035-11-24": [
+   {
+    "text": "客先訪問-0104",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptdpb36t",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g23397b5e779c3d56159035ac9",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:13.451Z"
+   }
+  ],
+  "2035-12-04": [
+   {
+    "text": "研修-0105",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohth8ywo7",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g003effbad3e00af391590c09d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:14.694Z"
+   }
+  ],
+  "2036-11-24": [
+   {
+    "text": "打ち合わせ-0106",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptcc1y9f",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g42163d72beec12a0be8612321",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:16.000Z"
+   }
+  ],
+  "2036-12-04": [
+   {
+    "text": "出張-0107",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohthdqumr",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb62f7b15692e61efcc026d9a6",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:17.461Z"
+   }
+  ],
+  "2037-11-24": [
+   {
+    "text": "定例会議-0108",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptszcyko",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ge69e9fc49e7c9d194e860cbd4",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:18.735Z"
+   }
+  ],
+  "2037-12-04": [
+   {
+    "text": "生産計画レビュー-0109",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht1uhscl",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g863097f579ba7a9f9198a57a9",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:19.948Z"
+   }
+  ],
+  "2038-11-24": [
+   {
+    "text": "ライン切替立ち会い-0110",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptl2tk6g",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gd608ebccd50afae325f377594",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:21.208Z"
+   }
+  ],
+  "2038-12-04": [
+   {
+    "text": "棚卸-0111",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtmnfane",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g64fc5772edc9bb8eb778adfca",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:22.583Z"
+   }
+  ],
+  "2039-11-24": [
+   {
+    "text": "部品入荷確認-0112",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptler37l",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gbaf4e0e8104ddc1613b0c95e6",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:23.921Z"
+   }
+  ],
+  "2039-12-04": [
+   {
+    "text": "工程会議-0113",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtb360a8",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g6b952e248fdd04b1bdf6bbc79",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:25.175Z"
+   }
+  ],
+  "2040-11-24": [
+   {
+    "text": "設備点検-0114",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptbsgn5v",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g1ad2042ee1a0c0f977be04839",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:26.494Z"
+   }
+  ],
+  "2040-12-04": [
+   {
+    "text": "月次報告-0115",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohttpv14g",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g1c68914469f2ee4810d2d8dad",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:27.772Z"
+   }
+  ],
+  "2041-11-24": [
+   {
+    "text": "客先訪問-0116",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptimg92q",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gf6c06304c0fe7d2c3937a60f8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:29.085Z"
+   }
+  ],
+  "2041-12-04": [
+   {
+    "text": "研修-0117",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht346tu6",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g34ec76b493af3b3313cc3a1b8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:30.405Z"
+   }
+  ],
+  "2042-11-24": [
+   {
+    "text": "打ち合わせ-0118",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptrrrc7a",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g86c15ae16ca5fdb76e173b81e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:31.900Z"
+   }
+  ],
+  "2042-12-04": [
+   {
+    "text": "出張-0119",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtmsvn9j",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g7ac8e7facde905142a0530d82",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:33.348Z"
+   }
+  ],
+  "2043-11-24": [
+   {
+    "text": "定例会議-0120",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptjl6iqz",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g6af48b4d1726ef61ef0b4066d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:34.644Z"
+   }
+  ],
+  "2043-12-04": [
+   {
+    "text": "生産計画レビュー-0121",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtt4h9pv",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gc823627221bfbb463df7278a8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:35.977Z"
+   }
+  ],
+  "2044-11-24": [
+   {
+    "text": "ライン切替立ち会い-0122",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptus5xut",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gc59ace00628b8ac05775c3c39",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:37.195Z"
+   }
+  ],
+  "2044-12-04": [
+   {
+    "text": "棚卸-0123",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtqlxqk0",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g38bbeaa2fbe363577ef538188",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:38.404Z"
+   }
+  ],
+  "2045-11-24": [
+   {
+    "text": "部品入荷確認-0124",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptz1noox",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gcb3b59fc1d164338766b04c94",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:39.575Z"
+   }
+  ],
+  "2045-12-04": [
+   {
+    "text": "工程会議-0125",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtb6w6oz",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gc8f4649d5475ceec39dc368d1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:40.855Z"
+   }
+  ],
+  "2046-11-24": [
+   {
+    "text": "設備点検-0126",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt2564b3",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g712c0246ae04e1f236e47cef1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:42.181Z"
+   }
+  ],
+  "2046-12-04": [
+   {
+    "text": "月次報告-0127",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht4r9389",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g91c72025eccd28d58adf86137",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:43.444Z"
+   }
+  ],
+  "2047-11-24": [
+   {
+    "text": "客先訪問-0128",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pti7fm9t",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g39bf9ea8557ad45496b14e163",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:44.792Z"
+   }
+  ],
+  "2047-12-04": [
+   {
+    "text": "研修-0129",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtpn7km7",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g5704eb665920e540bcab95c09",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:46.166Z"
+   }
+  ],
+  "2048-11-24": [
+   {
+    "text": "打ち合わせ-0130",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptunxm5d",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga7e5761b11d42569dd45af6e2",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:47.500Z"
+   }
+  ],
+  "2048-12-04": [
+   {
+    "text": "出張-0131",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht3r0lgv",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g294b1d44ffe3cb0bc4ad4b6c2",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:48.826Z"
+   }
+  ],
+  "2049-11-24": [
+   {
+    "text": "定例会議-0132",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptbbrpuq",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g99a1f435c59818f2701761097",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:49.970Z"
+   }
+  ],
+  "2049-12-04": [
+   {
+    "text": "生産計画レビュー-0133",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohts46zqv",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gdd9f9502cf16b139977c6bbb5",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:51.190Z"
+   }
+  ],
+  "2050-11-24": [
+   {
+    "text": "ライン切替立ち会い-0134",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptyurqic",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g31276466f49694196481e0df1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:52.583Z"
+   }
+  ],
+  "2050-12-04": [
+   {
+    "text": "棚卸-0135",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht4bvk8d",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g070c93aba55b9c7f3e179004d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:53.834Z"
+   }
+  ],
+  "2051-11-24": [
+   {
+    "text": "部品入荷確認-0136",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptmoimqq",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g0b34639c184f835d5da597aa2",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:55.151Z"
+   }
+  ],
+  "2051-12-04": [
+   {
+    "text": "工程会議-0137",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtdd397s",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb50371b13d7664237775b1409",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:56.390Z"
+   }
+  ],
+  "2052-11-24": [
+   {
+    "text": "設備点検-0138",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptjrtg28",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g9225a6b156cf71632dd48a10a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:57.585Z"
+   }
+  ],
+  "2052-12-04": [
+   {
+    "text": "月次報告-0139",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht2r4vq4",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gfba9b44d799b9ccebb313725a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:17:58.889Z"
+   }
+  ],
+  "2053-11-24": [
+   {
+    "text": "客先訪問-0140",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptt4qh3k",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gde2ab66b97b70b1035f731aa8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:00.108Z"
+   }
+  ],
+  "2053-12-04": [
+   {
+    "text": "研修-0141",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohto297m8",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb8478a7e666db2bd0543c2286",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:01.322Z"
+   }
+  ],
+  "2054-11-24": [
+   {
+    "text": "打ち合わせ-0142",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptyicq56",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g798665f55aee326f829e09df5",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:02.541Z"
+   }
+  ],
+  "2054-12-04": [
+   {
+    "text": "出張-0143",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohthhmfps",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gaafa5f523fc6e3db789fa6b03",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:03.821Z"
+   }
+  ],
+  "2055-11-24": [
+   {
+    "text": "定例会議-0144",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptttrb18",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga7ab3f9101886efb69c06f38d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:05.258Z"
+   }
+  ],
+  "2055-12-04": [
+   {
+    "text": "生産計画レビュー-0145",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtvst33r",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g126b0ab8404de8a602ce10ac8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:06.661Z"
+   }
+  ],
+  "2056-11-24": [
+   {
+    "text": "ライン切替立ち会い-0146",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptovlssz",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g5085214ff657739c01da3f48d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:07.920Z"
+   }
+  ],
+  "2056-12-04": [
+   {
+    "text": "棚卸-0147",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtr7t2nr",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g2c3efc2463fbdb2b20c7a4fe1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:09.170Z"
+   }
+  ],
+  "2057-11-24": [
+   {
+    "text": "部品入荷確認-0148",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptdz0uo1",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gd7ca8fb9b7d65cfbb6d366951",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:10.481Z"
+   }
+  ],
+  "2057-12-04": [
+   {
+    "text": "工程会議-0149",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtcd1mps",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ge13d534ca943fe0e02648e4c1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:11.808Z"
+   }
+  ],
+  "2058-11-24": [
+   {
+    "text": "設備点検-0150",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt2vi3e4",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g0ccedc34290e17c0713dcbccd",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:13.277Z"
+   }
+  ],
+  "2058-12-04": [
+   {
+    "text": "月次報告-0151",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtuk9416",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g3a2a3d8296e56a2b96d5d343b",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:14.828Z"
+   }
+  ],
+  "2059-11-24": [
+   {
+    "text": "客先訪問-0152",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt1xpnpa",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g6a02f02d5111d425a7a8486c8",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:16.319Z"
+   }
+  ],
+  "2059-12-04": [
+   {
+    "text": "研修-0153",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtnr5b6y",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga859cb26cd18ed41d2abd34c6",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:17.621Z"
+   }
+  ],
+  "2060-11-24": [
+   {
+    "text": "打ち合わせ-0154",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptgm51db",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g67d0cc2b0272c4bb38c2a9caf",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:19.089Z"
+   }
+  ],
+  "2060-12-04": [
+   {
+    "text": "出張-0155",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtqryig9",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g30a82784def3cd41f548e9c4d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:20.422Z"
+   }
+  ],
+  "2061-11-24": [
+   {
+    "text": "定例会議-0156",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptc64eqn",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g63db14b640e64954a1f6269ee",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:21.789Z"
+   }
+  ],
+  "2061-12-04": [
+   {
+    "text": "生産計画レビュー-0157",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht315e9x",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g6d6a47fd8aa8238d0c5bdc89d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:23.018Z"
+   }
+  ],
+  "2062-11-24": [
+   {
+    "text": "ライン切替立ち会い-0158",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptjht824",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gdd9a1fcc384603e7e4fc99dde",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:24.371Z"
+   }
+  ],
+  "2062-12-04": [
+   {
+    "text": "棚卸-0159",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtd9uwyd",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g936dbad5c908c3c2bbb5f8cec",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:25.644Z"
+   }
+  ],
+  "2063-11-24": [
+   {
+    "text": "部品入荷確認-0160",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pttqraqp",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g549b5eb6a2df5b9e1b500daba",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:26.895Z"
+   }
+  ],
+  "2063-12-04": [
+   {
+    "text": "工程会議-0161",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtcxzlzy",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g2bc6e5b3a9fc9fd46415af9bd",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:28.116Z"
+   }
+  ],
+  "2064-11-24": [
+   {
+    "text": "設備点検-0162",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptb2tz6c",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g4c0d895cd0d7af2e63fb24761",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:29.455Z"
+   }
+  ],
+  "2064-12-04": [
+   {
+    "text": "月次報告-0163",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtpwjtyd",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb960532249b0ac1ab829d55f6",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:30.729Z"
+   }
+  ],
+  "2065-11-24": [
+   {
+    "text": "客先訪問-0164",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt0wkn6s",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g79f1fb33019cab2063d188966",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:31.893Z"
+   }
+  ],
+  "2065-12-04": [
+   {
+    "text": "研修-0165",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtlujt1f",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g58f70e5bfa060da8f56e2cd51",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:33.115Z"
+   }
+  ],
+  "2066-11-24": [
+   {
+    "text": "打ち合わせ-0166",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptssr3xm",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g5c7bc7dc1916e3a99f58402f7",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:34.358Z"
+   }
+  ],
+  "2066-12-04": [
+   {
+    "text": "出張-0167",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohth9cqe3",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb33445fb72c9271690e6e8834",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:35.571Z"
+   }
+  ],
+  "2067-11-24": [
+   {
+    "text": "定例会議-0168",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt5cuupt",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g4c87e5993596657a24db17255",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:36.942Z"
+   }
+  ],
+  "2067-12-04": [
+   {
+    "text": "生産計画レビュー-0169",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtbtgl1w",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g7f0ed2d3b7dfae47c8bf0a185",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:38.285Z"
+   }
+  ],
+  "2068-11-24": [
+   {
+    "text": "ライン切替立ち会い-0170",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptrfztmj",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gbb780b26475c333cf55ceff2c",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:39.622Z"
+   }
+  ],
+  "2068-12-04": [
+   {
+    "text": "棚卸-0171",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtjthvq1",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g18f05f25fdd04cf2eebc33212",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:41.064Z"
+   }
+  ],
+  "2069-11-24": [
+   {
+    "text": "部品入荷確認-0172",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptoipggh",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g7434620789ce1437edb276414",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:42.367Z"
+   }
+  ],
+  "2069-12-04": [
+   {
+    "text": "工程会議-0173",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtgncdpv",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gdb7cf85560f5cec1d752be06a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:43.654Z"
+   }
+  ],
+  "2070-11-24": [
+   {
+    "text": "設備点検-0174",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt58790d",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga6819f7524cf24e06cbf182f7",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:44.941Z"
+   }
+  ],
+  "2070-12-04": [
+   {
+    "text": "月次報告-0175",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht5br0c4",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gf962c5a4f2dc49b33712e1603",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:46.305Z"
+   }
+  ],
+  "2071-11-24": [
+   {
+    "text": "客先訪問-0176",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt956x9m",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ge7b388c13244755f5e09bdc58",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:47.768Z"
+   }
+  ],
+  "2071-12-04": [
+   {
+    "text": "研修-0177",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht9gvb41",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g0b236fcd1fa69322f8e1dd7bb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:48.910Z"
+   }
+  ],
+  "2072-11-24": [
+   {
+    "text": "打ち合わせ-0178",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptk5334u",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g1b54c2d2a5321724f146b2d02",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:50.214Z"
+   }
+  ],
+  "2072-12-04": [
+   {
+    "text": "出張-0179",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtd6zqv0",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gd0d8685ec969894b7f8b46573",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:51.427Z"
+   }
+  ],
+  "2073-11-24": [
+   {
+    "text": "定例会議-0180",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptp1aws8",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gad0df87c890e4af37109fd295",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:52.732Z"
+   }
+  ],
+  "2073-12-04": [
+   {
+    "text": "生産計画レビュー-0181",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3oht39b1na",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g11358c0705dd7eef173f792e2",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:54.016Z"
+   }
+  ],
+  "2074-11-24": [
+   {
+    "text": "ライン切替立ち会い-0182",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptcse4tn",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gc5416963084b22716a98ea159",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:55.284Z"
+   }
+  ],
+  "2074-12-04": [
+   {
+    "text": "棚卸-0183",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtrb0v5b",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g1e7a3c5e36959519ec4d28c27",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:56.685Z"
+   }
+  ],
+  "2075-11-24": [
+   {
+    "text": "部品入荷確認-0184",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptanz3vb",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga4a712d4c125de001d18fd14b",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:57.982Z"
+   }
+  ],
+  "2075-12-04": [
+   {
+    "text": "工程会議-0185",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtqodq0j",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gabfc921b1a6ab8f3512412125",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:18:59.263Z"
+   }
+  ],
+  "2076-11-24": [
+   {
+    "text": "設備点検-0186",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt0g5q3g",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb1c7f8eebf8883d83e38edc1e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:00.547Z"
+   }
+  ],
+  "2076-12-04": [
+   {
+    "text": "月次報告-0187",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohtbf255c",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gac94cb163c688d5c4fcbd3591",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:01.929Z"
+   }
+  ],
+  "2077-11-24": [
+   {
+    "text": "客先訪問-0188",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptpfv79l",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb02d7b703decbaacee5f34bf3",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:03.148Z"
+   }
+  ],
+  "2077-12-04": [
+   {
+    "text": "研修-0189",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohul0lwvx",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g53314a80bbe23b6f4a965f669",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:04.407Z"
+   }
+  ],
+  "2078-11-24": [
+   {
+    "text": "打ち合わせ-0190",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptbiowna",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gea025963e51d83b928bf4d1ef",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:05.614Z"
+   }
+  ],
+  "2078-12-04": [
+   {
+    "text": "出張-0191",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohus9lgx3",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g362322d31d4f3ff3a89265dfb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:06.830Z"
+   }
+  ],
+  "2079-11-24": [
+   {
+    "text": "定例会議-0192",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt97lu4y",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb1496bd30dca7a7b0642411cc",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:08.051Z"
+   }
+  ],
+  "2079-12-04": [
+   {
+    "text": "生産計画レビュー-0193",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuzfpuvt",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gd9105d552ff2507b00b1fbc06",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:09.461Z"
+   }
+  ],
+  "2080-11-24": [
+   {
+    "text": "ライン切替立ち会い-0194",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptivalms",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gdb752dd9aa5d014b98d5106bb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:10.809Z"
+   }
+  ],
+  "2080-12-04": [
+   {
+    "text": "棚卸-0195",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuuncwnu",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g201e247e40e37f909df9b58a5",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:12.149Z"
+   }
+  ],
+  "2081-11-24": [
+   {
+    "text": "部品入荷確認-0196",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt3z4lrd",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g75b87b04307825ac6596576cc",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:13.299Z"
+   }
+  ],
+  "2081-12-04": [
+   {
+    "text": "工程会議-0197",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohugqr63d",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gab3fe445516009e6cd24817bf",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:14.489Z"
+   }
+  ],
+  "2082-11-24": [
+   {
+    "text": "設備点検-0198",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt52kfql",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g4cbd347bffbc8c668bb363475",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:15.682Z"
+   }
+  ],
+  "2082-12-04": [
+   {
+    "text": "月次報告-0199",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohucdg1to",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga6127c516446ce2fdeadcff3b",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:16.892Z"
+   }
+  ],
+  "2083-11-24": [
+   {
+    "text": "客先訪問-0200",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt9m1y7v",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g8cc11e36306524894f3c8de57",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:18.139Z"
+   }
+  ],
+  "2083-12-04": [
+   {
+    "text": "研修-0201",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuz8w85p",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g56dcb346b6564f471a884bc51",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:19.373Z"
+   }
+  ],
+  "2084-11-24": [
+   {
+    "text": "打ち合わせ-0202",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptr72m0o",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g38b0e3e373745c1829b366b55",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:20.711Z"
+   }
+  ],
+  "2084-12-04": [
+   {
+    "text": "出張-0203",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohu5h38xu",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gfe1068dd134345d4f9d61f734",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:22.040Z"
+   }
+  ],
+  "2085-11-24": [
+   {
+    "text": "定例会議-0204",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptkz3v6g",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g659e98e3116fbb484cd51da3e",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:23.205Z"
+   }
+  ],
+  "2085-12-04": [
+   {
+    "text": "生産計画レビュー-0205",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohu16y9mj",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g70002e6c1366f82cf9131d63a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:24.447Z"
+   }
+  ],
+  "2086-11-24": [
+   {
+    "text": "ライン切替立ち会い-0206",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt6225db",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gfca681517e9ed1862b8c8ac4f",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:25.841Z"
+   }
+  ],
+  "2086-12-04": [
+   {
+    "text": "棚卸-0207",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohukpbm0k",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g8a5d9418d1a07eb86aac7d921",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:27.142Z"
+   }
+  ],
+  "2087-11-24": [
+   {
+    "text": "部品入荷確認-0208",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptxaxilo",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gdf264ae4367e38c3de15fc6ac",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:28.461Z"
+   }
+  ],
+  "2087-12-04": [
+   {
+    "text": "工程会議-0209",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohurbw6po",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g11e5200273aee7058c74978dd",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:29.762Z"
+   }
+  ],
+  "2088-11-24": [
+   {
+    "text": "設備点検-0210",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptn1seb4",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb4d999493a42e795e6eef9dbe",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:31.110Z"
+   }
+  ],
+  "2088-12-04": [
+   {
+    "text": "月次報告-0211",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuh8pnlh",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb58195eaf5d5e108c4249a5f2",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:32.302Z"
+   }
+  ],
+  "2089-11-24": [
+   {
+    "text": "客先訪問-0212",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt1j6uqj",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga40aafba547e847758e65323f",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:33.656Z"
+   }
+  ],
+  "2089-12-04": [
+   {
+    "text": "研修-0213",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohu1v4g1i",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g60a0e0594286ec98bc4be14e0",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:34.929Z"
+   }
+  ],
+  "2090-11-24": [
+   {
+    "text": "打ち合わせ-0214",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptjfy9b2",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g968310ef0ff5f6970f2c3f09b",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:36.355Z"
+   }
+  ],
+  "2090-12-04": [
+   {
+    "text": "出張-0215",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuzq69c3",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga16cff511d5bb1b03dce797cc",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:37.642Z"
+   }
+  ],
+  "2091-11-24": [
+   {
+    "text": "定例会議-0216",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pt6w0gj0",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga41b65c32007a818e1749b07a",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:38.929Z"
+   }
+  ],
+  "2091-12-04": [
+   {
+    "text": "生産計画レビュー-0217",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohu9icd9k",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g54d416593e00eb040197c1778",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:40.212Z"
+   }
+  ],
+  "2092-11-24": [
+   {
+    "text": "ライン切替立ち会い-0218",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptl0dnbb",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g66a37a87e5f03b8977dc2bea1",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:41.437Z"
+   }
+  ],
+  "2092-12-04": [
+   {
+    "text": "棚卸-0219",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohurxmti2",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gb1404f7ac4911a90e4006eae3",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:42.715Z"
+   }
+  ],
+  "2093-11-24": [
+   {
+    "text": "部品入荷確認-0220",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pte035qs",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g7583497016f38831b8fd58c26",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:43.883Z"
+   }
+  ],
+  "2093-12-04": [
+   {
+    "text": "工程会議-0221",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuqq570r",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gee258413c1f08466e6a9a632c",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:45.117Z"
+   }
+  ],
+  "2094-11-24": [
+   {
+    "text": "設備点検-0222",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptc2a9z5",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g904ea4327383a27bce7195b4c",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:46.464Z"
+   }
+  ],
+  "2094-12-04": [
+   {
+    "text": "月次報告-0223",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuraetoc",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g6e2fcb06e424c22d1c6a3979c",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:47.797Z"
+   }
+  ],
+  "2095-11-24": [
+   {
+    "text": "客先訪問-0224",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pti1no1k",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gfc9239b404c8de0ac0c4f5c80",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:48.935Z"
+   }
+  ],
+  "2095-12-04": [
+   {
+    "text": "研修-0225",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohueosdm2",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g12a8f7dae223c054aefa193b7",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:50.254Z"
+   }
+  ],
+  "2096-11-24": [
+   {
+    "text": "打ち合わせ-0226",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptbf8ezb",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gad36676171eb5dea36613e74b",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:51.432Z"
+   }
+  ],
+  "2096-12-04": [
+   {
+    "text": "出張-0227",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuxb0nq2",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "ga8d796d21e5dcdb5d61d930b0",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:52.539Z"
+   }
+  ],
+  "2097-11-24": [
+   {
+    "text": "定例会議-0228",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9pttucb4p",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g37d8d5324fd029e3673a5b6c5",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:53.642Z"
+   }
+  ],
+  "2097-12-04": [
+   {
+    "text": "生産計画レビュー-0229",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuv5mlv8",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g23f883ac97ae5b3db31309715",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:54.946Z"
+   }
+  ],
+  "2098-11-24": [
+   {
+    "text": "ライン切替立ち会い-0230",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptqdxs6j",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g1c3abe6a7974fd4ea9f1fc6bb",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:56.249Z"
+   }
+  ],
+  "2098-12-04": [
+   {
+    "text": "棚卸-0231",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuid1qrd",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g78f89c64e9aa8b8c465c17399",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:57.544Z"
+   }
+  ],
+  "2099-11-24": [
+   {
+    "text": "部品入荷確認-0232",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2fm9ptp6b69l",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "g95f9a35d7dc52f9877a94d52d",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:58.817Z"
+   }
+  ],
+  "2099-12-04": [
+   {
+    "text": "工程会議-0233",
+    "color": "#fef3c7",
+    "start": null,
+    "end": null,
+    "location": null,
+    "endDate": null,
+    "uid": "gmt2f3ohuvs41sb",
+    "updatedAt": 1789200803925,
+    "src": "import",
+    "gcalId": "gd16f2c71d9e58777c77fed062",
+    "calId": "cfb7ad55f8f0b8b34d44e0c6731d43e156d9b9a86244ab7c1b9580281e6ab6c6a",
+    "gUpdated": "2026-09-12T08:19:59.994Z"
+   }
+  ]
+ },
+ "recurringEvents": [
+  {
+   "calId": "c18aef7c5fb45fb6f9f784ed34949c029a29ecb18fc0003664a577b6ea8832f75",
+   "color": "#ede9fe",
+   "dirty": false,
+   "end": null,
+   "except": [
+    "2027-04-21",
+    "2026-04-21"
+   ],
+   "from": "2026-04-21",
+   "gUpdated": "2026-09-12T21:12:59.731Z",
+   "gcalId": "g8d96b86af269e1fd0f0607027",
+   "location": null,
+   "rule": {
+    "day": 21,
+    "month": 4,
+    "type": "yearly"
+   },
+   "start": null,
+   "text": "定例会議-9000",
+   "uid": "gmtz1s18u99xf80",
+   "until": null,
+   "updatedAt": 1789247579731
+  }
+ ],
+ "settings": {
+  "fontSize": {
+   "year": 2,
+   "half": 1,
+   "month": 1,
+   "week": 1,
+   "day": 1
+  },
+  "show": {
+   "year": {
+    "mark": true,
+    "text": false,
+    "start": false,
+    "end": false,
+    "location": false
+   },
+   "half": {
+    "mark": true,
+    "text": true,
+    "start": false,
+    "end": false,
+    "location": false
+   },
+   "month": {
+    "mark": false,
+    "text": true,
+    "start": true,
+    "end": true,
+    "location": false
+   },
+   "week": {
+    "mark": false,
+    "text": true,
+    "start": true,
+    "end": true,
+    "location": true
+   },
+   "day": {
+    "mark": false,
+    "text": true,
+    "start": true,
+    "end": true,
+    "location": true
+   }
+  },
+  "notify": {
+   "enabled": true,
+   "lead": 10
+  },
+  "hours": {
+   "start": 0,
+   "end": 24
+  },
+  "summary": {
+   "enabled": false,
+   "time": "08:00"
+  },
+  "todoCarryover": true,
+  "categories": [
+   {
+    "color": "#dbeafe",
+    "name": "仕事"
+   },
+   {
+    "color": "#d1fae5",
+    "name": "私用"
+   },
+   {
+    "color": "#fce7f3",
+    "name": "重要"
+   }
+  ],
+  "hiddenCats": [],
+  "weekStart": 0,
+  "theme": "light",
+  "syncBackup": false,
+  "feed": {
+   "url": "",
+   "auto": true
+  },
+  "calcCollapsed": true,
+  "settingsGroups": {
+   "display": true,
+   "notify": false,
+   "workday": false,
+   "sync": true
+  }
+ },
+ "workingDays": [
+  "2023-01-05",
+  "2023-01-06",
+  "2023-01-10",
+  "2023-01-11",
+  "2023-01-12",
+  "2023-01-13",
+  "2023-01-16",
+  "2023-01-17",
+  "2023-01-18",
+  "2023-01-19",
+  "2023-01-20",
+  "2023-01-23",
+  "2023-01-24",
+  "2023-01-25",
+  "2023-01-26",
+  "2023-01-27",
+  "2023-01-30",
+  "2023-01-31",
+  "2023-02-01",
+  "2023-02-02",
+  "2023-02-06",
+  "2023-02-07",
+  "2023-02-08",
+  "2023-02-09",
+  "2023-02-10",
+  "2023-02-13",
+  "2023-02-14",
+  "2023-02-15",
+  "2023-02-16",
+  "2023-02-17",
+  "2023-02-20",
+  "2023-02-21",
+  "2023-02-22",
+  "2023-02-24",
+  "2023-02-27",
+  "2023-02-28",
+  "2023-03-01",
+  "2023-03-02",
+  "2023-03-03",
+  "2023-03-06",
+  "2023-03-07",
+  "2023-03-08",
+  "2023-03-09",
+  "2023-03-13",
+  "2023-03-14",
+  "2023-03-15",
+  "2023-03-16",
+  "2023-03-17",
+  "2023-03-20",
+  "2023-03-22",
+  "2023-03-23",
+  "2023-03-24",
+  "2023-03-27",
+  "2023-03-28",
+  "2023-03-29",
+  "2023-03-30",
+  "2023-03-31",
+  "2023-04-03",
+  "2023-04-04",
+  "2023-04-05",
+  "2023-04-06",
+  "2023-04-07",
+  "2023-04-10",
+  "2023-04-11",
+  "2023-04-12",
+  "2023-04-13",
+  "2023-04-14",
+  "2023-04-17",
+  "2023-04-18",
+  "2023-04-19",
+  "2023-04-20",
+  "2023-04-21",
+  "2023-04-24",
+  "2023-04-25",
+  "2023-04-26",
+  "2023-04-27",
+  "2023-04-28",
+  "2023-05-08",
+  "2023-05-09",
+  "2023-05-10",
+  "2023-05-11",
+  "2023-05-12",
+  "2023-05-15",
+  "2023-05-16",
+  "2023-05-17",
+  "2023-05-18",
+  "2023-05-19",
+  "2023-05-22",
+  "2023-05-23",
+  "2023-05-24",
+  "2023-05-25",
+  "2023-05-26",
+  "2023-05-29",
+  "2023-05-30",
+  "2023-05-31",
+  "2023-06-01",
+  "2023-06-05",
+  "2023-06-06",
+  "2023-06-07",
+  "2023-06-08",
+  "2023-06-09",
+  "2023-06-12",
+  "2023-06-13",
+  "2023-06-14",
+  "2023-06-15",
+  "2023-06-16",
+  "2023-06-19",
+  "2023-06-20",
+  "2023-06-21",
+  "2023-06-22",
+  "2023-06-23",
+  "2023-06-26",
+  "2023-06-27",
+  "2023-06-28",
+  "2023-06-29",
+  "2023-06-30",
+  "2023-07-03",
+  "2023-07-04",
+  "2023-07-05",
+  "2023-07-06",
+  "2023-07-07",
+  "2023-07-10",
+  "2023-07-11",
+  "2023-07-12",
+  "2023-07-13",
+  "2023-07-14",
+  "2023-07-17",
+  "2023-07-18",
+  "2023-07-19",
+  "2023-07-20",
+  "2023-07-26",
+  "2023-07-27",
+  "2023-07-28",
+  "2023-07-31",
+  "2023-08-01",
+  "2023-08-02",
+  "2023-08-03",
+  "2023-08-04",
+  "2023-08-07",
+  "2023-08-08",
+  "2023-08-09",
+  "2023-08-10",
+  "2023-08-17",
+  "2023-08-18",
+  "2023-08-21",
+  "2023-08-22",
+  "2023-08-23",
+  "2023-08-24",
+  "2023-08-25",
+  "2023-08-28",
+  "2023-08-29",
+  "2023-08-30",
+  "2023-08-31",
+  "2023-09-01",
+  "2023-09-04",
+  "2023-09-05",
+  "2023-09-06",
+  "2023-09-07",
+  "2023-09-08",
+  "2023-09-11",
+  "2023-09-12",
+  "2023-09-13",
+  "2023-09-14",
+  "2023-09-15",
+  "2023-09-19",
+  "2023-09-20",
+  "2023-09-21",
+  "2023-09-22",
+  "2023-09-25",
+  "2023-09-26",
+  "2023-09-27",
+  "2023-09-28",
+  "2023-09-29",
+  "2023-10-02",
+  "2023-10-03",
+  "2023-10-04",
+  "2023-10-05",
+  "2023-10-06",
+  "2023-10-10",
+  "2023-10-11",
+  "2023-10-12",
+  "2023-10-13",
+  "2023-10-16",
+  "2023-10-17",
+  "2023-10-19",
+  "2023-10-20",
+  "2023-10-23",
+  "2023-10-24",
+  "2023-10-25",
+  "2023-10-26",
+  "2023-10-27",
+  "2023-10-30",
+  "2023-10-31",
+  "2023-11-01",
+  "2023-11-02",
+  "2023-11-06",
+  "2023-11-07",
+  "2023-11-08",
+  "2023-11-09",
+  "2023-11-10",
+  "2023-11-13",
+  "2023-11-14",
+  "2023-11-15",
+  "2023-11-16",
+  "2023-11-17",
+  "2023-11-20",
+  "2023-11-21",
+  "2023-11-22",
+  "2023-11-23",
+  "2023-11-24",
+  "2023-11-27",
+  "2023-11-28",
+  "2023-11-29",
+  "2023-11-30",
+  "2023-12-01",
+  "2023-12-04",
+  "2023-12-05",
+  "2023-12-06",
+  "2023-12-07",
+  "2023-12-08",
+  "2023-12-11",
+  "2023-12-12",
+  "2023-12-13",
+  "2023-12-14",
+  "2023-12-15",
+  "2023-12-18",
+  "2023-12-19",
+  "2023-12-20",
+  "2023-12-21",
+  "2023-12-22",
+  "2023-12-25",
+  "2023-12-26",
+  "2023-12-27",
+  "2024-01-05",
+  "2024-01-06",
+  "2024-01-09",
+  "2024-01-10",
+  "2024-01-11",
+  "2024-01-12",
+  "2024-01-15",
+  "2024-01-16",
+  "2024-01-17",
+  "2024-01-18",
+  "2024-01-19",
+  "2024-01-22",
+  "2024-01-23",
+  "2024-01-24",
+  "2024-01-25",
+  "2024-01-26",
+  "2024-01-29",
+  "2024-01-30",
+  "2024-01-31",
+  "2024-02-01",
+  "2024-02-02",
+  "2024-02-05",
+  "2024-02-06",
+  "2024-02-07",
+  "2024-02-08",
+  "2024-02-09",
+  "2024-02-13",
+  "2024-02-14",
+  "2024-02-15",
+  "2024-02-16",
+  "2024-02-19",
+  "2024-02-20",
+  "2024-02-21",
+  "2024-02-26",
+  "2024-02-27",
+  "2024-02-28",
+  "2024-02-29",
+  "2024-03-01",
+  "2024-03-04",
+  "2024-03-05",
+  "2024-03-06",
+  "2024-03-07",
+  "2024-03-11",
+  "2024-03-12",
+  "2024-03-13",
+  "2024-03-14",
+  "2024-03-15",
+  "2024-03-18",
+  "2024-03-19",
+  "2024-03-21",
+  "2024-03-22",
+  "2024-03-25",
+  "2024-03-26",
+  "2024-03-27",
+  "2024-03-28",
+  "2024-03-29",
+  "2024-04-01",
+  "2024-04-02",
+  "2024-04-03",
+  "2024-04-04",
+  "2024-04-05",
+  "2024-04-08",
+  "2024-04-09",
+  "2024-04-10",
+  "2024-04-11",
+  "2024-04-12",
+  "2024-04-15",
+  "2024-04-16",
+  "2024-04-17",
+  "2024-04-18",
+  "2024-04-19",
+  "2024-04-22",
+  "2024-04-23",
+  "2024-04-24",
+  "2024-04-25",
+  "2024-04-26",
+  "2024-05-07",
+  "2024-05-08",
+  "2024-05-09",
+  "2024-05-10",
+  "2024-05-13",
+  "2024-05-14",
+  "2024-05-15",
+  "2024-05-16",
+  "2024-05-17",
+  "2024-05-20",
+  "2024-05-21",
+  "2024-05-22",
+  "2024-05-23",
+  "2024-05-24",
+  "2024-05-27",
+  "2024-05-28",
+  "2024-05-29",
+  "2024-05-30",
+  "2024-05-31",
+  "2024-06-03",
+  "2024-06-04",
+  "2024-06-05",
+  "2024-06-06",
+  "2024-06-10",
+  "2024-06-11",
+  "2024-06-12",
+  "2024-06-13",
+  "2024-06-14",
+  "2024-06-17",
+  "2024-06-18",
+  "2024-06-19",
+  "2024-06-20",
+  "2024-06-21",
+  "2024-06-24",
+  "2024-06-25",
+  "2024-06-26",
+  "2024-06-27",
+  "2024-06-28",
+  "2024-07-01",
+  "2024-07-02",
+  "2024-07-03",
+  "2024-07-04",
+  "2024-07-05",
+  "2024-07-08",
+  "2024-07-09",
+  "2024-07-10",
+  "2024-07-11",
+  "2024-07-12",
+  "2024-07-15",
+  "2024-07-16",
+  "2024-07-17",
+  "2024-07-18",
+  "2024-07-24",
+  "2024-07-25",
+  "2024-07-26",
+  "2024-07-29",
+  "2024-07-30",
+  "2024-07-31",
+  "2024-08-01",
+  "2024-08-02",
+  "2024-08-05",
+  "2024-08-06",
+  "2024-08-07",
+  "2024-08-08",
+  "2024-08-15",
+  "2024-08-16",
+  "2024-08-19",
+  "2024-08-20",
+  "2024-08-21",
+  "2024-08-22",
+  "2024-08-23",
+  "2024-08-26",
+  "2024-08-27",
+  "2024-08-28",
+  "2024-08-29",
+  "2024-08-30",
+  "2024-09-02",
+  "2024-09-03",
+  "2024-09-04",
+  "2024-09-05",
+  "2024-09-06",
+  "2024-09-09",
+  "2024-09-10",
+  "2024-09-11",
+  "2024-09-12",
+  "2024-09-13",
+  "2024-09-17",
+  "2024-09-18",
+  "2024-09-19",
+  "2024-09-20",
+  "2024-09-23",
+  "2024-09-24",
+  "2024-09-25",
+  "2024-09-26",
+  "2024-09-27",
+  "2024-09-30",
+  "2024-10-01",
+  "2024-10-02",
+  "2024-10-03",
+  "2024-10-04",
+  "2024-10-07",
+  "2024-10-08",
+  "2024-10-09",
+  "2024-10-10",
+  "2024-10-11",
+  "2024-10-15",
+  "2024-10-16",
+  "2024-10-17",
+  "2024-10-21",
+  "2024-10-22",
+  "2024-10-23",
+  "2024-10-24",
+  "2024-10-25",
+  "2024-10-28",
+  "2024-10-29",
+  "2024-10-30",
+  "2024-10-31",
+  "2024-11-01",
+  "2024-11-05",
+  "2024-11-06",
+  "2024-11-07",
+  "2024-11-08",
+  "2024-11-11",
+  "2024-11-12",
+  "2024-11-13",
+  "2024-11-14",
+  "2024-11-15",
+  "2024-11-18",
+  "2024-11-19",
+  "2024-11-20",
+  "2024-11-21",
+  "2024-11-22",
+  "2024-11-25",
+  "2024-11-26",
+  "2024-11-27",
+  "2024-11-28",
+  "2024-11-29",
+  "2024-12-02",
+  "2024-12-03",
+  "2024-12-04",
+  "2024-12-05",
+  "2024-12-06",
+  "2024-12-09",
+  "2024-12-10",
+  "2024-12-11",
+  "2024-12-12",
+  "2024-12-13",
+  "2024-12-16",
+  "2024-12-17",
+  "2024-12-18",
+  "2024-12-19",
+  "2024-12-20",
+  "2024-12-23",
+  "2024-12-24",
+  "2024-12-25",
+  "2024-12-26",
+  "2025-01-06",
+  "2025-01-07",
+  "2025-01-08",
+  "2025-01-09",
+  "2025-01-10",
+  "2025-01-14",
+  "2025-01-15",
+  "2025-01-16",
+  "2025-01-17",
+  "2025-01-20",
+  "2025-01-21",
+  "2025-01-22",
+  "2025-01-23",
+  "2025-01-24",
+  "2025-01-27",
+  "2025-01-28",
+  "2025-01-29",
+  "2025-01-30",
+  "2025-01-31",
+  "2025-02-03",
+  "2025-02-04",
+  "2025-02-05",
+  "2025-02-06",
+  "2025-02-07",
+  "2025-02-12",
+  "2025-02-13",
+  "2025-02-14",
+  "2025-02-17",
+  "2025-02-18",
+  "2025-02-19",
+  "2025-02-20",
+  "2025-02-21",
+  "2025-02-24",
+  "2025-02-25",
+  "2025-02-26",
+  "2025-02-27",
+  "2025-02-28",
+  "2025-03-03",
+  "2025-03-04",
+  "2025-03-05",
+  "2025-03-06",
+  "2025-03-10",
+  "2025-03-11",
+  "2025-03-12",
+  "2025-03-13",
+  "2025-03-14",
+  "2025-03-17",
+  "2025-03-18",
+  "2025-03-19",
+  "2025-03-21",
+  "2025-03-24",
+  "2025-03-25",
+  "2025-03-26",
+  "2025-03-27",
+  "2025-03-28",
+  "2025-03-31",
+  "2025-04-01",
+  "2025-04-02",
+  "2025-04-03",
+  "2025-04-04",
+  "2025-04-07",
+  "2025-04-08",
+  "2025-04-09",
+  "2025-04-10",
+  "2025-04-11",
+  "2025-04-14",
+  "2025-04-15",
+  "2025-04-16",
+  "2025-04-17",
+  "2025-04-18",
+  "2025-04-21",
+  "2025-04-22",
+  "2025-04-23",
+  "2025-04-24",
+  "2025-04-25",
+  "2025-04-28",
+  "2025-04-29",
+  "2025-05-07",
+  "2025-05-08",
+  "2025-05-09",
+  "2025-05-12",
+  "2025-05-13",
+  "2025-05-14",
+  "2025-05-15",
+  "2025-05-16",
+  "2025-05-19",
+  "2025-05-20",
+  "2025-05-21",
+  "2025-05-22",
+  "2025-05-23",
+  "2025-05-26",
+  "2025-05-27",
+  "2025-05-28",
+  "2025-05-29",
+  "2025-05-30",
+  "2025-06-02",
+  "2025-06-03",
+  "2025-06-04",
+  "2025-06-05",
+  "2025-06-06",
+  "2025-06-09",
+  "2025-06-10",
+  "2025-06-11",
+  "2025-06-12",
+  "2025-06-16",
+  "2025-06-17",
+  "2025-06-18",
+  "2025-06-19",
+  "2025-06-20",
+  "2025-06-23",
+  "2025-06-24",
+  "2025-06-25",
+  "2025-06-26",
+  "2025-06-27",
+  "2025-06-30",
+  "2025-07-01",
+  "2025-07-02",
+  "2025-07-03",
+  "2025-07-04",
+  "2025-07-07",
+  "2025-07-08",
+  "2025-07-09",
+  "2025-07-10",
+  "2025-07-11",
+  "2025-07-14",
+  "2025-07-15",
+  "2025-07-16",
+  "2025-07-17",
+  "2025-07-24",
+  "2025-07-25",
+  "2025-07-28",
+  "2025-07-29",
+  "2025-07-30",
+  "2025-07-31",
+  "2025-08-01",
+  "2025-08-04",
+  "2025-08-05",
+  "2025-08-06",
+  "2025-08-07",
+  "2025-08-08",
+  "2025-08-11",
+  "2025-08-12",
+  "2025-08-18",
+  "2025-08-19",
+  "2025-08-20",
+  "2025-08-21",
+  "2025-08-22",
+  "2025-08-25",
+  "2025-08-26",
+  "2025-08-27",
+  "2025-08-28",
+  "2025-08-29",
+  "2025-09-01",
+  "2025-09-02",
+  "2025-09-03",
+  "2025-09-04",
+  "2025-09-05",
+  "2025-09-08",
+  "2025-09-09",
+  "2025-09-10",
+  "2025-09-11",
+  "2025-09-12",
+  "2025-09-16",
+  "2025-09-17",
+  "2025-09-18",
+  "2025-09-19",
+  "2025-09-24",
+  "2025-09-25",
+  "2025-09-26",
+  "2025-09-29",
+  "2025-09-30",
+  "2025-10-01",
+  "2025-10-02",
+  "2025-10-03",
+  "2025-10-06",
+  "2025-10-07",
+  "2025-10-08",
+  "2025-10-09",
+  "2025-10-10",
+  "2025-10-14",
+  "2025-10-15",
+  "2025-10-16",
+  "2025-10-17",
+  "2025-10-20",
+  "2025-10-21",
+  "2025-10-22",
+  "2025-10-23",
+  "2025-10-24",
+  "2025-10-27",
+  "2025-10-28",
+  "2025-10-29",
+  "2025-10-30",
+  "2025-10-31",
+  "2025-11-04",
+  "2025-11-05",
+  "2025-11-06",
+  "2025-11-07",
+  "2025-11-10",
+  "2025-11-11",
+  "2025-11-12",
+  "2025-11-13",
+  "2025-11-14",
+  "2025-11-17",
+  "2025-11-18",
+  "2025-11-19",
+  "2025-11-20",
+  "2025-11-21",
+  "2025-11-25",
+  "2025-11-26",
+  "2025-11-27",
+  "2025-11-28",
+  "2025-12-01",
+  "2025-12-02",
+  "2025-12-03",
+  "2025-12-04",
+  "2025-12-05",
+  "2025-12-08",
+  "2025-12-09",
+  "2025-12-10",
+  "2025-12-11",
+  "2025-12-12",
+  "2025-12-15",
+  "2025-12-16",
+  "2025-12-17",
+  "2025-12-18",
+  "2025-12-19",
+  "2025-12-22",
+  "2025-12-23",
+  "2025-12-24",
+  "2025-12-25",
+  "2025-12-26",
+  "2026-01-05",
+  "2026-01-06",
+  "2026-01-07",
+  "2026-01-08",
+  "2026-01-09",
+  "2026-01-13",
+  "2026-01-14",
+  "2026-01-15",
+  "2026-01-16",
+  "2026-01-19",
+  "2026-01-20",
+  "2026-01-21",
+  "2026-01-22",
+  "2026-01-23",
+  "2026-01-26",
+  "2026-01-27",
+  "2026-01-28",
+  "2026-01-29",
+  "2026-01-30",
+  "2026-02-02",
+  "2026-02-03",
+  "2026-02-04",
+  "2026-02-05",
+  "2026-02-06",
+  "2026-02-09",
+  "2026-02-10",
+  "2026-02-12",
+  "2026-02-13",
+  "2026-02-16",
+  "2026-02-17",
+  "2026-02-18",
+  "2026-02-19",
+  "2026-02-20",
+  "2026-02-24",
+  "2026-02-25",
+  "2026-02-26",
+  "2026-02-27",
+  "2026-03-02",
+  "2026-03-03",
+  "2026-03-04",
+  "2026-03-05",
+  "2026-03-09",
+  "2026-03-10",
+  "2026-03-11",
+  "2026-03-12",
+  "2026-03-13",
+  "2026-03-16",
+  "2026-03-17",
+  "2026-03-18",
+  "2026-03-19",
+  "2026-03-23",
+  "2026-03-24",
+  "2026-03-25",
+  "2026-03-26",
+  "2026-03-27",
+  "2026-03-30",
+  "2026-03-31"
+ ],
+ "dataStart": "2023-01-05",
+ "dataEnd": "2026-03-31"
+}
