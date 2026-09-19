@@ -16,8 +16,32 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public sealed class DayCellViewModel : ObservableObject
 {
-    /// <summary>マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。</summary>
+    /// <summary>
+    /// マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。
+    /// <para>実際の数はマスの高さから決める（<see cref="CapacityFor"/>）。これは最低限。</para>
+    /// </summary>
     public const int DefaultMaxChips = 3;
+
+    /// <summary>1件ぶんの高さ。チップの行の高さ 16 に上の余白 2 を足したもの。</summary>
+    private const double ChipHeight = 18;
+
+    /// <summary>日付の行と「＋N」に要る高さ。上下の余白を含む。</summary>
+    private const double Reserved = 40;
+
+    /// <summary>
+    /// この高さのマスに何件並べられるか。
+    /// <para>
+    /// 固定の3件だと、画面を広げてもマスの下が空いたまま「＋1」と出る。実機で
+    /// 「こんなにスペースがあるのに全て表示されない」という指摘があった。
+    /// </para>
+    /// <para>高さが分からないうちは <see cref="DefaultMaxChips"/>。</para>
+    /// </summary>
+    public static int CapacityFor(double cellHeight)
+    {
+        if (double.IsNaN(cellHeight) || cellHeight <= 0) return DefaultMaxChips;
+
+        return Math.Max(1, (int)((cellHeight - Reserved) / ChipHeight));
+    }
 
     private bool _isSelected;
 

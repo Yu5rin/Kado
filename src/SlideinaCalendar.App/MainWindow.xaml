@@ -72,6 +72,7 @@
                           PreviewMouseLeftButtonDown="OnSourceRowPressed"
                           PreviewMouseMove="OnSourceRowMoved"
                           DragOver="OnSourceRowDragOver"
+                          DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
                           ToolTip="右クリックで名前と色を変えられます"
                           Tag="{Binding DataContext,
@@ -86,6 +87,7 @@
                           PreviewMouseLeftButtonDown="OnSourceRowPressed"
                           PreviewMouseMove="OnSourceRowMoved"
                           DragOver="OnSourceRowDragOver"
+                          DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
                           ToolTip="右クリックで名前を変えられます"
                           Tag="{Binding DataContext,

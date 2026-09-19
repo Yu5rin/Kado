@@ -38,6 +38,7 @@ public sealed class MonthViewModel : ObservableObject
     private readonly ICalendarSources _sources;
 
     private DateOnly _month;
+    private int _maxChipsPerCell = DayCellViewModel.DefaultMaxChips;
     private DateOnly _today;
     private DateOnly? _selectedDate;
     private IReadOnlyList<DayCellViewModel> _cells = [];
@@ -86,6 +87,25 @@ public sealed class MonthViewModel : ObservableObject
     }
 
     /// <summary>並べるマス。左上から右下へ、週の数だけ。</summary>
+    /// <summary>
+    /// 1つのマスに並べる件数。
+    /// <para>
+    /// 画面の大きさで変わるので、表示側がマスの高さから決めて渡す。固定にすると、
+    /// 画面を広げてもマスの下が空いたまま「＋N」と出る。
+    /// </para>
+    /// </summary>
+    public int MaxChipsPerCell
+    {
+        get => _maxChipsPerCell;
+        set
+        {
+            if (value < 1 || value == _maxChipsPerCell) return;
+
+            _maxChipsPerCell = value;
+            Refresh();
+        }
+    }
+
     public IReadOnlyList<DayCellViewModel> Cells
     {
         get => _cells;
@@ -162,6 +182,7 @@ public sealed class MonthViewModel : ObservableObject
                 tasks,
                 _workspace.Holidays.NameOf(date),
                 _sources,
+                _maxChipsPerCell,
                 milestones: MilestoneRow.For(date, all, _sources)));
         }
 

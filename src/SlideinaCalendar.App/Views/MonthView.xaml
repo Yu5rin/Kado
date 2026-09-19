@@ -156,7 +156,9 @@
             </ItemsControl>
         </Border>
 
-        <ItemsControl ItemsSource="{Binding Cells}" Background="{DynamicResource LineBrush}">
+        <ItemsControl x:Name="CellsHost" ItemsSource="{Binding Cells}"
+                      SizeChanged="OnCellsResized"
+                      Background="{DynamicResource LineBrush}">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <UniformGrid Columns="7" />
@@ -249,9 +251,10 @@
                                     Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
+                        <!-- 前後の月と同じ色にすると、載せているのか月の外なのか読めない -->
                         <Trigger SourceName="Cell" Property="IsMouseOver" Value="True">
                             <Setter TargetName="Cell" Property="Background"
-                                    Value="{DynamicResource SunkenBrush}" />
+                                    Value="{DynamicResource CellHoverBrush}" />
                         </Trigger>
 
                         <!-- 今日は枠で囲む。内側に引くのでマスの大きさは変わらない -->
@@ -265,9 +268,10 @@
                                     Value="{DynamicResource AccentBrush}" />
                         </DataTrigger>
 
+                        <!-- 休業日の面と近いと紛れるので、はっきり青に寄せた色を使う -->
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                             <Setter TargetName="Cell" Property="Background"
-                                    Value="{DynamicResource AccentSoftBrush}" />
+                                    Value="{DynamicResource CellSelectedBrush}" />
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>

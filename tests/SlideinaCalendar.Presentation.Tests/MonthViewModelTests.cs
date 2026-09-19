@@ -446,6 +446,45 @@ public class MonthViewModelTests
         // 日曜は今までどおり
         Assert.True(Cell(vm, D(2026, 9, 20)).IsSundayLike);
     }
+
+    [Theory]
+    [InlineData(0, 3)]        // 高さが分からないうちは既定
+    [InlineData(-1, 3)]
+    [InlineData(100, 3)]      // (100-40)/18 = 3
+    [InlineData(150, 6)]
+    [InlineData(200, 8)]
+    [InlineData(50, 1)]       // どんなに狭くても1件は出す
+    public void マスの高さで並べる件数が決まる(double height, int expected)
+    {
+        Assert.Equal(expected, DayCellViewModel.CapacityFor(height));
+    }
+
+    [Fact]
+    public void 件数を増やすと溢れが減る()
+    {
+        using var test = TestWorkspace.Create();
+
+        for (var i = 0; i < 6; i++)
+        {
+            test.Workspace.AddEvent(new CalendarEvent
+            {
+                Id = $"e{i}", Title = $"予定{i}", Date = D(2026, 9, 24),
+                StartTime = new TimeOnly(9 + i, 0), EndTime = new TimeOnly(10 + i, 0),
+            });
+        }
+
+        var vm = Create(test);
+
+        // 既定は3件。画面が広いのに下が空いたまま「＋3」と出ていた
+        Assert.Equal(3, Cell(vm, D(2026, 9, 24)).Events.Count);
+        Assert.Equal(3, Cell(vm, D(2026, 9, 24)).OverflowCount);
+
+        vm.MaxChipsPerCell = 6;
+
+        Assert.Equal(6, Cell(vm, D(2026, 9, 24)).Events.Count);
+        Assert.Equal(0, Cell(vm, D(2026, 9, 24)).OverflowCount);
+        Assert.Null(Cell(vm, D(2026, 9, 24)).OverflowLabel);
+    }
 }
 
 /// <summary>読みやすさのための小さな拡張。</summary>

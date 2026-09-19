@@ -17,6 +17,8 @@
     <SolidColorBrush x:Key="SundayBrush" Color="{DynamicResource SundayColor}" />
     <SolidColorBrush x:Key="SaturdayBrush" Color="{DynamicResource SaturdayColor}" />
     <SolidColorBrush x:Key="WorkingDayBrush" Color="{DynamicResource WorkingDayColor}" />
+    <SolidColorBrush x:Key="CellHoverBrush" Color="{DynamicResource CellHoverColor}" />
+    <SolidColorBrush x:Key="CellSelectedBrush" Color="{DynamicResource CellSelectedColor}" />
     <SolidColorBrush x:Key="OffDayBrush" Color="{DynamicResource OffDayColor}" />
     <SolidColorBrush x:Key="SunkenBrush" Color="{DynamicResource SunkenColor}" />
     <SolidColorBrush x:Key="CategoryGreenBrush" Color="{DynamicResource CategoryGreenColor}" />

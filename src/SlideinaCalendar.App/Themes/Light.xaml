@@ -37,6 +37,15 @@
     <Color x:Key="WorkingDayColor">#FBFCFE</Color>
     <Color x:Key="OffDayColor">#E3E7EE</Color>
 
+    <!--
+        マスを押したときと、マウスを載せたときの面。
+        前後の月（SunkenColor）と同じにすると、載せているのか月の外なのか読めない。
+        選択は休業日（OffDayColor）と近いと紛れるので、はっきり青に寄せる。
+        4つ（前後の月・休業日・ホバー・選択）が互いに見分けられることが要る
+    -->
+    <Color x:Key="CellHoverColor">#E6EFFA</Color>
+    <Color x:Key="CellSelectedColor">#C7DCF7</Color>
+
     <!-- 予定のカテゴリ色。モックの ok / amber の変数に対応する -->
     <Color x:Key="CategoryGreenColor">#2F7D5B</Color>
     <Color x:Key="CategoryAmberColor">#C2762B</Color>

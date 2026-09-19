@@ -25,6 +25,10 @@
     <Color x:Key="WorkingDayColor">#242A34</Color>
     <Color x:Key="OffDayColor">#12151A</Color>
 
+    <!-- マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること -->
+    <Color x:Key="CellHoverColor">#2B3444</Color>
+    <Color x:Key="CellSelectedColor">#31486B</Color>
+
     <Color x:Key="CategoryGreenColor">#5FB08A</Color>
     <Color x:Key="CategoryAmberColor">#D59A55</Color>
 
