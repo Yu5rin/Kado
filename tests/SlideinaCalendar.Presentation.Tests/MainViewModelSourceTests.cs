@@ -379,4 +379,55 @@ public class MainViewModelSourceTests
         Assert.Contains(CalendarWorkspace.DefaultCalendarName, editors.LastConfirmMessage, StringComparison.Ordinal);
         Assert.Contains(CalendarWorkspace.DefaultCalendarName, vm.StatusMessage!, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void inaCalendar_の名前は変えられない()
+    {
+        using var test = TestWorkspace.Create();
+
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        var (vm, editors) = Create(test);
+
+        var locked = false;
+        editors.OnCalendar = editor =>
+        {
+            locked = editor.IsNameLocked;
+
+            // 画面で止めていても、別の入口から変えられては困る
+            editor.Name = "べつの名前";
+            editor.Color = "#8d6e63";
+            return true;
+        };
+
+        vm.EditSourceCommand.Execute(vm.SourceLists.Calendars.Single(c => c.Id == ina.Id));
+
+        Assert.True(locked);
+        Assert.Equal(CalendarWorkspace.WorkingDayCalendarName,
+            test.Workspace.Sources.FindCalendar(ina.Id)!.DisplayName);
+
+        // 色は変えられる
+        Assert.Equal("#8d6e63", test.Workspace.Sources.FindCalendar(ina.Id)!.BackgroundColor);
+    }
+
+    [Fact]
+    public void ほかのカレンダーは今までどおり名前を変えられる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        editors.OnCalendar = editor => { editor.Name = "私用"; return true; };
+        vm.AddCalendarCommand.Execute(null);
+
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "私用");
+
+        editors.OnCalendar = editor =>
+        {
+            Assert.False(editor.IsNameLocked);
+            editor.Name = "プライベート";
+            return true;
+        };
+        vm.EditSourceCommand.Execute(vm.SourceLists.Calendars.Single(c => c.Id == target.Id));
+
+        Assert.Equal("プライベート", test.Workspace.Sources.FindCalendar(target.Id)!.DisplayName);
+    }
 }

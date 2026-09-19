@@ -1,3 +1,5 @@
+using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Presentation;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.Presentation.Tests;
@@ -132,5 +134,121 @@ public class WorkingDayCalendarImportTests
             c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
 
         Assert.Contains(test.Workspace.Events.All(), e => e.CalendarId == existing.Id);
+    }
+
+    // ------------------------------------------------------------------
+    // 入れ先の選び方
+    //
+    // Google に繋いでいれば Google の「inaCalendar」へ、繋いでいなければ
+    // このアプリの「inaCalendar」へ。無ければ作る
+    // ------------------------------------------------------------------
+
+    private static void AddGoogleCalendar(TestWorkspace test, string id, string name) =>
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = id,
+            Summary = name,
+            GoogleRaw = $$"""{"id":"{{id}}","summary":"{{name}}","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+    private static IReadOnlyList<CalendarEvent> Milestones(TestWorkspace test) =>
+        test.Workspace.Events.All().Where(e => CalendarWorkspace.IsMilestoneId(e.Id)).ToArray();
+
+    [Fact]
+    public void 繋いでいなければこのアプリの_inaCalendar_に入れる()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        var calendar = test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        Assert.True(CalendarWorkspace.IsLocal(calendar));
+        Assert.All(Milestones(test), e => Assert.Equal(calendar.Id, e.CalendarId));
+    }
+
+    [Fact]
+    public void _Google_に_inaCalendar_があればそちらに入れる()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        const string id = "ina@group.calendar.google.com";
+        AddGoogleCalendar(test, id, CalendarWorkspace.WorkingDayCalendarName);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        Assert.All(Milestones(test), e => Assert.Equal(id, e.CalendarId));
+    }
+
+    [Fact]
+    public void 両方あれば_Google_のほうを選ぶ()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+
+        const string id = "ina@group.calendar.google.com";
+        AddGoogleCalendar(test, id, CalendarWorkspace.WorkingDayCalendarName);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        Assert.All(Milestones(test), e => Assert.Equal(id, e.CalendarId));
+    }
+
+    [Fact]
+    public void 同期を通したあとに読み直しても増えない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using (var first = SampleFile()) test.Workspace.ImportWorkingDays(first);
+
+        var before = Milestones(test);
+        Assert.NotEmpty(before);
+
+        // 同期を通ると Source は "google" に書き換わり、Google の識別子が付く。
+        // 入れ替えの見分けを Source でやっていると、ここで二重になる
+        foreach (var e in before)
+        {
+            test.Workspace.Events.Upsert(e with
+            {
+                Source = "google",
+                GoogleEventId = $"g-{e.Id}",
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+
+        using (var second = SampleFile()) test.Workspace.ImportWorkingDays(second);
+
+        Assert.Equal(before.Count, Milestones(test).Count);
+
+        // 結び付けた Google の識別子は残す。消して作り直すと相手側でも作り直しになる
+        Assert.All(Milestones(test), e => Assert.NotNull(e.GoogleEventId));
+    }
+
+    [Fact]
+    public void 利用者が自分で入れた予定は消さない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using (var first = SampleFile()) test.Workspace.ImportWorkingDays(first);
+
+        var calendar = test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        var mine = Milestones(test)[0].Date;
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "mine", Title = "チャンスの時間", Date = mine, CalendarId = calendar.Id,
+            StartTime = new TimeOnly(23, 0), EndTime = new TimeOnly(23, 55),
+        });
+
+        using (var second = SampleFile()) test.Workspace.ImportWorkingDays(second);
+
+        Assert.NotNull(test.Workspace.Events.Find("mine"));
     }
 }
