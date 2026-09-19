@@ -263,8 +263,7 @@
                                           ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
                             </MenuItem>
                             <Separator />
-                            <MenuItem Header="設定" IsEnabled="False"
-                                      ToolTip="このあとのフェーズで実装します" />
+                            <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
                         </ContextMenu>
                     </Button.ContextMenu>
                     <Path Data="{StaticResource IconSettings}" Stretch="Uniform" Width="16" Height="16"

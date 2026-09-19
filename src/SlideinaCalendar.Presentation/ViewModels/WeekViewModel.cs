@@ -162,7 +162,7 @@ public sealed class WeekDayColumnViewModel
 /// </summary>
 public sealed class WeekViewModel : ObservableObject
 {
-    private readonly TimelineBuilder _timeline;
+    private TimelineBuilder _timeline;
     private readonly DayOfWeek _weekStart;
 
     private DateOnly _anchor;
@@ -256,12 +256,30 @@ public sealed class WeekViewModel : ObservableObject
         Raise(nameof(ShowNowLine), nameof(NowOffset));
     }
 
+    /// <summary>
+    /// 時間軸に使える高さ。表示側が測って渡す。
+    /// <para>選んだ時間帯をこの高さに割り付ける。入りきらなければスクロールになる。</para>
+    /// </summary>
+    public double ViewportHeight
+    {
+        set
+        {
+            if (double.IsNaN(value) || value <= 0) return;
+
+            var height = _timeline.HourHeightFor(value);
+            if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;
+
+            _timeline = _timeline.WithHourHeight(height);
+            Refresh();
+        }
+    }
+
     /// <summary>データを読み直して列を組み直す。</summary>
     public void Refresh()
     {
         Days = _timeline.Build(WeekStart, WeekEnd, _today);
 
         Raise(nameof(Title), nameof(WeekStart), nameof(WeekEnd),
-              nameof(HourLabels), nameof(TimelineHeight));
+              nameof(HourLabels), nameof(HourHeight), nameof(TimelineHeight));
     }
 }

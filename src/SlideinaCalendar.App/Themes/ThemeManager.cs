@@ -1,16 +1,7 @@
 using System.Windows;
+using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.App.Themes;
-
-/// <summary>配色の選択。</summary>
-public enum AppTheme
-{
-    /// <summary>OS の設定に従う。</summary>
-    Auto,
-
-    Light,
-    Dark,
-}
 
 /// <summary>
 /// 配色の切り替え。
@@ -25,16 +16,16 @@ public static class ThemeManager
     private const int PaletteIndex = 0;
 
     /// <summary>現在の配色。</summary>
-    public static AppTheme Current { get; private set; } = AppTheme.Auto;
+    public static ThemeChoice Current { get; private set; } = ThemeChoice.Auto;
 
     /// <summary>配色を切り替える。</summary>
-    public static void Apply(AppTheme theme)
+    public static void Apply(ThemeChoice theme)
     {
         Current = theme;
 
-        var resolved = theme == AppTheme.Auto ? DetectSystemTheme() : theme;
+        var resolved = theme == ThemeChoice.Auto ? DetectSystemTheme() : theme;
         var source = new Uri(
-            resolved == AppTheme.Dark
+            resolved == ThemeChoice.Dark
                 ? "pack://application:,,,/Themes/Dark.xaml"
                 : "pack://application:,,,/Themes/Light.xaml",
             UriKind.Absolute);
@@ -56,7 +47,7 @@ public static class ThemeManager
     /// 判断できないときに暗くすると、文字が読めない画面が出かねない。
     /// </para>
     /// </summary>
-    private static AppTheme DetectSystemTheme()
+    private static ThemeChoice DetectSystemTheme()
     {
         try
         {
@@ -64,12 +55,12 @@ public static class ThemeManager
                 @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
 
             return key?.GetValue("AppsUseLightTheme") is int value && value == 0
-                ? AppTheme.Dark
-                : AppTheme.Light;
+                ? ThemeChoice.Dark
+                : ThemeChoice.Light;
         }
         catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException)
         {
-            return AppTheme.Light;
+            return ThemeChoice.Light;
         }
     }
 }

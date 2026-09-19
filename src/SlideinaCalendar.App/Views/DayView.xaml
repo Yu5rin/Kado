@@ -182,7 +182,9 @@
         </Border>
 
         <!-- 時間軸 -->
-        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+        <!-- 選んだ時間帯を、ここで測った高さに割り付ける -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      SizeChanged="OnTimelineResized">
             <Grid Height="{Binding TimelineHeight}">
                 <DockPanel>
                     <ItemsControl DockPanel.Dock="Left" Width="56" ItemsSource="{Binding HourLabels}">

@@ -39,6 +39,15 @@ public sealed class TimelineBuilder
         DayEnd = dayEnd ?? new TimeOnly(20, 0);
     }
 
+    /// <summary>
+    /// 1時間分の高さの下限。
+    /// <para>
+    /// 時間帯は画面の高さに割り付けるが、24時間ぶんとなると1時間が潰れる。ここまで
+    /// 縮めても収まらないぶんはスクロールに回す。予定の題が1行読める高さが目安。
+    /// </para>
+    /// </summary>
+    public const double MinHourHeight = 26;
+
     /// <summary>1時間分の高さ。</summary>
     public double HourHeight { get; }
 
@@ -48,12 +57,35 @@ public sealed class TimelineBuilder
     /// <summary>時間軸の下端の時刻。</summary>
     public TimeOnly DayEnd { get; }
 
+    /// <summary>
+    /// 時間軸に並ぶ時間の数。
+    /// <para>
+    /// 端数は切り上げる。真夜中までを出すときの下端は 23:59 で持つので（<c>TimeOnly</c> は
+    /// 24:00 を表せない）、切り捨てると 23 時台がまるごと落ちる。
+    /// </para>
+    /// </summary>
+    public int HourCount => Math.Max((int)Math.Ceiling((DayEnd - DayStart).TotalHours), 1);
+
     /// <summary>時間軸全体の高さ。</summary>
-    public double TimelineHeight => (DayEnd.Hour - DayStart.Hour) * HourHeight;
+    public double TimelineHeight => HourCount * HourHeight;
 
     /// <summary>左に出す「8:00」などの見出し。</summary>
     public IReadOnlyList<string> HourLabels =>
-        Enumerable.Range(DayStart.Hour, DayEnd.Hour - DayStart.Hour).Select(h => $"{h}:00").ToArray();
+        Enumerable.Range(DayStart.Hour, HourCount).Select(h => $"{h}:00").ToArray();
+
+    /// <summary>
+    /// 1時間の高さだけを変えた複製。
+    /// <para>使える高さは表示側にしか分からないので、測ってから作り直す。</para>
+    /// </summary>
+    public TimelineBuilder WithHourHeight(double hourHeight) =>
+        new(_workspace, _sources, DayStart, DayEnd, hourHeight);
+
+    /// <summary>
+    /// 使える高さに時間帯を割り付けたときの、1時間の高さ。
+    /// <para><see cref="MinHourHeight"/> より縮めない。残りはスクロールで見る。</para>
+    /// </summary>
+    public double HourHeightFor(double available) =>
+        Math.Max(available / HourCount, MinHourHeight);
 
     /// <summary>表示時間帯に入っている時刻か。現在時刻の線を出すかどうかの判断に使う。</summary>
     public bool Covers(TimeOnly time) => time >= DayStart && time < DayEnd;
