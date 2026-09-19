@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using Microsoft.Data.Sqlite;
+using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Themes;
 using SlideinaCalendar.Data;
 using SlideinaCalendar.Presentation;
@@ -56,9 +57,13 @@ public partial class App : Application
 
         try
         {
-            var window = new MainWindow
+            // 編集画面はウィンドウを親にして出す。その参照は作ったあとでないと渡せない
+            MainWindow? window = null;
+            var editors = new DialogEditorPresenter(() => window);
+
+            window = new MainWindow
             {
-                DataContext = new MainViewModel(workspace, today),
+                DataContext = new MainViewModel(workspace, today, editors: editors),
             };
 
             MainWindow = window;

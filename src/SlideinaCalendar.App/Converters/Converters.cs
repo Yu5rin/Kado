@@ -215,3 +215,19 @@ public sealed class EnumToBoolConverter : IValueConverter
             ? Enum.Parse(targetType, name)
             : Binding.DoNothing;
 }
+
+/// <summary>
+/// <see cref="DateOnly"/> と <see cref="DateTime"/> をつなぐ。
+/// <para>
+/// WPF の DatePicker は <see cref="DateTime"/> しか扱えない。モデル側を
+/// DateTime に寄せると時刻の無い日付に 0 時が付いて回るので、ここで変換する。
+/// </para>
+/// </summary>
+public sealed class DateOnlyToDateTimeConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DateOnly date ? date.ToDateTime(TimeOnly.MinValue) : null;
+
+    public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DateTime dateTime ? DateOnly.FromDateTime(dateTime) : null;
+}
