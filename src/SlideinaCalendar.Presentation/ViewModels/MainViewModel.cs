@@ -587,14 +587,20 @@ public sealed class MainViewModel : ObservableObject
             StatusMessage = "Google のクライアント設定を取り込みました";
             Raise(nameof(HasGoogleClient));
 
+            // これを呼ばないと「Google に接続…」が押せないままになる
+            Sync.RefreshAvailability();
+
+            // 読み込めただけでは同期は始まらない。次に何を押すかまで書く。
+            // ここで手が止まると、設定したのに使えない状態に見える
             _files.ShowReport(
-                "Google 連携の準備",
+                "Google の設定を取り込みました",
                 $"""
+                 次に、⚙ メニューの「Google に接続…」を押してください。
+                 ブラウザが開いて許可を求められます。許可すると、そのまま
+                 1回目の同期が走ります。
+
                  クライアント ID: {options.ClientId}
-
                  保存先: {_googleClient.Path}
-
-                 同期そのものはこのあとのフェーズで実装します。
 
                  なお、OAuth 同意画面の公開ステータスが「テスト」のままだと、
                  更新トークンが7日で失効します。毎週つなぎ直すことになるので、
