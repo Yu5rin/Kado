@@ -17,6 +17,21 @@ public class EventMapperTests
 
     private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement;
 
+    /// <summary>
+    /// この PC の時差を付けた時刻の文字列。
+    /// <para>
+    /// 予定は「この PC で見た時刻」として読む。テストに <c>+09:00</c> と書き込むと、
+    /// 時差の違う場所（CI は UTC）で動かしたときに落ちる。動かす場所に合わせて作る。
+    /// </para>
+    /// </summary>
+    private static string LocalTime(int year, int month, int day, int hour, int minute)
+    {
+        var naive = new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Unspecified);
+        var offset = TimeZoneInfo.Local.GetUtcOffset(naive);
+
+        return new DateTimeOffset(naive, offset).ToString("yyyy-MM-ddTHH:mm:sszzz");
+    }
+
     [Fact]
     public void 時刻つきの予定を読める()
     {
@@ -28,10 +43,11 @@ public class EventMapperTests
               "location": "第2会議室",
               "status": "confirmed",
               "updated": "2026-09-19T01:23:45.000Z",
-              "start": { "dateTime": "2026-09-24T09:00:00+09:00" },
-              "end":   { "dateTime": "2026-09-24T10:30:00+09:00" }
+              "start": { "dateTime": "{{START}}" },
+              "end":   { "dateTime": "{{END}}" }
             }
-            """), "primary");
+            """.Replace("{{START}}", LocalTime(2026, 9, 24, 9, 0))
+               .Replace("{{END}}", LocalTime(2026, 9, 24, 10, 30))), "primary");
 
         Assert.Equal("10月度 生産台数計画 レビュー", value.Title);
         Assert.Equal(D(2026, 9, 24), value.Date);
@@ -131,10 +147,11 @@ public class EventMapperTests
         var value = EventMapper.FromGoogle(Json("""
             {
               "id": "e4", "summary": "夜間作業",
-              "start": { "dateTime": "2026-09-24T22:00:00+09:00" },
-              "end":   { "dateTime": "2026-09-25T06:00:00+09:00" }
+              "start": { "dateTime": "{{START}}" },
+              "end":   { "dateTime": "{{END}}" }
             }
-            """), "primary");
+            """.Replace("{{START}}", LocalTime(2026, 9, 24, 22, 0))
+               .Replace("{{END}}", LocalTime(2026, 9, 25, 6, 0))), "primary");
 
         Assert.Equal(D(2026, 9, 24), value.Date);
 

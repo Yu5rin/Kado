@@ -73,19 +73,52 @@ jobs:
       - name: テスト
         run: dotnet test --configuration Release --no-build --verbosity normal
 
-      - name: 発行
-        run: >
-          dotnet publish src/SlideinaCalendar.App/SlideinaCalendar.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          --output publish
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:Version=${{ steps.version.outputs.value }}
+      # 焼き込む設定が登録されていなければ、その旨を残して先へ進む。
+      # 配布物は作れるが、受け取った人は自分でクライアント設定を入れることになる
+      - name: 焼き込む設定があるか見る
+        id: client
+        shell: pwsh
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CLIENT_ID)) {
+            Write-Host '::warning::GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET が未登録です。受け取った人が自分でクライアント設定を入れる必要があります。'
+            "embed=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "embed=true" >> $env:GITHUB_OUTPUT
+          }
 
+      # 既定のクライアント設定を焼き込む。ソースには書かないので、
+      # リポジトリを公開しても出ない。配布物からは読めるが、デスクトップアプリ型の
+      # シークレットはもともと秘密として扱えず、横取りへの備えは PKCE が受け持つ
+      - name: 発行
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        shell: pwsh
+        run: |
+          $args = @(
+            'publish', 'src/SlideinaCalendar.App/SlideinaCalendar.App.csproj',
+            '--configuration', 'Release',
+            '--runtime', 'win-x64',
+            '--self-contained', 'true',
+            '--output', 'publish',
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true',
+            "-p:Version=${{ steps.version.outputs.value }}"
+          )
+
+          if ('${{ steps.client.outputs.embed }}' -eq 'true') {
+            $args += "-p:GoogleClientId=$env:CLIENT_ID"
+            $args += "-p:GoogleClientSecret=$env:CLIENT_SECRET"
+          }
+
+          dotnet @args
+
+      # Releases へ添える用。手動実行のときは作らない（成果物は publish の中身をそのまま渡す）
       - name: ZIP にまとめる
         id: package
+        if: github.ref_type == 'tag'
         shell: pwsh
         run: |
           $name = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.zip"
@@ -93,20 +126,29 @@ jobs:
           "asset=$name" >> $env:GITHUB_OUTPUT
 
       # タグから来たときだけ Releases に上げる。手動実行は成果物の確認まで
+      # exe をそのまま添える。アプリの自動更新はこれを落として入れ替えるので、
+      # ZIP だけだと更新が見つけられない（.exe で終わるものを探している）
       - name: Releases に上げる
         if: github.ref_type == 'tag'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create '${{ github.ref_name }}' '${{ steps.package.outputs.asset }}' `
+          $exe = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.exe"
+          Copy-Item publish/SlideinaCalendar.App.exe $exe
+
+          gh release create '${{ github.ref_name }}' $exe '${{ steps.package.outputs.asset }}' `
             --title 'SlideinaCalendar ${{ steps.version.outputs.value }}' `
             --generate-notes
 
-      # 手動実行でも受け取れるようにしておく
+      # 手動実行でも受け取れるようにしておく。
+      #
+      # ここで渡すのは ZIP ではなく publish の中身そのもの。GitHub は成果物を
+      # 受け取るときに自動で ZIP にするので、ZIP を渡すと二重になり、
+      # 落とした人が二度展開することになる
       - name: 成果物として残す
         uses: actions/upload-artifact@v4
         with:
-          name: SlideinaCalendar-win-x64
-          path: ${{ steps.package.outputs.asset }}
+          name: SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64
+          path: publish/
           retention-days: 14
