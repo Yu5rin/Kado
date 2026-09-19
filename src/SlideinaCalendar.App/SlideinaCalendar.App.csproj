@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SlideinaCalendar.App</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SlideinaCalendar.Core\SlideinaCalendar.Core.csproj" />
+    <ProjectReference Include="..\SlideinaCalendar.Data\SlideinaCalendar.Data.csproj" />
+    <ProjectReference Include="..\SlideinaCalendar.Google\SlideinaCalendar.Google.csproj" />
+    <ProjectReference Include="..\SlideinaCalendar.Shell\SlideinaCalendar.Shell.csproj" />
+  </ItemGroup>
+
+</Project>
