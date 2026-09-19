@@ -84,6 +84,10 @@ public sealed class MainViewModel : ObservableObject
         });
         AddTaskCommand = new RelayCommand(AddTask);
         EditEventCommand = new RelayCommand<DayEventViewModel?>(EditEvent);
+        EditChipCommand = new RelayCommand<EventChipViewModel?>(chip => EditEventBy(chip?.Id));
+        DeleteChipCommand = new RelayCommand<EventChipViewModel?>(chip => DeleteEventBy(chip?.Id));
+        EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
+        DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
         DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
         EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
@@ -367,6 +371,18 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<DateOnly?> AddEventOnCommand { get; }
     public RelayCommand AddTaskCommand { get; }
     public RelayCommand<DayEventViewModel?> EditEventCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶ予定を開く。右ペインの行とは別の型なので分けてある。</summary>
+    public RelayCommand<EventChipViewModel?> EditChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶ予定を消す。</summary>
+    public RelayCommand<EventChipViewModel?> DeleteChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶタスクを開く。</summary>
+    public RelayCommand<TaskItem?> EditTaskChipCommand { get; }
+
+    /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
+    public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
     public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
@@ -534,10 +550,16 @@ public sealed class MainViewModel : ObservableObject
         var kind = isTaskList ? "タスクリスト" : "カレンダー";
         var contents = isTaskList ? "タスク" : "予定";
 
+        // 移った先を名前で言う。「別のカレンダーへ移ります」だけだと、
+        // 消したあとどこを見ればよいのか分からない
+        var destination = isTaskList
+            ? _workspace.TaskMoveTargetFor(target.Id)?.DisplayName
+            : _workspace.MoveTargetFor(target.Id)?.DisplayName;
+
         // 中身ごと消さない。分類を消したかっただけなのに中身まで消えるのは行き過ぎ
-        var message = count > 0
+        var message = count > 0 && destination is not null
             ? $"{kind}「{target.Name}」を削除します。{Environment.NewLine}{Environment.NewLine}"
-              + $"入っている{contents} {count} 件は、別の{kind}へ移ります。削除はされません。"
+              + $"入っている{contents} {count} 件は「{destination}」へ移ります。削除はされません。"
             : $"{kind}「{target.Name}」を削除します。";
 
         if (!_editors.Confirm($"{kind}の削除", message)) return;
@@ -548,7 +570,7 @@ public sealed class MainViewModel : ObservableObject
         {
             null => $"最後の{kind}は削除できません",
             0 => $"{kind}「{target.Name}」を削除しました",
-            var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を移しました",
+            var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を「{destination}」へ移しました",
         };
     }
 
@@ -714,12 +736,21 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = "予定を追加しました";
     }
 
-    private void EditEvent(DayEventViewModel? target)
+    private void EditEvent(DayEventViewModel? target) => EditEventBy(target?.Id);
+
+    /// <summary>
+    /// 識別子だけで予定を開く。
+    /// <para>
+    /// 月ビューのマスに並ぶ予定は右ペインの行とは別の型なので、識別子で受ける。
+    /// 画面ごとに同じ処理を書くと、片方だけ直し忘れる。
+    /// </para>
+    /// </summary>
+    private void EditEventBy(string? id)
     {
-        if (target is null) return;
+        if (id is not { Length: > 0 }) return;
 
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
-        if (_workspace.Events.Find(target.Id) is not { } stored) return;
+        if (_workspace.Events.Find(id) is not { } stored) return;
 
         var editor = new EventEditorViewModel(stored, CalendarNames);
         if (!_editors.ShowEventEditor(editor)) return;
@@ -736,6 +767,41 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = _workspace.DeleteEvent(target.Id)
             ? "予定を削除しました"
             : "予定が見つかりませんでした";
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void DeleteEventBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } stored) return;
+        if (!_editors.ConfirmDelete(stored.Title)) return;
+
+        StatusMessage = _workspace.DeleteEvent(id)
+            ? "予定を削除しました"
+            : "予定が見つかりませんでした";
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void EditTaskBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
+
+        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateTask(editor.ToModel())
+            ? "タスクを変更しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    /// <inheritdoc cref="EditEventBy"/>
+    private void DeleteTaskBy(string? id)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
+        if (!_editors.ConfirmDelete(stored.Title)) return;
+
+        StatusMessage = _workspace.DeleteTask(id)
+            ? "タスクを削除しました"
+            : "タスクが見つかりませんでした";
     }
 
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
