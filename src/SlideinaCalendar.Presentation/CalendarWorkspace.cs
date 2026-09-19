@@ -258,7 +258,9 @@ public sealed class CalendarWorkspace
         {
             Sources.Upsert(new CalendarSource
             {
-                Id = DefaultCalendarName,
+                // このアプリの中だけのものなので印を付ける。付け忘れると同期が
+                // Google に問い合わせに行き、あるはずのないものを探して notFound になる
+                Id = $"{LocalIdPrefix}default",
                 Summary = DefaultCalendarName,
                 BackgroundColor = CalendarPalette.ColorFor(DefaultCalendarName),
                 IsPrimary = true,
@@ -285,7 +287,7 @@ public sealed class CalendarWorkspace
         {
             Sources.Upsert(new TaskListSource
             {
-                Id = DefaultTaskListName,
+                Id = $"{LocalIdPrefix}mytasks",
                 Title = DefaultTaskListName,
                 UpdatedAt = DateTimeOffset.Now,
             });

@@ -57,14 +57,28 @@ public sealed class SourceListItemViewModel : ObservableObject
     private bool _isVisible = true;
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
-        bool isVisible, Action<SourceListItemViewModel> onToggled)
+        bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled)
     {
         Id = id;
         Name = name;
         SwatchColor = swatchColor;
         _isVisible = isVisible;
+        IsGoogle = isGoogle;
         _onToggled = onToggled;
     }
+
+    /// <summary>
+    /// Google 側にあるものか。
+    /// <para>
+    /// 左パネルはこれで二つに分ける。混ざっていると、消してよいのはどれか、
+    /// 名前を変えたら相手にも伝わるのはどれかが読めない。
+    /// </para>
+    /// <para>
+    /// 判断は<b>最後に Google から受け取った姿を持っているか</b>で行う。ID の形では
+    /// 決めない。このアプリの印が付く前に作られたものが手元に残っているため。
+    /// </para>
+    /// </summary>
+    public bool IsGoogle { get; }
 
     /// <summary>カレンダー ID またはタスクリスト ID。</summary>
     public string Id { get; }
@@ -114,6 +128,10 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 
     private IReadOnlyList<SourceListItemViewModel> _calendars = [];
     private IReadOnlyList<SourceListItemViewModel> _taskLists = [];
+    private IReadOnlyList<SourceListItemViewModel> _localCalendars = [];
+    private IReadOnlyList<SourceListItemViewModel> _googleCalendars = [];
+    private IReadOnlyList<SourceListItemViewModel> _localTaskLists = [];
+    private IReadOnlyList<SourceListItemViewModel> _googleTaskLists = [];
 
     public SourceListsViewModel(CalendarWorkspace workspace)
     {
@@ -138,6 +156,46 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         private set => Set(ref _taskLists, value);
     }
 
+    /// <summary>このアプリの中だけにあるカレンダー。</summary>
+    public IReadOnlyList<SourceListItemViewModel> LocalCalendars
+    {
+        get => _localCalendars;
+        private set => Set(ref _localCalendars, value);
+    }
+
+    /// <summary>Google から取り込んだカレンダー。</summary>
+    public IReadOnlyList<SourceListItemViewModel> GoogleCalendars
+    {
+        get => _googleCalendars;
+        private set => Set(ref _googleCalendars, value);
+    }
+
+    /// <summary>このアプリの中だけにあるタスクリスト。</summary>
+    public IReadOnlyList<SourceListItemViewModel> LocalTaskLists
+    {
+        get => _localTaskLists;
+        private set => Set(ref _localTaskLists, value);
+    }
+
+    /// <summary>Google から取り込んだタスクリスト。</summary>
+    public IReadOnlyList<SourceListItemViewModel> GoogleTaskLists
+    {
+        get => _googleTaskLists;
+        private set => Set(ref _googleTaskLists, value);
+    }
+
+    /// <summary>
+    /// カレンダーを「このアプリ」と「Google」に分けて見出しを出すか。
+    /// <para>
+    /// 両方にあるときだけ分ける。繋いでいないうちは全部がこのアプリのものなので、
+    /// 見出しが1つだけ立っても読む人の助けにならない。
+    /// </para>
+    /// </summary>
+    public bool ShowsCalendarGroups => _localCalendars.Count > 0 && _googleCalendars.Count > 0;
+
+    /// <summary>タスクリストを分けて見出しを出すか。</summary>
+    public bool ShowsTaskListGroups => _localTaskLists.Count > 0 && _googleTaskLists.Count > 0;
+
     /// <summary>一覧を読み直す。チェックの状態は引き継ぐ。</summary>
     public void Refresh()
     {
@@ -145,13 +203,22 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         Calendars = _workspace.Sources.Calendars()
             .Select(c => new SourceListItemViewModel(
                 c.Id, c.DisplayName, c.BackgroundColor ?? CalendarPalette.ColorFor(c.Id),
-                c.IsVisible, OnCalendarToggled))
+                c.IsVisible, IsFromGoogle(c.GoogleRaw), OnCalendarToggled))
             .ToArray();
 
         TaskLists = _workspace.Sources.TaskLists()
             .Select(t => new SourceListItemViewModel(
-                t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible, OnTaskListToggled))
+                t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible,
+                IsFromGoogle(t.GoogleRaw), OnTaskListToggled))
             .ToArray();
+
+        LocalCalendars = _calendars.Where(c => !c.IsGoogle).ToArray();
+        GoogleCalendars = _calendars.Where(c => c.IsGoogle).ToArray();
+        LocalTaskLists = _taskLists.Where(t => !t.IsGoogle).ToArray();
+        GoogleTaskLists = _taskLists.Where(t => t.IsGoogle).ToArray();
+
+        Raise(nameof(ShowsCalendarGroups));
+        Raise(nameof(ShowsTaskListGroups));
 
         RebuildHidden();
     }
@@ -167,6 +234,15 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     public bool IncludesEvent(CalendarEvent value) =>
         !IsMilestone(value) &&
         (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
+
+    /// <summary>
+    /// Google 側にあるものか。
+    /// <para>
+    /// 最後に受け取った姿を持っていれば、Google の一覧に載っていたということ。
+    /// 取り込みは必ずこれを書くので、持っていないものは Google に無い。
+    /// </para>
+    /// </summary>
+    public static bool IsFromGoogle(string? googleRaw) => googleRaw is { Length: > 0 };
 
     /// <summary>実働日データから起こしたマイルストーンか。</summary>
     public static bool IsMilestone(CalendarEvent value) =>

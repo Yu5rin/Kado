@@ -292,4 +292,75 @@ public class SourceListsViewModelTests
         Assert.False(vm.IncludesEvent(new CalendarEvent { Id = "e1", CalendarId = "仕事" }));
         Assert.True(vm.IncludesEvent(new CalendarEvent { Id = "e2", CalendarId = "生産ライン" }));
     }
+
+    // ------------------------------------------------------------------
+    // このアプリのものと Google のもの
+    //
+    // 左パネルで混ざっていると、消してよいのはどれか、名前を変えたら相手にも
+    // 伝わるのはどれかが読めない。実機で見分けが付かないという指摘があった
+    // ------------------------------------------------------------------
+
+    /// <summary>Google から取り込んだ体のカレンダーを1件足す。</summary>
+    private static void AddGoogleCalendar(TestWorkspace test, string id, string name) =>
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = id,
+            Summary = name,
+            BackgroundColor = "#2f6fed",
+
+            // 取り込みは必ずこれを書く。これを持っているかどうかで見分ける
+            GoogleRaw = $$"""{"id":"{{id}}","summary":"{{name}}","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+    [Fact]
+    public void このアプリのものと_Google_のものを分けて並べる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.EnsureSources();
+        AddGoogleCalendar(test, "yomeru@group.calendar.google.com", "仕事");
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Equal([CalendarWorkspace.DefaultCalendarName], vm.LocalCalendars.Select(c => c.Name));
+        Assert.Equal(["仕事"], vm.GoogleCalendars.Select(c => c.Name));
+
+        // 全部入りの一覧は今までどおり両方を持つ。色引きがこれを見ている
+        Assert.Equal(2, vm.Calendars.Count);
+    }
+
+    [Fact]
+    public void 両方あるときだけ見出しを出す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.EnsureSources();
+
+        var before = new SourceListsViewModel(test.Workspace);
+
+        // 繋ぐ前は全部がこのアプリのもの。見出しが1つだけ立っても助けにならない
+        Assert.False(before.ShowsCalendarGroups);
+
+        AddGoogleCalendar(test, "yomeru@group.calendar.google.com", "仕事");
+        var after = new SourceListsViewModel(test.Workspace);
+
+        Assert.True(after.ShowsCalendarGroups);
+    }
+
+    [Fact]
+    public void 印が付く前に作られたものもこのアプリのものと見なす()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 古い版は既定のカレンダーに local: の印を付けずに作っていた。
+        // ID の形で決めると、これを Google のものと取り違える
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "マイカレンダー", Summary = "マイカレンダー", UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        Assert.Contains("マイカレンダー", vm.LocalCalendars.Select(c => c.Id));
+        Assert.Empty(vm.GoogleCalendars);
+    }
 }
