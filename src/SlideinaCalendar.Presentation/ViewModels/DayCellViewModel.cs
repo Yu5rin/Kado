@@ -16,6 +16,9 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public sealed class DayCellViewModel : ObservableObject
 {
+    /// <summary>マスに並べる最大件数。これを超えたぶんは「＋N」にまとめる。</summary>
+    public const int DefaultMaxChips = 3;
+
     private bool _isSelected;
 
     public DayCellViewModel(
@@ -24,13 +27,38 @@ public sealed class DayCellViewModel : ObservableObject
         DateOnly today,
         WorkingDayCalendar workingDays,
         IReadOnlyList<ScheduledEvent> events,
-        IReadOnlyList<TaskItem> tasks)
+        IReadOnlyList<TaskItem> tasks,
+        string? holidayName = null,
+        int maxChips = DefaultMaxChips)
     {
         Date = date;
         IsCurrentMonth = isCurrentMonth;
         IsToday = date == today;
-        Events = events;
-        Tasks = tasks;
+        HolidayName = holidayName;
+
+        AllEvents = events;
+        AllTasks = tasks;
+
+        // マスに入る数には限りがある。溢れたぶんは「＋N」でまとめて示し、
+        // 件数が分からないまま隠れてしまうのを避ける
+        var chips = events.Select(e => new EventChipViewModel(e)).ToArray();
+        var taskChips = tasks;
+
+        var total = chips.Length + taskChips.Count;
+        if (total <= maxChips)
+        {
+            Events = chips;
+            Tasks = taskChips;
+            OverflowCount = 0;
+        }
+        else
+        {
+            // 予定を先に見せる。タスクは右ペインでも一覧できる
+            var eventRoom = Math.Min(chips.Length, maxChips);
+            Events = chips.Take(eventRoom).ToArray();
+            Tasks = taskChips.Take(maxChips - eventRoom).ToArray();
+            OverflowCount = total - maxChips;
+        }
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
@@ -77,15 +105,34 @@ public sealed class DayCellViewModel : ObservableObject
     /// <summary>この日のマイルストーン。</summary>
     public IReadOnlyList<Milestone> Milestones { get; }
 
-    /// <summary>この日の予定。</summary>
-    public IReadOnlyList<ScheduledEvent> Events { get; }
+    /// <summary>マスに並べる予定。溢れたぶんは含まない。</summary>
+    public IReadOnlyList<EventChipViewModel> Events { get; }
 
-    /// <summary>この日が期限のタスク。</summary>
+    /// <summary>マスに並べるタスク。溢れたぶんは含まない。</summary>
     public IReadOnlyList<TaskItem> Tasks { get; }
+
+    /// <summary>この日の予定すべて。</summary>
+    public IReadOnlyList<ScheduledEvent> AllEvents { get; }
+
+    /// <summary>この日が期限のタスクすべて。</summary>
+    public IReadOnlyList<TaskItem> AllTasks { get; }
+
+    /// <summary>マスに入りきらなかった件数。0 なら省略は起きていない。</summary>
+    public int OverflowCount { get; }
+
+    /// <summary>「＋2」の表示。溢れていなければ null。</summary>
+    public string? OverflowLabel => OverflowCount > 0 ? $"＋{OverflowCount}" : null;
+
+    /// <summary>
+    /// 祝日の名前。祝日でなければ null。
+    /// <para>日付の下に赤で出す。休みの理由が読めると予定を立てやすい。</para>
+    /// </summary>
+    public string? HolidayName { get; }
 
     /// <summary>日付の数字。</summary>
     public int DayNumber => Date.Day;
 
     /// <summary>マスに何も無いか。</summary>
-    public bool IsEmpty => Events.Count == 0 && Tasks.Count == 0 && Milestones.Count == 0;
+    public bool IsEmpty =>
+        AllEvents.Count == 0 && AllTasks.Count == 0 && Milestones.Count == 0 && HolidayName is null;
 }

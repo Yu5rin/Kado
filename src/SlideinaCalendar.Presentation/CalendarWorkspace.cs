@@ -18,9 +18,11 @@ public sealed class CalendarWorkspace
 {
     private WorkingDayCalendar _workingDays;
 
-    public CalendarWorkspace(SqliteConnection connection)
+    public CalendarWorkspace(SqliteConnection connection, IHolidaySource? holidays = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
+
+        Holidays = holidays ?? EmptyHolidaySource.Instance;
 
         Events = new EventRepository(connection);
         Tasks = new TaskRepository(connection);
@@ -41,6 +43,9 @@ public sealed class CalendarWorkspace
 
     /// <summary>元に戻す・やり直しの履歴。</summary>
     public UndoStack Undo { get; } = new();
+
+    /// <summary>祝日の名前を引く。取り込むまでは何も返さない実装が入る。</summary>
+    public IHolidaySource Holidays { get; }
 
     /// <summary>実働日の判定に使うカレンダー。</summary>
     public WorkingDayCalendar WorkingDays => _workingDays;

@@ -132,7 +132,8 @@ public sealed class MonthViewModel : ObservableObject
                 _today,
                 workingDays,
                 eventsByDate.TryGetValue(date, out var events) ? events : [],
-                tasksByDue.TryGetValue(date, out var tasks) ? tasks : []));
+                tasksByDue.TryGetValue(date, out var tasks) ? tasks : [],
+                _workspace.Holidays.NameOf(date)));
         }
 
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;

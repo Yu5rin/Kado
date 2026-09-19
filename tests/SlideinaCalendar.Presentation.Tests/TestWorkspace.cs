@@ -22,16 +22,22 @@ internal sealed class TestWorkspace : IDisposable
     /// 登録したワークスペースを作る。Core のテストと同じ並びなので、
     /// 実働日まわりの期待値をそろえられる。
     /// </summary>
-    public static TestWorkspace Create(bool withWorkingDays = true)
+    public static TestWorkspace Create(
+        bool withWorkingDays = true,
+        IReadOnlyDictionary<DateOnly, string>? holidays = null)
     {
         var connection = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
 
         if (withWorkingDays)
         {
-            var holidays = new[] { new DateOnly(2026, 9, 21), new DateOnly(2026, 9, 22), new DateOnly(2026, 9, 23) };
+            // 稼働日から除く日。表示用の祝日名とは別物で、祝日でも稼働する場合がある
+            var closedDays = new[]
+            {
+                new DateOnly(2026, 9, 21), new DateOnly(2026, 9, 22), new DateOnly(2026, 9, 23),
+            };
             var days = Enumerable.Range(1, 30)
                 .Select(d => new DateOnly(2026, 9, d))
-                .Where(d => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !holidays.Contains(d))
+                .Where(d => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !closedDays.Contains(d))
                 .ToArray();
 
             new Data.Repositories.WorkingDayRepository(connection).Save(
@@ -42,7 +48,8 @@ internal sealed class TestWorkspace : IDisposable
                     new DateOnly(2026, 9, 14), new DateOnly(2026, 9, 14)));
         }
 
-        return new TestWorkspace(connection, new CalendarWorkspace(connection));
+        var holidaySource = holidays is null ? null : new HolidayTable(holidays);
+        return new TestWorkspace(connection, new CalendarWorkspace(connection, holidaySource));
     }
 
     public void Dispose() => _connection.Dispose();
