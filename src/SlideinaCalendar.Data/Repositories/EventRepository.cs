@@ -22,6 +22,7 @@ public sealed class EventRepository(SqliteConnection connection)
         start_time AS StartTime, end_time AS EndTime,
         location AS Location, note AS Note, color AS Color,
         calendar_id AS CalendarId, recurrence AS Recurrence, url AS Url,
+        status AS Status, source_title AS SourceTitle, google_raw AS GoogleRaw,
         google_event_id AS GoogleEventId, google_updated AS GoogleUpdated,
         source AS Source, updated_at AS UpdatedAt
         """;
@@ -89,10 +90,12 @@ public sealed class EventRepository(SqliteConnection connection)
             INSERT INTO events (
                 id, title, date, end_date, start_time, end_time,
                 location, note, color, calendar_id, recurrence, url,
+                status, source_title, google_raw,
                 google_event_id, google_updated, source, updated_at
             ) VALUES (
                 @Id, @Title, @Date, @EndDate, @StartTime, @EndTime,
                 @Location, @Note, @Color, @CalendarId, @Recurrence, @Url,
+                @Status, @SourceTitle, @GoogleRaw,
                 @GoogleEventId, @GoogleUpdated, @Source, @UpdatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -100,7 +103,8 @@ public sealed class EventRepository(SqliteConnection connection)
                 start_time = excluded.start_time, end_time = excluded.end_time,
                 location = excluded.location, note = excluded.note, color = excluded.color,
                 calendar_id = excluded.calendar_id, recurrence = excluded.recurrence,
-                url = excluded.url,
+                url = excluded.url, status = excluded.status,
+                source_title = excluded.source_title, google_raw = excluded.google_raw,
                 google_event_id = excluded.google_event_id, google_updated = excluded.google_updated,
                 source = excluded.source, updated_at = excluded.updated_at;
             """,

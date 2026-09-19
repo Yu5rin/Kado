@@ -62,9 +62,16 @@ public partial class App : Application
             var editors = new DialogEditorPresenter(() => window);
             var files = new ShellFileDialogs(() => window);
 
+            // データベースと同じ場所に置く。デスクトップアプリ型のシークレットは
+            // 秘密として扱えないので暗号化しない。守るべきはトークンのほう
+            var googleClient = new SlideinaCalendar.Google.OAuth.GoogleClientSecretsStore(
+                Path.Combine(
+                    Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-client.json"));
+
             window = new MainWindow
             {
-                DataContext = new MainViewModel(workspace, today, editors: editors, files: files),
+                DataContext = new MainViewModel(
+                    workspace, today, editors: editors, files: files, googleClient: googleClient),
             };
 
             MainWindow = window;
