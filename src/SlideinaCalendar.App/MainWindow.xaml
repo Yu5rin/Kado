@@ -41,8 +41,18 @@
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
+            <!--
+                Google のものには削除を出さない。手元から消しても次の同期で戻ってくるうえ、
+                中の予定は別のカレンダーへ移ったまま取り残される。見せない相手には
+                チェックを外してもらう
+            -->
+            <Separator Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                    Converter={StaticResource InverseBoolToVisibility}}" />
             <MenuItem Header="削除"
+                      Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                   Converter={StaticResource InverseBoolToVisibility}}"
                       Command="{Binding PlacementTarget.Tag.DeleteSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
