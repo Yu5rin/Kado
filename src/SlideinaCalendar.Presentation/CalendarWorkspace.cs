@@ -452,6 +452,18 @@ public sealed class CalendarWorkspace
         var calendar = EnsureWorkingDayCalendar();
         var now = DateTimeOffset.Now;
 
+        // すでに同じ日に同じ題のものがあれば作らない。
+        //
+        // 旧 inaCalendar が Google に書き込んだ「休業日」「特別出勤」が同期で降りてきて
+        // いる。こちらでも作ると、次の同期で Google 側に同じ予定が2つ並ぶ。
+        // 見るのは「よそから来た分」だけ。自分が前に書いた印まで数えると、
+        // 2回目の書き出しで作り直されず、入れ替えのときに消えてしまう
+        var already = Events.InRange(from, to)
+            .Where(e => string.Equals(e.CalendarId, calendar.Id, StringComparison.Ordinal))
+            .Where(e => !IsClosedDayId(e.Id) && !IsOpenDayId(e.Id))
+            .Select(e => (e.Date, e.Title))
+            .ToHashSet();
+
         var closed = new List<CalendarEvent>();
         var open = new List<CalendarEvent>();
 
@@ -462,13 +474,14 @@ public sealed class CalendarWorkspace
             if (working)
             {
                 // 休みのはずの日に動く。暦だけ見ていると予定を入れそこなうので、
-                // これはむしろ休業日より見落としたくない
-                if (IsRestDay(date))
+                // これはむしろ休業日より見落としたくない（旧 inaCalendar の「特別出勤」）
+                if (IsRestDay(date) && !already.Contains((date, OpenDayTitle)))
                 {
                     open.Add(Mark(OpenDayIdPrefix, OpenDayTitle, date, calendar.Id, now));
                 }
             }
-            else if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            else if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) &&
+                     !already.Contains((date, ClosedDayTitle)))
             {
                 closed.Add(Mark(ClosedDayIdPrefix, ClosedDayTitle, date, calendar.Id, now));
             }
@@ -499,8 +512,14 @@ public sealed class CalendarWorkspace
     /// <summary>休業日の予定に付ける題。</summary>
     public const string ClosedDayTitle = "休業日";
 
-    /// <summary>休日・祝日に稼働する日の予定に付ける題。</summary>
-    public const string OpenDayTitle = "実働日";
+    /// <summary>
+    /// 休日・祝日に稼働する日の予定に付ける題。
+    /// <para>
+    /// 旧 inaCalendar と同じ言葉にしてある。向こうが Google に書き込んだものと題が
+    /// 揃うので、同じ日の分が二重に出ない。
+    /// </para>
+    /// </summary>
+    public const string OpenDayTitle = "特別出勤";
 
     /// <summary>休業日の予定か。</summary>
     public static bool IsClosedDayId(string? id) =>
