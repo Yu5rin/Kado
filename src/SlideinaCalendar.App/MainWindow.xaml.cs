@@ -53,6 +53,18 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
+    private void OnSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } menu } button) return;
+
+        // 既定の右クリック待ちではなく、左クリックで開く
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.DataContext = DataContext;
+        menu.IsOpen = true;
+    }
+
     private static T? DataContextOf<T>(object sender) where T : class =>
         (sender as FrameworkElement)?.DataContext as T;
 }

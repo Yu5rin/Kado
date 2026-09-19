@@ -130,7 +130,19 @@
                            Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
 
                 <!-- 右端。設定・同期・検索の順に並べる（右から左へ積む） -->
-                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}" ToolTip="設定">
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
+                        ToolTip="取り込みと設定" Click="OnSettingsClicked">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="実働日ファイルを取り込む…（Excel）"
+                                      Command="{Binding ImportWorkingDaysCommand}" />
+                            <MenuItem Header="旧 inaCalendar のバックアップを取り込む…（JSON）"
+                                      Command="{Binding ImportLegacyBackupCommand}" />
+                            <Separator />
+                            <MenuItem Header="設定" IsEnabled="False"
+                                      ToolTip="このあとのフェーズで実装します" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
                     <Path Data="{StaticResource IconSettings}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
