@@ -11,9 +11,15 @@ CI は Linux で回しているので、確認できるのは**コンパイル�
 方法は2つ。
 
 **配布物を使う**（.NET を入れなくてよい）
+
 GitHub の [Actions → リリース](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/release.yml)
-から実行を開き、下のほうの成果物 `SlideinaCalendar-win-x64` を落として展開する。
-200MB 近いのは、.NET のランタイムを同梱しているため。
+から実行を開き、いちばん下の Artifacts にある `SlideinaCalendar-0.4.x-win-x64` を落とす。
+展開すると `SlideinaCalendar.App.exe` が出るので、それを叩く。
+
+70MB ほどあるのは、.NET のランタイムを同梱しているため。受け取る側で .NET を入れずに済む。
+
+> 以前は展開しても中にもう1つ ZIP が入っていた。GitHub は成果物を自動で ZIP にするので、
+> こちらでも ZIP にしていたぶんが二重になっていた。いまは直してある。
 
 **自分でビルドする**（.NET 8 SDK が要る）
 
