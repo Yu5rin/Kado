@@ -78,7 +78,7 @@ public sealed class TimelineBuilder
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
-            var events = all is null ? [] : all.Where(x => _sources.IncludesEvent(x.Source)).ToArray();
+            var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
             var blocks = blocksByDate.TryGetValue(date, out var b) ? b : [];

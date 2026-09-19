@@ -222,4 +222,81 @@ public class SelectedDayViewModelTests
         // 遅れているものが一番上。先の期限ほど下
         Assert.Equal(["遅れ", "今日まで", "来月", "年度末"], vm.Tasks.Select(t => t.Title));
     }
+
+    // ------------------------------------------------------------------
+    // 同じ日の並び
+    //
+    // 時刻のあるものは時刻順。時刻を持たないものはカレンダーの並び順。
+    // 旧 inaCalendar と同じ
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 時刻の無い予定はカレンダーの並び順で出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 左パネルでの並びは、作った順（sort_order）
+        var first = test.Workspace.CreateCalendar("社内行事");
+        var second = test.Workspace.CreateCalendar("生産ライン");
+
+        // わざと逆の順で入れる。題の五十音でもない並びになる
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "あ", Date = D(2026, 9, 24), CalendarId = second.Id,
+        });
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "い", Date = D(2026, 9, 24), CalendarId = first.Id,
+        });
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Equal(["e1", "e2"], main.SelectedDay.Events.Select(e => e.Id));
+    }
+
+    [Fact]
+    public void 時刻のある予定は時刻順で出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        var late = test.Workspace.CreateCalendar("あとのカレンダー");
+        var early = test.Workspace.CreateCalendar("さきのカレンダー");
+
+        // 並び順では late が先。時刻があるときは時刻を優先する
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "午後", Date = D(2026, 9, 24), CalendarId = late.Id,
+            StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(16, 0),
+        });
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "午前", Date = D(2026, 9, 24), CalendarId = early.Id,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Equal(["e2", "e1"], main.SelectedDay.Events.Select(e => e.Id));
+    }
+
+    [Fact]
+    public void 終日は時刻のあるものより先に出す()
+    {
+        using var test = TestWorkspace.Create();
+        var calendar = test.Workspace.CreateCalendar("仕事");
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "朝一", Date = D(2026, 9, 24), CalendarId = calendar.Id,
+            StartTime = new TimeOnly(0, 30), EndTime = new TimeOnly(1, 0),
+        });
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "棚卸し", Date = D(2026, 9, 24), CalendarId = calendar.Id,
+        });
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Equal(["e2", "e1"], main.SelectedDay.Events.Select(e => e.Id));
+    }
 }

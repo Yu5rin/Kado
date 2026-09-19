@@ -591,6 +591,50 @@ public sealed class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// 左パネルの並べ替え。<paramref name="moved"/> を <paramref name="target"/> の位置へ移す。
+    /// <para>
+    /// 並び順は時刻を持たない予定の並びにも効く（要件どおり、旧 inaCalendar と同じ）ので、
+    /// 見た目だけの話ではない。
+    /// </para>
+    /// <para>
+    /// カレンダーとタスクリストの間では動かさない。別の一覧なので、混ぜる意味がない。
+    /// </para>
+    /// </summary>
+    /// <returns>実際に動いたら true。</returns>
+    public bool MoveSource(SourceListItemViewModel? moved, SourceListItemViewModel? target)
+    {
+        if (!CanMoveSource(moved, target)) return false;
+
+        var isTaskList = IsTaskList(moved!);
+
+        var items = isTaskList ? SourceLists.TaskLists : SourceLists.Calendars;
+
+        var ids = items.Select(i => i.Id).ToList();
+        var from = ids.IndexOf(moved.Id);
+        var to = ids.IndexOf(target.Id);
+
+        if (from < 0 || to < 0 || from == to) return false;
+
+        ids.RemoveAt(from);
+        ids.Insert(to, moved.Id);
+
+        if (isTaskList) _workspace.Sources.SetTaskListOrder(ids);
+        else _workspace.Sources.SetCalendarOrder(ids);
+
+        // 並び順は予定の並びにも効くので、画面をまるごと引き直す
+        RefreshViews();
+
+        StatusMessage = $"「{moved.Name}」の位置を変えました";
+        return true;
+    }
+
+    /// <summary>並べ替えとして成り立つ組み合わせか。落とせる先かどうかの判断に使う。</summary>
+    public bool CanMoveSource(SourceListItemViewModel? moved, SourceListItemViewModel? target) =>
+        moved is not null && target is not null &&
+        !ReferenceEquals(moved, target) &&
+        IsTaskList(moved) == IsTaskList(target);
+
     /// <summary>タスクリスト側の項目か。一覧に含まれているかで見分ける。</summary>
     private bool IsTaskList(SourceListItemViewModel target) =>
         SourceLists.TaskLists.Any(t => ReferenceEquals(t, target));

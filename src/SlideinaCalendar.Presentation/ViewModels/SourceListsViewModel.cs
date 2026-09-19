@@ -39,6 +39,15 @@ public interface ICalendarPalette
 {
     /// <summary>そのカレンダーの色（<c>#rrggbb</c>）。決まっていなければ null。</summary>
     string? ColorOf(string? calendarId);
+
+    /// <summary>
+    /// 左パネルでの並び順。小さいほど上。
+    /// <para>
+    /// 時刻を持たない予定は時刻で並べられないので、代わりにこれで並べる。
+    /// 知らないカレンダーは最後に回す。
+    /// </para>
+    /// </summary>
+    int OrderOf(string? calendarId);
 }
 
 /// <summary>表示するかどうかと、何色で出すか。</summary>
@@ -59,6 +68,9 @@ public sealed class DefaultCalendarSources : ICalendarSources
 
     /// <summary>null を返すと、表示側が既定のアクセント色を使う。</summary>
     public string? ColorOf(string? calendarId) => null;
+
+    /// <summary>並び順を持たないので、すべて同じ扱いにする。</summary>
+    public int OrderOf(string? calendarId) => 0;
 }
 
 /// <summary>左パネルに並べるカレンダー／タスクリスト1件。</summary>
@@ -292,6 +304,23 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         calendarId is { Length: > 0 } id
             ? _calendars.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal))?.SwatchColor
             : null;
+
+    /// <summary>
+    /// 左パネルでの並び順。
+    /// <para>一覧はすでに並び順で読んであるので、その位置をそのまま使う。</para>
+    /// </summary>
+    public int OrderOf(string? calendarId)
+    {
+        if (calendarId is not { Length: > 0 }) return int.MaxValue;
+
+        for (var i = 0; i < _calendars.Count; i++)
+        {
+            if (string.Equals(_calendars[i].Id, calendarId, StringComparison.Ordinal)) return i;
+        }
+
+        // 一覧に無いものは最後に回す。順番を決める手がかりが無い
+        return int.MaxValue;
+    }
 
     private void OnCalendarToggled(SourceListItemViewModel item)
     {

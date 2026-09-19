@@ -68,6 +68,11 @@
         <DataTemplate x:Key="CalendarRowTemplate">
             <ToggleButton Style="{StaticResource SourceListRowStyle}"
                           IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                          AllowDrop="True"
+                          PreviewMouseLeftButtonDown="OnSourceRowPressed"
+                          PreviewMouseMove="OnSourceRowMoved"
+                          DragOver="OnSourceRowDragOver"
+                          Drop="OnSourceRowDropped"
                           ToolTip="右クリックで名前と色を変えられます"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"
@@ -77,6 +82,11 @@
         <DataTemplate x:Key="TaskListRowTemplate">
             <ToggleButton Style="{StaticResource SourceListRowStyle}"
                           IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                          AllowDrop="True"
+                          PreviewMouseLeftButtonDown="OnSourceRowPressed"
+                          PreviewMouseMove="OnSourceRowMoved"
+                          DragOver="OnSourceRowDragOver"
+                          Drop="OnSourceRowDropped"
                           ToolTip="右クリックで名前を変えられます"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"

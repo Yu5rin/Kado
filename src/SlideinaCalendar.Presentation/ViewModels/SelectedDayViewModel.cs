@@ -244,8 +244,9 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>読み直す。</summary>
     public void Refresh()
     {
-        Events = _workspace.Schedule.EventsInRange(_date, _date)
-            .Where(e => _sources.IncludesEvent(e.Source))
+        Events = EventOrder
+            .Sort(_workspace.Schedule.EventsInRange(_date, _date)
+                .Where(e => _sources.IncludesEvent(e.Source)), _sources)
             .Select(e => new DayEventViewModel(e, _sources.ColorOf(e.Source.CalendarId)))
             .ToArray();
 

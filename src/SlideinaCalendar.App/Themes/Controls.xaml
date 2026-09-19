@@ -274,9 +274,17 @@
                                     Background="{Binding SwatchColor, Converter={StaticResource HexBrush}}"
                                     BorderThickness="0" BorderBrush="{DynamicResource LineStrongBrush}" />
 
-                            <TextBlock DockPanel.Dock="Right" Text="⋮⋮" FontSize="11"
-                                       VerticalAlignment="Center" Margin="6,0,0,0"
-                                       Foreground="{DynamicResource LineStrongBrush}" />
+                            <!--
+                                並べ替えの取っ手。ここを掴んだときだけ動かす。
+                                行のどこでも掴めるようにすると、チェックを入り切りする
+                                ふつうの押し下げと区別が付かない
+                            -->
+                            <Border x:Name="Grip" DockPanel.Dock="Right"
+                                    Background="Transparent" Padding="4,0,0,0"
+                                    Cursor="SizeNS" ToolTip="ドラッグで並べ替え">
+                                <TextBlock Text="⋮⋮" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource LineStrongBrush}" />
+                            </Border>
 
                             <TextBlock x:Name="Label" Text="{Binding Name}"
                                        VerticalAlignment="Center"
@@ -292,6 +300,9 @@
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger SourceName="Grip" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Grip" Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
