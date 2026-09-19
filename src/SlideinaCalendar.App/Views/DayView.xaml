@@ -190,12 +190,18 @@
                     <ItemsControl DockPanel.Dock="Left" Width="56" ItemsSource="{Binding HourLabels}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}"
-                                           Height="{Binding DataContext.HourHeight, ElementName=Root}"
-                                           FontSize="10" TextAlignment="Right"
-                                           Padding="0,0,6,0" Margin="0,-5,0,0"
-                                           Foreground="{DynamicResource Ink3Brush}"
-                                           Typography.NumeralAlignment="Tabular" />
+                                <!--
+                                    高さは枠で取り、文字だけを線の上へずらす。
+                                    文字に負の余白を付けると、その分だけ1行ずつ詰まって
+                                    見出しと罫線が食い違っていく（24時間ぶんで2時間ずれる）
+                                -->
+                                <Border Height="{Binding DataContext.HourHeight, ElementName=Root}">
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Top"
+                                               FontSize="10"
+                                               TextAlignment="Right" Padding="0,0,6,0" Margin="0,-5,0,0"
+                                               Foreground="{DynamicResource Ink3Brush}"
+                                               Typography.NumeralAlignment="Tabular" />
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
