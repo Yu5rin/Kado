@@ -16,9 +16,11 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, string? color, bool isWorkBlock, string? location)
+        double top, double height, string? color, bool isWorkBlock, string? location,
+        string? taskId = null)
     {
         Id = id;
+        TaskId = taskId;
         Title = title;
         Start = start;
         End = end;
@@ -51,6 +53,12 @@ public sealed class TimeBlockViewModel
     /// <para>予定には変換しないので、点線枠で見分けられるようにする（要件書 5.4）。</para>
     /// </summary>
     public bool IsWorkBlock { get; }
+
+    /// <summary>
+    /// 作業時間ブロックなら、そのもとになったタスク。予定なら null。
+    /// <para>ブロック自身の識別子とは別物。押したときに開くのはタスクのほう。</para>
+    /// </summary>
+    public string? TaskId { get; }
 
     public string? Location { get; }
 

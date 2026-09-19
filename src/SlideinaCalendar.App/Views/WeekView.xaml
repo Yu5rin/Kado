@@ -21,12 +21,48 @@
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
 
+
+        <!--
+            終日レーンの右クリックメニュー。ContextMenu は画面の木から外れて出るので、
+            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="AllDayEventMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="AllDayTaskMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <!-- 終日レーンのタスク。点線の丸印で予定と区別する -->
         <DataTemplate x:Key="AllDayTaskTemplate">
             <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
                     Background="{DynamicResource AccentSoftBrush}"
                     BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
-                    ToolTip="時間帯へドラッグすると作業時間を確保します">
+                    ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AllDayTaskMenu}"
+                    MouseLeftButtonDown="OnAllDayTaskClicked">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
@@ -38,7 +74,10 @@
         </DataTemplate>
 
         <DataTemplate x:Key="AllDayEventTemplate">
-            <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2"
+            <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AllDayEventMenu}"
+                    MouseLeftButtonDown="OnAllDayEventClicked"
                     Background="{DynamicResource AccentSoftBrush}">
                 <TextBlock Text="{Binding Label}" FontSize="10.5"
                            Foreground="{DynamicResource InkBrush}"

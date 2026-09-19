@@ -17,6 +17,33 @@
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EventColorFaceConverter x:Key="EventColorFace" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!--
+            時間軸に置かれた1件の右クリックメニュー。
+            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
+            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
+        <ContextMenu x:Key="BlockMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditBlockCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+
+            <!-- 作業時間ブロックは予定ではないので、ここからは消せない -->
+            <Separator Visibility="{Binding PlacementTarget.DataContext.IsWorkBlock,
+                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                    Converter={StaticResource InverseBoolToVisibility}}" />
+            <MenuItem Header="削除"
+                      Visibility="{Binding PlacementTarget.DataContext.IsWorkBlock,
+                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                   Converter={StaticResource InverseBoolToVisibility}}"
+                      Command="{Binding PlacementTarget.Tag.DeleteBlockCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
     </UserControl.Resources>
 
     <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
@@ -41,6 +68,9 @@
                     <DataTemplate>
                         <Border x:Name="Block" VerticalAlignment="Top" CornerRadius="3" Padding="5,2"
                                 Cursor="Hand" ToolTip="{Binding Tooltip}"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                ContextMenu="{StaticResource BlockMenu}"
+                                MouseLeftButtonDown="OnBlockClicked"
                                 Height="{Binding Height}"
                                 Margin="{Binding Top, Converter={StaticResource TimelineOffsetToMargin}}"
                                 Background="{Binding Color, Converter={StaticResource EventColorFace}}"

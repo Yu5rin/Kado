@@ -88,6 +88,9 @@ public sealed class MainViewModel : ObservableObject
         DeleteChipCommand = new RelayCommand<EventChipViewModel?>(chip => DeleteEventBy(chip?.Id));
         EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
         DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
+        EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(EditBlock);
+        DeleteBlockCommand = new RelayCommand<TimeBlockViewModel?>(
+            block => DeleteEventBy(block?.IsWorkBlock == false ? block.Id : null));
         DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
         EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
@@ -383,6 +386,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
     public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
+
+    /// <summary>週ビュー・日ビューの時間軸に置かれた1件を開く。</summary>
+    public RelayCommand<TimeBlockViewModel?> EditBlockCommand { get; }
+
+    /// <summary>週ビュー・日ビューの時間軸に置かれた予定を消す。作業時間ブロックは対象外。</summary>
+    public RelayCommand<TimeBlockViewModel?> DeleteBlockCommand { get; }
     public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
@@ -786,6 +795,21 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = _workspace.DeleteEvent(id)
             ? "予定を削除しました"
             : "予定が見つかりませんでした";
+    }
+
+    /// <summary>
+    /// 時間軸の1件を開く。
+    /// <para>
+    /// 作業時間ブロックは予定ではないので、もとになったタスクのほうを開く。
+    /// ブロック自身の識別子で予定を探しても見つからない。
+    /// </para>
+    /// </summary>
+    private void EditBlock(TimeBlockViewModel? target)
+    {
+        if (target is null) return;
+
+        if (target.IsWorkBlock) EditTaskBy(target.TaskId);
+        else EditEventBy(target.Id);
     }
 
     /// <inheritdoc cref="EditEventBy"/>
