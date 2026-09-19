@@ -42,6 +42,17 @@ public class GoogleSyncServiceTests : IDisposable
             {
                 Wrote.Add(url);
 
+                // カレンダーを作ったときの応答。イベントとは形が違う
+                if (url.EndsWith("/calendars", StringComparison.Ordinal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{"id":"created-cal","summary":"inaCalendar","accessRole":"owner"}""",
+                            System.Text.Encoding.UTF8, "application/json"),
+                    };
+                }
+
                 // 作った・直したときの応答。id を返さないと、控えを更新できない
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -219,5 +230,71 @@ public class GoogleSyncServiceTests : IDisposable
 
         Assert.DoesNotContain(report!.Warnings, w =>
             w.Contains("マイカレンダー", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------------
+    // 実働日の入れ先を Google 側へ移す
+    //
+    // 繋ぐ前に取り込むとこのアプリの中に入る。繋いだあとは Google の同じ名前の
+    // カレンダーへ集めたい。旧 inaCalendar と同じ場所になる
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 繋いだら実働日の入れ先を_Google_に作って移す()
+    {
+        var ina = _test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        _test.Workspace.AddEvent(new SlideinaCalendar.Data.Models.CalendarEvent
+        {
+            Id = "workingday:20260924:仕様期限", Title = "仕様期限",
+            Date = new DateOnly(2026, 9, 24), CalendarId = ina.Id,
+            Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        // 作りに行っている
+        Assert.Contains(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
+
+        // 名前が同じものが2つ並ばない。こちらの分は畳む
+        var named = _test.Workspace.WorkingDayCalendars();
+        var moved = Assert.Single(named);
+        Assert.False(CalendarWorkspace.IsLocal(moved));
+
+        // 中の予定ごと移っている
+        Assert.Equal(moved.Id, _test.Workspace.Events.Find("workingday:20260924:仕様期限")!.CalendarId);
+    }
+
+    [Fact]
+    public async Task 実働日の入れ先が無ければ_Google_に作らない()
+    {
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        // 実働日データを使わない人のために、空のカレンダーを勝手に作らない
+        Assert.DoesNotContain(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task すでに_Google_にあれば作らない()
+    {
+        _test.Workspace.Sources.Upsert(new SlideinaCalendar.Data.Models.CalendarSource
+        {
+            Id = "ina@group.calendar.google.com",
+            Summary = CalendarWorkspace.WorkingDayCalendarName,
+            GoogleRaw = """{"id":"ina@group.calendar.google.com","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Wrote, url => url.EndsWith("/calendars", StringComparison.Ordinal));
     }
 }

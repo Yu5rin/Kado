@@ -432,28 +432,68 @@ public sealed class CalendarWorkspace
         var from = rangeStart ?? milestones.Min(m => m.Date);
         var to = rangeEnd ?? milestones.Max(m => m.Date);
 
+        var now = DateTimeOffset.Now;
+        var wanted = milestones
+            .Select(m => new CalendarEvent
+            {
+                // 同じ日の同じ名前なら同じ予定。読み直しても増えない
+                Id = MilestoneId(m),
+                Title = m.Name,
+                Date = m.Date,
+                CalendarId = calendar.Id,
+                Source = WorkingDaySource,
+                Note = m.SourceVersion is { Length: > 0 } version ? $"実働日データ {version}" : null,
+                UpdatedAt = now,
+            })
+            .ToArray();
+
+        var keep = wanted.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+
+        // 前の版のマイルストーンを落とす。
+        //
+        // 見分けは識別子の頭で行う。所属や Source では見分けられない。同期を通ると
+        // Source は "google" に書き換わり、所属は Google 側の inaCalendar に移るため。
+        // 識別子はこちらが付けたまま残るので、これが唯一の手がかりになる。
+        //
+        // こちらが書いたものだけを消す。inaCalendar には利用者が自分で入れた予定も
+        // ありうるので、期間内を丸ごと消してはいけない。
         foreach (var stale in Events.InRange(from, to)
-                     .Where(e => string.Equals(e.Source, WorkingDaySource, StringComparison.Ordinal)))
+                     .Where(e => IsMilestoneId(e.Id) && !keep.Contains(e.Id)))
         {
             Events.Delete(stale.Id);
+
+            // 同期先にも伝える。残さないと次の同期で相手から戻ってくる
+            if (stale.GoogleEventId is { Length: > 0 } googleId)
+            {
+                Tombstones.Record(stale.Id, TombstoneRepository.EventKind, googleId, now);
+            }
         }
 
-        var now = DateTimeOffset.Now;
-
-        Events.UpsertMany(milestones.Select(m => new CalendarEvent
-        {
-            // 同じ日の同じ名前なら同じ予定。読み直しても増えない
-            Id = $"workingday:{m.Date:yyyyMMdd}:{m.Name}",
-            Title = m.Name,
-            Date = m.Date,
-            CalendarId = calendar.Id,
-            Source = WorkingDaySource,
-            Note = m.SourceVersion is { Length: > 0 } version ? $"実働日データ {version}" : null,
-            UpdatedAt = now,
-        }));
+        // すでにある分は所属と中身だけ直す。結び付けた Google の識別子は残す。
+        // 消して作り直すと、同期のたびに相手側でも消えて作られることになる
+        Events.UpsertMany(wanted.Select(e => Events.Find(e.Id) is { } existing
+            ? existing with
+            {
+                Title = e.Title,
+                Date = e.Date,
+                CalendarId = calendar.Id,
+                Note = e.Note,
+                UpdatedAt = now,
+            }
+            : e));
 
         NotifyChanged();
     }
+
+    /// <summary>マイルストーンの予定に付ける識別子。同じ日の同じ名前なら同じものになる。</summary>
+    private static string MilestoneId(Milestone value) =>
+        $"{MilestoneIdPrefix}{value.Date:yyyyMMdd}:{value.Name}";
+
+    /// <summary>実働日データから起こしたマイルストーンの識別子か。</summary>
+    public static bool IsMilestoneId(string? id) =>
+        id is not null && id.StartsWith(MilestoneIdPrefix, StringComparison.Ordinal);
+
+    private const string MilestoneIdPrefix = WorkingDaySource + ":";
 
     /// <summary>
     /// 「inaCalendar」を用意する。
@@ -464,12 +504,21 @@ public sealed class CalendarWorkspace
     /// </summary>
     public CalendarSource EnsureWorkingDayCalendar()
     {
-        var existing = Sources.Calendars()
-            .FirstOrDefault(c => string.Equals(
-                c.DisplayName, WorkingDayCalendarName, StringComparison.Ordinal));
+        var named = WorkingDayCalendars();
 
-        return existing ?? CreateCalendar(WorkingDayCalendarName);
+        // Google に同じ名前のものがあればそちらへ入れる。旧 inaCalendar と同じ場所に
+        // 集まり、他の端末やブラウザからも見える。無ければこのアプリの中に持つ
+        return named.FirstOrDefault(c => !IsLocal(c))
+            ?? named.FirstOrDefault()
+            ?? CreateCalendar(WorkingDayCalendarName);
     }
+
+    /// <summary>「inaCalendar」という名前のカレンダー。Google のものを先に返す。</summary>
+    public IReadOnlyList<CalendarSource> WorkingDayCalendars() =>
+        Sources.Calendars()
+            .Where(c => string.Equals(c.DisplayName, WorkingDayCalendarName, StringComparison.Ordinal))
+            .OrderBy(IsLocal)
+            .ToArray();
 
     /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
     public LegacyImportResult ImportLegacyBackup(Stream json)

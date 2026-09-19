@@ -515,15 +515,23 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
 
         var isTaskList = IsTaskList(target);
-        var editor = new CalendarEditorViewModel(target.Id, target.Name, target.SwatchColor, isTaskList);
+        // 「inaCalendar」は名前で見分けて日付の行に出している。変えられると黙って止まる
+        var locked = !isTaskList && string.Equals(
+            target.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+
+        var editor = new CalendarEditorViewModel(
+            target.Id, target.Name, target.SwatchColor, isTaskList, locked);
 
         if (!_editors.ShowCalendarEditor(editor)) return;
 
-        var changed = isTaskList
-            ? _workspace.UpdateTaskList(target.Id, editor.TrimmedName)
-            : _workspace.UpdateCalendar(target.Id, editor.TrimmedName, editor.Color);
+        // 画面で止めていても、名前は元のものを使う。入口が増えても崩れないようにする
+        var name = locked ? target.Name : editor.TrimmedName;
 
-        StatusMessage = changed ? $"「{editor.TrimmedName}」に変更しました" : "見つかりませんでした";
+        var changed = isTaskList
+            ? _workspace.UpdateTaskList(target.Id, name)
+            : _workspace.UpdateCalendar(target.Id, name, editor.Color);
+
+        StatusMessage = changed ? $"「{name}」に変更しました" : "見つかりませんでした";
     }
 
     /// <summary>
