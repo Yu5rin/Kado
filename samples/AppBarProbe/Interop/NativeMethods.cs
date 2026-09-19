@@ -83,6 +83,10 @@ internal static class NativeMethods
     /// <summary>DWM に「実際に見えている」ウィンドウ境界を問い合わせる属性。</summary>
     public const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
+    private const int GWL_EXSTYLE = -20;
+    private const long WS_EX_TOOLWINDOW = 0x00000080;
+    private const long WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+
 
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
 
@@ -116,6 +120,27 @@ internal static class NativeMethods
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(
         IntPtr hwnd, uint dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsZoomed(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     /// <summary>現在のワークエリア（プライマリモニタ）を取得する。</summary>
     public static RECT GetWorkArea()
@@ -186,5 +211,56 @@ internal static class NativeMethods
 
         GetWindowRect(hwnd, out var window);
         return window;
+    }
+
+    /// <summary>
+    /// ドック境界のすぐ外側にあるウィンドウが最大化されているか。
+    /// <para>
+    /// 隣のウィンドウがスナップ配置なら、その可視境界はウィンドウ矩形より内側にあり
+    /// （ドロップシャドウ用の不可視マージン）、境界どうしを突き合わせても隙間が見える。
+    /// 一方、最大化されたウィンドウは可視境界がワークエリアにぴったり揃うため隙間が無い。
+    /// この非対称のせいで、隙間を埋める量を固定値にすると最大化時に重なってしまう。
+    /// </para>
+    /// <para>
+    /// Z 順で手前から走査し、境界の外側の点を含む最初のウィンドウを隣とみなす。
+    /// 自分自身と、ツールウィンドウなどの補助的なウィンドウは対象から外す。
+    /// </para>
+    /// </summary>
+    /// <param name="self">自分のウィンドウハンドル。判定から除く。</param>
+    /// <param name="dockRect">AppBar に申告した矩形。</param>
+    /// <param name="edge">ドックしている辺。</param>
+    public static bool IsNeighborMaximized(IntPtr self, RECT dockRect, AppBarEdge edge)
+    {
+        // 境界の 1px 外側を調べる。自分は除外するので、隙間埋めで広げていても影響しない。
+        var (probeX, probeY) = edge switch
+        {
+            AppBarEdge.Left => (dockRect.Right + 1, (dockRect.Top + dockRect.Bottom) / 2),
+            AppBarEdge.Right => (dockRect.Left - 1, (dockRect.Top + dockRect.Bottom) / 2),
+            AppBarEdge.Top => ((dockRect.Left + dockRect.Right) / 2, dockRect.Bottom + 1),
+            _ => ((dockRect.Left + dockRect.Right) / 2, dockRect.Top - 1),
+        };
+
+        var neighbor = IntPtr.Zero;
+
+        EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == self) return true;
+            if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return true;
+
+            var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+            if ((ex & WS_EX_TOOLWINDOW) != 0) return true;
+
+            if (!GetWindowRect(hwnd, out var r)) return true;
+            if (r.Width <= 0 || r.Height <= 0) return true;
+
+            var hit = probeX >= r.Left && probeX < r.Right
+                   && probeY >= r.Top && probeY < r.Bottom;
+            if (!hit) return true;
+
+            neighbor = hwnd;
+            return false;   // Z 順で最初に当たったものが手前の隣
+        }, IntPtr.Zero);
+
+        return neighbor != IntPtr.Zero && IsZoomed(neighbor);
     }
 }
