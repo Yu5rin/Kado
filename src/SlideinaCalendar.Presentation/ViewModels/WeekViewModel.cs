@@ -62,7 +62,7 @@ public sealed class TimeBlockViewModel
 
     public string? Location { get; }
 
-    /// <summary>「09:00」。ブロックの頭に出す。</summary>
+    /// <summary>「09:00」。ブロックには書かず、マウスを載せたときの説明に使う。</summary>
     public string TimeText => Start.ToString("HH:mm", CultureInfo.InvariantCulture);
 
     public string Tooltip => Location is { Length: > 0 }
@@ -163,6 +163,9 @@ public sealed class WeekDayColumnViewModel
 public sealed class WeekViewModel : ObservableObject
 {
     private TimelineBuilder _timeline;
+
+    /// <summary>最後に受け取った「いま」。高さが変わったときに引き直すために控える。</summary>
+    private TimeOnly? _now;
     private readonly DayOfWeek _weekStart;
 
     private DateOnly _anchor;
@@ -248,6 +251,9 @@ public sealed class WeekViewModel : ObservableObject
     /// <summary>現在時刻の線を動かす。</summary>
     public void UpdateNowLine(TimeOnly now)
     {
+        // 1時間の高さが変わると線の位置も変わる。控えておいて引き直せるようにする
+        _now = now;
+
         var inRange = _timeline.Covers(now);
 
         ShowNowLine = inRange && _today >= WeekStart && _today <= WeekEnd;
@@ -271,6 +277,8 @@ public sealed class WeekViewModel : ObservableObject
 
             _timeline = _timeline.WithHourHeight(height);
             Refresh();
+
+            if (_now is { } now) UpdateNowLine(now);
         }
     }
 

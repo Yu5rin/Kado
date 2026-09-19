@@ -21,6 +21,7 @@
     <SolidColorBrush x:Key="CellSelectedBrush" Color="{DynamicResource CellSelectedColor}" />
     <SolidColorBrush x:Key="OffDayBrush" Color="{DynamicResource OffDayColor}" />
     <SolidColorBrush x:Key="SunkenBrush" Color="{DynamicResource SunkenColor}" />
+    <SolidColorBrush x:Key="NowLineBrush" Color="{DynamicResource NowLineColor}" />
     <SolidColorBrush x:Key="CategoryGreenBrush" Color="{DynamicResource CategoryGreenColor}" />
     <SolidColorBrush x:Key="CategoryAmberBrush" Color="{DynamicResource CategoryAmberColor}" />
     <SolidColorBrush x:Key="DoneBrush" Color="{DynamicResource DoneColor}" />
