@@ -42,6 +42,8 @@ public sealed class MainViewModel : ObservableObject
     private DateOnly _today;
     private string? _statusMessage;
     private string _searchText = string.Empty;
+    private double _sidePanelWidth;
+    private double _detailPaneWidth;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
@@ -55,6 +57,9 @@ public sealed class MainViewModel : ObservableObject
         _editors = editors ?? NullEditorPresenter.Instance;
         _files = files ?? NullFileDialogs.Instance;
         _today = today;
+
+        _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
+        _detailPaneWidth = ReadWidth(DetailPaneWidthKey, DefaultDetailPaneWidth, MinDetailPaneWidth, MaxDetailPaneWidth);
 
         SourceLists = new SourceListsViewModel(workspace);
         Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
@@ -223,6 +228,70 @@ public sealed class MainViewModel : ObservableObject
         get => _isSidePanelOpen;
         set => Set(ref _isSidePanelOpen, value);
     }
+
+    // ------------------------------------------------------------------
+    // 3ペインの幅
+    //
+    // 両端は手で決めた幅のまま置く。ウィンドウを広げたぶんは中央が受け取る。
+    // 左パネルの一覧も右ペインの予定も、幅が増えて嬉しいのは中央のほう
+    // ------------------------------------------------------------------
+
+    private const string SidePanelWidthKey = "ui.side_panel_width";
+    private const string DetailPaneWidthKey = "ui.detail_pane_width";
+
+    /// <summary>左パネルの幅の既定値。モックの .side と同じ。</summary>
+    public const double DefaultSidePanelWidth = 216;
+
+    /// <summary>右ペインの幅の既定値。モックの .detail と同じ。</summary>
+    public const double DefaultDetailPaneWidth = 296;
+
+    /// <summary>左パネルの幅の下限。これより狭いとカレンダー名が読めない。</summary>
+    public const double MinSidePanelWidth = 160;
+
+    /// <summary>左パネルの幅の上限。</summary>
+    public const double MaxSidePanelWidth = 480;
+
+    /// <summary>右ペインの幅の下限。</summary>
+    public const double MinDetailPaneWidth = 200;
+
+    /// <summary>右ペインの幅の上限。</summary>
+    public const double MaxDetailPaneWidth = 640;
+
+    /// <summary>左パネルの幅。手で変えた値をそのまま次回に持ち越す。</summary>
+    public double SidePanelWidth
+    {
+        get => _sidePanelWidth;
+        set => SetWidth(ref _sidePanelWidth, value, MinSidePanelWidth, MaxSidePanelWidth,
+            SidePanelWidthKey, nameof(SidePanelWidth));
+    }
+
+    /// <summary>右ペインの幅。手で変えた値をそのまま次回に持ち越す。</summary>
+    public double DetailPaneWidth
+    {
+        get => _detailPaneWidth;
+        set => SetWidth(ref _detailPaneWidth, value, MinDetailPaneWidth, MaxDetailPaneWidth,
+            DetailPaneWidthKey, nameof(DetailPaneWidth));
+    }
+
+    /// <summary>幅を収まる範囲に丸めてから覚える。範囲外の値が保存に残らないようにする。</summary>
+    private void SetWidth(
+        ref double field, double value, double min, double max, string key, string name)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value)) return;
+
+        var rounded = Math.Clamp(Math.Round(value), min, max);
+        if (Math.Abs(rounded - field) < 0.5) return;
+
+        field = rounded;
+        _workspace.Settings.Set(key, rounded.ToString(CultureInfo.InvariantCulture));
+        Raise(name);
+    }
+
+    /// <summary>保存されている幅を読む。読めなければ既定値。</summary>
+    private double ReadWidth(string key, double fallback, double min, double max) =>
+        double.TryParse(_workspace.Settings.Get(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var saved)
+            ? Math.Clamp(saved, min, max)
+            : fallback;
 
     /// <summary>今日。日付が変わったら差し替える。</summary>
     public DateOnly Today
