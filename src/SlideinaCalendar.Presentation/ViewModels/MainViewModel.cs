@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Google.Mapping;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
@@ -932,6 +933,14 @@ public sealed class MainViewModel : ObservableObject
         if (CalendarWorkspace.IsMilestoneMark(found)) return false;
         if (found.Date == date && !copy) return false;
 
+        // 向こうで変えられない予定は動かさない。ここで動かしても伝わらず、
+        // 画面と Google とで日付が食い違うだけ。複製は元を触らないので通す
+        if (!copy && IsLocked(found))
+        {
+            StatusMessage = LockedMessage;
+            return false;
+        }
+
         var length = found.EndDate is { } end ? end.DayNumber - found.Date.DayNumber : 0;
         var moved = found with
         {
@@ -989,6 +998,19 @@ public sealed class MainViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// 向こうで内容を変えられない予定か。
+    /// <para>
+    /// メールから起こされた予約（美容室やホテルなど）、誕生日、勤務場所がこれにあたる。
+    /// <b>読むだけにする。</b>こちらで変えても向こうへは伝わらず、画面と Google とで
+    /// 食い違うだけになる。消すことはできるので、削除は止めない。
+    /// </para>
+    /// </summary>
+    public static bool IsLocked(CalendarEvent value) => EventMapper.IsLocked(value);
+
+    private const string LockedMessage =
+        "この予定は Google 側で作られたもので、ここからは変えられません（削除はできます）";
+
     private void AddEvent()
     {
         var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);
@@ -1013,6 +1035,12 @@ public sealed class MainViewModel : ObservableObject
 
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
         if (_workspace.Events.Find(id) is not { } stored) return;
+
+        if (IsLocked(stored))
+        {
+            StatusMessage = LockedMessage;
+            return;
+        }
 
         var editor = new EventEditorViewModel(stored, CalendarNames);
         if (!_editors.ShowEventEditor(editor)) return;
