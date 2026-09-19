@@ -386,11 +386,170 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
+    <!-- 一覧に出す行 -->
+    <Style x:Key="FieldComboBoxItemStyle" TargetType="ComboBoxItem">
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Root" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 開閉ボタンの山形。既定のものは周りと太さが揃わない -->
+    <Style x:Key="ComboToggleStyle" TargetType="ToggleButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="ClickMode" Value="Press" />
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent">
+                        <Path Data="M6 9l6 6 6-6" Stretch="Uniform" Width="11" Height="11"
+                              StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Stroke="{DynamicResource Ink3Brush}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        選ぶだけの欄（カレンダー・タスクリスト・繰り返し）。
+        既定のテンプレートは枠も高さも周りと揃わないので差し替える。
+    -->
     <Style x:Key="FieldComboBoxStyle" TargetType="ComboBox">
         <Setter Property="Height" Value="28" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource FieldComboBoxItemStyle}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <Border x:Name="Root" CornerRadius="5"
+                                Background="{DynamicResource BackgroundBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}" />
+
+                        <ToggleButton HorizontalAlignment="Stretch" Width="Auto" Background="Transparent"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                  RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+
+                        <DockPanel Margin="9,0,4,0" IsHitTestVisible="False">
+                            <Path DockPanel.Dock="Right" Data="M6 9l6 6 6-6" Stretch="Uniform"
+                                  Width="11" Height="11" Margin="4,0,0,0"
+                                  StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Stroke="{DynamicResource Ink3Brush}" VerticalAlignment="Center" />
+                            <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              VerticalAlignment="Center" />
+                        </DockPanel>
+
+                        <Popup x:Name="PART_Popup" Placement="Bottom" Focusable="False"
+                               AllowsTransparency="True"
+                               IsOpen="{TemplateBinding IsDropDownOpen}">
+                            <Border MinWidth="{TemplateBinding ActualWidth}" MaxHeight="240" Margin="0,2,0,0"
+                                    CornerRadius="5" Background="{DynamicResource PanelBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        打っても選んでもよい欄（時刻）。
+        打ち込みは「9」「930」「9:30」のどれでも読むので、候補は目安として出すだけ。
+    -->
+    <Style x:Key="TimeComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="Height" Value="28" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="IsEditable" Value="True" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource FieldComboBoxItemStyle}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="Root" Grid.ColumnSpan="2" CornerRadius="5"
+                                Background="{DynamicResource BackgroundBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}" />
+
+                        <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
+                                 Margin="9,0,0,0" Padding="0"
+                                 BorderThickness="0" Background="Transparent"
+                                 VerticalContentAlignment="Center"
+                                 Foreground="{DynamicResource InkBrush}"
+                                 CaretBrush="{DynamicResource InkBrush}"
+                                 Typography.NumeralAlignment="Tabular" />
+
+                        <ToggleButton Grid.Column="1" Style="{StaticResource ComboToggleStyle}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                  RelativeSource={RelativeSource TemplatedParent}}" />
+
+                        <Popup x:Name="PART_Popup" Grid.ColumnSpan="2" Placement="Bottom" Focusable="False"
+                               AllowsTransparency="True"
+                               IsOpen="{TemplateBinding IsDropDownOpen}">
+                            <Border MinWidth="{TemplateBinding ActualWidth}" MaxHeight="240" Margin="0,2,0,0"
+                                    CornerRadius="5" Background="{DynamicResource PanelBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 期限の早入れ（今日・明日・来週）。小さめの枠線ボタン -->
+    <Style x:Key="ChipButtonStyle" TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Margin" Value="0,0,6,0" />
     </Style>
 
     <!-- 保存ボタン。押すべき先がひとつだと分かるようアクセントで塗る -->

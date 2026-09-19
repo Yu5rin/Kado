@@ -10,7 +10,7 @@ public class TaskEditorViewModelTests
     [Fact]
     public void タイトルが空なら保存できない()
     {
-        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"]);
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"], D(2026, 9, 24));
 
         Assert.False(vm.CanSave);
 
@@ -21,7 +21,7 @@ public class TaskEditorViewModelTests
     [Fact]
     public void 期限を外せる()
     {
-        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"]) { Title = "いつかやる" };
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), ["マイタスク"], D(2026, 9, 24)) { Title = "いつかやる" };
 
         Assert.Equal(D(2026, 9, 24), vm.ToModel().Due);
 
@@ -34,7 +34,7 @@ public class TaskEditorViewModelTests
     [Fact]
     public void 期限を外しても日付は覚えている()
     {
-        var vm = new TaskEditorViewModel(D(2026, 9, 24), []) { Title = "提出" };
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), [], D(2026, 9, 24)) { Title = "提出" };
 
         vm.HasDue = false;
         vm.HasDue = true;
@@ -46,7 +46,7 @@ public class TaskEditorViewModelTests
     public void 期限の無いタスクを開くと今日が入る()
     {
         var source = new TaskItem { Id = "t1", Title = "未定", Due = null };
-        var vm = new TaskEditorViewModel(source, [], fallbackDue: D(2026, 9, 24));
+        var vm = new TaskEditorViewModel(source, [], today: D(2026, 9, 24));
 
         Assert.False(vm.HasDue);
         Assert.Equal(D(2026, 9, 24), vm.Due);   // 付けると決めたときの初期値
@@ -68,5 +68,32 @@ public class TaskEditorViewModelTests
         Assert.Equal("g1", model.GoogleTaskId);
         Assert.Equal("gl1", model.GoogleTaskListId);
         Assert.Equal("google", model.Source);
+    }
+
+    [Fact]
+    public void 期限の早入れが使える()
+    {
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), [], today: D(2026, 9, 24)) { Title = "提出" };
+
+        Assert.Equal(["今日", "明日", "来週"], vm.DuePresets.Select(p => p.Label));
+        Assert.Equal(D(2026, 9, 25), vm.DuePresets[1].Date);
+
+        vm.SetDue(vm.DuePresets[2].Date);
+        Assert.Equal(D(2026, 10, 1), vm.ToModel().Due);
+    }
+
+    [Fact]
+    public void 早入れは期限なしのタスクにも期限を付ける()
+    {
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), [], today: D(2026, 9, 24))
+        {
+            Title = "いつかやる",
+            HasDue = false,
+        };
+
+        vm.SetDue(D(2026, 9, 30));
+
+        Assert.True(vm.HasDue);
+        Assert.Equal(D(2026, 9, 30), vm.ToModel().Due);
     }
 }

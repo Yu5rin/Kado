@@ -147,12 +147,13 @@ public class MainViewModelEditingTests
 
         var task = Assert.Single(vm.SelectedDay.Tasks);
         Assert.False(task.IsDone);
-        Assert.Equal("0 / 1", vm.SelectedDay.TaskCountText);
+        // 見出しは「残り / 全体」
+        Assert.Equal("1 / 1", vm.SelectedDay.TaskCountText);
 
         vm.ToggleTaskDoneCommand.Execute(task);
 
         Assert.True(Assert.Single(vm.SelectedDay.Tasks).IsDone);
-        Assert.Equal("1 / 1", vm.SelectedDay.TaskCountText);
+        Assert.Equal("0 / 1", vm.SelectedDay.TaskCountText);
 
         // 切り替えも元に戻せる
         vm.UndoCommand.Execute(null);
