@@ -1,0 +1,112 @@
+# 配布物（Windows 向け実行ファイル）を作って GitHub Releases に上げる。
+#
+# CI（ci.yml）は Linux で回しているので、確認できるのはコンパイルが通ることまで。
+# こちらは windows-latest なので、配布物を作る前に**テストを実際に実行**できる。
+# 起動時にだけ落ちる WPF の書き方は Linux では気づけないため、この順序が要る。
+#
+# 配布物は自己完結（self-contained）の単一ファイル。.NET ランタイムを同梱するので
+# 200MB 近くなるが、受け取る側でランタイムを入れずに済む。会社の PC のように
+# 勝手にランタイムを入れられない環境を想定している。
+name: リリース
+
+on:
+  # v1.0.0 のようなタグを押すと走る
+  push:
+    tags: ['v*']
+  # タグを作らずに試したいとき用
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'バージョン（例: 0.4.0）。省略すると 0.0.0-dev'
+        required: false
+        default: ''
+
+# Releases に上げるために書き込みが要る
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Windows 版のビルドと公開
+    runs-on: windows-latest
+
+    steps:
+      - name: リポジトリの取得
+        uses: actions/checkout@v4
+
+      - name: .NET 8 SDK のセットアップ
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: NuGet パッケージのキャッシュ
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # タグ（refs/tags/v0.4.0）とワークフロー実行の入力、どちらから来ても同じ形にする
+      - name: バージョンを決める
+        id: version
+        shell: pwsh
+        run: |
+          $version = '${{ github.event.inputs.version }}'
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            if ('${{ github.ref_type }}' -eq 'tag') {
+              $version = '${{ github.ref_name }}' -replace '^v', ''
+            } else {
+              $version = '0.0.0-dev'
+            }
+          }
+          Write-Host "バージョン: $version"
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: 依存関係の復元
+        run: dotnet restore
+
+      - name: ビルド
+        run: dotnet build --configuration Release --no-restore
+
+      # Linux の CI では実行できていない。ここが唯一、実際に走らせられる場所
+      - name: テスト
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: 発行
+        run: >
+          dotnet publish src/SlideinaCalendar.App/SlideinaCalendar.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output publish
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.version.outputs.value }}
+
+      - name: ZIP にまとめる
+        id: package
+        shell: pwsh
+        run: |
+          $name = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.zip"
+          Compress-Archive -Path publish/* -DestinationPath $name
+          "asset=$name" >> $env:GITHUB_OUTPUT
+
+      # タグから来たときだけ Releases に上げる。手動実行は成果物の確認まで
+      - name: Releases に上げる
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' '${{ steps.package.outputs.asset }}' `
+            --title 'SlideinaCalendar ${{ steps.version.outputs.value }}' `
+            --generate-notes
+
+      # 手動実行でも受け取れるようにしておく
+      - name: 成果物として残す
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlideinaCalendar-win-x64
+          path: ${{ steps.package.outputs.asset }}
+          retention-days: 14
