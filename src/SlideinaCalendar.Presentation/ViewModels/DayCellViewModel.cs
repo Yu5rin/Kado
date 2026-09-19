@@ -114,6 +114,15 @@ public sealed class DayCellViewModel : ObservableObject
     /// <summary>日曜か。</summary>
     public bool IsSunday => Date.DayOfWeek == DayOfWeek.Sunday;
 
+    /// <summary>
+    /// 日曜と同じ赤で出すか。日曜と祝日。
+    /// <para>
+    /// 祝日は曜日に関わらず赤。土曜に重なっても赤を採る。祝日であることのほうが、
+    /// その日の予定の立て方に効く。
+    /// </para>
+    /// </summary>
+    public bool IsSundayLike => IsSunday || HolidayName is { Length: > 0 };
+
     /// <summary>土曜か。</summary>
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
 

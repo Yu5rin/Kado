@@ -409,6 +409,29 @@ public class MonthViewModelTests
         Assert.False(unknown.IsWorkingDayLit);
         Assert.False(unknown.IsDimmed);
     }
+
+    [Fact]
+    public void 祝日は日付を赤で出す()
+    {
+        // モックに合わせる。曜日に関わらず赤。土曜に重なっても赤を採る
+        using var test = TestWorkspace.Create(holidays: new Dictionary<DateOnly, string>
+        {
+            [D(2026, 9, 21)] = "敬老の日",
+            [D(2026, 9, 26)] = "土曜の祝日",
+        });
+
+        var vm = Create(test);
+
+        Assert.True(Cell(vm, D(2026, 9, 21)).IsSundayLike);
+        Assert.True(Cell(vm, D(2026, 9, 26)).IsSundayLike);
+
+        // ふつうの平日と土曜は変わらない
+        Assert.False(Cell(vm, D(2026, 9, 24)).IsSundayLike);
+        Assert.False(Cell(vm, D(2026, 9, 19)).IsSundayLike);
+
+        // 日曜は今までどおり
+        Assert.True(Cell(vm, D(2026, 9, 20)).IsSundayLike);
+    }
 }
 
 /// <summary>読みやすさのための小さな拡張。</summary>
