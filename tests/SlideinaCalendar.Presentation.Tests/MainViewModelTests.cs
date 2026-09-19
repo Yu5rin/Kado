@@ -350,4 +350,53 @@ public class MainViewModelTests
         Assert.Equal(D(2026, 9, 20), vm.Week.WeekStart);
         Assert.Equal("2026年9月", vm.Title);
     }
+
+    [Fact]
+    public void 実働日データが無ければ残りのバッジも出さない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        var vm = Create(test);
+
+        // データが無いのに「残り 0 日」と出ると、実数だと思われる
+        Assert.False(vm.HasWorkingDayData);
+        Assert.False(vm.HasRemainingWorkingDays);
+    }
+
+    [Fact]
+    public void 同期の表示には同期の状態だけを出す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Equal("Google 未接続", vm.SyncStatusText);
+
+        // 操作の結果を混ぜると、同期できているのか読み取れなくなる
+        vm.UndoCommand.Execute(null);
+        Assert.Equal("Google 未接続", vm.SyncStatusText);
+    }
+
+    [Fact]
+    public void 時計を進めると現在時刻の線が動く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.UpdateNow(new DateTime(2026, 9, 24, 10, 0, 0));
+
+        Assert.True(vm.Week.ShowNowLine);
+        Assert.True(vm.Day.ShowNowLine);
+    }
+
+    [Fact]
+    public void 日をまたぐと今日が差し替わる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 起動しっぱなしで日をまたぐ
+        vm.UpdateNow(new DateTime(2026, 9, 25, 9, 0, 0));
+
+        Assert.Equal(D(2026, 9, 25), vm.Today);
+        Assert.Equal(D(2026, 9, 25), vm.Month.Today);
+    }
 }

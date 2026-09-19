@@ -22,11 +22,11 @@ public sealed class DayViewModel : ObservableObject
     private WeekDayColumnViewModel _day;
 
     public DayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
-        ISourceFilter? filter = null, TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
+        ICalendarSources? sources = null, TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         // 日ビューは列が1本なので、モックどおり1時間を高く取る
-        _timeline = new TimelineBuilder(workspace, filter, dayStart, dayEnd, TimelineBuilder.DayHourHeight);
+        _timeline = new TimelineBuilder(workspace, sources, dayStart, dayEnd, TimelineBuilder.DayHourHeight);
         _date = date;
         _today = today;
         _day = _timeline.Build(date, date, today)[0];

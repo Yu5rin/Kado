@@ -112,10 +112,22 @@ public static class SchemaMigrations
         CREATE INDEX ix_tombstones_deleted_at ON tombstones (deleted_at);
         """;
 
+    /// <summary>
+    /// 予定に URL を足す。
+    /// <para>
+    /// Google Calendar のイベントは <c>source.url</c> を持つ。資料や図面の置き場所を
+    /// 説明欄に書くと、リンクなのか本文なのか分からなくなる。
+    /// </para>
+    /// </summary>
+    private const string V2 = """
+        ALTER TABLE events ADD COLUMN url TEXT;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
         new(1, "予定・タスク・実働日・マイルストーン・設定・同期状態の初版", V1),
+        new(2, "予定に URL を足す", V2),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

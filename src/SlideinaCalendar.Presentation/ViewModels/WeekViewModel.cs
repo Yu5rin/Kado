@@ -16,7 +16,7 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, EventAccent accent, bool isWorkBlock, string? location)
+        double top, double height, string? color, bool isWorkBlock, string? location)
     {
         Id = id;
         Title = title;
@@ -24,7 +24,7 @@ public sealed class TimeBlockViewModel
         End = end;
         Top = top;
         Height = height;
-        Accent = accent;
+        Color = color;
         IsWorkBlock = isWorkBlock;
         Location = location;
     }
@@ -43,7 +43,8 @@ public sealed class TimeBlockViewModel
     /// <summary>高さ。下の罫線と重ならないよう少し詰めてある。</summary>
     public double Height { get; }
 
-    public EventAccent Accent { get; }
+    /// <summary>帯の色（<c>#rrggbb</c>）。所属カレンダーで決まる。null なら既定のアクセント色。</summary>
+    public string? Color { get; }
 
     /// <summary>
     /// タスクの作業時間ブロックか。
@@ -71,12 +72,14 @@ public sealed class WeekDayColumnViewModel
 
     internal WeekDayColumnViewModel(DateOnly date, DateOnly today, WorkingDayCalendar workingDays,
         string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<TaskItem> tasks,
-        IReadOnlyList<TimeBlockViewModel> blocks)
+        IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette)
     {
         Date = date;
         IsToday = date == today;
         HolidayName = holidayName;
-        AllDayEvents = allDay.Select(e => new EventChipViewModel(e)).ToArray();
+        AllDayEvents = allDay
+            .Select(e => new EventChipViewModel(e, palette.ColorOf(e.Source.CalendarId)))
+            .ToArray();
         Tasks = tasks;
         Blocks = blocks;
 
@@ -152,10 +155,10 @@ public sealed class WeekViewModel : ObservableObject
     private IReadOnlyList<WeekDayColumnViewModel> _days = [];
 
     public WeekViewModel(CalendarWorkspace workspace, DateOnly anchor, DateOnly today,
-        DayOfWeek weekStart = DayOfWeek.Sunday, ISourceFilter? filter = null,
+        DayOfWeek weekStart = DayOfWeek.Sunday, ICalendarSources? sources = null,
         TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
     {
-        _timeline = new TimelineBuilder(workspace, filter, dayStart, dayEnd);
+        _timeline = new TimelineBuilder(workspace, sources, dayStart, dayEnd);
         _weekStart = weekStart;
         _anchor = anchor;
         _today = today;

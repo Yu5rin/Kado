@@ -26,7 +26,7 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
         <conv:DueEmphasisBrushConverter x:Key="DueEmphasisBrush" />
-        <conv:EventAccentBrushConverter x:Key="EventAccentBrush" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
 
         <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す -->
@@ -90,14 +90,16 @@
                         <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Month}" />
-                        <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     ToolTip="週ビューはこのあとのフェーズで実装します" />
-                        <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     ToolTip="日ビューはこのあとのフェーズで実装します" />
+                        <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Week}" />
+                        <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Day}" />
                         <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     ToolTip="年ビューはこのあとのフェーズで実装します" />
+                                     ToolTip="このあとのフェーズで実装します" />
                         <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     BorderThickness="0" ToolTip="一覧ビューはこのあとのフェーズで実装します" />
+                                     BorderThickness="0" ToolTip="このあとのフェーズで実装します" />
                     </StackPanel>
                 </Border>
 
@@ -137,7 +139,8 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,8,0"
                             VerticalAlignment="Center">
                     <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
-                             Fill="{DynamicResource Ink3Brush}" />
+                             Fill="{DynamicResource Ink3Brush}"
+                             ToolTip="Google 連携はこのあとのフェーズで実装します" />
                     <TextBlock Text="{Binding SyncStatusText}" FontSize="11.5"
                                Foreground="{DynamicResource Ink3Brush}" />
                 </StackPanel>
@@ -278,7 +281,21 @@
                                TextTrimming="CharacterEllipsis" />
                 </Border>
 
-                <views:MonthView DataContext="{Binding Month}" />
+                <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
+                <Grid>
+                    <views:MonthView DataContext="{Binding Month}"
+                                     Visibility="{Binding DataContext.IsMonthView,
+                                                  RelativeSource={RelativeSource AncestorType=Window},
+                                                  Converter={StaticResource BoolToVisibility}}" />
+                    <views:WeekView DataContext="{Binding Week}"
+                                    Visibility="{Binding DataContext.IsWeekView,
+                                                 RelativeSource={RelativeSource AncestorType=Window},
+                                                 Converter={StaticResource BoolToVisibility}}" />
+                    <views:DayView DataContext="{Binding Day}"
+                                   Visibility="{Binding DataContext.IsDayView,
+                                                RelativeSource={RelativeSource AncestorType=Window},
+                                                Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
             </DockPanel>
 
             <!-- 右ペイン（.detail 296px） -->
@@ -352,7 +369,7 @@
                                                            Typography.NumeralAlignment="Tabular" />
                                                 <Border DockPanel.Dock="Left" Width="3" MinHeight="20" Margin="0,0,9,0"
                                                         CornerRadius="2"
-                                                        Background="{Binding Accent, Converter={StaticResource EventAccentBrush}}" />
+                                                        Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
 
                                                 <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
                                                         Style="{StaticResource RowDeleteButtonStyle}"

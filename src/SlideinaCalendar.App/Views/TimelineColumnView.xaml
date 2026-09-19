@@ -15,8 +15,8 @@
 
     <UserControl.Resources>
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
-        <conv:EventAccentBrushConverter x:Key="EventAccentBrush" />
-        <conv:EventAccentFaceConverter x:Key="EventAccentFace" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
+        <conv:EventColorFaceConverter x:Key="EventColorFace" />
     </UserControl.Resources>
 
     <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
@@ -43,9 +43,9 @@
                                 Cursor="Hand" ToolTip="{Binding Tooltip}"
                                 Height="{Binding Height}"
                                 Margin="{Binding Top, Converter={StaticResource TimelineOffsetToMargin}}"
-                                Background="{Binding Accent, Converter={StaticResource EventAccentFace}}"
+                                Background="{Binding Color, Converter={StaticResource EventColorFace}}"
                                 BorderThickness="3,0,0,0"
-                                BorderBrush="{Binding Accent, Converter={StaticResource EventAccentBrush}}">
+                                BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}">
                             <StackPanel ClipToBounds="True">
                                 <TextBlock Text="{Binding TimeText}" FontSize="9.5"
                                            Foreground="{DynamicResource Ink2Brush}"
