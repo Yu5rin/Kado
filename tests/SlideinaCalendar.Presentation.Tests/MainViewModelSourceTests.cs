@@ -430,4 +430,103 @@ public class MainViewModelSourceTests
 
         Assert.Equal("プライベート", test.Workspace.Sources.FindCalendar(target.Id)!.DisplayName);
     }
+
+    // ------------------------------------------------------------------
+    // 左パネルの並べ替え
+    //
+    // 並び順は時刻を持たない予定の並びにも効くので、見た目だけの話ではない
+    // ------------------------------------------------------------------
+
+    private static MainViewModel WithCalendars(TestWorkspace test, params string[] names)
+    {
+        foreach (var name in names) test.Workspace.CreateCalendar(name);
+        return new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+    }
+
+    [Fact]
+    public void 並べ替えられる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "仕事", "生産ライン", "社内行事");
+
+        var before = vm.SourceLists.Calendars.Select(c => c.Name).ToArray();
+        var moved = vm.SourceLists.Calendars.Single(c => c.Name == "社内行事");
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "仕事");
+
+        Assert.True(vm.MoveSource(moved, target));
+
+        var after = vm.SourceLists.Calendars.Select(c => c.Name).ToArray();
+
+        Assert.NotEqual(before, after);
+        Assert.Equal("社内行事", after[Array.IndexOf(before, "仕事")]);
+    }
+
+    [Fact]
+    public void 並べ替えは閉じても残る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "仕事", "生産ライン");
+
+        vm.MoveSource(
+            vm.SourceLists.Calendars.Single(c => c.Name == "生産ライン"),
+            vm.SourceLists.Calendars.Single(c => c.Name == "仕事"));
+
+        var after = vm.SourceLists.Calendars.Select(c => c.Name).ToArray();
+
+        // 開き直しても同じ並びで出る
+        var again = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        Assert.Equal(after, again.SourceLists.Calendars.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void カレンダーとタスクリストの間では動かさない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "仕事");
+
+        var calendar = vm.SourceLists.Calendars[0];
+        var list = vm.SourceLists.TaskLists[0];
+
+        Assert.False(vm.CanMoveSource(calendar, list));
+        Assert.False(vm.MoveSource(calendar, list));
+    }
+
+    [Fact]
+    public void 同じところへ落としても何も起きない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = WithCalendars(test, "仕事");
+
+        var calendar = vm.SourceLists.Calendars[0];
+
+        Assert.False(vm.CanMoveSource(calendar, calendar));
+        Assert.False(vm.MoveSource(calendar, calendar));
+    }
+
+    [Fact]
+    public void 並べ替えると時刻の無い予定の並びも変わる()
+    {
+        using var test = TestWorkspace.Create();
+
+        var first = test.Workspace.CreateCalendar("社内行事");
+        var second = test.Workspace.CreateCalendar("生産ライン");
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "行事", Date = D(2026, 9, 24), CalendarId = first.Id,
+        });
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "点検", Date = D(2026, 9, 24), CalendarId = second.Id,
+        });
+
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        Assert.Equal(["e1", "e2"], vm.SelectedDay.Events.Select(e => e.Id));
+
+        vm.MoveSource(
+            vm.SourceLists.Calendars.Single(c => c.Id == second.Id),
+            vm.SourceLists.Calendars.Single(c => c.Id == first.Id));
+
+        Assert.Equal(["e2", "e1"], vm.SelectedDay.Events.Select(e => e.Id));
+    }
 }

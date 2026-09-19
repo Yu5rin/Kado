@@ -149,7 +149,7 @@ public sealed class MonthViewModel : ObservableObject
         {
             // 左パネルでチェックを外したカレンダーは、ここで落とす
             var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
-            var events = all is null ? [] : all.Where(x => _sources.IncludesEvent(x.Source)).ToArray();
+            var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
 
