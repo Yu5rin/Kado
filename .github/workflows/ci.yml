@@ -1,0 +1,64 @@
+# ビルドと単体テストを自動で回す。
+#
+# WPF プロジェクト（SlideinaCalendar.App / AppBarProbe）は net8.0-windows だが、
+# Directory.Build.props で EnableWindowsTargeting を立てているため Linux でもビルドできる。
+# 実行は Windows が必要なので、ここで確認するのはコンパイルが通ることまで。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # 手動でも流せるようにしておく
+  workflow_dispatch:
+
+# 同じブランチで新しい実行が始まったら、古い実行は止める
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ビルドとテスト
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリの取得
+        uses: actions/checkout@v4
+
+      - name: .NET 8 SDK のセットアップ
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: NuGet パッケージのキャッシュ
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: 依存関係の復元
+        run: dotnet restore
+
+      - name: ビルド
+        run: dotnet build --no-restore --configuration Release
+
+      - name: テスト
+        # 実働日の実ファイル（ツール用実働日.xlsx）を使う統合テストを含む
+        run: >
+          dotnet test --no-build --configuration Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory TestResults
+
+      - name: テスト結果の保存
+        # 失敗したときこそ中身を見たいので、結果に関わらず必ず上げる
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 14
