@@ -30,7 +30,8 @@ public sealed class DayCellViewModel : ObservableObject
         IReadOnlyList<TaskItem> tasks,
         string? holidayName = null,
         ICalendarPalette? palette = null,
-        int maxChips = DefaultMaxChips)
+        int maxChips = DefaultMaxChips,
+        IReadOnlyList<Milestone>? milestones = null)
     {
         Date = date;
         IsCurrentMonth = isCurrentMonth;
@@ -65,7 +66,9 @@ public sealed class DayCellViewModel : ObservableObject
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
-        Milestones = workingDays.MilestonesOn(date);
+        // 日付の行に出すものは呼び出し側が組み立てる（左パネルのチェックを効かせるため）。
+        // 渡されなければ実働日データから直に引く
+        Milestones = milestones ?? workingDays.MilestonesOn(date);
     }
 
     /// <summary>この日。</summary>

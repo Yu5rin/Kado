@@ -158,7 +158,7 @@ public class MonthViewModelTests
     [Fact]
     public void マイルストーンがマスに出る()
     {
-        using var test = TestWorkspace.Create();
+        using var test = TestWorkspace.Create(withMilestones: true);
         var vm = Create(test);
 
         Assert.Equal("仕様期限", Assert.Single(Cell(vm, D(2026, 9, 14)).Milestones).Name);

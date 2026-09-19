@@ -162,7 +162,10 @@ public class BackgroundSyncTests
         sync.Start();
 
         clock.Advance(Interval);
-        await WaitUntilAsync(() => runs >= 1);
+
+        // 走り終わるだけでなく、次の間隔が決まるまで待つ。決まる前に時計を進めると、
+        // 古い間隔ぶんしか進まず次の回が来ない
+        await WaitUntilAsync(() => runs >= 1 && sync.CurrentDelay > Interval);
 
         // 頼まれていない同期で落ちるのがいちばん困る
         Assert.Equal(1, runs);

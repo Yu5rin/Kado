@@ -42,6 +42,9 @@ public sealed class CalendarWorkspace
         _workingDays = WorkingDayStore.Load();
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath);
+
+        // 実働日データを読んだあとでないと補えない
+        BackfillMilestones();
     }
 
     public EventRepository Events { get; }
@@ -127,6 +130,10 @@ public sealed class CalendarWorkspace
     /// </para>
     /// </summary>
     public const string WorkingDaySource = "workingday";
+
+    /// <summary>実働日データから起こしたマイルストーンか。</summary>
+    public static bool IsMilestoneMark(CalendarEvent value) =>
+        value is not null && string.Equals(value.Source, WorkingDaySource, StringComparison.Ordinal);
 
     /// <summary>既定のタスクリスト名。</summary>
     public const string DefaultTaskListName = "マイタスク";
@@ -395,15 +402,35 @@ public sealed class CalendarWorkspace
     /// マイルストーンが残らないようにする。期間の外は触らない（実働日データと同じ考え方）。
     /// </para>
     /// </summary>
-    private void WriteMilestonesToCalendar(ImportResult result)
+    private void WriteMilestonesToCalendar(ImportResult result) => WriteMilestones(
+        result.Milestones, result.MilestoneRangeStart, result.MilestoneRangeEnd);
+
+    /// <summary>
+    /// 取り込み済みの実働日データから、まだ書かれていないマイルストーンを補う。
+    /// <para>
+    /// 日付の行は<b>予定から</b>組み立てる（左パネルのチェックを効かせるため）。書き出しを
+    /// するようになる前に取り込んだデータは予定を持たないので、起動時に補っておく。
+    /// 同じ日の同じ名前は同じ識別子になるので、何度呼んでも増えない。
+    /// </para>
+    /// </summary>
+    public void BackfillMilestones()
     {
-        if (result.Milestones.Count == 0) return;
+        var milestones = WorkingDays.AllMilestones;
+        if (milestones.Count == 0) return;
+
+        WriteMilestones(milestones, WorkingDays.MilestoneRangeStart, WorkingDays.MilestoneRangeEnd);
+    }
+
+    private void WriteMilestones(
+        IReadOnlyList<Milestone> milestones, DateOnly? rangeStart, DateOnly? rangeEnd)
+    {
+        if (milestones.Count == 0) return;
 
         var calendar = EnsureWorkingDayCalendar();
 
         // 入れ替える範囲。マイルストーンが載っている期間だけ
-        var from = result.MilestoneRangeStart ?? result.Milestones.Min(m => m.Date);
-        var to = result.MilestoneRangeEnd ?? result.Milestones.Max(m => m.Date);
+        var from = rangeStart ?? milestones.Min(m => m.Date);
+        var to = rangeEnd ?? milestones.Max(m => m.Date);
 
         foreach (var stale in Events.InRange(from, to)
                      .Where(e => string.Equals(e.Source, WorkingDaySource, StringComparison.Ordinal)))
@@ -413,7 +440,7 @@ public sealed class CalendarWorkspace
 
         var now = DateTimeOffset.Now;
 
-        Events.UpsertMany(result.Milestones.Select(m => new CalendarEvent
+        Events.UpsertMany(milestones.Select(m => new CalendarEvent
         {
             // 同じ日の同じ名前なら同じ予定。読み直しても増えない
             Id = $"workingday:{m.Date:yyyyMMdd}:{m.Name}",

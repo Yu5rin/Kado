@@ -65,7 +65,7 @@ public class MainViewModelTests
     [Fact]
     public void 日を選ぶと右ペインが入れ替わる()
     {
-        using var test = TestWorkspace.Create();
+        using var test = TestWorkspace.Create(withMilestones: true);
         var vm = Create(test);
 
         vm.SelectDateCommand.Execute(D(2026, 9, 14));

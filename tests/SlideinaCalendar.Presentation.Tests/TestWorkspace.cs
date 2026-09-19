@@ -22,9 +22,14 @@ internal sealed class TestWorkspace : IDisposable
     /// 登録したワークスペースを作る。Core のテストと同じ並びなので、
     /// 実働日まわりの期待値をそろえられる。
     /// </summary>
+    /// <param name="withMilestones">
+    /// マイルストーンも入れるか。入れると起動時に「inaCalendar」が作られ、その予定も
+    /// 1件増える（日付の行は予定から組み立てるため）。要るテストだけが頼むようにする。
+    /// </param>
     public static TestWorkspace Create(
         bool withWorkingDays = true,
-        IReadOnlyDictionary<DateOnly, string>? holidays = null)
+        IReadOnlyDictionary<DateOnly, string>? holidays = null,
+        bool withMilestones = false)
     {
         var connection = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
 
@@ -44,7 +49,7 @@ internal sealed class TestWorkspace : IDisposable
                 WorkingDayCalendar.Create(
                     days,
                     new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30),
-                    [new Milestone(new DateOnly(2026, 9, 14), "仕様期限", "Ver．26.1")],
+                    withMilestones ? [new Milestone(new DateOnly(2026, 9, 14), "仕様期限", "Ver．26.1")] : [],
                     new DateOnly(2026, 9, 14), new DateOnly(2026, 9, 14)));
         }
 

@@ -423,4 +423,110 @@ public class SourceListsViewModelTests
         Assert.NotNull(home);
         Assert.True(CalendarWorkspace.IsLocal(home));
     }
+
+    // ------------------------------------------------------------------
+    // inaCalendar という名前のカレンダーは日付の行に出す
+    //
+    // 旧 inaCalendar と同じ見え方にする。名前で見分けるので、このアプリで作った
+    // ものでも Google から取り込んだものでも同じ扱いになる
+    // ------------------------------------------------------------------
+
+    private static CalendarEvent Milestone(string id, string title, string calendarId) => new()
+    {
+        Id = id, Title = title, Date = D(2026, 9, 24), CalendarId = calendarId,
+    };
+
+    [Fact]
+    public void 名前が_inaCalendar_なら日付の行に出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", ina.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var cell = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+
+        Assert.Equal(["仕様期限"], cell.Milestones.Select(m => m.Name));
+
+        // 日付の行に出したものは、予定の並びからは外す。二度出さないため
+        Assert.DoesNotContain(cell.Events, e => e.Id == "e1");
+        Assert.DoesNotContain(main.SelectedDay.Events, e => e.Id == "e1");
+    }
+
+    [Fact]
+    public void _Google_から取り込んだ_inaCalendar_も同じ扱いにする()
+    {
+        using var test = TestWorkspace.Create();
+
+        AddGoogleCalendar(test, "ina@group.calendar.google.com", CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "MAD5", "ina@group.calendar.google.com"));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Equal(["MAD5"], main.SelectedDay.Milestones.Select(m => m.Name));
+    }
+
+    [Fact]
+    public void 名前が違えばふつうの予定として出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 「inaCalendar 予定」は名前が違うので対象外
+        var other = test.Workspace.CreateCalendar("inaCalendar 予定");
+        test.Workspace.AddEvent(Milestone("e1", "打ち合わせ", other.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        var cell = main.Month.Cells.Single(c => c.Date == D(2026, 9, 24));
+
+        Assert.Empty(cell.Milestones);
+        Assert.Contains(cell.Events, e => e.Id == "e1");
+    }
+
+    [Fact]
+    public void チェックを外せば日付の行からも消える()
+    {
+        using var test = TestWorkspace.Create();
+
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", ina.Id));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+        Assert.NotEmpty(main.SelectedDay.Milestones);
+
+        main.SourceLists.Calendars.Single(c => c.Id == ina.Id).IsVisible = false;
+
+        Assert.Empty(main.SelectedDay.Milestones);
+        Assert.Empty(main.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).Milestones);
+    }
+
+    [Fact]
+    public void 同じ名前が二つあっても一度しか出さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 旧 inaCalendar は Google 側にも同じ内容を書き込んでいた
+        var mine = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        AddGoogleCalendar(test, "ina@group.calendar.google.com", CalendarWorkspace.WorkingDayCalendarName);
+
+        test.Workspace.AddEvent(Milestone("e1", "仕様期限", mine.Id));
+        test.Workspace.AddEvent(Milestone("e2", "仕様期限", "ina@group.calendar.google.com"));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.Single(main.SelectedDay.Milestones);
+    }
+
+    [Fact]
+    public void 実働日データだけでも日付の行に出る()
+    {
+        // 書き出しをするようになる前に取り込んだデータは予定を持たない。起動時に補う
+        using var test = TestWorkspace.Create(withMilestones: true);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 14));
+
+        Assert.Equal(["仕様期限"], main.SelectedDay.Milestones.Select(m => m.Name));
+        Assert.Contains(test.Workspace.Sources.Calendars(),
+            c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+    }
 }
