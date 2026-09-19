@@ -133,14 +133,17 @@
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding IsSunday}" Value="True">
-                    <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SundayBrush}" />
-                    <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SundayBrush}" />
-                </DataTrigger>
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
                     <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
                 </DataTrigger>
+
+                <!-- 祝日は曜日に関わらず赤。土曜より後に置いてこちらを勝たせる -->
+                <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                    <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                    <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+
                 <!-- 今日は日にちを丸で囲う -->
                 <DataTrigger Binding="{Binding IsToday}" Value="True">
                     <Setter TargetName="NumberFace" Property="Background" Value="{DynamicResource AccentBrush}" />

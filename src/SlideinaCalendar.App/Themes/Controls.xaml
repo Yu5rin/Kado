@@ -220,11 +220,13 @@
                             <Setter Property="Opacity" Value="0.5" />
                         </DataTrigger>
 
-                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
-                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
+                        </DataTrigger>
+
+                        <!-- 祝日は曜日に関わらず赤。土曜より後に置いてこちらを勝たせる -->
+                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
                         <!-- 選択日は内枠。今日より先に置いて、今日の塗りに負けるようにする -->

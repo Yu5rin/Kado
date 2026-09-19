@@ -114,6 +114,9 @@ public sealed class WeekDayColumnViewModel
 
     public bool IsSunday => Date.DayOfWeek == DayOfWeek.Sunday;
 
+    /// <inheritdoc cref="DayCellViewModel.IsSundayLike"/>
+    public bool IsSundayLike => IsSunday || HolidayName is { Length: > 0 };
+
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
 
     public bool HasWorkingDayData { get; }

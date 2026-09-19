@@ -211,13 +211,18 @@
                             <Setter TargetName="DayNumber" Property="Opacity" Value="0.4" />
                         </DataTrigger>
 
-                        <DataTrigger Binding="{Binding IsSunday}" Value="True">
-                            <Setter TargetName="DayNumber" Property="Foreground"
-                                    Value="{DynamicResource SundayBrush}" />
-                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                             <Setter TargetName="DayNumber" Property="Foreground"
                                     Value="{DynamicResource SaturdayBrush}" />
+                        </DataTrigger>
+
+                        <!--
+                            祝日は日付そのものを赤にする（モックに合わせる）。土曜に重なっても
+                            赤を採るので、土曜より後に置いてこちらを勝たせる
+                        -->
+                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                            <Setter TargetName="DayNumber" Property="Foreground"
+                                    Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
                         <Trigger SourceName="Cell" Property="IsMouseOver" Value="True">
