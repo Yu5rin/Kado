@@ -16,6 +16,8 @@ public sealed class TaskRepository(SqliteConnection connection)
     private const string Columns = """
         id AS Id, title AS Title, due AS Due, is_done AS IsDone,
         note AS Note, task_list_id AS TaskListId,
+        completed_at AS CompletedAt, parent_id AS ParentId, position AS Position,
+        google_raw AS GoogleRaw,
         google_task_id AS GoogleTaskId, google_task_list_id AS GoogleTaskListId,
         google_updated AS GoogleUpdated, source AS Source, updated_at AS UpdatedAt
         """;
@@ -77,14 +79,18 @@ public sealed class TaskRepository(SqliteConnection connection)
             """
             INSERT INTO tasks (
                 id, title, due, is_done, note, task_list_id,
+                completed_at, parent_id, position, google_raw,
                 google_task_id, google_task_list_id, google_updated, source, updated_at
             ) VALUES (
                 @Id, @Title, @Due, @IsDone, @Note, @TaskListId,
+                @CompletedAt, @ParentId, @Position, @GoogleRaw,
                 @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @Source, @UpdatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
                 title = excluded.title, due = excluded.due, is_done = excluded.is_done,
                 note = excluded.note, task_list_id = excluded.task_list_id,
+                completed_at = excluded.completed_at, parent_id = excluded.parent_id,
+                position = excluded.position, google_raw = excluded.google_raw,
                 google_task_id = excluded.google_task_id,
                 google_task_list_id = excluded.google_task_list_id,
                 google_updated = excluded.google_updated,

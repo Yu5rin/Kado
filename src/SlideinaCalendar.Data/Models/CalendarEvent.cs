@@ -54,6 +54,24 @@ public sealed record CalendarEvent
     /// <summary>繰り返し指定（<c>FREQ=...</c>）。単発なら null。</summary>
     public string? Recurrence { get; init; }
 
+    /// <summary>
+    /// 予定の状態。<c>confirmed</c> / <c>tentative</c> / <c>cancelled</c>。
+    /// <para>Google では取り消しが <c>cancelled</c> で流れてくる。削除として扱う。</para>
+    /// </summary>
+    public string? Status { get; init; }
+
+    /// <summary>URL に添える見出し。Google Calendar の <c>source.title</c>。</summary>
+    public string? SourceTitle { get; init; }
+
+    /// <summary>
+    /// 最後に Google から受け取った姿（キーをソートした JSON）。
+    /// <para>
+    /// 差分の判定に使う。キーの並び順の違いで「変わった」と誤判定しないため
+    /// （要件書 6.3）。書き戻しは <c>patch</c> なので、ここに無い項目も消えない。
+    /// </para>
+    /// </summary>
+    public string? GoogleRaw { get; init; }
+
     /// <summary>Google Calendar 側のイベント ID。未同期なら null。</summary>
     public string? GoogleEventId { get; init; }
 

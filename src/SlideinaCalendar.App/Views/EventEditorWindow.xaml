@@ -142,7 +142,8 @@
                     <TextBlock Text="カレンダー" Style="{StaticResource FieldLabelStyle}" />
                     <ComboBox Width="176" Style="{StaticResource FieldComboBoxStyle}"
                               ItemsSource="{Binding Calendars}"
-                              SelectedItem="{Binding CalendarId}" />
+                              SelectedValuePath="Id"
+                              SelectedValue="{Binding CalendarId}" />
                 </StackPanel>
             </StackPanel>
 

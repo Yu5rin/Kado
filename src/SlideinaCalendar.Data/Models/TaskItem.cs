@@ -31,6 +31,21 @@ public sealed record TaskItem
     /// <summary>所属タスクリスト。</summary>
     public string? TaskListId { get; init; }
 
+    /// <summary>
+    /// 完了した日時。未完了なら null。
+    /// <para>完了したことだけでは、ローカルと Google のどちらが新しいか判定できない。</para>
+    /// </summary>
+    public DateTimeOffset? CompletedAt { get; init; }
+
+    /// <summary>親タスク。サブタスクでなければ null。Google 側では <c>move</c> でしか変えられない。</summary>
+    public string? ParentId { get; init; }
+
+    /// <summary>同じ階層での並び順。Google が振る文字列をそのまま持つ。</summary>
+    public string? Position { get; init; }
+
+    /// <summary>最後に Google から受け取った姿。用途は予定側と同じ。</summary>
+    public string? GoogleRaw { get; init; }
+
     /// <summary>Google Tasks 側の ID。未同期なら null。</summary>
     public string? GoogleTaskId { get; init; }
 

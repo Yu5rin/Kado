@@ -207,10 +207,13 @@ public class MainViewModelEditingTests
             Id = "e1", Title = "会議", Date = D(2026, 9, 24), CalendarId = "仕事",
         });
 
+        test.Workspace.EnsureSources();
+
         var (vm, editors) = Create(test);
         editors.OnEvent = _ => false;
         vm.AddEventCommand.Execute(null);
 
-        Assert.Equal(["仕事"], editors.LastEventEditor!.Calendars);
+        // 既定の入れ先に加えて、予定が指している所属も候補に出る
+        Assert.Contains(editors.LastEventEditor!.Calendars, c => c.Name == "仕事");
     }
 }

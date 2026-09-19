@@ -16,11 +16,21 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
     public bool ShowTaskEditor(TaskEditorViewModel editor) =>
         Show(new TaskEditorWindow(editor));
 
+    public bool ShowCalendarEditor(CalendarEditorViewModel editor) =>
+        Show(new CalendarEditorWindow(editor));
+
     public bool ConfirmDelete(string title) =>
         MessageBox.Show(
             ownerProvider() ?? Application.Current.MainWindow,
             $"「{title}」を削除します。よろしいですか。\n\n削除しても Ctrl＋Z で元に戻せます。",
             "SlideinaCalendar", MessageBoxButton.OKCancel, MessageBoxImage.Warning,
+            MessageBoxResult.Cancel) == MessageBoxResult.OK;
+
+    public bool Confirm(string title, string message) =>
+        MessageBox.Show(
+            ownerProvider() ?? Application.Current.MainWindow,
+            message,
+            title, MessageBoxButton.OKCancel, MessageBoxImage.Warning,
             MessageBoxResult.Cancel) == MessageBoxResult.OK;
 
     private bool Show(Window window)

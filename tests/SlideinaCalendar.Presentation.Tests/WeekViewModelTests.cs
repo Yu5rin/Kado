@@ -242,8 +242,10 @@ public class WeekViewModelTests
             StartTime = T(9), EndTime = T(10), CalendarId = "私用",
         });
 
+        test.Workspace.EnsureSources();
+
         var lists = new SourceListsViewModel(test.Workspace);
-        lists.Calendars.Single(c => c.Name == "私用").IsVisible = false;
+        lists.Calendars.Single(c => c.Id == "私用").IsVisible = false;
 
         var vm = new WeekViewModel(test.Workspace, D(2026, 9, 24), D(2026, 9, 24), sources: lists);
 

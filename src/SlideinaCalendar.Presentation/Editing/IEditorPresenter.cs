@@ -17,9 +17,17 @@ public interface IEditorPresenter
     /// <returns>保存されたら true、取り消されたら false。</returns>
     bool ShowTaskEditor(TaskEditorViewModel editor);
 
+    /// <summary>カレンダーまたはタスクリストの編集画面を出す。</summary>
+    /// <returns>保存されたら true、取り消されたら false。</returns>
+    bool ShowCalendarEditor(CalendarEditorViewModel editor);
+
     /// <summary>削除してよいか尋ねる。元に戻せるとはいえ、取り返しのつかない操作に見える。</summary>
     /// <returns>削除してよければ true。</returns>
     bool ConfirmDelete(string title);
+
+    /// <summary>文言を指定して尋ねる。消したあとの行き先など、断りが要るとき。</summary>
+    /// <returns>進めてよければ true。</returns>
+    bool Confirm(string title, string message);
 }
 
 /// <summary>何も出さない実装。編集画面を用意していない画面で使う。</summary>
@@ -33,5 +41,9 @@ public sealed class NullEditorPresenter : IEditorPresenter
 
     public bool ShowTaskEditor(TaskEditorViewModel editor) => false;
 
+    public bool ShowCalendarEditor(CalendarEditorViewModel editor) => false;
+
     public bool ConfirmDelete(string title) => false;
+
+    public bool Confirm(string title, string message) => false;
 }

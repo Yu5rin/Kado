@@ -86,7 +86,8 @@
                 <ComboBox Width="176" HorizontalAlignment="Left"
                           Style="{StaticResource FieldComboBoxStyle}"
                           ItemsSource="{Binding TaskLists}"
-                          SelectedItem="{Binding TaskListId}" />
+                          SelectedValuePath="Id"
+                          SelectedValue="{Binding TaskListId}" />
             </StackPanel>
 
             <TextBlock Text="詳細" Style="{StaticResource FieldLabelStyle}" />

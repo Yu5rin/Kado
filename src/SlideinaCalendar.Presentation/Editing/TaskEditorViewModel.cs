@@ -33,16 +33,16 @@ public sealed class TaskEditorViewModel : ObservableObject
     private string? _taskListId;
 
     /// <summary>新しく作る。</summary>
-    public TaskEditorViewModel(DateOnly due, IReadOnlyList<string> taskLists, DateOnly today)
+    public TaskEditorViewModel(DateOnly due, IReadOnlyList<SourceChoice> taskLists, DateOnly today)
     {
         TaskLists = taskLists;
         _today = today;
         _due = due;
-        _taskListId = taskLists.Count > 0 ? taskLists[0] : null;
+        _taskListId = taskLists.Count > 0 ? taskLists[0].Id : null;
     }
 
     /// <summary>すでにあるタスクを直す。</summary>
-    public TaskEditorViewModel(TaskItem value, IReadOnlyList<string> taskLists, DateOnly today)
+    public TaskEditorViewModel(TaskItem value, IReadOnlyList<SourceChoice> taskLists, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -72,7 +72,7 @@ public sealed class TaskEditorViewModel : ObservableObject
     public string HeaderText => IsNew ? "タスクの追加" : "タスクの編集";
 
     /// <summary>選べるタスクリスト。</summary>
-    public IReadOnlyList<string> TaskLists { get; }
+    public IReadOnlyList<SourceChoice> TaskLists { get; }
 
     public string Title
     {

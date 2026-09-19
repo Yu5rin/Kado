@@ -50,16 +50,16 @@ public sealed class EventEditorViewModel : ObservableObject
     private RecurrenceKind _recurrence;
 
     /// <summary>新しく作る。</summary>
-    public EventEditorViewModel(DateOnly date, IReadOnlyList<string> calendars)
+    public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars)
     {
         Calendars = calendars;
         _date = date;
         _endDate = date;
-        _calendarId = calendars.Count > 0 ? calendars[0] : null;
+        _calendarId = calendars.Count > 0 ? calendars[0].Id : null;
     }
 
     /// <summary>すでにある予定を直す。</summary>
-    public EventEditorViewModel(CalendarEvent value, IReadOnlyList<string> calendars)
+    public EventEditorViewModel(CalendarEvent value, IReadOnlyList<SourceChoice> calendars)
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -89,7 +89,7 @@ public sealed class EventEditorViewModel : ObservableObject
     public string HeaderText => IsNew ? "予定の追加" : "予定の編集";
 
     /// <summary>選べるカレンダー。ひとつも無ければ欄を出さない。</summary>
-    public IReadOnlyList<string> Calendars { get; }
+    public IReadOnlyList<SourceChoice> Calendars { get; }
 
     public string Title
     {
