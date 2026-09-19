@@ -70,14 +70,30 @@ public sealed class EventSyncEngine(
     /// </summary>
     /// <param name="calendarId">Google 側のカレンダー ID。</param>
     /// <param name="localCalendarId">こちらのカレンダー ID。取り込んだ予定の所属になる。</param>
+    /// <param name="readOnly">
+    /// 読むだけにするか。
+    /// <para>
+    /// 祝日や誕生日、他人から共有されたカレンダーは<b>こちらから書けない</b>。
+    /// 送ろうとすると断られるので、はじめから送らない。
+    /// </para>
+    /// </param>
     public async Task<SyncReport> SyncAsync(
-        string calendarId, string localCalendarId, CancellationToken cancellationToken = default)
+        string calendarId, string localCalendarId,
+        CancellationToken cancellationToken = default, bool readOnly = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(calendarId);
 
-        var report = await PushDeletionsAsync(calendarId, cancellationToken).ConfigureAwait(false);
+        var report = readOnly
+            ? new SyncReport()
+            : await PushDeletionsAsync(calendarId, cancellationToken).ConfigureAwait(false);
+
         report += await PullAsync(calendarId, localCalendarId, cancellationToken).ConfigureAwait(false);
-        report += await PushChangesAsync(calendarId, localCalendarId, cancellationToken).ConfigureAwait(false);
+
+        if (!readOnly)
+        {
+            report += await PushChangesAsync(calendarId, localCalendarId, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return report;
     }

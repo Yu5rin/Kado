@@ -85,12 +85,29 @@ public sealed class GoogleClientSecretsStore(string path)
     /// <summary>読み込んだファイルを置く先。</summary>
     public string Path => _path;
 
-    /// <summary>設定が入っているか。</summary>
-    public bool Exists => File.Exists(_path);
+    /// <summary>利用者が自分の設定を置いているか。</summary>
+    public bool HasOwnFile => File.Exists(_path);
 
-    /// <summary>読む。まだ入れていなければ null。</summary>
+    /// <summary>
+    /// 繋ぐのに使える設定があるか。
+    /// <para>
+    /// 焼き込んであれば、利用者が何もしなくても true。ここが false になるのは、
+    /// 焼き込まずに組み立てた配布物を、設定を入れずに使っているときだけ。
+    /// </para>
+    /// </summary>
+    public bool Exists => HasOwnFile || EmbeddedClientSettings.Exists;
+
+    /// <summary>
+    /// 読む。
+    /// <para>
+    /// 自分で入れた設定があればそちらを使う。無ければアプリに焼き込んである既定を使う。
+    /// 自前のプロジェクトで使いたい人が差し替えられる余地を残しつつ、
+    /// ふつうは何もしなくてよい、という形にしてある。
+    /// </para>
+    /// </summary>
     /// <exception cref="FormatException">中身が想定の形ではない。</exception>
-    public GoogleOAuthOptions? Load() => Exists ? GoogleClientSecrets.FromFile(_path) : null;
+    public GoogleOAuthOptions? Load() =>
+        HasOwnFile ? GoogleClientSecrets.FromFile(_path) : EmbeddedClientSettings.Options;
 
     /// <summary>
     /// 落としてきたファイルを取り込む。
@@ -108,9 +125,12 @@ public sealed class GoogleClientSecretsStore(string path)
         return options;
     }
 
-    /// <summary>消す。</summary>
+    /// <summary>
+    /// 自分で入れた設定を消す。
+    /// <para>消しても、焼き込んである既定に戻るだけで繋げなくなりはしない。</para>
+    /// </summary>
     public void Clear()
     {
-        if (Exists) File.Delete(_path);
+        if (HasOwnFile) File.Delete(_path);
     }
 }

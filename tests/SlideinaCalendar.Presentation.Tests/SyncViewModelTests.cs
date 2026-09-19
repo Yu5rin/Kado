@@ -232,6 +232,40 @@ public class SyncViewModelTests
     }
 
     [Fact]
+    public void 設定を入れたら繋げるようになる()
+    {
+        // クライアント設定を読み込むまでは繋げない
+        var google = new FakeGoogle { CanConnect = false };
+        var vm = new SyncViewModel(google);
+
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+
+        // 読み込んだ、という想定
+        google.CanConnect = true;
+        vm.RefreshAvailability();
+
+        // これが通らないと、設定を入れたのに「Google に接続…」が押せないままになる。
+        // このコマンドは CommandManager に乗っていないので、自分で知らせないと変わらない
+        Assert.True(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.CanConnect);
+    }
+
+    [Fact]
+    public void 押せるかどうかが変わったことを画面に知らせる()
+    {
+        var google = new FakeGoogle { CanConnect = false };
+        var vm = new SyncViewModel(google);
+
+        var changed = 0;
+        vm.ConnectCommand.CanExecuteChanged += (_, _) => changed++;
+
+        google.CanConnect = true;
+        vm.RefreshAvailability();
+
+        Assert.True(changed > 0);
+    }
+
+    [Fact]
     public async Task 繋いだあとだけ同期を押せる()
     {
         var google = new FakeGoogle();

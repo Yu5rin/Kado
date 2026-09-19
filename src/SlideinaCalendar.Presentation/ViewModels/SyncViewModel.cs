@@ -30,6 +30,13 @@ public enum SyncState
 /// ここに出すのは<b>同期の状態だけ</b>。操作の結果や断り書きを混ぜると、
 /// 同期できているのかどうかが読み取れなくなる。
 /// </para>
+/// <para>
+/// <b>待ち合わせのあとは、呼ばれた場所へ戻る（<c>ConfigureAwait(true)</c>）。</b>
+/// このクラスは待ち合わせのあとに状態を書き換え、<see cref="Synced"/> で画面を引き直させる。
+/// <c>ConfigureAwait(false)</c> だと別のスレッドのまま画面を触ることになり、WPF が
+/// 「このオブジェクトは別のスレッドに所有されているため…」で撥ねる。通信そのものを
+/// 行う下の層（<c>GoogleSyncService</c> 以下）は画面を触らないので、あちらは戻らなくてよい。
+/// </para>
 /// </summary>
 public sealed class SyncViewModel : ObservableObject
 {
@@ -86,6 +93,21 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>繋げる支度ができているか。</summary>
     public bool CanConnect => _google is { CanConnect: true };
 
+    /// <summary>
+    /// 押せるかどうかを見直す。
+    /// <para>
+    /// 繋げるかどうかは<b>こちらの外側で変わる</b>。クライアント設定を読み込んだ時点で
+    /// 繋げるようになるが、これらのコマンドは WPF の <c>CommandManager</c> に乗って
+    /// いないので、黙っていると無効のままになる。設定を入れたのに「Google に接続…」が
+    /// 押せない、という状態を防ぐために呼ぶ。
+    /// </para>
+    /// </summary>
+    public void RefreshAvailability()
+    {
+        Raise(nameof(CanConnect));
+        RaiseCanExecute();
+    }
+
     /// <summary>最後に同期できた時刻。一度も成功していなければ null。</summary>
     public DateTimeOffset? LastSyncedAt
     {
@@ -124,7 +146,7 @@ public sealed class SyncViewModel : ObservableObject
     {
         if (_google is null || !_google.IsConnected || IsBusy) return true;
 
-        await SyncAsync(cancellationToken).ConfigureAwait(false);
+        await SyncAsync(cancellationToken).ConfigureAwait(true);
 
         // 警告どまりなら、繋がってはいる。間隔を伸ばす理由にはしない
         return State is not SyncState.Failed;
@@ -138,12 +160,12 @@ public sealed class SyncViewModel : ObservableObject
         State = SyncState.Running;
         try
         {
-            await _google.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await _google.ConnectAsync(cancellationToken).ConfigureAwait(true);
 
             State = SyncState.Idle;
 
             // 繋いだらすぐ取り込む。繋いだのに何も出ないと、繋がったのか分からない
-            await SyncAsync(cancellationToken).ConfigureAwait(false);
+            await SyncAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (OAuthException ex)
         {
@@ -162,7 +184,7 @@ public sealed class SyncViewModel : ObservableObject
 
         try
         {
-            await _google.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            await _google.DisconnectAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is OAuthException or HttpRequestException)
         {
@@ -184,7 +206,7 @@ public sealed class SyncViewModel : ObservableObject
         State = SyncState.Running;
         try
         {
-            var report = await _google.SyncAsync(cancellationToken).ConfigureAwait(false);
+            var report = await _google.SyncAsync(cancellationToken).ConfigureAwait(true);
 
             // すでに走っていた。状態は走っているほうが持っている
             if (report is null)
