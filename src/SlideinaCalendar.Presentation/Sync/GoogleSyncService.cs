@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.Mapping;
 using SlideinaCalendar.Google.Sync;
@@ -23,6 +24,8 @@ public sealed class GoogleSyncService(
     DateTimeOffset? from = null) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    private GoogleColors? _palette;
 
     /// <summary>いま走っているか。</summary>
     public bool IsRunning { get; private set; }
@@ -91,6 +94,7 @@ public sealed class GoogleSyncService(
     {
         var created = 0;
         var updated = 0;
+        var pushed = 0;
         var warnings = new List<string>();
 
         try
@@ -108,14 +112,20 @@ public sealed class GoogleSyncService(
 
                     var existing = workspace.Sources.FindCalendar(id);
 
+                    // こちらで名前や色を変えていたら、先に相手へ送る。
+                    // 送る前に上書きすると、変えたことが消えてしまう
+                    if (existing is not null &&
+                        await PushCalendarSettingsAsync(existing, item, cancellationToken).ConfigureAwait(false))
+                    {
+                        pushed++;
+                        continue;
+                    }
+
                     workspace.Sources.Upsert(new CalendarSource
                     {
                         Id = id,
                         Summary = item.Text("summary") ?? id,
-
-                        // 付け替えた名前は残す。こちらで変えたものを戻さない
-                        SummaryOverride = existing?.SummaryOverride ?? item.Text("summaryOverride"),
-
+                        SummaryOverride = item.Text("summaryOverride"),
                         BackgroundColor = item.Text("backgroundColor") ?? existing?.BackgroundColor,
                         ForegroundColor = item.Text("foregroundColor") ?? existing?.ForegroundColor,
                         IsPrimary = item.Flag("primary"),
@@ -142,8 +152,82 @@ public sealed class GoogleSyncService(
             warnings.Add($"カレンダー一覧を取れませんでした: {ex.Reason}");
         }
 
-        return new SyncReport { CreatedLocal = created, UpdatedLocal = updated, Warnings = warnings };
+        return new SyncReport
+        {
+            CreatedLocal = created,
+            UpdatedLocal = updated,
+            UpdatedRemote = pushed,
+            Warnings = warnings,
+        };
     }
+
+    /// <summary>
+    /// こちらで変えた名前と色を相手へ送る。
+    /// <para>
+    /// 名前の付け替えと表示色は Google でも<b>その人だけの設定</b>なので、書き戻しても
+    /// 共有している相手には影響しない。これを送らないと、こちらで変えた色が同期のたびに
+    /// 戻り、左パネルの色見本が言うことを聞かなくなる。
+    /// </para>
+    /// <para>
+    /// 色は任意の <c>#rrggbb</c> をそのままは送れない。Google が持っている番号のうち
+    /// <b>いちばん近いもの</b>に寄せる。寄せた結果は次の同期で降ってきて、画面もそれに揃う。
+    /// </para>
+    /// </summary>
+    /// <returns>送ったら true。送るものが無ければ false。</returns>
+    private async Task<bool> PushCalendarSettingsAsync(
+        CalendarSource local, JsonElement remote, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject();
+
+        // 相手から受け取った姿と違っていれば、こちらで変えたということ
+        if (!string.Equals(local.SummaryOverride, remote.Text("summaryOverride"), StringComparison.Ordinal))
+        {
+            body["summaryOverride"] = local.SummaryOverride;
+        }
+
+        var colors = await PaletteAsync(cancellationToken).ConfigureAwait(false);
+        var wanted = colors.ClosestCalendarId(local.BackgroundColor);
+
+        // 寄せ先が今の色番号と違うときだけ送る。同じ番号なら見た目は変わらない
+        if (wanted is not null && !string.Equals(wanted, remote.Text("colorId"), StringComparison.Ordinal))
+        {
+            body["colorId"] = wanted;
+        }
+
+        if (body.Count == 0) return false;
+
+        try
+        {
+            var patched = await calendars
+                .PatchCalendarListAsync(local.Id, body, cancellationToken)
+                .ConfigureAwait(false);
+
+            // 送った結果をそのまま控える。次の同期で「また変わった」と見ないため
+            workspace.Sources.Upsert(local with
+            {
+                Summary = patched.Text("summary") ?? local.Summary,
+                SummaryOverride = patched.Text("summaryOverride"),
+                BackgroundColor = patched.Text("backgroundColor") ?? local.BackgroundColor,
+                ForegroundColor = patched.Text("foregroundColor") ?? local.ForegroundColor,
+                GoogleRaw = GoogleJson.Normalize(patched),
+                UpdatedAt = DateTimeOffset.Now,
+            });
+
+            return true;
+        }
+        catch (GoogleApiException)
+        {
+            // 送れなくても、こちらの見た目は変えたままにしておく。次の同期で出し直す
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 色の一覧。一度取ったら覚えておく。
+    /// <para>めったに変わらないので、同期のたびに取りに行かない。</para>
+    /// </summary>
+    private async Task<GoogleColors> PaletteAsync(CancellationToken cancellationToken) =>
+        _palette ??= await calendars.GetColorsAsync(cancellationToken).ConfigureAwait(false);
 
     /// <summary>Google のタスクリスト一覧を取り込む。</summary>
     private async Task<SyncReport> ImportTaskListsAsync(CancellationToken cancellationToken)
