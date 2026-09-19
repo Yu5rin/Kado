@@ -72,7 +72,8 @@ public sealed class WeekDayColumnViewModel
 
     internal WeekDayColumnViewModel(DateOnly date, DateOnly today, WorkingDayCalendar workingDays,
         string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<TaskItem> tasks,
-        IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette)
+        IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette,
+        IReadOnlyList<Milestone>? milestones = null)
     {
         Date = date;
         IsToday = date == today;
@@ -85,7 +86,7 @@ public sealed class WeekDayColumnViewModel
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
-        Milestones = workingDays.MilestonesOn(date);
+        Milestones = milestones ?? workingDays.MilestonesOn(date);
         WorkingDayIndex = workingDays.IndexInMonth(date);
     }
 

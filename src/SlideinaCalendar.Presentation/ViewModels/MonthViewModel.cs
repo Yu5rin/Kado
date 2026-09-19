@@ -148,8 +148,8 @@ public sealed class MonthViewModel : ObservableObject
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             // 左パネルでチェックを外したカレンダーは、ここで落とす
-            var events = eventsByDate.TryGetValue(date, out var e)
-                ? e.Where(x => _sources.IncludesEvent(x.Source)).ToArray() : [];
+            var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
+            var events = all is null ? [] : all.Where(x => _sources.IncludesEvent(x.Source)).ToArray();
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
 
@@ -161,7 +161,8 @@ public sealed class MonthViewModel : ObservableObject
                 events,
                 tasks,
                 _workspace.Holidays.NameOf(date),
-                _sources));
+                _sources,
+                milestones: MilestoneRow.For(date, all, _sources)));
         }
 
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;

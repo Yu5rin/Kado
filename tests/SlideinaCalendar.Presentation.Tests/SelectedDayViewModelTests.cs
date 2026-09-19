@@ -125,7 +125,7 @@ public class SelectedDayViewModelTests
     [Fact]
     public void マイルストーンが出る()
     {
-        using var test = TestWorkspace.Create();
+        using var test = TestWorkspace.Create(withMilestones: true);
 
         Assert.Equal("仕様期限", Assert.Single(Create(test, D(2026, 9, 14)).Milestones).Name);
         Assert.Empty(Create(test, D(2026, 9, 15)).Milestones);

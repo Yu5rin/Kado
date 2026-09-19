@@ -12,8 +12,17 @@ namespace SlideinaCalendar.Presentation.ViewModels;
 /// </summary>
 public interface ISourceFilter
 {
-    /// <summary>この予定を出すか。</summary>
+    /// <summary>この予定を、予定の並びに出すか。</summary>
     bool IncludesEvent(CalendarEvent value);
+
+    /// <summary>
+    /// この予定を、日付の行にマイルストーンとして出すか。
+    /// <para>
+    /// <see cref="IncludesEvent"/> とは排他。同じものを二度出さないため、
+    /// こちらに出るものは予定の並びからは外れる。
+    /// </para>
+    /// </summary>
+    bool IncludesMilestone(CalendarEvent value);
 
     /// <summary>このタスクを出すか。</summary>
     bool IncludesTask(TaskItem value);
@@ -42,7 +51,9 @@ public sealed class DefaultCalendarSources : ICalendarSources
 
     private DefaultCalendarSources() { }
 
-    public bool IncludesEvent(CalendarEvent value) => true;
+    public bool IncludesEvent(CalendarEvent value) => !CalendarWorkspace.IsMilestoneMark(value);
+
+    public bool IncludesMilestone(CalendarEvent value) => CalendarWorkspace.IsMilestoneMark(value);
 
     public bool IncludesTask(TaskItem value) => true;
 
@@ -125,6 +136,10 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     // 取り込み後はデータベース側に持つので、終了しても残る（要件書 5.5）
     private readonly HashSet<string> _hiddenCalendars = new(StringComparer.Ordinal);
     private readonly HashSet<string> _hiddenTaskLists = new(StringComparer.Ordinal);
+
+    // 日付の行に出すカレンダー。名前で見分ける（要望どおり）。このアプリで作ったものでも
+    // Google から取り込んだものでも、名前が合えば同じ扱いにする
+    private readonly HashSet<string> _milestoneCalendars = new(StringComparer.Ordinal);
 
     private IReadOnlyList<SourceListItemViewModel> _calendars = [];
     private IReadOnlyList<SourceListItemViewModel> _taskLists = [];
@@ -224,15 +239,37 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     }
 
     /// <summary>
+    /// 日付の行に出す扱いか。
+    /// <para>
+    /// 実働日データから起こしたマイルストーンと、<b>「inaCalendar」という名前の
+    /// カレンダーに入っている予定</b>。名前で見分けるので、このアプリで作ったものでも
+    /// Google から取り込んだものでも同じ扱いになる。
+    /// </para>
+    /// <para>
+    /// 名前で決めているので、カレンダーの名前を変えると外れる。逆に、別のカレンダーを
+    /// この名前にすれば日付の行に出る。
+    /// </para>
+    /// </summary>
+    public bool IsMilestoneEvent(CalendarEvent value) =>
+        CalendarWorkspace.IsMilestoneMark(value) ||
+        (value.CalendarId is { Length: > 0 } id && _milestoneCalendars.Contains(id));
+
+    /// <summary>
     /// 所属が無い予定は常に出す。どこにも属していないだけで、消す理由にはならない。
     /// <para>
-    /// ただし実働日データから起こしたマイルストーンは、<b>日付の行に別途出している</b>ので
-    /// 予定の並びからは外す。外さないと同じ日に二度出る。所属カレンダーのチェックは
-    /// 効くので、左パネルで消せば日付の行からも消える。
+    /// ただし日付の行に出すものは、<b>予定の並びからは外す</b>。外さないと同じ日に二度出る。
     /// </para>
     /// </summary>
     public bool IncludesEvent(CalendarEvent value) =>
-        !IsMilestone(value) &&
+        !IsMilestoneEvent(value) &&
+        (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
+
+    /// <summary>
+    /// 日付の行に出すか。
+    /// <para>チェックを外したカレンダーのものは出さない。日付の行も左パネルに従う。</para>
+    /// </summary>
+    public bool IncludesMilestone(CalendarEvent value) =>
+        IsMilestoneEvent(value) &&
         (value.CalendarId is not { Length: > 0 } id || !_hiddenCalendars.Contains(id));
 
     /// <summary>
@@ -244,9 +281,8 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// </summary>
     public static bool IsFromGoogle(string? googleRaw) => googleRaw is { Length: > 0 };
 
-    /// <summary>実働日データから起こしたマイルストーンか。</summary>
-    public static bool IsMilestone(CalendarEvent value) =>
-        string.Equals(value.Source, CalendarWorkspace.WorkingDaySource, StringComparison.Ordinal);
+    /// <inheritdoc cref="CalendarWorkspace.IsMilestoneMark"/>
+    public static bool IsMilestone(CalendarEvent value) => CalendarWorkspace.IsMilestoneMark(value);
 
     public bool IncludesTask(TaskItem value) =>
         value.TaskListId is not { Length: > 0 } id || !_hiddenTaskLists.Contains(id);
@@ -274,11 +310,18 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         VisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>日付の行に出すカレンダーか。名前で見分ける。</summary>
+    private static bool IsMilestoneCalendar(SourceListItemViewModel item) =>
+        string.Equals(item.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+
     /// <summary>いま隠している ID を、一覧の状態から作り直す。絞り込みはこれを見る。</summary>
     private void RebuildHidden()
     {
         Sync(_hiddenCalendars, _calendars);
         Sync(_hiddenTaskLists, _taskLists);
+
+        _milestoneCalendars.Clear();
+        foreach (var calendar in _calendars.Where(IsMilestoneCalendar)) _milestoneCalendars.Add(calendar.Id);
 
         static void Sync(HashSet<string> hidden, IReadOnlyList<SourceListItemViewModel> items)
         {
