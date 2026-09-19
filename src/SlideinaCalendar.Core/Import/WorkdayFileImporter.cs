@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using SlideinaCalendar.Core.WorkingDays;
 
@@ -91,7 +92,8 @@ public sealed class WorkdayFileImporter
 
             if (!seen.Add(date.Value))
             {
-                warnings.Add($"{row}行目: 稼働日 {date.Value:yyyy/MM/dd} が重複しています。2件目以降は無視しました。");
+                warnings.Add(
+                    $"{row}行目: 稼働日 {date.Value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture)} が重複しています。2件目以降は無視しました。");
             }
             else
             {
