@@ -45,6 +45,9 @@ internal sealed class AppBarController : IDisposable
     /// <summary>現在 AppBar として登録されているか。</summary>
     public bool IsRegistered { get; private set; }
 
+    /// <summary>直近の配置で補正が要ったかどうか。ログに出して原因を追えるようにする。</summary>
+    public string LastPlacementNote { get; private set; } = string.Empty;
+
     /// <summary>状態が変わったときに呼ばれる。UI へのログ出力用。</summary>
     public event Action<string>? StatusChanged;
 
@@ -66,7 +69,10 @@ internal sealed class AppBarController : IDisposable
         ApplyDockedChrome();
 
         // 削る前のワークエリアを控えておく。異常終了時はこれを書き戻して復旧する。
-        WorkAreaRecovery.MarkRegistered(NativeMethods.GetWorkArea());
+        var stateSaved = WorkAreaRecovery.MarkRegistered(NativeMethods.GetWorkArea());
+        Report(stateSaved
+            ? "復旧用の控えを保存しました。この状態で強制終了すれば、次回起動時に復旧します。"
+            : "復旧用の控えを保存できませんでした。強制終了するとワークエリアが戻りません。");
 
         var data = CreateData();
         data.uCallbackMessage = CallbackMessage;
@@ -174,7 +180,7 @@ internal sealed class AppBarController : IDisposable
         var rc = data.rc;
         ApplyWindowBounds(rc);
 
-        Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）");
+        Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）／{LastPlacementNote}");
     }
 
     /// <summary>希望するドック矩形。モニタの端いっぱいに寄せる。</summary>
@@ -189,30 +195,50 @@ internal sealed class AppBarController : IDisposable
     /// <summary>
     /// 割り当てられた矩形に、ウィンドウの<b>見た目</b>をぴったり合わせる。
     /// <para>
-    /// ウィンドウ矩形にはドロップシャドウ用の不可視マージンが含まれるため、
-    /// 素直に置くと画面端との間に隙間が空く。その分だけ外側に広げて配置する。
-    /// 枠を外してマージンが無い場合は補正量が 0 になるので、二重に広げることはない。
+    /// 一度置いてから実際の可視境界を測り、目標とずれていれば差分だけ補正して置き直す。
+    /// ずれる理由はドロップシャドウ用の不可視マージン、DPI スケーリングの丸め、
+    /// ウィンドウスタイルの反映遅れなど複数あり、事前に計算しきるのが難しい。
+    /// 結果を見て合わせるほうが確実なので、この形にしている。
     /// </para>
     /// </summary>
     private void ApplyWindowBounds(RECT target)
     {
-        var left = target.Left;
-        var top = target.Top;
-        var width = target.Width;
-        var height = target.Height;
+        Place(target.Left, target.Top, target.Width, target.Height);
 
-        if (NativeMethods.TryGetShadowPadding(_hwnd, out var pad))
+        var visible = NativeMethods.GetVisibleBounds(_hwnd);
+        var dx = target.Left - visible.Left;
+        var dy = target.Top - visible.Top;
+        var dw = target.Width - visible.Width;
+        var dh = target.Height - visible.Height;
+
+        if (dx == 0 && dy == 0 && dw == 0 && dh == 0)
         {
-            left -= pad.Left;
-            top -= pad.Top;
-            width += pad.Left + pad.Right;
-            height += pad.Top + pad.Bottom;
+            LastPlacementNote = "ぴったり配置";
+            return;
         }
 
-        NativeMethods.SetWindowPos(
-            _hwnd, IntPtr.Zero, left, top, width, height,
-            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        if (!NativeMethods.GetWindowRect(_hwnd, out var current))
+        {
+            LastPlacementNote = $"ズレ {dx},{dy},{dw},{dh} を検出しましたが補正できませんでした";
+            return;
+        }
+
+        Place(current.Left + dx, current.Top + dy, current.Width + dw, current.Height + dh);
+
+        var after = NativeMethods.GetVisibleBounds(_hwnd);
+        var ok = after.Left == target.Left && after.Top == target.Top
+              && after.Right == target.Right && after.Bottom == target.Bottom;
+
+        LastPlacementNote = ok
+            ? $"ズレ {dx},{dy},{dw},{dh} を補正"
+            : $"ズレ {dx},{dy},{dw},{dh} を補正しましたが可視境界は {after} のまま";
     }
+
+    /// <summary>ウィンドウ矩形をそのまま指定して移動する。</summary>
+    private void Place(int x, int y, int width, int height) =>
+        NativeMethods.SetWindowPos(
+            _hwnd, IntPtr.Zero, x, y, width, height,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
 
     /// <summary>ドック中の外観にする。タイトルバーと枠を外し、リサイズを止める。</summary>
     private void ApplyDockedChrome()
