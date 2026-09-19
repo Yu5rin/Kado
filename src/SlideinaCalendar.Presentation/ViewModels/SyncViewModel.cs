@@ -112,6 +112,24 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>直前の同期の結果。詳しく見せるとき用。</summary>
     public SyncReport? LastReport { get; private set; }
 
+    /// <summary>
+    /// 裏で静かに同期する。
+    /// <para>
+    /// 手で押したときと違い、利用者が頼んでいない。<b>失敗しても画面を割り込ませない。</b>
+    /// 状態は右上の表示に出るので、気づける人は気づく。
+    /// </para>
+    /// </summary>
+    /// <returns>うまくいったら true。次の間隔を決めるのに使われる。</returns>
+    public async Task<bool> SyncQuietlyAsync(CancellationToken cancellationToken = default)
+    {
+        if (_google is null || !_google.IsConnected || IsBusy) return true;
+
+        await SyncAsync(cancellationToken).ConfigureAwait(false);
+
+        // 警告どまりなら、繋がってはいる。間隔を伸ばす理由にはしない
+        return State is not SyncState.Failed;
+    }
+
     /// <summary>繋ぐ。</summary>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
