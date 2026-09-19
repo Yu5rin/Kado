@@ -26,8 +26,14 @@ public partial class App : Application
     /// <summary>緊急解除のために、生成済みのコントローラを保持する。</summary>
     internal static AppBarController? ActiveController { get; set; }
 
-    /// <summary>起動時の復旧結果。MainWindow が読んでログに出す。</summary>
-    internal static string? RecoveryMessage { get; private set; }
+    /// <summary>
+    /// 前回の異常終了で残った控え。MainWindow がウィンドウハンドル取得後に復旧する。
+    /// <para>
+    /// 復旧には AppBar のやり取りにウィンドウハンドルが要るため、ここでは読むだけにして
+    /// 実行は <see cref="MainWindow"/> 側へ回している。
+    /// </para>
+    /// </summary>
+    internal static WorkAreaRecovery.SavedWorkArea? PendingRecovery { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -51,7 +57,8 @@ public partial class App : Application
 
         // --- 安全装置3: 前回の異常終了からの復旧 ---
         // ABM_REMOVE を呼ばずに落ちた場合、Windows はワークエリアを削ったまま放置する。
-        RecoveryMessage = WorkAreaRecovery.RecoverIfNeeded();
+        // ここでは控えの有無を見るだけ。書き戻しはハンドルが取れてから行う。
+        PendingRecovery = WorkAreaRecovery.ReadPending();
 
         base.OnStartup(e);
     }
@@ -59,6 +66,9 @@ public partial class App : Application
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         ActiveController?.EmergencyUnregister();
+
+        // 続行するので、枠やボタンの状態も揃えておく（枠なしのままだと閉じられない）
+        if (Current.MainWindow is MainWindow main) main.ResetAfterEmergency();
 
         MessageBox.Show(
             $"エラーが発生したため AppBar を解除しました。\nワークエリアは元に戻っています。\n\n{e.Exception.Message}",

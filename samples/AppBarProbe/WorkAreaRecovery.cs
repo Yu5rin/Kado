@@ -13,7 +13,12 @@ namespace AppBarProbe;
 /// <para>
 /// 仕組みは単純で、AppBar を登録する直前に「登録前のワークエリア」をファイルへ書き、
 /// 正常に解除できたら消す。起動時にファイルが残っていれば前回落ちたと判断し、
-/// 記録しておいた矩形を <c>SPI_SETWORKAREA</c> で書き戻す。
+/// 記録しておいた矩形を書き戻す。
+/// </para>
+/// <para>
+/// なお、タスクマネージャの「プロセス」タブからの終了は、ウィンドウに <c>WM_CLOSE</c> が
+/// 送られるため<b>正常終了として扱われる</b>（控えも消える）。異常終了を試すには
+/// 「詳細」タブから終了するか <c>taskkill /F</c> を使う必要がある。
 /// </para>
 /// </summary>
 internal static class WorkAreaRecovery
@@ -24,7 +29,18 @@ internal static class WorkAreaRecovery
 
     private static readonly string StateFile = Path.Combine(StateDirectory, "appbar-probe.state.json");
 
-    private sealed record SavedWorkArea(int Left, int Top, int Right, int Bottom, string SavedAt);
+    /// <summary>控えの中身。</summary>
+    internal sealed record SavedWorkArea(int Left, int Top, int Right, int Bottom, string SavedAt)
+    {
+        public RECT ToRect() => new() { Left = Left, Top = Top, Right = Right, Bottom = Bottom };
+    }
+
+    /// <summary>控えの保存先。ログに出して所在を分かるようにする。</summary>
+    public static string StateFilePath => StateFile;
+
+    // ------------------------------------------------------------------
+    // 記録
+    // ------------------------------------------------------------------
 
     /// <summary>AppBar 登録の直前に、現在のワークエリアを控える。</summary>
     public static void MarkRegistered(RECT workAreaBeforeRegister)
@@ -44,7 +60,7 @@ internal static class WorkAreaRecovery
             File.WriteAllText(temp, JsonSerializer.Serialize(saved));
             File.Move(temp, StateFile, overwrite: true);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // 控えが取れなくても AppBar 自体は動かす。復旧できないリスクだけが残る。
         }
@@ -62,42 +78,57 @@ internal static class WorkAreaRecovery
         }
     }
 
+    // ------------------------------------------------------------------
+    // 復旧
+    // ------------------------------------------------------------------
+
     /// <summary>
-    /// 起動時に呼ぶ。控えが残っていれば前回の異常終了なので、ワークエリアを書き戻す。
+    /// 控えが残っているか調べる。残っていれば前回は異常終了している。
+    /// <para>ここでは消さない。実際に復旧する <see cref="Recover"/> で消す。</para>
     /// </summary>
-    /// <returns>復旧を実行したら、書き戻した矩形の説明。何もしなければ null。</returns>
-    public static string? RecoverIfNeeded()
+    public static SavedWorkArea? ReadPending()
     {
-        SavedWorkArea? saved;
         try
         {
             if (!File.Exists(StateFile)) return null;
-            saved = JsonSerializer.Deserialize<SavedWorkArea>(File.ReadAllText(StateFile));
+            return JsonSerializer.Deserialize<SavedWorkArea>(File.ReadAllText(StateFile));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
-            return null;
-        }
-
-        if (saved is null)
-        {
+            // 壊れた控えは判断材料にならないので捨てる
             MarkUnregistered();
             return null;
         }
+    }
 
-        var rect = new RECT
-        {
-            Left = saved.Left,
-            Top = saved.Top,
-            Right = saved.Right,
-            Bottom = saved.Bottom,
-        };
+    /// <summary>
+    /// ワークエリアを控えの状態へ書き戻す。
+    /// <para>
+    /// Explorer 側に死んだウィンドウの AppBar 登録が残っていると
+    /// <c>SPI_SETWORKAREA</c> だけでは戻り切らないことがあるため、
+    /// 先に AppBar のやり取りを一度発生させて掃除を促す。
+    /// </para>
+    /// </summary>
+    /// <param name="saved">控えの内容。</param>
+    /// <param name="hwnd">ダミーの AppBar 登録に使うウィンドウハンドル。</param>
+    /// <returns>ログに出す復旧結果の説明。</returns>
+    public static string Recover(SavedWorkArea saved, IntPtr hwnd)
+    {
+        var before = NativeMethods.GetWorkArea();
+        var target = saved.ToRect();
 
-        var current = NativeMethods.GetWorkArea();
-        NativeMethods.SetWorkArea(rect);
+        NativeMethods.NudgeAppBarRegistry(hwnd);
+        NativeMethods.SetWorkArea(target);
+
+        var after = NativeMethods.GetWorkArea();
         MarkUnregistered();
 
-        return $"前回の異常終了を検知しました。ワークエリアを {current} から {rect} に復旧しました。"
-             + $"（控えた日時: {saved.SavedAt}）";
+        var verdict = after.Left == target.Left && after.Top == target.Top
+                   && after.Right == target.Right && after.Bottom == target.Bottom
+            ? "復旧しました"
+            : "復旧を試みましたが、期待どおりになっていません";
+
+        return $"前回の異常終了を検知しました。ワークエリアを {before} → {after} に{verdict}"
+             + $"（控えた日時: {saved.SavedAt}、目標: {target}）。";
     }
 }

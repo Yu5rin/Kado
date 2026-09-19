@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using AppBarProbe.Interop;
 
 namespace AppBarProbe;
@@ -30,9 +31,16 @@ public partial class MainWindow : Window
     {
         Log($"起動しました。現在のワークエリア: {NativeMethods.GetWorkArea()}");
 
-        if (App.RecoveryMessage is { } message)
+        if (App.PendingRecovery is { } pending)
         {
-            Log(message);
+            var hwnd = new WindowInteropHelper(this).EnsureHandle();
+            Log(WorkAreaRecovery.Recover(pending, hwnd));
+        }
+        else
+        {
+            // 何も起きなかったことを明示しておく。検証中に「検知されたのか判断できない」を避ける。
+            Log("前回は正常に終了しています（復旧の必要はありません）。");
+            Log($"控えの保存先: {WorkAreaRecovery.StateFilePath}");
         }
     }
 
@@ -79,6 +87,24 @@ public partial class MainWindow : Window
 
     private void OnCrashClick(object sender, RoutedEventArgs e)
         => throw new InvalidOperationException("安全装置の検証のために投げた例外です。");
+
+    /// <summary>
+    /// 例外で AppBar が緊急解除されたあとの後始末。
+    /// <para>
+    /// 緊急解除は UI に触れないため、枠を外したままピンボタンも押された状態で残る。
+    /// 続行できる例外ではここで見た目を揃えておかないと、ウィンドウを閉じられなくなる。
+    /// </para>
+    /// </summary>
+    internal void ResetAfterEmergency()
+    {
+        _appBar.RestoreChromeIfNeeded();
+
+        // Unchecked が走り、ボタンの表示と入力欄の有効・無効が元に戻る。
+        // AppBar は解除済みなので Unregister は何もしない。
+        PinButton.IsChecked = false;
+
+        Log("例外により AppBar を解除しました。ウィンドウの表示を元に戻しています。");
+    }
 
     // ------------------------------------------------------------------
 

@@ -31,6 +31,11 @@ internal sealed class AppBarController : IDisposable
     private IntPtr _hwnd;
     private bool _disposed;
 
+    // ピン留め前のウィンドウ外観。解除時に戻す。
+    private WindowStyle _styleBeforeDock;
+    private ResizeMode _resizeModeBeforeDock;
+    private bool _chromeChanged;
+
     /// <summary>ドック中の辺。</summary>
     public AppBarEdge Edge { get; set; } = AppBarEdge.Right;
 
@@ -56,6 +61,10 @@ internal sealed class AppBarController : IDisposable
 
         EnsureHandle();
 
+        // ドック中はタイトルバーと枠を外す（要件書 7.2）。
+        // 枠があるとドロップシャドウの分だけ画面端との間に隙間が見える。
+        ApplyDockedChrome();
+
         // 削る前のワークエリアを控えておく。異常終了時はこれを書き戻して復旧する。
         WorkAreaRecovery.MarkRegistered(NativeMethods.GetWorkArea());
 
@@ -65,6 +74,7 @@ internal sealed class AppBarController : IDisposable
         if (NativeMethods.SHAppBarMessage(NativeMethods.ABM_NEW, ref data) == IntPtr.Zero)
         {
             WorkAreaRecovery.MarkUnregistered();
+            RestoreChrome();
             Report("ABM_NEW に失敗しました。");
             return;
         }
@@ -87,6 +97,7 @@ internal sealed class AppBarController : IDisposable
         IsRegistered = false;
         _source?.RemoveHook(WndProc);
         WorkAreaRecovery.MarkUnregistered();
+        RestoreChrome();
 
         Report("AppBar を解除しました。ワークエリアが戻ります。");
     }
@@ -161,9 +172,7 @@ internal sealed class AppBarController : IDisposable
         NativeMethods.SHAppBarMessage(NativeMethods.ABM_SETPOS, ref data);
 
         var rc = data.rc;
-        NativeMethods.SetWindowPos(
-            _hwnd, IntPtr.Zero, rc.Left, rc.Top, rc.Width, rc.Height,
-            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        ApplyWindowBounds(rc);
 
         Report($"再配置しました: {rc}（{rc.Width}×{rc.Height}）");
     }
@@ -176,6 +185,67 @@ internal sealed class AppBarController : IDisposable
         AppBarEdge.Top => monitor with { Bottom = monitor.Top + DesiredWidth },
         _ => monitor with { Top = monitor.Bottom - DesiredWidth },
     };
+
+    /// <summary>
+    /// 割り当てられた矩形に、ウィンドウの<b>見た目</b>をぴったり合わせる。
+    /// <para>
+    /// ウィンドウ矩形にはドロップシャドウ用の不可視マージンが含まれるため、
+    /// 素直に置くと画面端との間に隙間が空く。その分だけ外側に広げて配置する。
+    /// 枠を外してマージンが無い場合は補正量が 0 になるので、二重に広げることはない。
+    /// </para>
+    /// </summary>
+    private void ApplyWindowBounds(RECT target)
+    {
+        var left = target.Left;
+        var top = target.Top;
+        var width = target.Width;
+        var height = target.Height;
+
+        if (NativeMethods.TryGetShadowPadding(_hwnd, out var pad))
+        {
+            left -= pad.Left;
+            top -= pad.Top;
+            width += pad.Left + pad.Right;
+            height += pad.Top + pad.Bottom;
+        }
+
+        NativeMethods.SetWindowPos(
+            _hwnd, IntPtr.Zero, left, top, width, height,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+    }
+
+    /// <summary>ドック中の外観にする。タイトルバーと枠を外し、リサイズを止める。</summary>
+    private void ApplyDockedChrome()
+    {
+        if (_chromeChanged) return;
+
+        _styleBeforeDock = _window.WindowStyle;
+        _resizeModeBeforeDock = _window.ResizeMode;
+        _chromeChanged = true;
+
+        _window.WindowStyle = WindowStyle.None;
+        _window.ResizeMode = ResizeMode.NoResize;
+    }
+
+    /// <summary>
+    /// ピン留め前の外観に戻す。例外処理から呼ぶための公開版。
+    /// <para>
+    /// <see cref="EmergencyUnregister"/> は UI に触れないため枠を外したままになる。
+    /// タイトルバーが無いとウィンドウを閉じられないので、UI スレッドに戻れる経路では
+    /// これを呼んで外観だけ復元する。
+    /// </para>
+    /// </summary>
+    public void RestoreChromeIfNeeded() => RestoreChrome();
+
+    /// <summary>ピン留め前の外観に戻す。</summary>
+    private void RestoreChrome()
+    {
+        if (!_chromeChanged) return;
+
+        _window.WindowStyle = _styleBeforeDock;
+        _window.ResizeMode = _resizeModeBeforeDock;
+        _chromeChanged = false;
+    }
 
     // ------------------------------------------------------------------
     // 通知の受信
