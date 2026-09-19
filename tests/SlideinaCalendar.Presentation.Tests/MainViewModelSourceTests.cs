@@ -293,4 +293,38 @@ public class MainViewModelSourceTests
 
         Assert.DoesNotContain(vm.SourceLists.Calendars, c => c.Id == target.Id);
     }
+
+    [Fact]
+    public void カレンダーの色を変えると予定の帯もすぐ変わる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        editors.OnCalendar = editor => { editor.Name = "私用"; return true; };
+        vm.AddCalendarCommand.Execute(null);
+
+        var target = vm.SourceLists.Calendars.Single(c => c.Name == "私用");
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "歯医者", Date = D(2026, 9, 24), CalendarId = target.Id,
+        });
+
+        const string wanted = "#8d6e63";
+        editors.OnCalendar = editor => { editor.Color = wanted; return true; };
+        vm.EditSourceCommand.Execute(vm.SourceLists.Calendars.Single(c => c.Id == target.Id));
+
+        // 左パネルの色見本
+        Assert.Equal(wanted, vm.SourceLists.Calendars.Single(c => c.Id == target.Id).SwatchColor);
+
+        // 月ビューの帯。ここが古い色のままだと「色を変えても反映されない」ことになる
+        var chip = vm.Month.Cells
+            .SelectMany(c => c.Events)
+            .Single(e => e.Label.Contains("歯医者", StringComparison.Ordinal));
+
+        Assert.Equal(wanted, chip.Color);
+
+        // 右ペインも同じ色を引く
+        Assert.Equal(wanted, vm.SelectedDay.Events.Single(e => e.Id == "e1").Color);
+    }
 }

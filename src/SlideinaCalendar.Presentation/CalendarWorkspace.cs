@@ -253,20 +253,9 @@ public sealed class CalendarWorkspace
             });
         }
 
-        // 1つも無いと予定の入れ先が決まらない
-        if (order == 0 && calendars.Count == 0)
-        {
-            Sources.Upsert(new CalendarSource
-            {
-                // このアプリの中だけのものなので印を付ける。付け忘れると同期が
-                // Google に問い合わせに行き、あるはずのないものを探して notFound になる
-                Id = $"{LocalIdPrefix}default",
-                Summary = DefaultCalendarName,
-                BackgroundColor = CalendarPalette.ColorFor(DefaultCalendarName),
-                IsPrimary = true,
-                UpdatedAt = DateTimeOffset.Now,
-            });
-        }
+        // 所属の無い予定にも居場所を用意する。1つも無いと入れ先が決まらないし、
+        // 所属が無いままだと左パネルに受け皿が無く、チェックを外しても消せない
+        Events.AdoptOrphans(EnsureLocalCalendar().Id);
 
         var taskLists = Sources.TaskLists();
         var knownLists = taskLists.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
@@ -283,15 +272,67 @@ public sealed class CalendarWorkspace
             });
         }
 
-        if (listOrder == 0 && taskLists.Count == 0)
+        Tasks.AdoptOrphans(EnsureLocalTaskList().Id);
+    }
+
+    /// <summary>
+    /// このアプリの中だけのものか。
+    /// <para>
+    /// Google から受け取った姿を持っていなければ、相手の一覧には載っていない。
+    /// ID の形では決めない。印が付く前に作られたものが手元に残っているため。
+    /// </para>
+    /// </summary>
+    public static bool IsLocal(CalendarSource value) =>
+        value is not null && value.GoogleRaw is not { Length: > 0 };
+
+    /// <inheritdoc cref="IsLocal(CalendarSource)"/>
+    public static bool IsLocal(TaskListSource value) =>
+        value is not null && value.GoogleRaw is not { Length: > 0 };
+
+    /// <summary>
+    /// このアプリの中だけのカレンダーを1つ返す。無ければ作る。
+    /// <para>
+    /// 所属の無い予定の入れ先に使う。<b>Google のカレンダーに入れてはいけない。</b>
+    /// 入れると、次の同期で勝手に相手へ送られてしまう。
+    /// </para>
+    /// </summary>
+    private CalendarSource EnsureLocalCalendar()
+    {
+        var calendars = Sources.Calendars();
+        if (calendars.FirstOrDefault(IsLocal) is { } existing) return existing;
+
+        var created = new CalendarSource
         {
-            Sources.Upsert(new TaskListSource
-            {
-                Id = $"{LocalIdPrefix}mytasks",
-                Title = DefaultTaskListName,
-                UpdatedAt = DateTimeOffset.Now,
-            });
-        }
+            // このアプリの中だけのものなので印を付ける。付け忘れると同期が
+            // Google に問い合わせに行き、あるはずのないものを探して notFound になる
+            Id = $"{LocalIdPrefix}default",
+            Summary = DefaultCalendarName,
+            BackgroundColor = CalendarPalette.ColorFor(DefaultCalendarName),
+            IsPrimary = calendars.Count == 0,
+            SortOrder = Sources.NextCalendarOrder(),
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        Sources.Upsert(created);
+        return created;
+    }
+
+    /// <inheritdoc cref="EnsureLocalCalendar"/>
+    private TaskListSource EnsureLocalTaskList()
+    {
+        var lists = Sources.TaskLists();
+        if (lists.FirstOrDefault(IsLocal) is { } existing) return existing;
+
+        var created = new TaskListSource
+        {
+            Id = $"{LocalIdPrefix}mytasks",
+            Title = DefaultTaskListName,
+            SortOrder = Sources.NextTaskListOrder(),
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        Sources.Upsert(created);
+        return created;
     }
 
     // ------------------------------------------------------------------

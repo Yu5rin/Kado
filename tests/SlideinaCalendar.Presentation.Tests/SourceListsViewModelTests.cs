@@ -218,8 +218,10 @@ public class SourceListsViewModelTests
         Assert.Equal(expected,
             main.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).Events.Single(e => e.Id == "e1").Color);
 
-        // 所属なしの予定は既定の色に任せる
-        Assert.Null(main.SelectedDay.Events.Single(e => e.Id == "e3").Color);
+        // 所属の無い予定は、このアプリのカレンダーが引き取る。引き取らないと
+        // 左パネルに受け皿が無く、チェックを外しても消せない
+        var orphan = main.SelectedDay.Events.Single(e => e.Id == "e3");
+        Assert.Equal(main.SourceLists.LocalCalendars[0].SwatchColor, orphan.Color);
     }
 
     [Fact]
@@ -362,5 +364,63 @@ public class SourceListsViewModelTests
 
         Assert.Contains("マイカレンダー", vm.LocalCalendars.Select(c => c.Id));
         Assert.Empty(vm.GoogleCalendars);
+    }
+
+    // ------------------------------------------------------------------
+    // チェックを外したら必ず消える
+    //
+    // 実機で全部のチェックを外しても一部の予定が残り、操作が効かないように見えた。
+    // 所属を持たない予定を「消す理由が無い」として常に出していたため
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 所属の無い予定はこのアプリのカレンダーが引き取る()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "所属なし", Date = D(2026, 9, 24) });
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "所属なし", Due = D(2026, 9, 24) });
+        test.Workspace.EnsureSources();
+
+        var home = test.Workspace.Sources.Calendars().First(CalendarWorkspace.IsLocal);
+        var list = test.Workspace.Sources.TaskLists().First(CalendarWorkspace.IsLocal);
+
+        Assert.Equal(home.Id, test.Workspace.Events.Find("e1")!.CalendarId);
+        Assert.Equal(list.Id, test.Workspace.Tasks.All().Single(t => t.Id == "t1").TaskListId);
+    }
+
+    [Fact]
+    public void 全部のチェックを外せば1件も残らない()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.NotEmpty(main.SelectedDay.Events);
+
+        foreach (var calendar in main.SourceLists.Calendars) calendar.IsVisible = false;
+        foreach (var list in main.SourceLists.TaskLists) list.IsVisible = false;
+
+        Assert.Empty(main.SelectedDay.Events);
+        Assert.Empty(main.SelectedDay.Tasks);
+        Assert.Empty(main.Month.Cells.SelectMany(c => c.Events));
+        Assert.Empty(main.Month.Cells.SelectMany(c => c.Tasks));
+    }
+
+    [Fact]
+    public void 引き取り先に_Google_のカレンダーは選ばない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // Google のものへ入れると、次の同期で勝手に相手へ送られてしまう
+        AddGoogleCalendar(test, "shigoto@group.calendar.google.com", "仕事");
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "所属なし", Date = D(2026, 9, 24) });
+        test.Workspace.EnsureSources();
+
+        var home = test.Workspace.Sources.FindCalendar(test.Workspace.Events.Find("e1")!.CalendarId!);
+
+        Assert.NotNull(home);
+        Assert.True(CalendarWorkspace.IsLocal(home));
     }
 }

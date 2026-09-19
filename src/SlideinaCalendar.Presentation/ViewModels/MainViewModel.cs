@@ -809,15 +809,24 @@ public sealed class MainViewModel : ObservableObject
         Day.UpdateNowLine(time);
     }
 
-    /// <summary>データが変わったので表示を引き直す。</summary>
+    /// <summary>
+    /// データが変わったので表示を引き直す。
+    /// <para>
+    /// <b>カレンダー一覧を先に読み直す。</b>各ビューは予定の帯の色と、出すかどうかの
+    /// 判断をこの一覧から引くので、
+    /// 順番が逆だと、色を変えた直後の引き直しに古い色が使われる。実機で、カレンダーの色を
+    /// 変えても月ビューの帯が変わらなかった。
+    /// </para>
+    /// </summary>
     private void RefreshViews()
     {
+        SourceLists.Refresh();
+
         Month.Refresh();
         SelectedDay.Refresh();
         Week.Refresh();
         Day.Refresh();
         MiniCalendar.Refresh();
-        SourceLists.Refresh();
         RaiseHeader();
     }
 
