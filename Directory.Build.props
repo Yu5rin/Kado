@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- ソリューション全体の共通設定 -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- 警告は潰しておく方針。CS1591（XMLコメント欠落）だけは実装途中でも邪魔になるので除外 -->
+    <WarningsAsErrors />
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NeutralLanguage>ja-JP</NeutralLanguage>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Windows 以外（CI の Linux コンテナ等）でも WPF プロジェクトを復元できるようにする -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Authors>Yu5rin</Authors>
+    <Product>SlideinaCalendar</Product>
+    <Company>SlideinaCalendar</Company>
+  </PropertyGroup>
+
+</Project>
