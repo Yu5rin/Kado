@@ -370,6 +370,81 @@ public class EventSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 差し替えた回は親の繰り返しから除かれる()
+    {
+        // Google は繰り返しを親と例外回に分けて持つ。気づかず取り込むと二重に出る
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", newDate: "2026-10-02", summary: "週次レビュー（振替）");
+
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        var parent = Events.All().Single(e => e.GoogleEventId == "g1");
+        Assert.Contains("EXDATE=20261001", parent.Recurrence);
+
+        // 差し替えた回は独立した予定として残る
+        var moved = Events.All().Single(e => e.GoogleEventId == "g1_20261001");
+        Assert.Equal(D(2026, 10, 2), moved.Date);
+        Assert.Equal("週次レビュー（振替）", moved.Title);
+    }
+
+    [Fact]
+    public async Task 中止した回は親から除くだけで予定は作らない()
+    {
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", cancelled: true);
+
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        var parent = Assert.Single(Events.All());
+        Assert.Equal("g1", parent.GoogleEventId);
+        Assert.Contains("EXDATE=20261001", parent.Recurrence);
+    }
+
+    [Fact]
+    public async Task 例外回が先に降ってきても除外日が消えない()
+    {
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", cancelled: true);
+
+        // 相手が返す順番は決まっていない。親を先に処理しないと、あとで上書きされて消える
+        _remote.PutFirst("g1_20261001");
+
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        var parent = Events.All().Single(e => e.GoogleEventId == "g1");
+        Assert.Contains("EXDATE=20261001", parent.Recurrence);
+    }
+
+    [Fact]
+    public async Task 何度同期しても除外日は増えない()
+    {
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", cancelled: true);
+
+        await Engine.SyncAsync("primary", "local:shigoto");
+        await Engine.SyncAsync("primary", "local:shigoto");
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        var parent = Events.All().Single(e => e.GoogleEventId == "g1");
+
+        // 同じ日を何度も足すと、指定がどんどん長くなる
+        Assert.Equal("FREQ=WEEKLY;BYDAY=TH;EXDATE=20261001", parent.Recurrence);
+    }
+
+    [Fact]
+    public async Task 親を知らなければ何もしない()
+    {
+        // 差分で例外回だけが降ってきた場面。親は次に降りてくる
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", newDate: "2026-10-02");
+
+        var report = await Engine.SyncAsync("primary", "local:shigoto");
+
+        // 例外回そのものは取り込む。落とすと予定が消えたように見える
+        Assert.Equal(1, report.CreatedLocal);
+        Assert.Equal(D(2026, 10, 2), Events.All().Single().Date);
+    }
+
+    [Fact]
     public async Task 終日予定は往復しても日付が動かない()
     {
         // 同期のたびに1日ずつ伸びる不具合を防ぐ
