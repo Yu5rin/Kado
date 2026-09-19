@@ -187,4 +187,43 @@ public class GoogleTokenProviderTests
             // 受け側が先に閉じることがある
         }
     }
+
+    [Fact]
+    public async Task 更新トークンが死んでいたら繋ぎ直させる()
+    {
+        // 同意画面が「テスト」のままなら7日で失効する。利用者が許可を
+        // 取り消したときも同じ
+        using var handler = new StubHttpHandler(
+            _ => (HttpStatusCode.BadRequest, """{"error":"invalid_grant"}"""));
+        using var http = new HttpClient(handler);
+
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.Zero));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        var error = await Assert.ThrowsAsync<OAuthException>(() => provider.GetAccessTokenAsync());
+
+        Assert.Contains("接続し直して", error.Message);
+
+        // 控えを残すと、繋がって見えるのに何をしても失敗し続ける
+        Assert.Null(store.Load());
+        Assert.False(provider.IsConnected);
+    }
+
+    [Fact]
+    public async Task 一時的な失敗では控えを消さない()
+    {
+        // 通信が落ちただけで繋ぎ直しを求めるのは行き過ぎ
+        using var handler = new StubHttpHandler(
+            _ => (HttpStatusCode.ServiceUnavailable, """{"error":"backend_error"}"""));
+        using var http = new HttpClient(handler);
+
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.Zero));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        await Assert.ThrowsAsync<OAuthException>(() => provider.GetAccessTokenAsync());
+
+        Assert.NotNull(store.Load());
+    }
 }

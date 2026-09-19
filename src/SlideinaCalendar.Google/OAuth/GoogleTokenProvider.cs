@@ -67,8 +67,23 @@ public sealed class GoogleTokenProvider(
                 throw new OAuthException("更新トークンがありません。接続し直してください。");
             }
 
-            var refreshed = current.WithRefreshed(
-                await _flow.RefreshAsync(refreshToken, cancellationToken).ConfigureAwait(false));
+            OAuthTokens refreshed;
+            try
+            {
+                refreshed = current.WithRefreshed(
+                    await _flow.RefreshAsync(refreshToken, cancellationToken).ConfigureAwait(false));
+            }
+            catch (OAuthException e) when (e.IsRefreshTokenDead)
+            {
+                // 更新トークンが死ぬ場面は現実にある。同意画面が「テスト」のままなら
+                // 7日で失効するし、利用者が Google 側で許可を取り消すこともある。
+                // 控えを残すと、繋がって見えるのに何をしても失敗し続ける
+                _store.Clear();
+
+                throw new OAuthException(
+                    "Google との連携が切れました。接続し直してください。"
+                    + "（同意画面が「テスト」のままだと7日で切れます）", e.Error);
+            }
 
             _store.Save(refreshed);
             return refreshed.AccessToken;

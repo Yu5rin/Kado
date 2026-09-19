@@ -14,6 +14,15 @@ public sealed class OAuthException(string message, string? error = null) : Excep
 
     /// <summary>利用者が認可画面で断ったか。</summary>
     public bool WasDeclined => string.Equals(Error, "access_denied", StringComparison.Ordinal);
+
+    /// <summary>
+    /// 更新トークンがもう使えないか。
+    /// <para>
+    /// 同意画面が「テスト」のままなら7日で失効する。利用者が Google 側で
+    /// 許可を取り消したときも同じ。どちらも繋ぎ直すしかない。
+    /// </para>
+    /// </summary>
+    public bool IsRefreshTokenDead => string.Equals(Error, "invalid_grant", StringComparison.Ordinal);
 }
 
 /// <summary>
