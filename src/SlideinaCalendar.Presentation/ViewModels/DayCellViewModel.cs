@@ -102,6 +102,15 @@ public sealed class DayCellViewModel : ObservableObject
     /// </summary>
     public bool IsDimmed => HasWorkingDayData && !IsWorkingDay;
 
+    /// <summary>
+    /// 稼働する日として面を起こすか。
+    /// <para>
+    /// 休業日と見分けるため。<b>データが無い日とも見分ける</b>ので、どこまで登録済みかが
+    /// 面の色だけで読める。
+    /// </para>
+    /// </summary>
+    public bool IsWorkingDayLit => HasWorkingDayData && IsWorkingDay;
+
     /// <summary>日曜か。</summary>
     public bool IsSunday => Date.DayOfWeek == DayOfWeek.Sunday;
 

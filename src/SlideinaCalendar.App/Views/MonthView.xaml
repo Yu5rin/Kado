@@ -189,7 +189,15 @@
                     </Border>
 
                     <DataTemplate.Triggers>
-                        <!-- 非稼働日は色を足さず背景を沈める（要件書 4.3） -->
+                        <!--
+                            実働日データを持つ日は、稼働する日と休業する日で面を分ける。
+                            データを持たない日はどちらでもないので、そのままにしておく。
+                            色を足すのではなく面の明るさで示す（要件書 4.3）
+                        -->
+                        <DataTrigger Binding="{Binding IsWorkingDayLit}" Value="True">
+                            <Setter TargetName="Cell" Property="Background"
+                                    Value="{DynamicResource WorkingDayBrush}" />
+                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource OffDayBrush}" />

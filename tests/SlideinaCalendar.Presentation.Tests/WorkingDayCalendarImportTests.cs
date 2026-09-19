@@ -251,4 +251,109 @@ public class WorkingDayCalendarImportTests
 
         Assert.NotNull(test.Workspace.Events.Find("mine"));
     }
+
+    // ------------------------------------------------------------------
+    // 休業日も inaCalendar に入れる
+    //
+    // 拡張機能の inaCalendar と同じ。実働日データが持っているのは稼働日だけなので、
+    // 期間内で稼働日でない日が休業日になる。
+    //
+    // 合成のサンプル Excel は平日をすべて稼働日にしてあるので、休業日を持つデータは
+    // TestWorkspace の 2026年9月（敬老の日・国民の休日・秋分の日を除く）を使う
+    // ------------------------------------------------------------------
+
+    private static readonly DateOnly[] Closed =
+    [
+        new(2026, 9, 21), new(2026, 9, 22), new(2026, 9, 23),
+    ];
+
+    private static IReadOnlyList<CalendarEvent> ClosedDays(TestWorkspace test) =>
+        test.Workspace.Events.All().Where(e => CalendarWorkspace.IsClosedDayId(e.Id)).ToArray();
+
+    [Fact]
+    public void 休業日も_inaCalendar_に入れる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        var calendar = test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        var closed = ClosedDays(test);
+
+        Assert.Equal(Closed, closed.Select(e => e.Date).OrderBy(d => d));
+        Assert.All(closed, e => Assert.Equal(calendar.Id, e.CalendarId));
+        Assert.All(closed, e => Assert.Equal(CalendarWorkspace.ClosedDayTitle, e.Title));
+    }
+
+    [Fact]
+    public void 土日は休業日に入れない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        // 月ビューでは背景が沈むうえ、毎週のことなので予定にすると連休が埋もれる
+        Assert.All(ClosedDays(test), e =>
+            Assert.False(e.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday));
+    }
+
+    [Fact]
+    public void 稼働日は休業日にしない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        Assert.All(ClosedDays(test), e =>
+            Assert.False(test.Workspace.WorkingDays.IsWorkingDay(e.Date)));
+    }
+
+    [Fact]
+    public void 読み直しても休業日は増えない()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.WriteWorkingDayEvents();
+        var before = ClosedDays(test).Count;
+
+        test.Workspace.WriteWorkingDayEvents();
+
+        Assert.Equal(before, ClosedDays(test).Count);
+    }
+
+    [Fact]
+    public void 休業日は予定の並びには出さず日付の行に出す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        var main = new MainViewModel(test.Workspace, today: Closed[0]);
+
+        Assert.Contains(CalendarWorkspace.ClosedDayTitle, main.SelectedDay.Milestones.Select(m => m.Name));
+        Assert.DoesNotContain(main.SelectedDay.Events, e => e.Title == CalendarWorkspace.ClosedDayTitle);
+    }
+
+    [Fact]
+    public void 取り込んだ期間の外の休業日は残す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        Assert.NotEmpty(ClosedDays(test));
+
+        // 合成のサンプルは 2023〜2025 年で、2026年9月とは期間が重ならない。
+        // 合わせた期間（2023〜2026）で見ると、間の隙間まで休業日にしてしまう
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        Assert.Equal(Closed, ClosedDays(test).Select(e => e.Date).OrderBy(d => d));
+    }
+
+    [Fact]
+    public void 起動しただけでは休業日を書かない()
+    {
+        // 頼まれていないのに、何百件もの予定とカレンダーができるのは行き過ぎ
+        using var test = TestWorkspace.Create(withMilestones: true);
+
+        Assert.Empty(ClosedDays(test));
+    }
 }
