@@ -169,6 +169,14 @@ internal static class NativeMethods
     /// <returns>最終的に <paramref name="rect"/> どおりになったか。</returns>
     public static bool SetWorkAreaWithFallback(RECT rect, out string detail)
     {
+        // 既に目標どおりなら何もしない。ここを区別しないと、書き戻しが効いたのか
+        // もともと壊れていなかったのか、ログから判断できなくなる。
+        if (Matches(GetWorkArea(), rect))
+        {
+            detail = "変更不要（呼び出し前から目標どおり）";
+            return true;
+        }
+
         var withNotify = SystemParametersInfo(SPI_SETWORKAREA, 0, ref rect, SPIF_SENDCHANGE);
         var errorWithNotify = withNotify ? 0 : Marshal.GetLastWin32Error();
 
