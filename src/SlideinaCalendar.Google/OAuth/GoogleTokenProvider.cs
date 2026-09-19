@@ -8,7 +8,8 @@ namespace SlideinaCalendar.Google.OAuth;
 /// </para>
 /// </summary>
 public sealed class GoogleTokenProvider(
-    LoopbackOAuthFlow flow, ITokenStore store, TimeProvider? time = null) : IDisposable
+    LoopbackOAuthFlow flow, ITokenStore store, TimeProvider? time = null)
+    : Sync.IAccessTokenSource, IDisposable
 {
     private readonly LoopbackOAuthFlow _flow = flow ?? throw new ArgumentNullException(nameof(flow));
     private readonly ITokenStore _store = store ?? throw new ArgumentNullException(nameof(store));
