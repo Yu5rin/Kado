@@ -170,6 +170,11 @@
                                       Command="{Binding Sync.DisconnectCommand}"
                                       ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
 
+                            <Separator />
+                            <MenuItem Header="更新を確認…"
+                                      Command="{Binding CheckForUpdateCommand}"
+                                      ToolTip="新しい版があれば知らせます" />
+
                             <!--
                                 自分の Google Cloud プロジェクトで使いたい人だけの項目。
                                 ふつうは触らせない。アプリに焼き込んだ設定で繋がる

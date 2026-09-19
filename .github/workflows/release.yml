@@ -126,13 +126,18 @@ jobs:
           "asset=$name" >> $env:GITHUB_OUTPUT
 
       # タグから来たときだけ Releases に上げる。手動実行は成果物の確認まで
+      # exe をそのまま添える。アプリの自動更新はこれを落として入れ替えるので、
+      # ZIP だけだと更新が見つけられない（.exe で終わるものを探している）
       - name: Releases に上げる
         if: github.ref_type == 'tag'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create '${{ github.ref_name }}' '${{ steps.package.outputs.asset }}' `
+          $exe = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.exe"
+          Copy-Item publish/SlideinaCalendar.App.exe $exe
+
+          gh release create '${{ github.ref_name }}' $exe '${{ steps.package.outputs.asset }}' `
             --title 'SlideinaCalendar ${{ steps.version.outputs.value }}' `
             --generate-notes
 

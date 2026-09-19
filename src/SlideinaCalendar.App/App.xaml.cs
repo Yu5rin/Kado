@@ -1,8 +1,11 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using Microsoft.Data.Sqlite;
 using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Google;
+using SlideinaCalendar.App.Update;
+using SlideinaCalendar.App.Views;
 using SlideinaCalendar.App.Themes;
 using SlideinaCalendar.Data;
 using SlideinaCalendar.Presentation;
@@ -23,6 +26,17 @@ public partial class App : Application
     private GoogleConnection? _google;
     private SingleInstance? _instance;
     private BackgroundSync? _background;
+    private UpdateService? _updater;
+
+    /// <summary>
+    /// 新しい版を見に行く先。
+    /// <para>
+    /// リポジトリが公開されていれば、認証なしで読める。非公開のうちは何も返らないので、
+    /// 更新の確認は黙って見送られる（アプリの動きには差し支えない）。
+    /// </para>
+    /// </summary>
+    private const string UpdateApiUrl =
+        "https://api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest";
 
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
@@ -32,8 +46,12 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // 入れ替え直後は、前のプロセスがまだ終わりきっていない。待たずに判定すると
+        // 「すでに起動しています」で即座に終わり、更新したのに起動しないように見える
+        var afterUpdate = e.Args.Contains(UpdateService.AfterUpdateArgument, StringComparer.Ordinal);
+
         // 2本動くと同期が壊れる。同じデータベースを開き、同じカレンダーへ書き戻すため
-        _instance = SingleInstance.TryAcquire();
+        _instance = SingleInstance.TryAcquire(afterUpdate ? UpdateService.AfterUpdateWait : TimeSpan.Zero);
         if (_instance is null)
         {
             // すでに動いているほうを前に出して、こちらは静かに終わる
@@ -105,15 +123,24 @@ public partial class App : Application
             // 2本目が起動されたら、こちらを前に出す
             _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
 
+            // 前回の入れ替えで残ったものを片付ける
+            _updater = new UpdateService(UpdateApiUrl);
+            _updater.CleanupOldFiles();
+
             // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
             if (window.DataContext is MainViewModel main)
             {
+                main.CheckForUpdate = () => CheckForUpdateAsync(showWhenLatest: true);
+
                 _background = new BackgroundSync(
                     token => Dispatcher.InvokeAsync(
                         () => main.Sync.SyncQuietlyAsync(token)).Task.Unwrap());
 
                 _background.Start();
             }
+
+            // 起動したときに一度だけ確かめる。最新なら何も出さない
+            _ = CheckForUpdateAsync(showWhenLatest: false);
         }
         catch (Exception ex)
         {
@@ -139,6 +166,48 @@ public partial class App : Application
         MessageBox.Show(
             $"予期しないエラーで終了します。\n\n{ex.GetType().Name}: {ex.Message}\n\n記録先: {CrashLogPath}",
             "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+
+    /// <summary>
+    /// 新しい版があるか確かめ、あれば案内する。
+    /// <para>
+    /// <paramref name="showWhenLatest"/> が false なら、最新のときは何も出さない。
+    /// 起動のたびに「最新です」と言われても邪魔なだけ。
+    /// </para>
+    /// </summary>
+    private async Task CheckForUpdateAsync(bool showWhenLatest)
+    {
+        if (_updater is null) return;
+
+        try
+        {
+            var info = await _updater.CheckAsync().ConfigureAwait(true);
+
+            if (info is null)
+            {
+                if (showWhenLatest)
+                {
+                    MessageBox.Show(
+                        MainWindow,
+                        $"お使いの {UpdateService.CurrentVersion} が最新です。",
+                        "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+
+                return;
+            }
+
+            new UpdateWindow(_updater, info, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // 更新を確かめられなくても、アプリは使える
+            if (showWhenLatest)
+            {
+                MessageBox.Show(
+                    MainWindow, "更新を確かめられませんでした。ネットワークをご確認ください。",
+                    "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
 
     /// <summary>
