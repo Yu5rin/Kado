@@ -14,6 +14,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters">
 
+    <!--
+        アイコンはここでも読み込む。別の辞書に置いた StaticResource は、
+        親をたどれる保証が無い。Theme.xaml 側の読み込みと重なるが害はない。
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Icons.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
     <conv:HexBrushConverter x:Key="HexBrush" />
 
     <!-- アイコンボタン -->
