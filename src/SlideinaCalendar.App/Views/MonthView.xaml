@@ -20,8 +20,8 @@
     <UserControl.Resources>
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
-        <conv:EventAccentBrushConverter x:Key="EventAccentBrush" />
-        <conv:EventAccentFaceConverter x:Key="EventAccentFace" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
+        <conv:EventColorFaceConverter x:Key="EventColorFace" />
 
         <!-- 曜日ヘッダ（.dow）。日曜は赤、土曜は青。週の開始曜日は設定で変わるので位置では決めない -->
         <DataTemplate x:Key="WeekDayHeaderTemplate">
@@ -41,9 +41,9 @@
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
         <DataTemplate x:Key="EventChipTemplate">
             <Border CornerRadius="3" Padding="5,1" Margin="0,2,0,0"
-                    Background="{Binding Accent, Converter={StaticResource EventAccentFace}}"
+                    Background="{Binding Color, Converter={StaticResource EventColorFace}}"
                     BorderThickness="3,0,0,0"
-                    BorderBrush="{Binding Accent, Converter={StaticResource EventAccentBrush}}">
+                    BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}">
                 <TextBlock Text="{Binding Label}" FontSize="11" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
@@ -97,7 +97,14 @@
                 <DataTemplate>
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
-                            ClipToBounds="True" Cursor="Hand">
+                            ClipToBounds="True" Cursor="Hand"
+                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加"
+                            MouseLeftButtonDown="OnCellClicked">
+                        <!--
+                            月ビューは日を選ぶための面でもある。押しても右ペインが動かないと、
+                            ミニ月暦からしか日を選べない。InputBinding からは
+                            RelativeSource の祖先をたどれないので、コードビハインドで受ける
+                        -->
                         <StackPanel>
                             <!-- 日付とマイルストーン。日付は左に固定 -->
                             <Grid>

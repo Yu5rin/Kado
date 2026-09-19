@@ -36,8 +36,14 @@ public sealed record CalendarEvent
     /// <summary>場所。</summary>
     public string? Location { get; init; }
 
-    /// <summary>メモ。</summary>
+    /// <summary>説明。Google Calendar の <c>description</c>。</summary>
     public string? Note { get; init; }
+
+    /// <summary>
+    /// 関連する URL。Google Calendar の <c>source.url</c>。
+    /// <para>資料や図面の置き場所。説明欄に書くと本文と混ざって拾いにくい。</para>
+    /// </summary>
+    public string? Url { get; init; }
 
     /// <summary>色（<c>#rrggbb</c>）。</summary>
     public string? Color { get; init; }

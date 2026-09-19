@@ -89,8 +89,11 @@ public class SelectedDayViewModelTests
         ws.AddTask(new TaskItem { Id = "today", Title = "今日まで", Due = D(2026, 9, 24) });
         ws.AddTask(new TaskItem { Id = "late", Title = "遅れ", Due = D(2026, 9, 18) });
 
-        Assert.Equal(DueEmphasis.Today, Assert.Single(Create(test, D(2026, 9, 24)).Tasks).Emphasis);
-        Assert.Equal(DueEmphasis.Overdue, Assert.Single(Create(test, D(2026, 9, 18)).Tasks).Emphasis);
+        // 右ペインは未完了のタスクをまとめて出すので、どちらの日でも両方並ぶ
+        var tasks = Create(test, D(2026, 9, 24)).Tasks;
+
+        Assert.Equal(DueEmphasis.Today, tasks.Single(t => t.Id == "today").Emphasis);
+        Assert.Equal(DueEmphasis.Overdue, tasks.Single(t => t.Id == "late").Emphasis);
     }
 
     [Fact]
@@ -142,5 +145,81 @@ public class SelectedDayViewModelTests
         Assert.Empty(vm.Events);
         Assert.Equal("9月25日（金）", vm.Title);
         Assert.Equal("実働 16日目", vm.WorkingDayLabel);
+    }
+
+    [Fact]
+    public void 先の期限のタスクも並ぶ()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "今日まで", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "来月", Due = D(2026, 10, 1) });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "年度末", Due = D(2027, 3, 31) });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        // その日のぶんだけだと、今日やることは分かっても段取りが組めない
+        Assert.Equal(["今日まで", "来月", "年度末"], vm.Tasks.Select(t => t.Title));
+        Assert.Equal("3 / 3", vm.TaskCountText);
+    }
+
+    [Fact]
+    public void 完了はその日のぶんだけ添える()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "残り", Due = D(2026, 9, 25) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "今日片付けた", Due = D(2026, 9, 24), IsDone = true });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "前に片付けた", Due = D(2026, 9, 10), IsDone = true });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        // 過去の完了が積み上がると読めない。並びは期限の近い順なので、
+        // 今日片付けたぶん（9/24）が 9/25 のものより上に来る
+        Assert.Equal(["今日片付けた", "残り"], vm.Tasks.Select(t => t.Title));
+        Assert.Equal("1 / 2", vm.TaskCountText);
+    }
+
+    [Fact]
+    public void 期限の無いタスクは右ペインに出さない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "いつかやる" });
+
+        Assert.Empty(Create(test, D(2026, 9, 24)).Tasks);
+    }
+
+    [Fact]
+    public void 日を変えてもタスクの並びは変わらない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "来月", Due = D(2026, 10, 1) });
+
+        var vm = Create(test, D(2026, 9, 24));
+        Assert.Single(vm.Tasks);
+
+        vm.Date = D(2026, 9, 25);
+
+        // 未完了のタスクは選択日に関係なく見えている
+        Assert.Single(vm.Tasks);
+    }
+
+    [Fact]
+    public void 期限の近い順に並ぶ()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "年度末", Due = D(2027, 3, 31) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "遅れ", Due = D(2026, 9, 18) });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "来月", Due = D(2026, 10, 1) });
+        ws.AddTask(new TaskItem { Id = "t4", Title = "今日まで", Due = D(2026, 9, 24) });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        // 遅れているものが一番上。先の期限ほど下
+        Assert.Equal(["遅れ", "今日まで", "来月", "年度末"], vm.Tasks.Select(t => t.Title));
     }
 }
