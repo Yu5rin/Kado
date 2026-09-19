@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Text.Json;
+using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -28,6 +31,8 @@ public enum CalendarView
 public sealed class MainViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
+    private readonly IEditorPresenter _editors;
+    private readonly IFileDialogs _files;
 
     private CalendarView _currentView = CalendarView.Month;
     private bool _isSidePanelOpen = true;
@@ -35,15 +40,20 @@ public sealed class MainViewModel : ObservableObject
     private string? _statusMessage;
     private string _searchText = string.Empty;
 
-    public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday)
+    public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
+        IEditorPresenter? editors = null, IFileDialogs? files = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _editors = editors ?? NullEditorPresenter.Instance;
+        _files = files ?? NullFileDialogs.Instance;
         _today = today;
 
         SourceLists = new SourceListsViewModel(workspace);
-        Month = new MonthViewModel(workspace, today, today, weekStart, SourceLists) { SelectedDate = today };
+        Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
+        Week = new WeekViewModel(workspace, today, today, weekStart, SourceLists);
+        Day = new DayViewModel(workspace, today, today, SourceLists);
 
         PreviousCommand = new RelayCommand(GoToPrevious);
         NextCommand = new RelayCommand(GoToNext);
@@ -57,12 +67,25 @@ public sealed class MainViewModel : ObservableObject
         MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
         MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
 
-        // 追加の画面はこのあとのフェーズで作る。押しても無反応だと壊れて見えるので、
-        // いまは何が起きていないかを状態表示で伝える
-        AddEventCommand = new RelayCommand(() => StatusMessage = "予定の追加画面はこのあとのフェーズで実装します");
-        AddTaskCommand = new RelayCommand(() => StatusMessage = "タスクの追加画面はこのあとのフェーズで実装します");
-        OpenWorkingDayCalculatorCommand =
-            new RelayCommand(() => StatusMessage = "実働日計算の画面はこのあとのフェーズで実装します");
+        AddEventCommand = new RelayCommand(AddEvent);
+        AddEventOnCommand = new RelayCommand<DateOnly?>(date =>
+        {
+            // その日をダブルクリックして足すので、選択も移す
+            if (date is { } d) SelectedDate = d;
+            AddEvent();
+        });
+        AddTaskCommand = new RelayCommand(AddTask);
+        EditEventCommand = new RelayCommand<DayEventViewModel?>(EditEvent);
+        DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
+        EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
+        DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
+        ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
+
+        // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
+        OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
+
+        ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
+        ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -72,6 +95,8 @@ public sealed class MainViewModel : ObservableObject
         {
             Month.Refresh();
             SelectedDay.Refresh();
+            Week.Refresh();
+            Day.Refresh();
         };
     }
 
@@ -84,6 +109,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
+
+    /// <summary>週ビュー。</summary>
+    public WeekViewModel Week { get; }
+
+    /// <summary>日ビュー。</summary>
+    public DayViewModel Day { get; }
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; }
@@ -107,9 +138,22 @@ public sealed class MainViewModel : ObservableObject
         get => _currentView;
         set
         {
-            if (Set(ref _currentView, value)) Raise(nameof(HintText));
+            if (!Set(ref _currentView, value)) return;
+
+            // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
+            Week.GoTo(SelectedDate);
+            Day.Date = SelectedDate;
+
+            Raise(nameof(HintText), nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
         }
     }
+
+    /// <summary>中央に出すビューの出し分け。</summary>
+    public bool IsMonthView => _currentView == CalendarView.Month;
+
+    public bool IsWeekView => _currentView == CalendarView.Week;
+
+    public bool IsDayView => _currentView == CalendarView.Day;
 
     /// <summary>左サイドパネルを開いているか。終了時に保存して次回復元する。</summary>
     public bool IsSidePanelOpen
@@ -129,6 +173,8 @@ public sealed class MainViewModel : ObservableObject
             Month.Today = value;
             SelectedDay.Today = value;
             MiniCalendar.Today = value;
+            Week.Today = value;
+            Day.Today = value;
         }
     }
 
@@ -143,6 +189,8 @@ public sealed class MainViewModel : ObservableObject
             Month.SelectedDate = value;
             SelectedDay.Date = value;
             MiniCalendar.SelectedDate = value;
+            Week.GoTo(value);
+            Day.Date = value;
             Raise();
         }
     }
@@ -151,10 +199,7 @@ public sealed class MainViewModel : ObservableObject
     public string? StatusMessage
     {
         get => _statusMessage;
-        private set
-        {
-            if (Set(ref _statusMessage, value)) Raise(nameof(SyncStatusText));
-        }
+        private set => Set(ref _statusMessage, value);
     }
 
     // ------------------------------------------------------------------
@@ -181,8 +226,11 @@ public sealed class MainViewModel : ObservableObject
     public string RemainingWorkingDaysText =>
         Month.RemainingWorkingDays?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
-    /// <summary>実働日バッジに残りを出すか。今日を含む月だけ。</summary>
-    public bool HasRemainingWorkingDays => Month.RemainingWorkingDays is not null;
+    /// <summary>
+    /// 実働日バッジに残りを出すか。実働日データがあり、かつ今日を含む月だけ。
+    /// <para>データが無いのに「残り 0 日」と出ると、実数だと思われる。</para>
+    /// </summary>
+    public bool HasRemainingWorkingDays => HasWorkingDayData && Month.RemainingWorkingDays is not null;
 
     /// <summary>検索語。</summary>
     public string SearchText
@@ -192,10 +240,13 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 同期の状態。Google 同期は Phase 5 なので、いまは未接続であることを出す。
-    /// 状態表示が入っているときはそちらを優先する（置き場所を増やさない）。
+    /// 同期の状態。
+    /// <para>
+    /// ここに出すのは同期の状態だけ。操作の結果や未実装の断り書きを混ぜると、
+    /// 同期できているのかどうかが読み取れなくなる。
+    /// </para>
     /// </summary>
-    public string SyncStatusText => _statusMessage ?? "Google 未接続";
+    public string SyncStatusText => IsSynced ? "同期済み" : "Google 未接続";
 
     /// <summary>同期できているか。丸印の色を変える。</summary>
     public bool IsSynced => false;
@@ -262,32 +313,266 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand MiniPreviousCommand { get; }
     public RelayCommand MiniNextCommand { get; }
     public RelayCommand AddEventCommand { get; }
+
+    /// <summary>日を指定して予定を足す。月ビューのマスをダブルクリックしたとき。</summary>
+    public RelayCommand<DateOnly?> AddEventOnCommand { get; }
     public RelayCommand AddTaskCommand { get; }
+    public RelayCommand<DayEventViewModel?> EditEventCommand { get; }
+    public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
+    public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
+    /// <summary>配布の実働日ファイル（Excel）を取り込む。</summary>
+    public RelayCommand ImportWorkingDaysCommand { get; }
+
+    /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
+    public RelayCommand ImportLegacyBackupCommand { get; }
+
+    /// <summary>
+    /// 前へ。動く幅は出しているビューで変わる（月・週・日）。
+    /// <para>年と一覧はまだ無いので、月と同じ扱いにしておく。</para>
+    /// </summary>
     private void GoToPrevious()
     {
-        Month.GoToPreviousMonth();
-        MiniCalendar.GoTo(Month.Month);
-        RaiseHeader();
+        switch (_currentView)
+        {
+            case CalendarView.Week:
+                Week.GoToPreviousWeek();
+                SyncHeaderTo(Week.WeekStart);
+                break;
+
+            case CalendarView.Day:
+                Day.GoToPreviousDay();
+                SyncHeaderTo(Day.Date);
+                break;
+
+            default:
+                Month.GoToPreviousMonth();
+                SyncHeaderTo(Month.Month);
+                break;
+        }
     }
 
     private void GoToNext()
     {
-        Month.GoToNextMonth();
-        MiniCalendar.GoTo(Month.Month);
-        RaiseHeader();
+        switch (_currentView)
+        {
+            case CalendarView.Week:
+                Week.GoToNextWeek();
+                SyncHeaderTo(Week.WeekStart);
+                break;
+
+            case CalendarView.Day:
+                Day.GoToNextDay();
+                SyncHeaderTo(Day.Date);
+                break;
+
+            default:
+                Month.GoToNextMonth();
+                SyncHeaderTo(Month.Month);
+                break;
+        }
     }
 
     private void GoToToday()
     {
         Month.GoToToday();
         SelectedDay.Date = _today;
+        Week.GoToToday();
+        Day.GoToToday();
         MiniCalendar.GoTo(_today);
         MiniCalendar.SelectedDate = _today;
         RaiseHeader();
         Raise(nameof(SelectedDate));
     }
+
+    /// <summary>
+    /// ツールバーの年月とミニ月暦を、いま見ている日に合わせる。
+    /// <para>週や日を送って月をまたいだとき、見出しだけ前の月に残るのを防ぐ。</para>
+    /// </summary>
+    private void SyncHeaderTo(DateOnly anchor)
+    {
+        Month.GoTo(anchor);
+        MiniCalendar.GoTo(anchor);
+        RaiseHeader();
+    }
+
+    // ------------------------------------------------------------------
+    // 取り込み
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 実働日ファイルを取り込む。
+    /// <para>
+    /// この口が無いと、配布の Excel を読み込む手段が無く、実働日の表示も計算も
+    /// 動かないままになる（要件書 4.1）。
+    /// </para>
+    /// </summary>
+    private void ImportWorkingDays()
+    {
+        if (_files.PickOpenFile("実働日ファイルを選ぶ", "Excel ブック (*.xlsx)|*.xlsx|すべてのファイル (*.*)|*.*")
+            is not { } path) return;
+
+        Run(path, "実働日の取り込み", stream =>
+        {
+            var result = _workspace.ImportWorkingDays(stream);
+
+            var lines = new List<string>
+            {
+                $"バージョン: {result.Version}",
+                $"稼働日: {result.WorkingDays.Count} 件"
+                    + $"（{result.WorkingDayRangeStart:yyyy/M/d} 〜 {result.WorkingDayRangeEnd:yyyy/M/d}）",
+                $"マイルストーン: {result.Milestones.Count} 件",
+            };
+
+            if (result.Warnings.Count > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add($"警告 {result.Warnings.Count} 件");
+                lines.AddRange(result.Warnings);
+            }
+
+            return (string.Join(Environment.NewLine, lines),
+                    $"実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）");
+        });
+    }
+
+    /// <summary>旧データを取り込む。まとめて書き込むので、先に断りを入れる。</summary>
+    private void ImportLegacyBackup()
+    {
+        if (!_files.Confirm(
+                "旧データの取り込み",
+                "旧 inaCalendar のバックアップを取り込みます。\n\n" +
+                "同じ識別子の予定とタスクは上書きされます。この操作は元に戻せません。"))
+        {
+            return;
+        }
+
+        if (_files.PickOpenFile("バックアップを選ぶ", "JSON ファイル (*.json)|*.json|すべてのファイル (*.*)|*.*")
+            is not { } path) return;
+
+        Run(path, "旧データの取り込み", stream =>
+        {
+            var result = _workspace.ImportLegacyBackup(stream);
+
+            var summary = $"予定 {result.Events.Count} 件、タスク {result.Tasks.Count} 件"
+                + $"（うち ToDo から変換 {result.ConvertedTaskCount} 件）";
+
+            return ($"{result.SourceApp} v{result.SourceVersion}{Environment.NewLine}"
+                    + $"{summary}{Environment.NewLine}{Environment.NewLine}{result.FormatLog()}",
+                    $"旧データを取り込みました（{summary}）");
+        });
+    }
+
+    /// <summary>
+    /// ファイルを開いて取り込み、結果を見せる。
+    /// <para>読めないファイルを選んでも落とさない。何が起きたかを出して続ける。</para>
+    /// </summary>
+    private void Run(string path, string title, Func<Stream, (string Report, string Status)> import)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var (report, status) = import(stream);
+
+            RefreshViews();
+            StatusMessage = status;
+            _files.ShowReport(title, report);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                  or FormatException or InvalidDataException
+                                  or InvalidOperationException or JsonException)
+        {
+            _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{e.Message}");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 予定とタスクの編集。どれも CalendarWorkspace を通すので Undo が効く
+    // ------------------------------------------------------------------
+
+    /// <summary>選択している日に予定を足す。</summary>
+    private void AddEvent()
+    {
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames);
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        _workspace.AddEvent(editor.ToModel());
+        StatusMessage = "予定を追加しました";
+    }
+
+    private void EditEvent(DayEventViewModel? target)
+    {
+        if (target is null) return;
+
+        // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
+        if (_workspace.Events.Find(target.Id) is not { } stored) return;
+
+        var editor = new EventEditorViewModel(stored, CalendarNames);
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateEvent(editor.ToModel())
+            ? "予定を変更しました"
+            : "予定が見つかりませんでした";
+    }
+
+    private void DeleteEvent(DayEventViewModel? target)
+    {
+        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+
+        StatusMessage = _workspace.DeleteEvent(target.Id)
+            ? "予定を削除しました"
+            : "予定が見つかりませんでした";
+    }
+
+    /// <summary>選択している日を期限にしてタスクを足す。</summary>
+    private void AddTask()
+    {
+        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        _workspace.AddTask(editor.ToModel());
+        StatusMessage = "タスクを追加しました";
+    }
+
+    private void EditTask(TaskListItemViewModel? target)
+    {
+        if (target is null) return;
+        if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
+
+        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        StatusMessage = _workspace.UpdateTask(editor.ToModel())
+            ? "タスクを変更しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    private void DeleteTask(TaskListItemViewModel? target)
+    {
+        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+
+        StatusMessage = _workspace.DeleteTask(target.Id)
+            ? "タスクを削除しました"
+            : "タスクが見つかりませんでした";
+    }
+
+    /// <summary>チェックの入り切り。画面を開かずに切り替えられる。</summary>
+    private void ToggleTaskDone(TaskListItemViewModel? target)
+    {
+        if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
+
+        StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
+    }
+
+    /// <summary>編集画面に出すカレンダーの候補。</summary>
+    private IReadOnlyList<string> CalendarNames =>
+        SourceLists.Calendars.Select(c => c.Id).ToArray();
+
+    private IReadOnlyList<string> TaskListNames =>
+        SourceLists.TaskLists.Select(t => t.Id).ToArray();
 
     private void Undo()
     {
@@ -299,11 +584,27 @@ public sealed class MainViewModel : ObservableObject
         if (_workspace.RedoLast() is { } description) StatusMessage = $"{description}をやり直しました";
     }
 
+    /// <summary>
+    /// いまの時刻を伝える。週・日ビューの現在時刻の線が動く。
+    /// <para>日付が変わっていたら「今日」も差し替える。起動しっぱなしで日をまたぐため。</para>
+    /// </summary>
+    public void UpdateNow(DateTime now)
+    {
+        var date = DateOnly.FromDateTime(now);
+        if (date != _today) Today = date;
+
+        var time = TimeOnly.FromDateTime(now);
+        Week.UpdateNowLine(time);
+        Day.UpdateNowLine(time);
+    }
+
     /// <summary>データが変わったので表示を引き直す。</summary>
     private void RefreshViews()
     {
         Month.Refresh();
         SelectedDay.Refresh();
+        Week.Refresh();
+        Day.Refresh();
         MiniCalendar.Refresh();
         SourceLists.Refresh();
         RaiseHeader();
