@@ -12,6 +12,7 @@
     <ProjectReference Include="..\SlideinaCalendar.Core\SlideinaCalendar.Core.csproj" />
     <ProjectReference Include="..\SlideinaCalendar.Data\SlideinaCalendar.Data.csproj" />
     <ProjectReference Include="..\SlideinaCalendar.Google\SlideinaCalendar.Google.csproj" />
+    <ProjectReference Include="..\SlideinaCalendar.Presentation\SlideinaCalendar.Presentation.csproj" />
     <ProjectReference Include="..\SlideinaCalendar.Shell\SlideinaCalendar.Shell.csproj" />
   </ItemGroup>
 
