@@ -387,4 +387,48 @@ public class MainViewModelTests
         Assert.Equal(D(2026, 9, 25), vm.Today);
         Assert.Equal(D(2026, 9, 25), vm.Month.Today);
     }
+
+    [Fact]
+    public void ペインの幅は既定から始まる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Equal(MainViewModel.DefaultSidePanelWidth, vm.SidePanelWidth);
+        Assert.Equal(MainViewModel.DefaultDetailPaneWidth, vm.DetailPaneWidth);
+    }
+
+    [Fact]
+    public void ペインの幅は次に開いたときも残る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SidePanelWidth = 260;
+        vm.DetailPaneWidth = 340;
+
+        // 起動し直した体
+        var next = Create(test);
+
+        Assert.Equal(260, next.SidePanelWidth);
+        Assert.Equal(340, next.DetailPaneWidth);
+    }
+
+    [Fact]
+    public void ペインの幅は収まる範囲に丸める()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 畳みきってしまうと中身が読めない。下限で止める
+        vm.SidePanelWidth = 10;
+        Assert.Equal(MainViewModel.MinSidePanelWidth, vm.SidePanelWidth);
+
+        vm.DetailPaneWidth = 5000;
+        Assert.Equal(MainViewModel.MaxDetailPaneWidth, vm.DetailPaneWidth);
+
+        // 測りそこねた値は覚えない
+        vm.SidePanelWidth = double.NaN;
+        Assert.Equal(MainViewModel.MinSidePanelWidth, vm.SidePanelWidth);
+    }
 }

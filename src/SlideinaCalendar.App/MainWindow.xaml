@@ -295,14 +295,21 @@
 
         <!-- 3ペイン（.body） -->
         <Grid>
+            <!--
+                両端は手で決めた幅のまま置き、ウィンドウを広げたぶんは中央が受け取る。
+                幅は境目をつまんで変えられる。実際の値はコードビハインドが入れる
+                （左パネルを閉じているあいだは 0 にするため）。
+            -->
             <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SideColumn" Width="216" MinWidth="160" MaxWidth="480" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="360" />
-                <ColumnDefinition Width="296" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="DetailColumn" Width="296" MinWidth="200" MaxWidth="640" />
             </Grid.ColumnDefinitions>
 
             <!-- 左パネル（.side 216px） -->
-            <Border Grid.Column="0" Width="216" Background="{DynamicResource PanelBrush}"
+            <Border Grid.Column="0" Background="{DynamicResource PanelBrush}"
                     BorderThickness="0,0,1,0" BorderBrush="{DynamicResource LineBrush}"
                     Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}">
                 <DockPanel>
@@ -453,8 +460,12 @@
                 </DockPanel>
             </Border>
 
+            <!-- 左パネルと中央の境目。閉じているあいだは出さない -->
+            <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitterStyle}"
+                          Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}" />
+
             <!-- 中央（.main） -->
-            <DockPanel Grid.Column="1" Background="{DynamicResource BackgroundBrush}">
+            <DockPanel Grid.Column="2" Background="{DynamicResource BackgroundBrush}">
                 <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
                 <Grid>
                     <views:MonthView DataContext="{Binding Month}"
@@ -472,8 +483,11 @@
                 </Grid>
             </DockPanel>
 
+            <!-- 中央と右ペインの境目 -->
+            <GridSplitter Grid.Column="3" Style="{StaticResource PaneSplitterStyle}" />
+
             <!-- 右ペイン（.detail 296px） -->
-            <Border Grid.Column="2" Background="{DynamicResource PanelBrush}"
+            <Border Grid.Column="4" Background="{DynamicResource PanelBrush}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
                     DataContext="{Binding SelectedDay}">
                 <Grid>

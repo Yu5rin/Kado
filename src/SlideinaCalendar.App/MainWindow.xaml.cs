@@ -18,6 +18,14 @@ public partial class MainWindow : Window
     /// <summary>現在時刻の線を動かす時計。1分ごとで足りる。</summary>
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMinutes(1) };
 
+    /// <summary>
+    /// 左パネルの幅。閉じているあいだ列は 0 になるので、戻す幅をここに控える。
+    /// </summary>
+    private double _sideWidth = MainViewModel.DefaultSidePanelWidth;
+
+    /// <summary>幅を入れ終わったか。<c>Loaded</c> は出し直すたびに来るので、一度だけにする。</summary>
+    private bool _widthsRestored;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -29,9 +37,73 @@ public partial class MainWindow : Window
         {
             ViewModel?.UpdateNow(DateTime.Now);
             _clock.Start();
+            RestorePaneWidths();
         };
 
-        Closed += (_, _) => _clock.Stop();
+        Closed += (_, _) =>
+        {
+            _clock.Stop();
+            SavePaneWidths();
+        };
+    }
+
+    // ------------------------------------------------------------------
+    // 3ペインの幅
+    //
+    // 両端はピクセルで、中央だけが「*」。こうしておけばウィンドウの幅が
+    // 変わっても両端は動かず、増えたぶんは中央が受け取る
+    // ------------------------------------------------------------------
+
+    /// <summary>前回の幅を列に入れ、左パネルの開け閉めに追従させる。</summary>
+    private void RestorePaneWidths()
+    {
+        if (_widthsRestored || ViewModel is not { } vm) return;
+
+        _widthsRestored = true;
+
+        _sideWidth = vm.SidePanelWidth;
+        DetailColumn.Width = new GridLength(vm.DetailPaneWidth);
+        ApplySidePanel(vm.IsSidePanelOpen);
+
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainViewModel.IsSidePanelOpen))
+            {
+                ApplySidePanel(vm.IsSidePanelOpen);
+            }
+        };
+    }
+
+    /// <summary>
+    /// 左パネルの開け閉め。
+    /// <para>
+    /// 閉じるときは列ごと畳む。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
+    /// 開くときは畳む前の幅に戻す。
+    /// </para>
+    /// </summary>
+    private void ApplySidePanel(bool isOpen)
+    {
+        if (isOpen)
+        {
+            SideColumn.MinWidth = MainViewModel.MinSidePanelWidth;
+            SideColumn.Width = new GridLength(_sideWidth);
+            return;
+        }
+
+        if (SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
+
+        // 下限を外さないと 0 まで畳めない
+        SideColumn.MinWidth = 0;
+        SideColumn.Width = new GridLength(0);
+    }
+
+    /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
+    private void SavePaneWidths()
+    {
+        if (ViewModel is not { } vm) return;
+
+        vm.SidePanelWidth = SideColumn.ActualWidth > 0 ? SideColumn.ActualWidth : _sideWidth;
+        vm.DetailPaneWidth = DetailColumn.ActualWidth;
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
