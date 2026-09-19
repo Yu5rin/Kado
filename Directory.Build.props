@@ -10,7 +10,11 @@
     <WarningsAsErrors />
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <NeutralLanguage>ja-JP</NeutralLanguage>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      InvariantGlobalization は有効にしない。WPF はフォントリンクのために言語情報を参照するため、
+      無効化すると MS.Internal.FontCache.MajorLanguages の型初期化で落ちる。
+      カルチャに依存させたくない書式は、呼び出し側で CultureInfo.InvariantCulture を明示すること。
+    -->
     <!-- Windows 以外（CI の Linux コンテナ等）でも WPF プロジェクトを復元できるようにする -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
