@@ -365,7 +365,7 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsSidePanelOpen));
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
         }
     }
 
@@ -384,7 +384,7 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsMainViewOpen));
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
             RaiseHeader();
         }
     }
@@ -399,7 +399,7 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
         }
     }
 
@@ -413,16 +413,25 @@ public sealed class MainViewModel : ObservableObject
     public bool ShowsCalendarTools => _isMainViewOpen;
 
     /// <summary>
+    /// ツールバーに年月の見出しを出すか。
+    /// <para>
+    /// <b>決めるのは中央を出しているかどうか。</b>中央を畳んでいるなら、見ているのは
+    /// 選んだ1日で、年月の見出しは右ペインの日付欄やミニ月暦と同じことを二度言う。
+    /// </para>
+    /// </summary>
+    public bool ShowsToolbarDate => _isMainViewOpen;
+
+    /// <summary>
     /// 日送りを右ペインの日付欄に置くか。
     /// <para>
-    /// 中央を畳んで右ペインだけで使っているとき、ツールバーの年月と「◀ ▶」は
-    /// 日付欄と同じことを二度言っている。送りは日付のすぐ隣にあるほうが近い。
+    /// 送りは日付のすぐ隣にあるほうが近い。ただし置けるのは日付欄があるとき、
+    /// つまり右ペインを出しているときだけ。
     /// </para>
     /// </summary>
     public bool ShowsDayNav => !_isMainViewOpen && _isDetailPaneOpen;
 
-    /// <summary>ツールバーに年月と「◀ ▶」を出すか。日付欄へ移したときは出さない。</summary>
-    public bool ShowsToolbarDate => !ShowsDayNav;
+    /// <summary>ツールバーに「◀ ▶」を置くか。日付欄へ移したときは置かない。</summary>
+    public bool ShowsToolbarNav => !ShowsDayNav;
 
     // ------------------------------------------------------------------
     // 幅に合わせた詰め方
