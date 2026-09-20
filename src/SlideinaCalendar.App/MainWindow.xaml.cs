@@ -210,6 +210,16 @@ public partial class MainWindow : Window
         };
 
         DetailColumn.MinWidth = vm.IsDetailPaneOpen ? MainViewModel.MinDetailPaneWidth : 0;
+
+        // 中身を隠すだけでは列が残る。「*」の列は、中が畳まれていても場所を取り続ける。
+        // 実機で「中央を消しても中央のエリアが残る」となったのはこれ
+        MainColumn.MinWidth = vm.IsMainViewOpen ? 360 : 0;
+        MainColumn.Width = vm.IsMainViewOpen ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        // 掴みしろだけ残っても、つまんで動かす相手がいない
+        DetailSplitter.Visibility = vm is { IsMainViewOpen: true, IsDetailPaneOpen: true }
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
@@ -342,12 +352,6 @@ public partial class MainWindow : Window
     }
 
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
-    /// <summary>
-    /// 出しかたとパネルの選び方を出す。
-    /// <para>⚙ と同じで、右クリック待ちではなく左クリックで開く。</para>
-    /// </summary>
-    private void OnLayoutMenuClicked(object sender, RoutedEventArgs e) => OnSettingsClicked(sender, e);
-
     private void OnSettingsClicked(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { ContextMenu: { } menu } button) return;

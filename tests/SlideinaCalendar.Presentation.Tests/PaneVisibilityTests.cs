@@ -54,6 +54,54 @@ public class PaneVisibilityTests
     }
 
     [Fact]
+    public void 中央を畳んだら送りは日ごとになる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.ToggleMainViewCommand.Execute(null);
+
+        // 出ているのは選んだ日の予定だけ。月を送っても手応えが無い
+        vm.NextCommand.Execute(null);
+        Assert.Equal(new DateOnly(2026, 9, 25), vm.SelectedDate);
+
+        vm.PreviousCommand.Execute(null);
+        vm.PreviousCommand.Execute(null);
+        Assert.Equal(new DateOnly(2026, 9, 23), vm.SelectedDate);
+    }
+
+    [Fact]
+    public void 中央を畳んだら見出しが日付になる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Equal("9月", vm.TitleMonth);
+
+        vm.ToggleMainViewCommand.Execute(null);
+
+        Assert.Equal("9月24日", vm.TitleMonth);
+        Assert.Equal("2026", vm.TitleYear);
+
+        vm.NextCommand.Execute(null);
+        Assert.Equal("9月25日", vm.TitleMonth);
+    }
+
+    [Fact]
+    public void 中央を戻したら送りは月ごとに戻る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.ToggleMainViewCommand.Execute(null);
+        vm.ToggleMainViewCommand.Execute(null);
+
+        vm.NextCommand.Execute(null);
+
+        Assert.Equal(10, vm.Month.Month.Month);
+    }
+
+    [Fact]
     public void 三つとも畳もうとしたら最後の一つは残す()
     {
         using var test = TestWorkspace.Create();

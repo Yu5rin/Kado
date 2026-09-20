@@ -187,7 +187,6 @@
                 </TextBlock>
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
-                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
                         Command="{Binding PreviousCommand}" ToolTip="前の月">
                     <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -201,7 +200,6 @@
                 </Button>
 
                 <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0"
-                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
                         Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}" />
 
                 <!-- ビュー切替（.seg）。区切り線は右側、最後だけ引かない -->
@@ -346,17 +344,22 @@
                 </Button>
 
                 <!--
-                    出しかたと、出すパネルの選び方。
-                    ドック中は枠が消えるので、ここが唯一の戻り口になる
+                    出しかたの切り替え。
+
+                    左クリックでウィンドウとスライドをその場で行き来する。いちばん
+                    使う操作なので、メニューを1枚挟ませない。右クリックで、寄せる辺や
+                    出すパネルを選ぶ（ContextMenu は右クリックで開く既定のまま）。
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
-                        Margin="0,0,2,0" ToolTip="{Binding Shell.ModeLabel}"
-                        Click="OnLayoutMenuClicked">
+                        Margin="0,0,2,0"
+                        Command="{Binding Shell.ToggleSlideCommand}"
+                        ToolTip="{Binding Shell.ModeLabel}">
                     <Button.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="ウィンドウ" Command="{Binding Shell.ToWindowCommand}"
                                       IsChecked="{Binding Shell.IsWindowMode, Mode=OneWay}"
-                                      IsCheckable="True" />
+                                      IsCheckable="True"
+                                      InputGestureText="Ctrl+Alt+S" />
                             <Separator />
                             <MenuItem Header="スライド（左端から出す）"
                                       Command="{Binding Shell.SlideLeftCommand}"
@@ -510,9 +513,9 @@
             -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SideColumn" Width="216" MinWidth="160" MaxWidth="480" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" MinWidth="360" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="SideSplitColumn" Width="Auto" />
+                <ColumnDefinition x:Name="MainColumn" Width="*" MinWidth="360" />
+                <ColumnDefinition x:Name="DetailSplitColumn" Width="Auto" />
                 <ColumnDefinition x:Name="DetailColumn" Width="296" MinWidth="200" MaxWidth="640" />
             </Grid.ColumnDefinitions>
 
@@ -702,7 +705,12 @@
             </DockPanel>
 
             <!-- 中央と右ペインの境目 -->
-            <GridSplitter Grid.Column="3" Style="{StaticResource PaneSplitterStyle}" />
+            <GridSplitter Grid.Column="3" x:Name="DetailSplitter"
+                          Style="{StaticResource PaneSplitterStyle}" />
+            <!--
+                どちらかを畳んだら境目も消す。掴みしろだけ残っても、つまんで動かす
+                相手がいない
+            -->
 
             <!-- 右ペイン（.detail 296px） -->
             <Border Grid.Column="4" x:Name="DetailPane"
