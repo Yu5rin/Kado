@@ -652,7 +652,8 @@ public sealed class CalendarWorkspace
             // 同期先にも伝える。残さないと次の同期で相手から戻ってくる
             if (stale.GoogleEventId is { Length: > 0 } googleId)
             {
-                Tombstones.Record(stale.Id, TombstoneRepository.EventKind, googleId, now);
+                Tombstones.Record(
+                    stale.Id, TombstoneRepository.EventKind, googleId, now, stale.CalendarId);
             }
         }
 
