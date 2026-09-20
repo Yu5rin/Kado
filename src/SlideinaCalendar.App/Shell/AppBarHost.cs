@@ -218,7 +218,52 @@ public sealed class AppBarHost : IDisposable
         _window.Top = rect.top / scale;
         _window.Width = rect.Width / scale;
         _window.Height = rect.Height / scale;
+
+        CheckActualWidth();
     }
+
+    /// <summary>
+    /// 頼んだ幅どおりに収まったかを、あとで見る。
+    /// <para>
+    /// <b>窓は頼んだ幅より広くなることがある。</b>中身の都合で下限が効くと、
+    /// 譲ってもらった幅より窓のほうが広くなり、その差のぶんだけ他のウィンドウと
+    /// 重なる。実機で「めちゃくちゃ被る」となったのはこれ。食い違っていたら、
+    /// <b>実際の幅で交渉し直す</b>。狭めるのが無理でも、重なりだけは避けられる。
+    /// </para>
+    /// <para>
+    /// レイアウトが済むまで実際の幅は分からないので、一拍置いてから見る。
+    /// 交渉し直すとまたここへ来るので、そのときは見ない（行ったり来たりを断つ）。
+    /// </para>
+    /// </summary>
+    private void CheckActualWidth()
+    {
+        if (_checking) return;
+
+        _window.Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (_disposed || !_registered) return;
+
+                var actual = _window.ActualWidth;
+                if (actual <= 0 || Math.Abs(actual - Width) <= 1) return;
+
+                _checking = true;
+
+                try
+                {
+                    Width = actual;
+                    Reposition();
+                }
+                finally
+                {
+                    _checking = false;
+                }
+            },
+            System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>いま交渉し直している最中。重ねて呼ばない。</summary>
+    private bool _checking;
 
     private IntPtr OnMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
