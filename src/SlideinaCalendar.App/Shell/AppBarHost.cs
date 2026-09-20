@@ -21,14 +21,20 @@ namespace SlideinaCalendar.App.Shell;
 /// </summary>
 public sealed class AppBarHost : IDisposable
 {
-    /// <summary>AppBar からの通知を受け取るメッセージ。名前で確保する（要件書 7.2）。</summary>
+    /// <summary>
+    /// AppBar からの通知を受け取るメッセージ。名前で確保する（要件書 7.2）。
+    /// <para>
+    /// 確保に失敗したら 0 が返る。0 のまま <c>ABM_NEW</c> に渡すと登録ごと失敗するので、
+    /// そのときは決め打ちの番号を使う。
+    /// </para>
+    /// </summary>
     private static readonly uint CallbackMessage =
-        RegisterWindowMessage("SlideinaCalendar.AppBar");
+        RegisterWindowMessage("SlideinaCalendar.AppBar") is var id && id != 0 ? id : 0x0400 + 1025;
 
     private readonly Window _window;
     private readonly DockPlacementStore _store;
 
-    private HwndSource? _source;
+    private HwndSource? _hooked;
     private bool _registered;
     private bool _disposed;
 
@@ -54,17 +60,32 @@ public sealed class AppBarHost : IDisposable
     public event EventHandler? Undocked;
 
     /// <summary>
+    /// 直前の失敗の理由。
+    /// <para>
+    /// 黙って諦めると「ピンを押しても何も起きない」としか見えない。何が起きたのかを
+    /// 残して、画面に出せるようにしておく。
+    /// </para>
+    /// </summary>
+    public string? LastFailure { get; private set; }
+
+    /// <summary>
     /// ピン留めする。ワークエリアを削り、そのぶん他のウィンドウが寄る。
     /// </summary>
     /// <returns>削れたら true。</returns>
     public bool Dock(DockEdge edge, double width)
     {
+        LastFailure = null;
+
         if (_disposed) return false;
 
         Edge = edge;
         Width = width;
 
-        if (Handle() is not { } hwnd) return false;
+        if (Handle() is not { } hwnd)
+        {
+            LastFailure = "ウィンドウがまだ画面に出ていません。";
+            return false;
+        }
 
         if (!_registered)
         {
@@ -77,15 +98,49 @@ public sealed class AppBarHost : IDisposable
             if (SHAppBarMessage(ABM_NEW, ref data) == IntPtr.Zero)
             {
                 _store.SetWorkAreaReserved(false);
+                LastFailure = "Windows が画面端の枠（AppBar）の登録を受け付けませんでした。";
                 return false;
             }
 
             _registered = true;
-            _source?.AddHook(OnMessage);
+            Hook(hwnd);
         }
 
+        var before = WorkRect(hwnd);
         Reposition();
+        var after = WorkRect(hwnd);
+
+        // 削れたかどうかを見る。登録できても場所を譲ってもらえないことがある
+        if (before.Width == after.Width && before.Height == after.Height)
+        {
+            Undock();
+            LastFailure = "画面端の枠は登録できましたが、Windows が作業領域を譲りませんでした。";
+            return false;
+        }
+
         return true;
+    }
+
+    /// <summary>このウィンドウが乗っているモニタの作業領域。削れたかどうかを見るのに使う。</summary>
+    private static RECT WorkRect(IntPtr hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFOEX
+        {
+            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>(),
+            szDevice = string.Empty,
+        };
+
+        return GetMonitorInfo(monitor, ref info) ? info.rcWork : default;
+    }
+
+    /// <summary>通知を受け取る口を付ける。二重に付けないよう、付けた先を覚えておく。</summary>
+    private void Hook(IntPtr hwnd)
+    {
+        if (_hooked is not null) return;
+
+        _hooked = HwndSource.FromHwnd(hwnd);
+        _hooked?.AddHook(OnMessage);
     }
 
     /// <summary>
@@ -104,7 +159,11 @@ public sealed class AppBarHost : IDisposable
             SHAppBarMessage(ABM_REMOVE, ref data);
         }
 
-        _source?.RemoveHook(OnMessage);
+        if (_hooked is not null)
+        {
+            _hooked.RemoveHook(OnMessage);
+            _hooked = null;
+        }
 
         // 戻したあとに印を消す。先に消すと、戻す途中で落ちたときに検知できない
         _store.SetWorkAreaReserved(false);
@@ -208,20 +267,19 @@ public sealed class AppBarHost : IDisposable
         return IntPtr.Zero;
     }
 
-    /// <summary>ウィンドウのハンドル。まだ出ていなければ null。</summary>
+    /// <summary>
+    /// ウィンドウのハンドル。まだ出ていなければ null。
+    /// <para>
+    /// <b>控えずに毎回引き直す。</b>枠の出し方（<c>WindowStyle</c>）を変えると
+    /// ハンドルが作り直されることがあり、古いものを握っていると Windows への
+    /// 頼みごとが黙って空振りする。
+    /// </para>
+    /// </summary>
     private IntPtr? Handle()
     {
-        _source ??= (HwndSource?)PresentationSource.FromVisual(_window);
+        var handle = new WindowInteropHelper(_window).Handle;
 
-        if (_source is null)
-        {
-            var handle = new WindowInteropHelper(_window).Handle;
-            if (handle == IntPtr.Zero) return null;
-
-            _source = HwndSource.FromHwnd(handle);
-        }
-
-        return _source?.Handle;
+        return handle == IntPtr.Zero ? null : handle;
     }
 
     private static APPBARDATA Data(IntPtr hwnd) => new()

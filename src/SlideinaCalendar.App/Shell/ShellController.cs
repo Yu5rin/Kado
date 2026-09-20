@@ -72,6 +72,12 @@ public sealed class ShellController : IDisposable
         };
     }
 
+    /// <summary>
+    /// 画面を分割できなかった。
+    /// <para>黙って諦めると「ピンを押しても何も起きない」としか見えない。</para>
+    /// </summary>
+    public event EventHandler<string>? DockFailed;
+
     /// <summary>起動時に、控えてあった居かたへ戻す。</summary>
     public void Restore() => Apply(_shell.Mode);
 
@@ -126,8 +132,15 @@ public sealed class ShellController : IDisposable
                 _hotZone.Disarm();
                 ToEdge();
 
-                // 削れなければオーバーレイに落とす。黙って重なったままにしない
-                if (!_appBar.Dock(_shell.Edge, _shell.DockWidth)) _shell.Mode = ShellMode.Overlay;
+                // ドックのあいだは最前面にしない。場所を譲ってもらっているので、
+                // 重ねる必要がない。立てたままだと他のアプリの邪魔になる
+                _window.Topmost = false;
+
+                if (_appBar.Dock(_shell.Edge, _shell.DockWidth)) break;
+
+                // 削れなかった。黙って重なったままにせず、理由を伝えてから落とす
+                DockFailed?.Invoke(this, _appBar.LastFailure ?? "画面を分割できませんでした。");
+                _shell.Mode = ShellMode.Overlay;
                 break;
         }
     }

@@ -215,22 +215,37 @@
                     <StackPanel Orientation="Horizontal">
                         <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
                                      ToolTip="予定とタスクを時系列で。予定のない日はまとめます"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Agenda}" />
+                                     IsChecked="{Binding CurrentView, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Agenda}"
+                                     Command="{Binding SwitchViewCommand}"
+                                     CommandParameter="Agenda" />
                         <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
                                      ToolTip="年度（4月〜翌3月）。ホイールで年度を送ります"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Year}" />
+                                     IsChecked="{Binding CurrentView, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Year}"
+                                     Command="{Binding SwitchViewCommand}"
+                                     CommandParameter="Year" />
                         <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Month}" />
+                                     IsChecked="{Binding CurrentView, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Month}"
+                                     Command="{Binding SwitchViewCommand}"
+                                     CommandParameter="Month" />
                         <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Week}" />
+                                     IsChecked="{Binding CurrentView, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Week}"
+                                     Command="{Binding SwitchViewCommand}"
+                                     CommandParameter="Week" />
                         <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
                                      BorderThickness="0"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Day}" />
+                                     IsChecked="{Binding CurrentView, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Day}"
+                                     Command="{Binding SwitchViewCommand}"
+                                     CommandParameter="Day" />
                     </StackPanel>
                 </Border>
 

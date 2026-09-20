@@ -20,6 +20,9 @@ public partial class YearView : UserControl
     /// <summary>カレンダー表示の1枚ぶんの幅（外側の余白を含む）。</summary>
     private const double GridCardWidth = 202;
 
+    /// <summary>縦のスクロールバーが出たぶん。出てから測ると幅が揺れる</summary>
+    private const double ScrollRoom = 14;
+
     public YearView() => InitializeComponent();
 
     /// <summary>日を押したら選択を合わせる。ダブルクリックでその日に予定を足す。</summary>
@@ -63,7 +66,7 @@ public partial class YearView : UserControl
     {
         if (DataContext is not YearViewModel year) return;
 
-        var room = e.NewSize.Width - SideRoom;
+        var room = e.NewSize.Width - SideRoom - ScrollRoom;
 
         // マスとマスのあいだに 1px 空けてある
         year.DayWidth = room > 0 ? (room / 31) - 1 : YearViewModel.DefaultDayWidth;

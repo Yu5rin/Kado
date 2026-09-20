@@ -43,7 +43,14 @@ public partial class AgendaView : UserControl
         if (_bound is { } agenda) ScrollTo(agenda.RowOn(date));
     }
 
-    /// <summary>その行が見えるところまで動かす。</summary>
+    /// <summary>
+    /// その行を<b>いちばん上</b>に出す。
+    /// <para>
+    /// <c>BringIntoView</c> は見える位置まで最短で動かすので、下から来ると
+    /// 画面のいちばん下に付いて止まる。探していた日が下端にあると、そこから先が
+    /// 見えず、送った意味が薄い。上に置けば、その日から先が読める。
+    /// </para>
+    /// </summary>
     private void ScrollTo(AgendaRowViewModel? row)
     {
         if (row is null) return;
@@ -51,10 +58,12 @@ public partial class AgendaView : UserControl
         // 描き終わる前に呼ばれると、行の入れ物がまだ無い
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (Rows.ItemContainerGenerator.ContainerFromItem(row) is FrameworkElement container)
-            {
-                container.BringIntoView();
-            }
+            if (Rows.ItemContainerGenerator.ContainerFromItem(row) is not FrameworkElement container) return;
+            if (Scroller is not { } scroller) return;
+
+            var top = container.TransformToAncestor(scroller).Transform(default(Point)).Y;
+
+            scroller.ScrollToVerticalOffset(scroller.VerticalOffset + top);
         }), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 

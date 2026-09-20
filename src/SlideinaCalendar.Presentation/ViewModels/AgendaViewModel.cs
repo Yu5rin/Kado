@@ -124,13 +124,14 @@ public sealed class AgendaViewModel : ObservableObject
     public const int EmptySpanDays = 30;
 
     /// <summary>
-    /// 今日から前後に遡れる年数。
+    /// 今日から前後に出す年数の上限。
     /// <para>
-    /// 遠い未来や過去に1件でも紛れ込むと、そこまで日をたどることになる。畳むので
-    /// 行数は増えないが、日をなぞる処理は日数ぶん回る。念のため止めておく。
+    /// 持っているぶんを全部出すといっても、限度は要る。日をなぞる処理が日数ぶん
+    /// 回るうえ、<b>繰り返しの予定はその期間ぶんすべて展開される</b>。10年ぶんに
+    /// していたら目に見えて重くなった。前後2年あれば、実用では「全部」に足りる。
     /// </para>
     /// </summary>
-    private const int MaxYears = 10;
+    private const int MaxYears = 2;
 
     private readonly CalendarWorkspace _workspace;
     private readonly ICalendarSources _sources;

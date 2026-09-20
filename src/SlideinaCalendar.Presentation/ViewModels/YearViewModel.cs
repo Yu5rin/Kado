@@ -171,8 +171,14 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>1マスの幅の下げ止まり。これより細いと日付が読めない。</summary>
     public const double MinDayWidth = 15;
 
-    /// <summary>1マスの幅の上げ止まり。広げすぎると間延びする。</summary>
-    public const double MaxDayWidth = 30;
+    /// <summary>
+    /// 1マスの幅の上げ止まり。
+    /// <para>
+    /// 30 にしていたら、広い画面で右が大きく余った。会社配布のカレンダーと同じで、
+    /// 横いっぱいに広げたほうが休みの並びを追いやすい。
+    /// </para>
+    /// </summary>
+    public const double MaxDayWidth = 64;
 
     /// <summary>幅が分からないうちに使う幅。</summary>
     public const double DefaultDayWidth = 20;
@@ -200,6 +206,12 @@ public sealed class YearViewModel : ObservableObject
         _selectedDate = today;
         _layout = layout;
         _fiscalYear = FiscalYearOf(today);
+
+        SetLayoutCommand = new RelayCommand<object?>(value =>
+        {
+            if (value is YearLayout chosen) Layout = chosen;
+            else if (value is string name && Enum.TryParse<YearLayout>(name, out var parsed)) Layout = parsed;
+        });
 
         Refresh();
     }
@@ -239,6 +251,16 @@ public sealed class YearViewModel : ObservableObject
 
     /// <summary>出し方が変わったとき。設定に控えるのは持ち主の仕事。</summary>
     public event EventHandler<YearLayout>? LayoutChanged;
+
+    /// <summary>
+    /// 出し方を切り替える。名前（文字列）でも受ける。
+    /// <para>
+    /// ボタンは <c>IsChecked</c> の双方向バインドをやめてこのコマンドで切り替える。
+    /// RadioButton は仲間が選ばれたときに <c>IsChecked</c> を直に書き換えるので、
+    /// そこで双方向のバインドが外れてしまう（WPF の癖）。
+    /// </para>
+    /// </summary>
+    public RelayCommand<object?> SetLayoutCommand { get; }
 
     public bool IsStrip => _layout == YearLayout.Strip;
 

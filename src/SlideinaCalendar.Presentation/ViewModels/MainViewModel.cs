@@ -131,7 +131,12 @@ public sealed class MainViewModel : ObservableObject
         UndoCommand = new RelayCommand(Undo, () => _workspace.Undo.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
-        SwitchViewCommand = new RelayCommand<CalendarView?>(view => { if (view is { } v) CurrentView = v; });
+        SwitchViewCommand = new RelayCommand<object?>(view =>
+        {
+            // XAML からは名前（文字列）で渡ってくる
+            if (view is CalendarView chosen) CurrentView = chosen;
+            else if (view is string name && Enum.TryParse<CalendarView>(name, out var parsed)) CurrentView = parsed;
+        });
         ShowMonthOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Month));
         ShowDayOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Day));
         ZoomInCommand = new RelayCommand(() => Zoom(1));
@@ -303,6 +308,9 @@ public sealed class MainViewModel : ObservableObject
         set
         {
             if (!Set(ref _currentView, value)) return;
+
+            // 出す番になった。溜めてあった組み直しをここで済ませる
+            RefreshHeavyIfShown();
 
             // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
             FocusOn(SelectedDate);
@@ -735,7 +743,16 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand UndoCommand { get; }
     public RelayCommand RedoCommand { get; }
     public RelayCommand<DateOnly?> SelectDateCommand { get; }
-    public RelayCommand<CalendarView?> SwitchViewCommand { get; }
+    /// <summary>
+    /// ビューを切り替える。
+    /// <para>
+    /// 名前（文字列）でも受ける。ツールバーのボタンは <c>IsChecked</c> の双方向
+    /// バインドをやめてこのコマンドで切り替えている。RadioButton は仲間が選ばれた
+    /// ときに <c>IsChecked</c> を直に書き換えるので、<b>そこで双方向のバインドが
+    /// 外れてしまい、以後どれだけ切り替えてもボタンが光らなくなる</b>（WPF の癖）。
+    /// </para>
+    /// </summary>
+    public RelayCommand<object?> SwitchViewCommand { get; }
     public RelayCommand MiniPreviousCommand { get; }
     public RelayCommand MiniNextCommand { get; }
     public RelayCommand AddEventCommand { get; }
@@ -1772,9 +1789,14 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Refresh();
         Week.Refresh();
         Day.Refresh();
-        Year.Refresh();
-        Agenda.Refresh();
         MiniCalendar.Refresh();
+
+        // 年と一覧は重い。年は12か月ぶん、一覧は数年ぶんの予定を組み立てる。
+        // 出していないあいだに組み直しても誰も見ないので、出すときまで待つ
+        _yearStale = true;
+        _agendaStale = true;
+        RefreshHeavyIfShown();
+
         RaiseHeader();
     }
 
@@ -1848,6 +1870,34 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _editors.ShowWorkdayCalculator(calculator);
+    }
+
+    /// <summary>年ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>
+    private bool _yearStale;
+
+    /// <inheritdoc cref="_yearStale"/>
+    private bool _agendaStale;
+
+    /// <summary>
+    /// いま出しているほうだけ組み直す。
+    /// <para>
+    /// 年と一覧は重い。予定を1件足すたびに両方を組み直していたので、全体の動きが
+    /// もたついていた。
+    /// </para>
+    /// </summary>
+    private void RefreshHeavyIfShown()
+    {
+        if (_yearStale && _currentView == CalendarView.Year)
+        {
+            _yearStale = false;
+            Year.Refresh();
+        }
+
+        if (_agendaStale && _currentView == CalendarView.Agenda)
+        {
+            _agendaStale = false;
+            Agenda.Refresh();
+        }
     }
 
     /// <summary>
