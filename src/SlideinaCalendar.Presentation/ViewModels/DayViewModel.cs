@@ -20,16 +20,24 @@ public sealed class DayViewModel : ObservableObject
     /// <summary>最後に受け取った「いま」。高さが変わったときに引き直すために控える。</summary>
     private TimeOnly? _now;
 
+    /// <summary>設定で決め打ちにされた1時間の高さ。0 なら画面に合わせる。</summary>
+    private readonly double _fixedHourHeight;
+
     private DateOnly _date;
     private DateOnly _today;
     private WeekDayColumnViewModel _day;
 
     public DayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
-        ICalendarSources? sources = null, TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
+        ICalendarSources? sources = null, TimeOnly? dayStart = null, TimeOnly? dayEnd = null,
+        double fixedHourHeight = 0)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _fixedHourHeight = fixedHourHeight;
+
         // 日ビューは列が1本なので、モックどおり1時間を高く取る
-        _timeline = new TimelineBuilder(workspace, sources, dayStart, dayEnd, TimelineBuilder.DayHourHeight);
+        _timeline = new TimelineBuilder(
+            workspace, sources, dayStart, dayEnd,
+            fixedHourHeight > 0 ? fixedHourHeight : TimelineBuilder.DayHourHeight);
         _date = date;
         _today = today;
         _day = _timeline.Build(date, date, today)[0];
@@ -126,6 +134,9 @@ public sealed class DayViewModel : ObservableObject
         set
         {
             if (double.IsNaN(value) || value <= 0) return;
+
+            // 高さを決め打ちにしているなら、画面に合わせない
+            if (_fixedHourHeight > 0) return;
 
             var height = _timeline.HourHeightFor(value);
             if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;

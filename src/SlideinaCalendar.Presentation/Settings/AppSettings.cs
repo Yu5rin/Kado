@@ -12,6 +12,12 @@ public enum ThemeChoice
 
     Light,
     Dark,
+
+    /// <summary>
+    /// 夜間。ダークより明るいグレーで、コントラストを落としてある。
+    /// <para>真っ暗な画面を長く見ていると目が疲れる、という向き。</para>
+    /// </summary>
+    Night,
 }
 
 /// <summary>
@@ -34,6 +40,7 @@ public sealed class AppSettings
     private const string DayEndKey = "ui.day_end_hour";
     private const string StartupViewKey = "ui.startup_view";
     private const string CountInCalendarDaysKey = "count.calendar_days";
+    private const string HourHeightKey = "ui.hour_height";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -56,6 +63,7 @@ public sealed class AppSettings
     private int _dayEndHour;
     private CalendarView _startupView;
     private bool _countInCalendarDays;
+    private int _hourHeight;
 
     public AppSettings(SettingsRepository store)
     {
@@ -65,6 +73,7 @@ public sealed class AppSettings
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
+        _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -150,6 +159,27 @@ public sealed class AppSettings
         }
     }
 
+    /// <summary>
+    /// 週ビュー・日ビューの1時間ぶんの高さ（px）。
+    /// <para>
+    /// 0 は「自動」で、選んだ時間帯が画面の縦にちょうど収まるように決める。
+    /// 数字を入れるとその高さで固定し、入りきらないぶんはスクロールになる。
+    /// </para>
+    /// </summary>
+    public int HourHeight
+    {
+        get => _hourHeight;
+        set
+        {
+            var clamped = value <= 0 ? 0 : Math.Clamp(value, 20, 200);
+            if (_hourHeight == clamped) return;
+
+            _hourHeight = clamped;
+            _store.Set(HourHeightKey, clamped.ToString(CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     /// <summary>時間軸の上端。</summary>
     public TimeOnly DayStart => new(_dayStartHour, 0);
 
@@ -174,6 +204,11 @@ public sealed class AppSettings
     private T Read<T>(string key, T fallback) where T : struct, Enum =>
         Enum.TryParse<T>(_store.Get(key), ignoreCase: true, out var saved) && Enum.IsDefined(saved)
             ? saved
+            : fallback;
+
+    private int ReadNumber(string key, int fallback, int min, int max) =>
+        int.TryParse(_store.Get(key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var saved)
+            ? Math.Clamp(saved, min, max)
             : fallback;
 
     private int ReadHour(string key, int fallback) =>

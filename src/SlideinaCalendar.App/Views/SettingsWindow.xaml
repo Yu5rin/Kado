@@ -113,6 +113,15 @@
             <TextBlock Text="この範囲を縦いっぱいに割り付けます。狭めるほど1時間が高くなります。"
                        Style="{StaticResource FieldNoteStyle}" />
 
+            <Border Height="12" />
+
+            <TextBlock Text="1時間の高さ" Style="{StaticResource FieldLabelStyle}" />
+            <ComboBox Style="{StaticResource FieldComboBoxStyle}"
+                      ItemsSource="{Binding HourHeights}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                      SelectedValuePath="Value" SelectedValue="{Binding HourHeight}" />
+            <TextBlock Text="決め打ちにすると、入りきらないぶんはスクロールになります。"
+                       Style="{StaticResource FieldNoteStyle}" />
+
             <Border Height="18" />
 
             <!-- 起動 -->

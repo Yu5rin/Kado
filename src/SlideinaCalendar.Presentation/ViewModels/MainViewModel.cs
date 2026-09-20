@@ -1559,8 +1559,11 @@ public sealed class MainViewModel : ObservableObject
         {
             SelectedDate = selected,
         };
-        Week = new WeekViewModel(_workspace, selected, _today, _weekStart, SourceLists, start, end);
-        Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end);
+        var hourHeight = _settings?.HourHeight ?? 0;
+
+        Week = new WeekViewModel(
+            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
+        Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
     }
 
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>

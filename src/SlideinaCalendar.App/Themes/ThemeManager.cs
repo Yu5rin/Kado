@@ -29,9 +29,12 @@ public static class ThemeManager
 
         var resolved = theme == ThemeChoice.Auto ? DetectSystemTheme() : theme;
         var source = new Uri(
-            resolved == ThemeChoice.Dark
-                ? "pack://application:,,,/Themes/Dark.xaml"
-                : "pack://application:,,,/Themes/Light.xaml",
+            resolved switch
+            {
+                ThemeChoice.Dark => "pack://application:,,,/Themes/Dark.xaml",
+                ThemeChoice.Night => "pack://application:,,,/Themes/Night.xaml",
+                _ => "pack://application:,,,/Themes/Light.xaml",
+            },
             UriKind.Absolute);
 
         var merged = Application.Current?.Resources.MergedDictionaries;
