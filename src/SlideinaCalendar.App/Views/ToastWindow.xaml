@@ -24,9 +24,9 @@
         <DockPanel>
             <!-- 閉じる。読み終わるのを待たずに消せるように -->
             <Button DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0"
-                    Style="{StaticResource SmallIconButtonStyle}"
+                    Style="{DynamicResource SmallIconButtonStyle}"
                     ToolTip="閉じる" Click="OnCloseClicked">
-                <Path Data="{StaticResource IconClose}" Stretch="Uniform" Width="9" Height="9"
+                <Path Data="{DynamicResource IconClose}" Stretch="Uniform" Width="9" Height="9"
                       StrokeThickness="1.6" StrokeStartLineCap="Round"
                       Stroke="{DynamicResource Ink3Brush}" />
             </Button>

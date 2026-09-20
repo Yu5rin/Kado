@@ -146,6 +146,13 @@
             <TextBlock Text="アプリを開いているあいだだけ知らせます。閉じていると出ません。"
                        Style="{StaticResource FieldNoteStyle}" />
 
+            <Border Height="8" />
+
+            <Button Content="試しに知らせる" HorizontalAlignment="Left"
+                    Style="{StaticResource GhostButtonStyle}"
+                    Command="{Binding TestNotifyCommand}"
+                    ToolTip="この形で予定の前にお知らせします" />
+
             <Border Height="18" />
 
             <!-- 実働日データ -->

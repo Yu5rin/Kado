@@ -181,12 +181,25 @@ public static class SchemaMigrations
         );
         """;
 
+    /// <summary>
+    /// 通知するかどうかを、予定ごととカレンダーごとに持つ。
+    /// <para>
+    /// 予定の <c>notify</c> は3つの状態を取る。1 なら知らせる、0 なら知らせない、
+    /// NULL なら「カレンダーの決まりに従う」。全部に印を付けさせないための NULL。
+    /// </para>
+    /// </summary>
+    private const string V4 = """
+        ALTER TABLE events ADD COLUMN notify INTEGER;
+        ALTER TABLE calendars ADD COLUMN notify_default INTEGER NOT NULL DEFAULT 1;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
         new(1, "予定・タスク・実働日・マイルストーン・設定・同期状態の初版", V1),
         new(2, "予定に URL を足す", V2),
         new(3, "同期の受け皿（差分判定用の生データ、カレンダー一覧、タスクリスト）", V3),
+        new(4, "通知するかどうかを予定ごと・カレンダーごとに持つ", V4),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

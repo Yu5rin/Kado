@@ -78,17 +78,30 @@ public partial class TimelineColumnView : UserControl
     // 15分きざみに丸める。1分単位で置けても、狙って置けるものではない
     // ------------------------------------------------------------------
 
-    /// <summary>落とした高さを時刻に直す。15分きざみ。</summary>
+    /// <summary>
+    /// 落とした高さを時刻に直す。15分きざみ。
+    /// <para>
+    /// <b>出している時間帯の中に収める。</b>外に出すと、移した先が画面から見えなくなり、
+    /// 予定が消えたように見える。
+    /// </para>
+    /// </summary>
     internal TimeOnly TimeAt(double y)
     {
-        if (RowHeight <= 0) return new TimeOnly(Math.Clamp(DayStartHour, 0, 23), 0);
+        var first = Math.Clamp(DayStartHour, 0, 23) * 60;
+        if (RowHeight <= 0) return new TimeOnly(first / 60, 0);
 
-        var minutes = (DayStartHour * 60) + (y / RowHeight * 60);
+        // 出している最後の時間の頭まで。1日ぶん出しているなら 23:45 まで
+        var last = Math.Min(first + (Math.Max(HourCount, 1) * 60) - 15, (24 * 60) - 15);
+
+        var minutes = first + (y / RowHeight * 60);
         var snapped = Math.Round(minutes / 15, MidpointRounding.AwayFromZero) * 15;
-        var clamped = (int)Math.Clamp(snapped, 0, (24 * 60) - 15);
+        var clamped = (int)Math.Clamp(snapped, first, last);
 
         return new TimeOnly(clamped / 60, clamped % 60);
     }
+
+    /// <summary>出している時間の数。時刻の見出しの数で分かる。</summary>
+    private int HourCount => HourLabels is System.Collections.ICollection labels ? labels.Count : 24;
 
     /// <summary>押したまま動かしたらドラッグを始める。</summary>
     private void OnBlockDragging(object sender, System.Windows.Input.MouseEventArgs e) =>

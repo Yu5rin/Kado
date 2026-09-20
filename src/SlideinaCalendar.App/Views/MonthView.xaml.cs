@@ -168,4 +168,23 @@ public partial class MonthView : UserControl
         main.EditMilestoneCommand.Execute(milestone);
         e.Handled = true;
     }
+
+    // ------------------------------------------------------------------
+    // ホイールで送る
+    //
+    // 月なら前後の月、週なら前後の週、日なら前後の日。指を止めずに見渡せる
+    // ------------------------------------------------------------------
+
+    /// <summary>ホイールを回したら前後へ送る。</summary>
+    private void OnWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        var command = e.Delta > 0 ? main.PreviousCommand : main.NextCommand;
+        if (!command.CanExecute(null)) return;
+
+        command.Execute(null);
+        e.Handled = true;
+    }
 }

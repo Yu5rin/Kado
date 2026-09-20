@@ -30,6 +30,9 @@ public partial class ToastWindow : Window
             _life.Start();
         };
 
+        // 高さは中身で決まる。決まってから置き直さないと、画面の外にはみ出す
+        SizeChanged += (_, _) => Place();
+
         Closed += (_, _) =>
         {
             _life.Stop();

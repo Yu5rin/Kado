@@ -331,4 +331,35 @@ public class DragMoveTests
         Assert.False(main.MoveEventTo("closedday:2026-09-24", Tomorrow));
         Assert.Equal(Today, test.Workspace.Events.Find("closedday:2026-09-24")!.Date);
     }
+
+    [Fact]
+    public void 遅い時刻に移しても画面から消えない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));   // 10:00〜11:00
+
+        var main = Create(test);
+        main.MoveEventToTime("e1", Today, new TimeOnly(23, 30));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+
+        // 日をまたぐと終わりが始まりより前になり、時間軸に置けなくなる
+        Assert.True(moved.EndTime > moved.StartTime);
+        Assert.Equal(new TimeOnly(23, 59), moved.EndTime);
+    }
+
+    [Fact]
+    public void 移した予定は週ビューに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        var settings = new Settings.AppSettings(test.Workspace.Settings);
+        var main = new MainViewModel(test.Workspace, Today, settings: settings);
+
+        main.MoveEventToTime("e1", Today, new TimeOnly(23, 30));
+
+        var column = main.Week.Days.Single(d => d.Date == Today);
+        Assert.Contains(column.Blocks, b => b.Id == "e1");
+    }
 }

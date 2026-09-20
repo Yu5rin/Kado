@@ -92,6 +92,8 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
             // 知らせる時刻を過ぎていて、まだ予定が始まっていないものだけ
             if (when > now || at <= now) continue;
 
+            if (!_workspace.NotifiesFor(value)) continue;
+
             var key = $"{value.Id}|{scheduled.Date:yyyy-MM-dd}";
             if (!_notified.Add(key)) continue;
 
