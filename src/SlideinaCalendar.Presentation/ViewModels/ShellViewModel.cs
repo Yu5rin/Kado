@@ -42,8 +42,8 @@ public sealed class ShellViewModel : ObservableObject
         ToOverlayCommand = new RelayCommand(() => Mode = ShellMode.Overlay);
         ToggleEdgeCommand = new RelayCommand(
             () => Edge = _edge == DockEdge.Left ? DockEdge.Right : DockEdge.Left);
-        SlideLeftCommand = new RelayCommand(() => SlideTo(DockEdge.Left));
-        SlideRightCommand = new RelayCommand(() => SlideTo(DockEdge.Right));
+        EdgeLeftCommand = new RelayCommand(() => Edge = DockEdge.Left);
+        EdgeRightCommand = new RelayCommand(() => Edge = DockEdge.Right);
         ToggleSlideCommand = new RelayCommand(
             () => Mode = _mode == ShellMode.Window ? ShellMode.Overlay : ShellMode.Window);
         ShowEventsCommand = new RelayCommand(() => Tab = SidebarTab.Events);
@@ -159,7 +159,7 @@ public sealed class ShellViewModel : ObservableObject
 
     /// <summary>ピンボタンの説明。押すと何が起きるかを書く。</summary>
     public string PinLabel => IsPinned
-        ? "ピンを外す（スライドに戻す。Ctrl＋Alt＋P）"
+        ? "ピンを外す（留める前の出しかたに戻す。Ctrl＋Alt＋P）"
         : "ピン留めする（出したまま固定し、画面を分割する。Ctrl＋Alt＋P）";
 
     /// <summary>いまの出しかたの名前。ボタンに出す。</summary>
@@ -182,15 +182,16 @@ public sealed class ShellViewModel : ObservableObject
     /// スナップ（画面の半分に広がる）と取り合いになって当てにならない。ボタンを
     /// 常時出し、押したらそのまま画面の分割まで行く。
     /// </para>
-    /// <para>外すときは、留める前の居かたへ戻す。</para>
+    /// <para>
+    /// 外すときは、<b>留める前の居かたへそのまま戻す</b>。ウィンドウから留めたのに
+    /// スライドで返すと、画面から消えてしまって戻し方が分からなくなる。
+    /// </para>
     /// </summary>
     private void TogglePin()
     {
         if (_mode == ShellMode.Dock)
         {
-            // 外したらスライドに戻す。ウィンドウから留めた場合も、そのまま
-            // 画面端に居続けるほうが「出しておきたくて留めた」流れに合う
-            Mode = _beforePin == ShellMode.Window ? ShellMode.Overlay : _beforePin;
+            Mode = _beforePin;
             return;
         }
 
@@ -206,25 +207,21 @@ public sealed class ShellViewModel : ObservableObject
 
     public RelayCommand ToggleEdgeCommand { get; }
 
-    /// <summary>左端のスライドにする。</summary>
-    public RelayCommand SlideLeftCommand { get; }
+    /// <summary>
+    /// 出す位置を左端にする。
+    /// <para>
+    /// <b>位置を決めるだけで、出しかたは変えない。</b>ウィンドウとスライドの
+    /// 行き来はボタンの左クリック（<see cref="ToggleSlideCommand"/>）の役目で、
+    /// 右クリックのメニューは「どちらの端から出すか」を選ぶところ。
+    /// </para>
+    /// </summary>
+    public RelayCommand EdgeLeftCommand { get; }
 
-    /// <summary>右端のスライドにする。</summary>
-    public RelayCommand SlideRightCommand { get; }
+    /// <summary>出す位置を右端にする。</summary>
+    public RelayCommand EdgeRightCommand { get; }
 
     /// <summary>ウィンドウとスライドを行き来する。</summary>
     public RelayCommand ToggleSlideCommand { get; }
-
-    /// <summary>
-    /// その辺のスライドにする。
-    /// <para>ピン留め中に辺だけ変えたいこともあるので、留めている状態は崩さない。</para>
-    /// </summary>
-    private void SlideTo(DockEdge edge)
-    {
-        Edge = edge;
-
-        if (_mode == ShellMode.Window) Mode = ShellMode.Overlay;
-    }
 
     public RelayCommand ShowEventsCommand { get; }
 

@@ -57,7 +57,11 @@ public sealed class ShellController : IDisposable
         {
             if (!_shell.IsPinned) { ApplyOverlayBounds(); return; }
 
-            // 手が止まってから交渉する
+            // 窓の幅だけ先に動かす。交渉が済むまで何も動かないと、掴んで引いても
+            // びくともしないように見えて「幅を変えられない」となる
+            ApplyPinnedWidth();
+
+            // 作業領域の取り合いは、手が止まってから
             _resizeSettle.Stop();
             _resizeSettle.Start();
         };
@@ -130,16 +134,10 @@ public sealed class ShellController : IDisposable
     private NativeMethods.RECT ScreenOfWindow()
     {
         var handle = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
-        if (handle == IntPtr.Zero) return default;
+        var scale = PresentationSource.FromVisual(_window)?.CompositionTarget?.TransformToDevice.M11
+            ?? 1.0;
 
-        var monitor = NativeMethods.MonitorFromWindow(handle, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        var info = new NativeMethods.MONITORINFOEX
-        {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFOEX>(),
-            szDevice = string.Empty,
-        };
-
-        return NativeMethods.GetMonitorInfo(monitor, ref info) ? info.rcMonitor : default;
+        return Screens.Of(handle, scale);
     }
 
     /// <summary>いま前にいるのが、自分の出した窓か。</summary>
@@ -179,13 +177,14 @@ public sealed class ShellController : IDisposable
                 ToEdge();
                 ApplyOverlayBounds();
 
-                // ピン留め中は張らない。常時出ているので呼び出す口が要らない。
-                // 見張る画面は、いま窓が乗っているモニタ
-                _hotZone.Arm(_shell.Edge, ScreenOfWindow());
-
                 // 切り替えた直後は出したままにする。いきなり消えると、何が起きたのか
                 // 分からない。他のアプリへ移った時点で引っ込む
                 Show();
+
+                // ピン留め中は張らない。常時出ているので呼び出す口が要らない。
+                // 見張る画面は、いま窓が乗っているモニタ。出してから引くのは、
+                // 隠れているあいだはハンドルがまだ無いことがあるため
+                _hotZone.Arm(_shell.Edge, ScreenOfWindow());
                 break;
 
             case ShellMode.Dock:
@@ -244,6 +243,28 @@ public sealed class ShellController : IDisposable
         _window.WindowStyle = WindowStyle.None;
         _window.ResizeMode = ResizeMode.NoResize;
         _window.Topmost = true;
+    }
+
+    /// <summary>
+    /// 留めているあいだの幅。
+    /// <para>
+    /// 作業領域の取り合いは重いので、ドラッグのあいだは窓の幅だけ動かしておき、
+    /// 手が止まってから改めて交渉する。
+    /// </para>
+    /// </summary>
+    private void ApplyPinnedWidth()
+    {
+        if (!_shell.IsPinned) return;
+
+        var scale = PresentationSource.FromVisual(_window)?.CompositionTarget?.TransformToDevice.M11
+            ?? 1.0;
+        var screen = ScreenOfWindow();
+        var width = _shell.DockWidth;
+
+        _window.Width = width;
+        _window.Left = _shell.Edge == DockEdge.Left
+            ? screen.left / scale
+            : (screen.right / scale) - width;
     }
 
     /// <summary>

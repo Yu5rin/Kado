@@ -187,8 +187,9 @@ public sealed class AppBarHost : IDisposable
     {
         if (Handle() is not { } hwnd) return;
 
-        var monitor = MonitorRect(hwnd);
-        var width = (int)Math.Round(Width * Scale());
+        var scale = Scale();
+        var monitor = Screens.Of(hwnd, scale);
+        var width = (int)Math.Round(Width * scale);
 
         var data = Data(hwnd);
         data.uEdge = Edge == DockEdge.Left ? ABE_LEFT : ABE_RIGHT;
@@ -268,19 +269,6 @@ public sealed class AppBarHost : IDisposable
         cbSize = System.Runtime.InteropServices.Marshal.SizeOf<APPBARDATA>(),
         hWnd = hwnd,
     };
-
-    /// <summary>このウィンドウが乗っているモニタの全体。ワークエリアではない。</summary>
-    private static RECT MonitorRect(IntPtr hwnd)
-    {
-        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        var info = new MONITORINFOEX
-        {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>(),
-            szDevice = string.Empty,
-        };
-
-        return GetMonitorInfo(monitor, ref info) ? info.rcMonitor : default;
-    }
 
     /// <summary>
     /// 画面の倍率。

@@ -426,10 +426,15 @@ public partial class App : Application
         Add("表示", BringToFront);
         menu.Items.Add(new System.Windows.Controls.Separator());
 
+        // 出しかたと、出す位置を分ける。ツールバーのボタンと同じ考え方で、
+        // 上の3つが「どう出すか」、下の2つが「どちらの端から出すか」
         Add("ウィンドウ", () => main.Shell.ToWindowCommand.Execute(null));
-        Add("スライド（左端から出す）", () => main.Shell.SlideLeftCommand.Execute(null));
-        Add("スライド（右端から出す）", () => main.Shell.SlideRightCommand.Execute(null));
+        Add("スライド", () => main.Shell.ToOverlayCommand.Execute(null));
         Add("出したまま固定する・やめる", () => main.Shell.TogglePinCommand.Execute(null));
+        menu.Items.Add(new System.Windows.Controls.Separator());
+
+        Add("左端から出す", () => main.Shell.EdgeLeftCommand.Execute(null));
+        Add("右端から出す", () => main.Shell.EdgeRightCommand.Execute(null));
         menu.Items.Add(new System.Windows.Controls.Separator());
 
         Add("いますぐ同期", () => main.Sync.SyncNowCommand.Execute(null));

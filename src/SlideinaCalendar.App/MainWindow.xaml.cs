@@ -157,6 +157,9 @@ public partial class MainWindow : Window
             if (args.PropertyName == nameof(MainViewModel.IsSidePanelOpen))
             {
                 ApplySidePanel(vm.IsSidePanelOpen);
+
+                // 誰が残りを受け取るかが変わる。開けたあとに呼ぶ
+                ApplyPanes(vm);
             }
             else if (args.PropertyName is nameof(MainViewModel.IsMainViewOpen)
                      or nameof(MainViewModel.IsDetailPaneOpen))
@@ -211,10 +214,26 @@ public partial class MainWindow : Window
 
         DetailColumn.MinWidth = vm.IsDetailPaneOpen ? MainViewModel.MinDetailPaneWidth : 0;
 
+        // 上限も外す。「*」にしても上限（既定 640px）で止まるので、中央を畳んだのに
+        // 右ペインがそこまでしか伸びず、その先が黒いまま余った
+        DetailColumn.MaxWidth = vm.IsMainViewOpen ? MainViewModel.MaxDetailPaneWidth
+            : double.PositiveInfinity;
+
         // 中身を隠すだけでは列が残る。「*」の列は、中が畳まれていても場所を取り続ける。
         // 実機で「中央を消しても中央のエリアが残る」となったのはこれ
         MainColumn.MinWidth = vm.IsMainViewOpen ? 360 : 0;
         MainColumn.Width = vm.IsMainViewOpen ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        // 左パネルだけ残したときも同じ。上限のまま置くと、右側が黒く余る
+        if (vm.IsSidePanelOpen)
+        {
+            var sideOnly = vm is { IsMainViewOpen: false, IsDetailPaneOpen: false };
+
+            SideColumn.MaxWidth = sideOnly ? double.PositiveInfinity
+                : MainViewModel.MaxSidePanelWidth;
+            SideColumn.Width = sideOnly ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(_sideWidth);
+        }
 
         // 掴みしろだけ残っても、つまんで動かす相手がいない
         DetailSplitter.Visibility = vm is { IsMainViewOpen: true, IsDetailPaneOpen: true }
