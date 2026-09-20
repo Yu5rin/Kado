@@ -87,6 +87,9 @@ public sealed class DayViewModel : ObservableObject
     /// <summary>1時間分の高さ。</summary>
     public double HourHeight => _timeline.HourHeight;
 
+    /// <summary>時間軸の上端の時。落とした場所から時刻を出すのに要る。</summary>
+    public int DayStartHour => _timeline.DayStart.Hour;
+
     /// <summary>時間軸全体の高さ。</summary>
     public double TimelineHeight => _timeline.TimelineHeight;
 
@@ -139,6 +142,6 @@ public sealed class DayViewModel : ObservableObject
         Day = _timeline.Build(_date, _date, _today)[0];
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(RemainingInMonthText),
-              nameof(HourLabels), nameof(HourHeight), nameof(TimelineHeight));
+              nameof(HourLabels), nameof(HourHeight), nameof(DayStartHour), nameof(TimelineHeight));
     }
 }

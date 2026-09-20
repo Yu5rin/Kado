@@ -15,7 +15,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
-             Background="{DynamicResource BackgroundBrush}">
+             Background="{DynamicResource BackgroundBrush}"
+             AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished">
 
     <UserControl.Resources>
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
@@ -138,7 +139,9 @@
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource MilestoneMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
-                    Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー">
+                    MouseMove="OnChipDragging"
+                    Cursor="Hand"
+                    ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー&#10;ドラッグで別の日へ移動">
                 <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>

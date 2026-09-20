@@ -917,21 +917,58 @@ public sealed class MainViewModel : ObservableObject
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// 予定を別の日へ移す。<paramref name="copy"/> なら複製する。
+    /// 予定を別の日へ移す。時刻はそのまま。<paramref name="copy"/> なら複製する。
+    /// <para>月ビューのように、何日の予定かだけを変えるときに使う。</para>
+    /// </summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventTo(string? id, DateOnly date, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.Keep, null, copy);
+
+    /// <summary>予定を別の日時へ移す。長さは保つ。終日だったものは1時間ぶんになる。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventToTime(string? id, DateOnly date, TimeOnly start, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.SetTo, start, copy);
+
+    /// <summary>予定を終日に変えて別の日へ移す。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventToAllDay(string? id, DateOnly date, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.Clear, null, copy);
+
+    /// <summary>移動のときに時刻をどう扱うか。</summary>
+    private enum TimeChange
+    {
+        /// <summary>そのまま。</summary>
+        Keep,
+
+        /// <summary>指定した時刻に置く。</summary>
+        SetTo,
+
+        /// <summary>時刻を外して終日にする。</summary>
+        Clear,
+    }
+
+    /// <summary>
+    /// 予定を動かす。
     /// <para>
-    /// 期間のある予定は長さを保つ。時刻は動かさない（何日の予定か、だけを変える）。
+    /// 期間のある予定は長さ（日数）を保つ。時刻を置くときは、その予定の長さ（時間）も保つ。
     /// </para>
     /// <para>
-    /// 実働日データから起こした印（休業日・特別出勤・日付の行）は動かせない。
-    /// 取り込み元と食い違うと、次の取り込みで元に戻るだけになる。
+    /// 休業日と特別出勤は動かせない。識別子にその日付が入っていて、取り込んだ実働日
+    /// データが決めるものだから。仕様期限などのラベルは動かせる。
     /// </para>
     /// </summary>
     /// <returns>動かしたら true。</returns>
-    public bool MoveEventTo(string? id, DateOnly date, bool copy = false)
+    private bool MoveEvent(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy)
     {
         if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } found) return false;
-        if (CalendarWorkspace.IsMilestoneMark(found)) return false;
-        if (found.Date == date && !copy) return false;
+
+        // 休業日と特別出勤はマスの色を決める印で、識別子にその日付が入っている。
+        // 動かすと取り込んだ実働日データと食い違う。仕様期限などのラベルは動かせる
+        if (CalendarWorkspace.IsClosedDayId(found.Id) || CalendarWorkspace.IsOpenDayId(found.Id))
+        {
+            StatusMessage = "休業日と特別出勤は実働日データが決めるので、動かせません";
+            return false;
+        }
 
         // 向こうで変えられない予定は動かさない。ここで動かしても伝わらず、
         // 画面と Google とで日付が食い違うだけ。複製は元を触らないので通す
@@ -947,6 +984,20 @@ public sealed class MainViewModel : ObservableObject
             Date = date,
             EndDate = found.EndDate is null ? null : date.AddDays(length),
         };
+
+        moved = change switch
+        {
+            TimeChange.SetTo when start is { } at => moved with { StartTime = at, EndTime = at.Add(LengthOf(found)) },
+            TimeChange.Clear => moved with { StartTime = null, EndTime = null },
+            _ => moved,
+        };
+
+        // 時刻だけを動かしたときは、日付が同じでも動かしたことになる
+        if (moved.Date == found.Date && moved.StartTime == found.StartTime
+            && moved.EndTime == found.EndTime && !copy)
+        {
+            return false;
+        }
 
         if (!copy)
         {
@@ -969,6 +1020,12 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = "予定を複製しました";
         return true;
     }
+
+    /// <summary>予定の長さ。時刻を持たない予定は1時間として扱う。</summary>
+    private static TimeSpan LengthOf(CalendarEvent value) =>
+        value.StartTime is { } from && value.EndTime is { } to && to > from
+            ? to.ToTimeSpan() - from.ToTimeSpan()
+            : TimeSpan.FromHours(1);
 
     /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
     /// <returns>動かしたら true。</returns>

@@ -235,4 +235,100 @@ public class DragMoveTests
         Assert.False(MainViewModel.IsLocked(test.Workspace.Events.Find("e1")!));
         Assert.True(Create(test).MoveEventTo("e1", Tomorrow));
     }
+
+    [Fact]
+    public void 時刻ごと別の日へ移せる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));   // 10:00〜11:00
+
+        Assert.True(Create(test).MoveEventToTime("e1", Tomorrow, new TimeOnly(14, 30)));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Equal(Tomorrow, moved.Date);
+        Assert.Equal(new TimeOnly(14, 30), moved.StartTime);
+
+        // 長さは保つ。1時間の予定は移しても1時間
+        Assert.Equal(new TimeOnly(15, 30), moved.EndTime);
+    }
+
+    [Fact]
+    public void 同じ日でも時刻が変われば動かしたことになる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        Assert.True(Create(test).MoveEventToTime("e1", Today, new TimeOnly(16, 0)));
+        Assert.Equal(new TimeOnly(16, 0), test.Workspace.Events.Find("e1")!.StartTime);
+    }
+
+    [Fact]
+    public void 同じ日の同じ時刻なら何も起きない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        Assert.False(Create(test).MoveEventToTime("e1", Today, new TimeOnly(10, 0)));
+    }
+
+    [Fact]
+    public void 終日の予定を時間軸に落とすと1時間の予定になる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "全社会議", Date = Today });
+
+        Create(test).MoveEventToTime("e1", Today, new TimeOnly(9, 0));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Equal(new TimeOnly(9, 0), moved.StartTime);
+        Assert.Equal(new TimeOnly(10, 0), moved.EndTime);
+    }
+
+    [Fact]
+    public void 終日レーンに落とすと時刻が外れる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        Assert.True(Create(test).MoveEventToAllDay("e1", Tomorrow));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Equal(Tomorrow, moved.Date);
+        Assert.Null(moved.StartTime);
+        Assert.Null(moved.EndTime);
+    }
+
+    [Fact]
+    public void 仕様期限などのラベルも動かせる()
+    {
+        using var test = TestWorkspace.Create();
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = CalendarWorkspace.WorkingDaySource + ":2026-09-24:仕様期限",
+            Title = "仕様期限", Date = Today, CalendarId = ina.Id,
+            Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var id = CalendarWorkspace.WorkingDaySource + ":2026-09-24:仕様期限";
+        Assert.True(Create(test).MoveEventTo(id, Tomorrow));
+        Assert.Equal(Tomorrow, test.Workspace.Events.Find(id)!.Date);
+    }
+
+    [Fact]
+    public void 休業日と特別出勤は動かせない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "closedday:2026-09-24", Title = CalendarWorkspace.ClosedDayTitle,
+            Date = Today, Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var main = Create(test);
+
+        // マスの色を決める印で、識別子にその日付が入っている
+        Assert.False(main.MoveEventTo("closedday:2026-09-24", Tomorrow));
+        Assert.Equal(Today, test.Workspace.Events.Find("closedday:2026-09-24")!.Date);
+    }
 }
