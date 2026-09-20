@@ -348,6 +348,28 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void 出ているのが一つなら狭めても畳まない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+
+        // 右ペインだけを出して使う。細い帯での主な使い方
+        vm.ToggleSidePanelCommand.Execute(null);
+        vm.ToggleMainViewCommand.Execute(null);
+        Assert.True(vm.IsDetailPaneOpen);
+        Assert.False(vm.IsMainViewOpen);
+
+        // ここで畳むと、代わりに中央のカレンダーが出てくる。それでは困る
+        Fit(vm, 300);
+
+        Assert.True(vm.IsDetailPaneOpen);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.False(vm.IsSidePanelOpen);
+    }
+
+    [Fact]
     public void 手で閉じたパネルは広げても勝手に開かない()
     {
         using var test = TestWorkspace.Create();

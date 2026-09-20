@@ -486,9 +486,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// 幅に合わせてパネルを畳む。
     /// <para>
-    /// 左 → 右 の順。中央のカレンダーは最後まで残す。<b>手で閉じたものは勝手に
-    /// 開け直さない。</b>自分で畳んだものだけ、広がったときに戻す。
+    /// 左 → 右 の順。<b>ただし畳むのは、ほかに出ているものがあるときだけ。</b>
+    /// いま出ているのが1つなら、それが何であれ残す。右ペインだけを出して使って
+    /// いるのに、狭めたらそれが消えて中央のカレンダーが出てきた、では困る。
+    /// 細い帯では右ペイン（予定・タスク）を主に使う。
     /// </para>
+    /// <para><b>手で閉じたものは勝手に開け直さない。</b>自分で畳んだものだけ戻す。</para>
     /// </summary>
     public void FitTo(double width)
     {
@@ -498,7 +501,8 @@ public sealed class MainViewModel : ObservableObject
 
         if (double.IsNaN(width) || width <= 0) return;
 
-        if (width < SidePaneFloor && _isSidePanelOpen)
+        // 左は、中央か右が出ているときだけ畳む
+        if (width < SidePaneFloor && _isSidePanelOpen && (_isMainViewOpen || _isDetailPaneOpen))
         {
             _autoClosedSide = true;
             IsSidePanelOpen = false;
@@ -509,7 +513,8 @@ public sealed class MainViewModel : ObservableObject
             IsSidePanelOpen = true;
         }
 
-        if (width < DetailPaneFloor && _isDetailPaneOpen)
+        // 右は、中央が出ているときだけ畳む。右だけで使っているなら触らない
+        if (width < DetailPaneFloor && _isDetailPaneOpen && _isMainViewOpen)
         {
             _autoClosedDetail = true;
             IsDetailPaneOpen = false;

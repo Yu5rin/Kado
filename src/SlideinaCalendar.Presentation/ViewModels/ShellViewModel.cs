@@ -100,6 +100,22 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 幅をつまんでいる最中か。
+    /// <para>
+    /// スライドは、カーソルが窓から外れたら引っ込む。幅を狭める向きに引くと
+    /// つまんでいる手そのものが窓の外へ出るので、そのままだと必ず消える。
+    /// <b>つまんでいるあいだは引っ込めない。</b>
+    /// </para>
+    /// </summary>
+    public bool IsResizing
+    {
+        get => _isResizing;
+        set => Set(ref _isResizing, value);
+    }
+
+    private bool _isResizing;
+
     /// <summary>サイドバーの下半分に出しているもの。</summary>
     public SidebarTab Tab
     {

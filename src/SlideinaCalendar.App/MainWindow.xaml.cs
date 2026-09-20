@@ -272,6 +272,10 @@ public partial class MainWindow : Window
         _gripFrom = PointToScreen(e.GetPosition(this));
         _gripWidth = vm.Shell.DockWidth;
 
+        // つまんでいるあいだはスライドを引っ込めない。狭める向きに引くと、
+        // つまんでいる手そのものが窓の外へ出る
+        vm.Shell.IsResizing = true;
+
         ((UIElement)sender).CaptureMouse();
         e.Handled = true;
     }
@@ -291,6 +295,9 @@ public partial class MainWindow : Window
         if (_gripFrom is null) return;
 
         _gripFrom = null;
+
+        if (ViewModel is { } vm) vm.Shell.IsResizing = false;
+
         ((UIElement)sender).ReleaseMouseCapture();
         e.Handled = true;
     }

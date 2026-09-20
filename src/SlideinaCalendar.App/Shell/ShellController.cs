@@ -101,6 +101,16 @@ public sealed class ShellController : IDisposable
             _resizeSettle.Start();
         };
 
+        // 幅をつまみ終えたら、見張る範囲を今の姿に合わせ直す
+        _shell.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(ShellViewModel.IsResizing)) return;
+            if (_shell.IsResizing || !SlideOutOnLeave) return;
+            if (_shell.Mode != ShellMode.Overlay || !_window.IsVisible) return;
+
+            _hotZone.WatchLeaving(WindowRectAt(_window.Left));
+        };
+
         // 帯に留まったらスライドさせる
         _hotZone.Triggered += (_, _) => SlideIn();
 
@@ -179,6 +189,9 @@ public sealed class ShellController : IDisposable
         if (_shell.Mode != ShellMode.Overlay) return;
 
         if (_slidingOut || !_window.IsVisible) return;
+
+        // 幅をつまんでいる最中。手が窓の外に出ていても引っ込めない
+        if (_shell.IsResizing) return;
 
         // 自分が出した窓（編集画面など）に移っただけなら、引っ込めない。
         // 予定を書いている最中に本体が消えると、書き終わって戻る先が無くなる
@@ -427,5 +440,12 @@ public sealed class ShellController : IDisposable
         _window.Height = work.Height;
         _window.Width = width;
         _window.Left = _shell.Edge == DockEdge.Left ? work.Left : work.Right - width;
+
+        // 幅を変えたら、見張る範囲も合わせる。
+        //
+        // 出したときの矩形のまま見張っていると、掴んで広げた先にカーソルを
+        // 置いた時点で「窓から外れた」ことになって引っ込む。つまり、
+        // 幅を広げようとすると必ず消える――幅を変えられない、という形で出る
+        if (_window.IsVisible && SlideOutOnLeave) _hotZone.WatchLeaving(WindowRectAt(_window.Left));
     }
 }
