@@ -132,6 +132,11 @@ public sealed class MainViewModel : ObservableObject
         ToggleMainViewCommand = new RelayCommand(() => IsMainViewOpen = !IsMainViewOpen);
         ToggleDetailPaneCommand = new RelayCommand(() => IsDetailPaneOpen = !IsDetailPaneOpen);
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
+        OpenSearchCommand = new RelayCommand(() =>
+        {
+            _searchOpen = true;
+            Raise(nameof(ShowsSearchBox), nameof(UsesCompactSearch));
+        });
         UndoCommand = new RelayCommand(Undo, () => _workspace.Undo.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
@@ -352,7 +357,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isSidePanelOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsSidePanelOpen));
-            Raise(nameof(ShowsCalendarTools));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
         }
     }
 
@@ -370,7 +375,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isMainViewOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsMainViewOpen));
-            Raise(nameof(ShowsCalendarTools));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
             RaiseHeader();
         }
     }
@@ -384,7 +389,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isDetailPaneOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
-            Raise(nameof(ShowsCalendarTools));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
         }
     }
 
@@ -396,6 +401,112 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool ShowsCalendarTools => _isMainViewOpen;
+
+    // ------------------------------------------------------------------
+    // 幅に合わせた詰め方
+    //
+    // 細い帯として使うので、入りきらないものは順に落とす。何を残すかは
+    // 使う人に決めてもらった。残すのは、年月の見出し・「◀ ▶」・今日・
+    // 検索（虫めがねに畳む）・≡、そして戻り口になるピンと▥と設定。
+    // ------------------------------------------------------------------
+
+    /// <summary>実働・残りのバッジを出す下限。同じ数字は右ペインの日付欄にも出る。</summary>
+    public const double WorkdayBadgeFloor = 1000;
+
+    /// <summary>同期の状態（●同期済み）を出す下限。</summary>
+    public const double SyncStatusFloor = 880;
+
+    /// <summary>検索の入力欄をそのまま出す下限。これを切ると虫めがねのボタンに畳む。</summary>
+    public const double SearchBoxFloor = 820;
+
+    /// <summary>ビュー切り替え（一覧・年・月・週・日）を出す下限。</summary>
+    public const double ViewSwitcherFloor = 700;
+
+    /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
+    public const double TodayButtonFloor = 380;
+
+    /// <summary>左パネルを開けておく下限。これを切ると、ひとりでに畳む。</summary>
+    public const double SidePaneFloor = 880;
+
+    /// <summary>右パネルを開けておく下限。左を畳んでも足りないときに、次はここ。</summary>
+    public const double DetailPaneFloor = 620;
+
+    /// <summary>ツールバーの詰め方を決める幅。ウィンドウの見た目の幅。</summary>
+    private double Room => Shell.LayoutWidth;
+
+    /// <summary>まだ幅が分からない（起動直後など）。そのときは出したままにする。</summary>
+    private bool RoomUnknown => double.IsNaN(Room) || Room <= 0;
+
+    public bool ShowsWorkdayBadges => RoomUnknown || Room >= WorkdayBadgeFloor;
+
+    public bool ShowsSyncStatus => RoomUnknown || Room >= SyncStatusFloor;
+
+    /// <summary>検索を虫めがねのボタンに畳むか。押すと入力欄が開く。</summary>
+    public bool UsesCompactSearch => !RoomUnknown && Room < SearchBoxFloor;
+
+    /// <summary>
+    /// 検索の入力欄を出すか。
+    /// <para>
+    /// 畳んでいるあいだは虫めがねのボタンだけを置き、押されたら入力欄を開く。
+    /// 細い帯では他のものを押しのけて出るが、探しているあいだだけのこと。
+    /// </para>
+    /// </summary>
+    public bool ShowsSearchBox => !UsesCompactSearch || _searchOpen;
+
+    private bool _searchOpen;
+
+    /// <summary>虫めがねを押したとき。入力欄を開く。</summary>
+    public RelayCommand OpenSearchCommand { get; private set; } = null!;
+
+    public bool ShowsViewSwitcher => ShowsCalendarTools && (RoomUnknown || Room >= ViewSwitcherFloor);
+
+    public bool ShowsTodayButton => RoomUnknown || Room >= TodayButtonFloor;
+
+    /// <summary>年月の見出しに取っておく幅。細いときは詰める。</summary>
+    public double TitleRoom => ShowsTodayButton ? 118 : 44;
+
+    /// <summary>自分で畳んだぶん。広がったときに開け直すのは、これだけ。</summary>
+    private bool _autoClosedSide;
+
+    private bool _autoClosedDetail;
+
+    /// <summary>
+    /// 幅に合わせてパネルを畳む。
+    /// <para>
+    /// 左 → 右 の順。中央のカレンダーは最後まで残す。<b>手で閉じたものは勝手に
+    /// 開け直さない。</b>自分で畳んだものだけ、広がったときに戻す。
+    /// </para>
+    /// </summary>
+    public void FitTo(double width)
+    {
+        Raise(nameof(ShowsWorkdayBadges), nameof(ShowsSyncStatus), nameof(UsesCompactSearch),
+            nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(ShowsTodayButton),
+            nameof(TitleRoom));
+
+        if (double.IsNaN(width) || width <= 0) return;
+
+        if (width < SidePaneFloor && _isSidePanelOpen)
+        {
+            _autoClosedSide = true;
+            IsSidePanelOpen = false;
+        }
+        else if (width >= SidePaneFloor && _autoClosedSide)
+        {
+            _autoClosedSide = false;
+            IsSidePanelOpen = true;
+        }
+
+        if (width < DetailPaneFloor && _isDetailPaneOpen)
+        {
+            _autoClosedDetail = true;
+            IsDetailPaneOpen = false;
+        }
+        else if (width >= DetailPaneFloor && _autoClosedDetail)
+        {
+            _autoClosedDetail = false;
+            IsDetailPaneOpen = true;
+        }
+    }
 
     /// <summary>
     /// 3つとも畳もうとしたら、最後の1つは残す。
@@ -692,7 +803,16 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>探すのをやめる。欄を空にして結果も消す。</summary>
-    public void ClearSearch() => SearchText = string.Empty;
+    public void ClearSearch()
+    {
+        SearchText = string.Empty;
+
+        // 虫めがねに畳んでいたぶんは、探し終えたら元の1つのボタンに戻す
+        if (!_searchOpen) return;
+
+        _searchOpen = false;
+        Raise(nameof(ShowsSearchBox), nameof(UsesCompactSearch));
+    }
 
     /// <summary>
     /// 見つかったものを開く。その日へ移って、検索は閉じる。

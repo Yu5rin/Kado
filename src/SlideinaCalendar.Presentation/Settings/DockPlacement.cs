@@ -60,13 +60,15 @@ public readonly record struct DockPlacement(
     public const double MaxWidth = 720;
 
     /// <summary>
-    /// この幅を境にレイアウトを切り替える。
+    /// この幅を境に、1列の形（上にカレンダー・下にタブ）へ切り替える。
     /// <para>
-    /// 同じ UI を縮小して使い回さない（要件書 5.1）。これより狭ければ、上に
-    /// カレンダー・下にタブという1列の形にする。
+    /// 同じ UI を縮小して使い回さない、という考え方（要件書 5.1）で 520px に
+    /// していたが、狭いときはパネルを左 → 右 の順に畳む作りにしたので、
+    /// <b>別の形へ化けるのは本当に置き場が無いときだけ</b>にした。途中で
+    /// 見た目が丸ごと入れ替わると、同じ操作を探し直すことになる。
     /// </para>
     /// </summary>
-    public const double SidebarThreshold = 520;
+    public const double SidebarThreshold = 300;
 
     /// <summary>覚えていないとき。既定は左。</summary>
     public static DockPlacement Unknown { get; } =

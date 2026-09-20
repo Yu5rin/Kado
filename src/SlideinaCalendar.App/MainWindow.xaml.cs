@@ -55,8 +55,10 @@ public partial class MainWindow : Window
             TrackPlacement();
 
             // 幅でレイアウトを切り替える。同じ UI を縮小して使い回さない（要件書 5.1）
-            if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
+            if (ViewModel is not { } vm) return;
 
+            vm.Shell.LayoutWidth = ActualWidth;
+            vm.FitTo(ActualWidth);
         };
         StateChanged += (_, _) => TrackPlacement();
 
@@ -67,7 +69,10 @@ public partial class MainWindow : Window
             _clock.Start();
             RestorePaneWidths();
 
-            if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
+            if (ViewModel is not { } vm) return;
+
+            vm.Shell.LayoutWidth = ActualWidth;
+            vm.FitTo(ActualWidth);
         };
 
         Closed += (_, _) =>
@@ -344,6 +349,17 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Esc で検索をやめる。</summary>
+    /// <summary>
+    /// 畳んであるときの虫めがね。
+    /// <para>開いたら打ち始められるよう、入力欄に手を渡す。</para>
+    /// </summary>
+    private void OnCompactSearchClicked(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(() =>
+        {
+            SearchBox.Focus();
+            Keyboard.Focus(SearchBox);
+        }, System.Windows.Threading.DispatcherPriority.Input);
+
     private void OnSearchKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;

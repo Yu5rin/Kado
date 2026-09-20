@@ -154,10 +154,14 @@ public class ShellModeTests
         // 幅が分からないうちは3ペインのまま
         Assert.True(vm.UsesWindowLayout);
 
+        // 既定の帯幅では、まだ3ペインの形。狭いぶんはパネルを左 → 右 の順に
+        // 畳んで凌ぐので、別の形へ化けるのは本当に置き場が無いときだけ
         vm.LayoutWidth = DockPlacement.DefaultWidth;
+        Assert.True(vm.UsesWindowLayout);
+
+        vm.LayoutWidth = DockPlacement.SidebarThreshold - 1;
         Assert.True(vm.UsesSidebarLayout);
 
-        // この幅で3ペインに分けると、各ペインが3行しか入らない（要件書 5.3）
         vm.LayoutWidth = 1180;
         Assert.True(vm.UsesWindowLayout);
         Assert.False(vm.UsesSidebarLayout);
