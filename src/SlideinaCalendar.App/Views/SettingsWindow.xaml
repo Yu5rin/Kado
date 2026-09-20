@@ -275,6 +275,13 @@
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
                                    Text="切ると、閉じるボタンでそのまま終わります。裏で動いていないあいだは通知も出ません。&#10;トレイのアイコンからは、入れていてもいなくても終了できます。" />
                     </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="スライドは、カーソルが外れたら引っ込める"
+                                  IsChecked="{Binding SlideOutOnLeave}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切ると、他のウィンドウを触るまで出したままになります。カーソルを外に出しながら見比べたいときに。&#10;出しっぱなしにしたいときは、ピンで留めてください（Ctrl＋Alt＋P）。" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </ScrollViewer>

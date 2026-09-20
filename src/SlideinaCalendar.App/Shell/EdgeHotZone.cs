@@ -41,6 +41,14 @@ internal sealed class EdgeHotZone : IDisposable
     /// <summary>出すまでに留まっている必要のある時間。短いと誤爆する。</summary>
     private static readonly TimeSpan Dwell = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// 出たあと、外れてから引っ込めるまでの猶予。
+    /// <para>
+    /// 端を掠めただけで消えると、押そうとしたボタンが逃げる。出すときより長く取る。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan LeaveDelay = TimeSpan.FromMilliseconds(400);
+
     private readonly DispatcherTimer _timer;
 
     private DockEdge _edge = DockEdge.Right;
@@ -48,8 +56,20 @@ internal sealed class EdgeHotZone : IDisposable
     private DateTime? _since;
     private bool _disposed;
 
+    /// <summary>出ているあいだ見張る窓の矩形（物理ピクセル）。</summary>
+    private RECT _window;
+
+    /// <summary>いま見張っているのは、帯ではなく「窓から外れること」か。</summary>
+    private bool _watchingLeave;
+
+    /// <summary>外れてからの時間。</summary>
+    private DateTime? _outside;
+
     /// <summary>留まったので出してほしい。</summary>
     public event EventHandler? Triggered;
+
+    /// <summary>窓から外れたので引っ込めてほしい。</summary>
+    public event EventHandler? Left;
 
     public EdgeHotZone()
     {
@@ -81,7 +101,34 @@ internal sealed class EdgeHotZone : IDisposable
         _edge = edge;
         _screen = screen;
         _since = null;
+        _watchingLeave = false;
+        _outside = null;
         _timer.Start();
+    }
+
+    /// <summary>
+    /// 出したあと、カーソルが窓から外れるのを見張る。
+    /// <para>
+    /// 帯の見張りは止める。出ているあいだに帯を踏んでも、もう出すものが無い。
+    /// </para>
+    /// </summary>
+    /// <param name="window">出ている窓の矩形（物理ピクセル）。</param>
+    public void WatchLeaving(RECT window)
+    {
+        if (_disposed || !_timer.IsEnabled) return;
+
+        _window = window;
+        _watchingLeave = true;
+        _outside = null;
+        _since = null;
+    }
+
+    /// <summary>見張りを帯に戻す。引っ込めたあとに呼ぶ。</summary>
+    public void WatchEdge()
+    {
+        _watchingLeave = false;
+        _outside = null;
+        _since = null;
     }
 
     /// <summary>帯を外す。</summary>
@@ -89,6 +136,8 @@ internal sealed class EdgeHotZone : IDisposable
     {
         _timer.Stop();
         _since = null;
+        _watchingLeave = false;
+        _outside = null;
     }
 
     public void Dispose()
@@ -108,6 +157,14 @@ internal sealed class EdgeHotZone : IDisposable
         if (!GetCursorPos(out var point))
         {
             _since = null;
+            _outside = null;
+            return;
+        }
+
+        // 出ているあいだは、帯ではなく窓から外れるのを見る
+        if (_watchingLeave)
+        {
+            CheckLeaving(point, now);
             return;
         }
 
@@ -130,6 +187,34 @@ internal sealed class EdgeHotZone : IDisposable
         _since = null;
         Triggered?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// 窓から外れたか。
+    /// <para>掠めただけで消えないよう、外れたまま少し置いてから知らせる。</para>
+    /// </summary>
+    private void CheckLeaving(POINT point, DateTime now)
+    {
+        if (Contains(_window, point))
+        {
+            _outside = null;
+            return;
+        }
+
+        if (_outside is not { } since)
+        {
+            _outside = now;
+            return;
+        }
+
+        if (now - since < LeaveDelay) return;
+
+        _outside = null;
+        Left?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static bool Contains(RECT rect, POINT point) =>
+        point.x >= rect.left && point.x < rect.right &&
+        point.y >= rect.top && point.y < rect.bottom;
 
     /// <summary>
     /// 帯の中か。

@@ -354,6 +354,19 @@ public partial class App : Application
 
         _shellController = new Shell.ShellController(window, main.Shell, _dockStore);
 
+        // スライドの引っ込め方は設定から。変えたらその場で効かせる
+        if (_settings is { } settings)
+        {
+            _shellController.SlideOutOnLeave = settings.SlideOutOnLeave;
+            settings.Changed += (_, _) =>
+            {
+                if (_shellController is { } controller)
+                {
+                    controller.SlideOutOnLeave = settings.SlideOutOnLeave;
+                }
+            };
+        }
+
         // 削れなかったときは理由を出す。黙って諦めると、押しても何も起きないとしか
         // 見えない。同じ理由を何度も出さないよう、1回だけにする
         var dockComplaint = (string?)null;

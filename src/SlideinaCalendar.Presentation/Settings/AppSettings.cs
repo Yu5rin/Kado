@@ -52,6 +52,7 @@ public sealed class AppSettings
     private const string DefaultCalendarKey = "ui.default_calendar";
     private const string YearLayoutKey = "ui.year_layout";
     private const string CloseToTrayKey = "ui.close_to_tray";
+    private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -72,6 +73,7 @@ public sealed class AppSettings
     private DayOfWeek _weekStart;
     private YearLayout _yearLayout;
     private bool _closeToTray = true;
+    private bool _slideOutOnLeave = true;
     private int _dayStartHour;
     private int _dayEndHour;
     private CalendarView _startupView;
@@ -94,6 +96,8 @@ public sealed class AppSettings
         _startupView = Read(StartupViewKey, CalendarView.Month);
         _yearLayout = Read(YearLayoutKey, YearLayout.Grid);
         _closeToTray = !string.Equals(_store.Get(CloseToTrayKey), "false", StringComparison.Ordinal);
+        _slideOutOnLeave =
+            !string.Equals(_store.Get(SlideOutOnLeaveKey), "false", StringComparison.Ordinal);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -394,6 +398,30 @@ public sealed class AppSettings
 
             _closeToTray = value;
             _store.Set(CloseToTrayKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// スライドから、カーソルが外れたら引っ込めるか。
+    /// <para>
+    /// 既定は引っ込める。用があるときだけ出てくるのがスライドの形で、出したまま
+    /// にしたければピンで留める。
+    /// </para>
+    /// <para>
+    /// 切ったときは、他のウィンドウを触るまで出したままにする。カーソルを外に
+    /// 出しながら見比べたい、という使い方のため。
+    /// </para>
+    /// </summary>
+    public bool SlideOutOnLeave
+    {
+        get => _slideOutOnLeave;
+        set
+        {
+            if (_slideOutOnLeave == value) return;
+
+            _slideOutOnLeave = value;
+            _store.Set(SlideOutOnLeaveKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
