@@ -251,12 +251,15 @@
                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
-                                    <DockPanel Margin="1,2,1,1">
+                                    <DockPanel Margin="1,2,1,2">
                                         <!--
-                                            予定は帯にしてマスの上へまとめ、日付は下に敷く。
-                                            日付を挟んで上下に置いていたら、下の帯が次の週の
-                                            日付とくっついて、どちらの日のものか読めなかった。
-                                            上が inaCalendar、その下がそれ以外
+                                            ストリップと同じ並び。実働日カレンダー
+                                            （inaCalendar）の予定は日付の上、それ以外は
+                                            日付の下。仕様期限や1次GOが日付の上に出て、
+                                            自分の予定が下に付く。
+
+                                            下の帯が次の週の日付とくっついて見えたので、
+                                            マスは線で区切ってある
                                         -->
                                         <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding TopMarks}"
                                                       ItemTemplate="{StaticResource GridMarkTemplate}">
@@ -265,7 +268,7 @@
                                             </ItemsControl.ItemsPanel>
                                         </ItemsControl>
 
-                                        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding BottomMarks}"
+                                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding BottomMarks}"
                                                       ItemTemplate="{StaticResource GridMarkTemplate}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
@@ -273,7 +276,7 @@
                                         </ItemsControl>
 
                                         <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
                                                    Typography.NumeralAlignment="Tabular"
                                                    Foreground="{DynamicResource InkBrush}" />
                                     </DockPanel>

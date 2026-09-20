@@ -168,7 +168,22 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <DockPanel Grid.Column="0" LastChildFill="False" ClipToBounds="True">
+                <!--
+                    左右とも ScrollViewer で包む。
+
+                    包まないと、中に並べたものの合計が「窓をこれ以上小さくできない
+                    幅」になる。ClipToBounds は描くときに切るだけで、大きさを測る
+                    ときには効かない。実機では 860px あたりで縮まらなくなり、帯に
+                    したいのに太いままだった。さらに、ピン留めで譲ってもらった幅より
+                    窓のほうが広くなるので、その差のぶん他のウィンドウと重なっていた。
+
+                    ScrollViewer は与えられた幅で満足するので、窓の下限を押し上げない。
+                    入りきらないぶんは切れるが、中身のほうも幅に合わせて順に畳むので、
+                    普通に使っているぶんには切れたところは見えない。
+                -->
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled" Focusable="False">
+                <DockPanel LastChildFill="False">
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
                         Command="{Binding ToggleSidePanelCommand}" ToolTip="サイドパネルの表示切替">
@@ -281,9 +296,12 @@
                 </StackPanel>
 
                 </DockPanel>
+                </ScrollViewer>
 
                 <!-- 右端。設定・ピン・同期・検索の順に並べる（右から左へ積む） -->
-                <DockPanel Grid.Column="1" LastChildFill="False">
+                <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled" Focusable="False">
+                <DockPanel LastChildFill="False">
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         ToolTip="取り込みと設定" Click="OnSettingsClicked">
                     <Button.ContextMenu>
@@ -507,6 +525,7 @@
                     </Popup>
                 </Grid>
                 </DockPanel>
+                </ScrollViewer>
             </Grid>
         </Border>
 
