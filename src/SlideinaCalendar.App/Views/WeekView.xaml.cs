@@ -32,6 +32,21 @@ public partial class WeekView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 列の見出しを押すと、その日を選ぶ。
+    /// <para>2回押したら、その日のビューへ移る（月ビューのマスと同じ）。</para>
+    /// </summary>
+    private void OnDayHeaderClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not WeekDayColumnViewModel day) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        if (e.ClickCount == 2) main.ShowDayOfCommand.Execute(day.Date);
+        else main.SelectDateCommand.Execute(day.Date);
+
+        e.Handled = true;
+    }
+
     /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
     private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
     {

@@ -74,7 +74,7 @@ public sealed class TimeBlockViewModel
 /// 週ビューの1日分の列。
 /// <para>日ビューはこれを1本だけ並べたものとして扱う。</para>
 /// </summary>
-public sealed class WeekDayColumnViewModel
+public sealed class WeekDayColumnViewModel : ObservableObject
 {
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -118,6 +118,21 @@ public sealed class WeekDayColumnViewModel
     public bool IsSundayLike => IsSunday || HolidayName is { Length: > 0 };
 
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
+
+    /// <summary>
+    /// 選んでいる日か。
+    /// <para>
+    /// 見出しを押すと右ペインがその日に入れ替わる。どの日を見ているのかを
+    /// 列の見出しにも出しておかないと、右ペインとの対応が分からない。
+    /// </para>
+    /// </summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => Set(ref _isSelected, value);
+    }
+
+    private bool _isSelected;
 
     public bool HasWorkingDayData { get; }
 
@@ -251,6 +266,31 @@ public sealed class WeekViewModel : ObservableObject
         if (Set(ref _anchor, date, nameof(WeekStart))) Refresh();
     }
 
+    /// <summary>選んでいる日。列の見出しに印を付ける。</summary>
+    public DateOnly? SelectedDate
+    {
+        get => _selectedDate;
+        set
+        {
+            if (_selectedDate == value) return;
+
+            _selectedDate = value;
+            MarkSelected();
+            Raise();
+        }
+    }
+
+    private DateOnly? _selectedDate;
+
+    /// <summary>どの列が選ばれているかを反映する。組み直さずに印だけ動かす。</summary>
+    private void MarkSelected()
+    {
+        foreach (var day in _days)
+        {
+            day.IsSelected = day.Date == _selectedDate;
+        }
+    }
+
     public void GoToPreviousWeek() => GoTo(_anchor.AddDays(-7));
 
     public void GoToNextWeek() => GoTo(_anchor.AddDays(7));
@@ -298,6 +338,9 @@ public sealed class WeekViewModel : ObservableObject
     public void Refresh()
     {
         Days = _timeline.Build(WeekStart, WeekEnd, _today);
+
+        // 組み直すと列は作り直されるので、印を付け直す
+        MarkSelected();
 
         Raise(nameof(Title), nameof(WeekStart), nameof(WeekEnd),
               nameof(HourLabels), nameof(HourHeight), nameof(DayStartHour), nameof(TimelineHeight));

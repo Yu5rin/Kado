@@ -205,6 +205,25 @@ internal static class NativeMethods
     internal const uint MOD_SHIFT = 0x0004;
     internal const uint MOD_NOREPEAT = 0x4000;
 
+    /// <summary>
+    /// 窓の大きさの下限を Windows に聞かれるとき。
+    /// <para>
+    /// WPF は中身が要る大きさをそのまま下限として答えるので、細い帯にしたいのに
+    /// 途中で縮まらなくなる。ここを横取りして下限を下げる。
+    /// </para>
+    /// </summary>
+    internal const int WM_GETMINMAXINFO = 0x0024;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+
     internal const int WM_HOTKEY = 0x0312;
     internal const int WM_DISPLAYCHANGE = 0x007E;
 

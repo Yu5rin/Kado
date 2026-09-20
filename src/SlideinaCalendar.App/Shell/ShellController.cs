@@ -152,6 +152,12 @@ public sealed class ShellController : IDisposable
 
         var resting = _window.Left;
 
+        // 見張る矩形は「落ち着いたあとの居場所」で取る。
+        // いまの Left はこれから画面の外へ動かす値なので、そのまま渡すと
+        // 画面外の矩形を見張ることになり、カーソルがどこにあっても「外れている」
+        // と判定されて、出たそばから引っ込む
+        var shown = WindowRectAt(resting);
+
         // 画面の外から滑り込ませる。位置を決めてから出す
         _window.Left = OffScreenLeft();
         Show();
@@ -159,7 +165,7 @@ public sealed class ShellController : IDisposable
         Animate(resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut });
 
         // 出たあとは、外れるのを見張る番
-        if (SlideOutOnLeave) _hotZone.WatchLeaving(WindowRect());
+        if (SlideOutOnLeave) _hotZone.WatchLeaving(shown);
     }
 
     /// <summary>
@@ -236,16 +242,19 @@ public sealed class ShellController : IDisposable
         _window.BeginAnimation(Window.LeftProperty, null);
     }
 
-    /// <summary>いまの窓の矩形（物理ピクセル）。カーソルが外れたかを見るのに使う。</summary>
-    private NativeMethods.RECT WindowRect()
+    /// <summary>
+    /// その左端に置いたときの窓の矩形（物理ピクセル）。
+    /// <para>カーソルが窓から外れたかを見るのに使う。</para>
+    /// </summary>
+    private NativeMethods.RECT WindowRectAt(double left)
     {
         var scale = Scale();
 
         return new NativeMethods.RECT
         {
-            left = (int)Math.Round(_window.Left * scale),
+            left = (int)Math.Round(left * scale),
             top = (int)Math.Round(_window.Top * scale),
-            right = (int)Math.Round((_window.Left + _window.Width) * scale),
+            right = (int)Math.Round((left + _window.Width) * scale),
             bottom = (int)Math.Round((_window.Top + _window.Height) * scale),
         };
     }

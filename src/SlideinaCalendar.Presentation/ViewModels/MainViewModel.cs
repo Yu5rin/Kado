@@ -132,6 +132,13 @@ public sealed class MainViewModel : ObservableObject
         ToggleMainViewCommand = new RelayCommand(() => IsMainViewOpen = !IsMainViewOpen);
         ToggleDetailPaneCommand = new RelayCommand(() => IsDetailPaneOpen = !IsDetailPaneOpen);
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
+        Shell.PropertyChanged += (_, args) =>
+        {
+            // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
+            // 古いまま残る。幅が変わったことはここでも受けておく
+            if (args.PropertyName == nameof(ShellViewModel.LayoutWidth)) FitTo(Shell.LayoutWidth);
+        };
+
         OpenSearchCommand = new RelayCommand(() =>
         {
             _searchOpen = true;
@@ -425,6 +432,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
     public const double TodayButtonFloor = 380;
 
+    /// <summary>
+    /// 中央のカレンダーの下げ止まり。
+    /// <para>帯として使うときはここまで詰める。月ビューの7列がぎりぎり読める幅。</para>
+    /// </summary>
+    public const double MinMainViewWidth = 260;
+
     /// <summary>左パネルを開けておく下限。これを切ると、ひとりでに畳む。</summary>
     public const double SidePaneFloor = 880;
 
@@ -613,6 +626,7 @@ public sealed class MainViewModel : ObservableObject
             SelectedDay.Date = value;
             MiniCalendar.SelectedDate = value;
             Week.GoTo(value);
+            Week.SelectedDate = value;
             Day.Date = value;
 
             // 年と一覧にも伝える。押した日がそこでも光っていないと、
@@ -2221,6 +2235,7 @@ public sealed class MainViewModel : ObservableObject
         Month.GoTo(date);
         MiniCalendar.GoTo(date);
         Week.GoTo(date);
+        Week.SelectedDate = date;
         Day.Date = date;
 
         // 年度が変われば、ここで組み直される。溜めてある印を下ろしておかないと、
