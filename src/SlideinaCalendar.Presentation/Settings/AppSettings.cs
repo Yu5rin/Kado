@@ -44,6 +44,10 @@ public sealed class AppSettings
     private const string FeedUrlKey = "workday.feed_url";
     private const string FeedAutoKey = "workday.feed_auto";
     private const string FeedCheckedKey = "workday.feed_checked";
+    private const string NotifyKey = "notify.enabled";
+    private const string NotifyLeadKey = "notify.lead_minutes";
+    private const string SummaryKey = "notify.summary_enabled";
+    private const string SummaryTimeKey = "notify.summary_time";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -69,6 +73,10 @@ public sealed class AppSettings
     private int _hourHeight;
     private string _feedUrl = string.Empty;
     private bool _feedAuto;
+    private bool _notifyEnabled;
+    private int _notifyLeadMinutes;
+    private bool _summaryEnabled;
+    private TimeOnly _summaryTime;
 
     public AppSettings(SettingsRepository store)
     {
@@ -81,6 +89,13 @@ public sealed class AppSettings
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
         _feedAuto = !string.Equals(_store.Get(FeedAutoKey), "false", StringComparison.Ordinal);
+        _notifyEnabled = string.Equals(_store.Get(NotifyKey), "true", StringComparison.Ordinal);
+        _notifyLeadMinutes = ReadNumber(NotifyLeadKey, DefaultLeadMinutes, 0, 24 * 60);
+        _summaryEnabled = string.Equals(_store.Get(SummaryKey), "true", StringComparison.Ordinal);
+        _summaryTime = TimeOnly.TryParseExact(
+            _store.Get(SummaryTimeKey), "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            ? at
+            : DefaultSummaryTime;
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -236,6 +251,72 @@ public sealed class AppSettings
     public static bool IsUsableFeedUrl(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var parsed)
         && string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>事前通知の既定。予定の10分前。</summary>
+    public const int DefaultLeadMinutes = 10;
+
+    /// <summary>日次サマリーの既定の時刻。</summary>
+    public static readonly TimeOnly DefaultSummaryTime = new(8, 0);
+
+    /// <summary>
+    /// 予定の前に知らせるか。
+    /// <para>既定は出さない。要らない人に出し続けるより、要る人に入れてもらう。</para>
+    /// </summary>
+    public bool NotifyEnabled
+    {
+        get => _notifyEnabled;
+        set
+        {
+            if (_notifyEnabled == value) return;
+
+            _notifyEnabled = value;
+            _store.Set(NotifyKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>何分前に知らせるか。</summary>
+    public int NotifyLeadMinutes
+    {
+        get => _notifyLeadMinutes;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 24 * 60);
+            if (_notifyLeadMinutes == clamped) return;
+
+            _notifyLeadMinutes = clamped;
+            _store.Set(NotifyLeadKey, clamped.ToString(CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>朝にその日の予定をまとめて知らせるか。</summary>
+    public bool SummaryEnabled
+    {
+        get => _summaryEnabled;
+        set
+        {
+            if (_summaryEnabled == value) return;
+
+            _summaryEnabled = value;
+            _store.Set(SummaryKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>まとめて知らせる時刻。</summary>
+    public TimeOnly SummaryTime
+    {
+        get => _summaryTime;
+        set
+        {
+            if (_summaryTime == value) return;
+
+            _summaryTime = value;
+            _store.Set(SummaryTimeKey, value.ToString("HH:mm", CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>時間軸の上端。</summary>
     public TimeOnly DayStart => new(_dayStartHour, 0);

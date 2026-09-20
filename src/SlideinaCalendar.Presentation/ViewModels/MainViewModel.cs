@@ -9,6 +9,7 @@ using SlideinaCalendar.Google.Mapping;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
+using SlideinaCalendar.Presentation.Notifications;
 using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -46,6 +47,9 @@ public sealed class MainViewModel : ObservableObject
     private readonly IStartupRegistration _startup;
     private readonly WorkdayFeedClient _feed = new();
 
+    /// <summary>予定の前と朝のまとめを知らせる。設定を渡されていなければ持たない。</summary>
+    private readonly ReminderService? _reminders;
+
     private CalendarView _currentView = CalendarView.Month;
     private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
@@ -65,7 +69,8 @@ public sealed class MainViewModel : ObservableObject
         Sync.IGoogleSync? google = null,
         TimeProvider? clock = null,
         AppSettings? settings = null,
-        IStartupRegistration? startup = null)
+        IStartupRegistration? startup = null,
+        INotifier? notifier = null)
     {
         _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
@@ -90,6 +95,7 @@ public sealed class MainViewModel : ObservableObject
         if (settings is not null)
         {
             workspace.CountInCalendarDays = settings.CountInCalendarDays;
+            _reminders = new ReminderService(workspace, settings, notifier ?? NullNotifier.Instance);
 
             // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
             settings.Changed += (_, _) =>
@@ -1630,6 +1636,9 @@ public sealed class MainViewModel : ObservableObject
         var time = TimeOnly.FromDateTime(now);
         Week.UpdateNowLine(time);
         Day.UpdateNowLine(time);
+
+        // 1分ごとに、いま知らせるものがあるかを見る
+        _reminders?.Check(now);
     }
 
     /// <summary>
