@@ -299,8 +299,152 @@ public class MonthViewModelTests
         var vm = Create(test);
 
         // 継続中の日に開始時刻を出すと、その日に始まるように見える
-        Assert.Equal("09:00 出張", Assert.Single(Cell(vm, D(2026, 9, 24)).Events).Label);
-        Assert.Equal("出張", Assert.Single(Cell(vm, D(2026, 9, 25)).Events).Label);
+        Assert.Equal("09:00 出張", Band(vm, D(2026, 9, 24)).Label);
+        Assert.Equal("出張", Band(vm, D(2026, 9, 25)).Label);
+    }
+
+    // ------------------------------------------------------------------
+    // またがる予定の帯。日ごとに切って並べると、同じ予定が1日ずつ
+    // 別々に入っているように見える
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void またがる予定は帯として並べチップには出さない()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 23), D(2026, 9, 25));
+
+        var vm = Create(test);
+
+        foreach (var date in new[] { D(2026, 9, 23), D(2026, 9, 24), D(2026, 9, 25) })
+        {
+            Assert.Equal("出張", Band(vm, date).Label);
+
+            // 二重に出さない
+            Assert.Empty(Cell(vm, date).Events);
+        }
+
+        // 同じ週の他の日は段だけ空けておく。ここで詰めると、帯が日によって
+        // 上下に動いて繋がって見えない
+        Assert.True(Assert.Single(Cell(vm, D(2026, 9, 22)).Bands).IsEmpty);
+        Assert.True(Assert.Single(Cell(vm, D(2026, 9, 26)).Bands).IsEmpty);
+
+        // 週が違えば段は要らない。9/19 は前の行（9/13〜9/19）
+        Assert.Empty(Cell(vm, D(2026, 9, 19)).Bands);
+    }
+
+    [Fact]
+    public void 帯は端の日だけ角を丸める()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 23), D(2026, 9, 25));
+
+        var vm = Create(test);
+
+        // 1日ずつ丸めると、隣のマスに別の予定が並んでいるように見える
+        Assert.Equal(ChipSpan.Start, Band(vm, D(2026, 9, 23)).Span);
+        Assert.Equal(ChipSpan.Middle, Band(vm, D(2026, 9, 24)).Span);
+        Assert.Equal(ChipSpan.End, Band(vm, D(2026, 9, 25)).Span);
+    }
+
+    [Fact]
+    public void 帯の途中ではタイトルを繰り返さない()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 23), D(2026, 9, 25));
+
+        var vm = Create(test);
+
+        Assert.Equal("出張", Band(vm, D(2026, 9, 23)).Text);
+        Assert.Equal("", Band(vm, D(2026, 9, 24)).Text);
+        Assert.Equal("", Band(vm, D(2026, 9, 25)).Text);
+    }
+
+    [Fact]
+    public void 週をまたぐ帯は週の頭でもう一度タイトルを出す()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/25 は金曜。日曜始まりなので 9/27 が次の行の頭
+        Trip(test, "e1", "出張", D(2026, 9, 25), D(2026, 9, 28));
+
+        var vm = Create(test);
+
+        Assert.Equal("", Band(vm, D(2026, 9, 26)).Text);
+
+        // 前の週を見ない限り何の予定か分からなくなる
+        Assert.Equal("出張", Band(vm, D(2026, 9, 27)).Text);
+        Assert.Equal("", Band(vm, D(2026, 9, 28)).Text);
+    }
+
+    [Fact]
+    public void 重なる帯は別の段に置く()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 21), D(2026, 9, 23));
+        Trip(test, "e2", "工事", D(2026, 9, 22), D(2026, 9, 25));
+
+        var vm = Create(test);
+
+        var both = Cell(vm, D(2026, 9, 22)).Bands;
+        Assert.Equal("出張", both[0].Chip!.Label);
+        Assert.Equal("工事", both[1].Chip!.Label);
+
+        // 段が動くと、繋がっているように見えない
+        var after = Cell(vm, D(2026, 9, 24)).Bands;
+        Assert.True(after[0].IsEmpty);
+        Assert.Equal("工事", after[1].Chip!.Label);
+    }
+
+    [Fact]
+    public void 重ならない帯は同じ段を使い回す()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 20), D(2026, 9, 21));
+        Trip(test, "e2", "工事", D(2026, 9, 23), D(2026, 9, 25));
+
+        var vm = Create(test);
+
+        // 段を増やすとマスが埋まり、他の予定が「＋N」に隠れてしまう
+        Assert.Equal("出張", Band(vm, D(2026, 9, 21)).Label);
+        Assert.Equal("工事", Band(vm, D(2026, 9, 23)).Label);
+        Assert.Single(Cell(vm, D(2026, 9, 22)).Bands);
+        Assert.True(Cell(vm, D(2026, 9, 22)).Bands[0].IsEmpty);
+    }
+
+    [Fact]
+    public void 空けた段もマスの場所を取る()
+    {
+        using var test = TestWorkspace.Create();
+        Trip(test, "e1", "出張", D(2026, 9, 20), D(2026, 9, 25));
+
+        var ws = test.Workspace;
+        for (var i = 0; i < 3; i++)
+        {
+            ws.AddEvent(new CalendarEvent
+            {
+                Id = $"s{i}", Title = $"会議{i}", Date = D(2026, 9, 22),
+            });
+        }
+
+        var cell = Cell(Create(test), D(2026, 9, 22));
+
+        // 帯1段＋チップ2件で既定の3件。残りは「＋N」へ
+        Assert.Single(cell.Bands);
+        Assert.Equal(2, cell.Events.Count);
+        Assert.Equal(1, cell.OverflowCount);
+    }
+
+    [Fact]
+    public void 一日で終わる予定は帯にしない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "棚卸", Date = D(2026, 9, 24) });
+
+        var cell = Cell(Create(test), D(2026, 9, 24));
+
+        Assert.Empty(cell.Bands);
+        Assert.Equal(ChipSpan.Single, Assert.Single(cell.Events).Span);
     }
 
     [Fact]
@@ -401,6 +545,16 @@ public class MonthViewModelTests
 
     private static DayCellViewModel Cell(MonthViewModel vm, DateOnly date) =>
         vm.Cells.Single(c => c.Date == date);
+
+    /// <summary>その日に出ている帯（1本だけのはず）。</summary>
+    private static EventChipViewModel Band(MonthViewModel vm, DateOnly date) =>
+        Assert.Single(Cell(vm, date).Bands, b => !b.IsEmpty).Chip!;
+
+    private static void Trip(TestWorkspace test, string id, string title, DateOnly from, DateOnly to) =>
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = id, Title = title, Date = from, EndDate = to,
+        });
 
     [Fact]
     public void 実働日と休業日とデータ無しで面を分ける()

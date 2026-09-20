@@ -9,6 +9,10 @@
       .chip   11px / padding 1px 5px / radius 3px / 左に 3px の帯
       .more   10px / 補助色
 
+    またがる予定は .chip では出さず、週の行ごとに段を決めた「帯」として並べる
+    （EventBands）。1日ずつ切って並べると、同じ予定が日ごとに別々に入っている
+    ように見える。
+
     実働日の通し番号はここには出さない（要件書 4.3）。
 -->
 <UserControl x:Class="SlideinaCalendar.App.Views.MonthView"
@@ -93,6 +97,77 @@
                            Typography.NumeralAlignment="Tabular"
                            ToolTip="{Binding Tooltip}" />
             </Border>
+        </DataTemplate>
+
+        <!--
+            またがる予定の帯。1日ずつ角を丸めて左に帯を立てると、隣のマスに別の予定が
+            並んでいるように見える。端だけを丸め、途中の日は左右の余白（5px）ぶん
+            はみ出させて、マスの境まで伸ばす。残るのは 1px の罫線だけになる。
+
+            途中の日は文字を出さない（EventChipViewModel.Text）。毎日タイトルを
+            繰り返すのが、切れて見える一番の理由だった。週をまたぐときは行の頭で出す。
+        -->
+        <DataTemplate x:Key="EventBandTemplate">
+            <Border x:Name="Band" CornerRadius="3,0,0,3" Padding="5,1" Margin="0,2,-5,0"
+                    Background="{Binding Color, Converter={StaticResource EventColorFace}}"
+                    BorderThickness="3,0,0,0"
+                    BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource EventChipMenu}"
+                    MouseLeftButtonDown="OnEventChipClicked"
+                    MouseMove="OnChipDragging">
+                <TextBlock Text="{Binding Text}" FontSize="11" LineHeight="16"
+                           Foreground="{DynamicResource InkBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           Typography.NumeralAlignment="Tabular"
+                           ToolTip="{Binding Tooltip}" />
+            </Border>
+
+            <DataTemplate.Triggers>
+                <!-- 途中の日。左右とも隣へ繋ぐので、角も帯も立てない -->
+                <DataTrigger Binding="{Binding Span}" Value="Middle">
+                    <Setter TargetName="Band" Property="CornerRadius" Value="0" />
+                    <Setter TargetName="Band" Property="Margin" Value="-5,2,-5,0" />
+                    <Setter TargetName="Band" Property="BorderThickness" Value="0" />
+                </DataTrigger>
+
+                <!-- 最終日。右だけ丸める -->
+                <DataTrigger Binding="{Binding Span}" Value="End">
+                    <Setter TargetName="Band" Property="CornerRadius" Value="0,3,3,0" />
+                    <Setter TargetName="Band" Property="Margin" Value="-5,2,0,0" />
+                    <Setter TargetName="Band" Property="BorderThickness" Value="0" />
+                </DataTrigger>
+
+                <!--
+                    週をまたいで続く行の頭。ここだけはタイトルが出るので、左は
+                    はみ出させない。出すと文字が罫線の下に潜る
+                -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Span}" Value="Middle" />
+                        <Condition Binding="{Binding ShowsTitle}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Band" Property="Margin" Value="0,2,-5,0" />
+                </MultiDataTrigger>
+
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Span}" Value="End" />
+                        <Condition Binding="{Binding ShowsTitle}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Band" Property="Margin" Value="0,2,0,0" />
+                </MultiDataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!--
+            帯の1段。予定が無くても高さぶんの場所を空ける。空けないと、その日だけ
+            下の予定がせり上がって、隣の日と段が揃わない
+        -->
+        <DataTemplate x:Key="EventBandSlotTemplate">
+            <ContentControl Height="20" Content="{Binding Chip}"
+                            ContentTemplate="{StaticResource EventBandTemplate}"
+                            HorizontalContentAlignment="Stretch" />
         </DataTemplate>
 
         <!-- タスクは帯を持たず、丸印を添えて予定と区別する -->
@@ -211,6 +286,8 @@
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
+                            <ItemsControl ItemsSource="{Binding Bands}"
+                                          ItemTemplate="{StaticResource EventBandSlotTemplate}" />
                             <ItemsControl ItemsSource="{Binding Events}"
                                           ItemTemplate="{StaticResource EventChipTemplate}" />
                             <ItemsControl ItemsSource="{Binding Tasks}"

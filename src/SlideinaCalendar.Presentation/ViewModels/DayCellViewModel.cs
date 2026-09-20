@@ -57,7 +57,8 @@ public sealed class DayCellViewModel : ObservableObject
         string? holidayName = null,
         ICalendarPalette? palette = null,
         int maxChips = DefaultMaxChips,
-        IReadOnlyList<MilestoneViewModel>? milestones = null)
+        IReadOnlyList<MilestoneViewModel>? milestones = null,
+        IReadOnlyList<EventBandViewModel>? bands = null)
     {
         Date = date;
         IsCurrentMonth = isCurrentMonth;
@@ -67,15 +68,28 @@ public sealed class DayCellViewModel : ObservableObject
         AllEvents = events;
         AllTasks = tasks;
 
+        // またがる予定は帯として別に置く。週のあいだ同じ段に居続けさせるので、
+        // ここで数を減らしたり順を入れ替えたりしない
+        Bands = bands ?? [];
+
+        var banded = Bands
+            .Where(b => !b.IsEmpty)
+            .Select(b => b.Chip!.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
         // マスに入る数には限りがある。溢れたぶんは「＋N」でまとめて示し、
         // 件数が分からないまま隠れてしまうのを避ける
         var chips = events
+            .Where(e => !banded.Contains(e.Source.Id))
             .Select(e => new EventChipViewModel(e, palette?.ColorOf(e.Source.CalendarId)))
             .ToArray();
         var taskChips = tasks;
 
+        // 空の段も場所を取る。帯を削ると繋がりが切れるので、削るのは帯以外から
+        var room = Math.Max(0, maxChips - Bands.Count);
+
         var total = chips.Length + taskChips.Count;
-        if (total <= maxChips)
+        if (total <= room)
         {
             Events = chips;
             Tasks = taskChips;
@@ -84,10 +98,10 @@ public sealed class DayCellViewModel : ObservableObject
         else
         {
             // 予定を先に見せる。タスクは右ペインでも一覧できる
-            var eventRoom = Math.Min(chips.Length, maxChips);
+            var eventRoom = Math.Min(chips.Length, room);
             Events = chips.Take(eventRoom).ToArray();
-            Tasks = taskChips.Take(maxChips - eventRoom).ToArray();
-            OverflowCount = total - maxChips;
+            Tasks = taskChips.Take(room - eventRoom).ToArray();
+            OverflowCount = total - room;
         }
 
         HasWorkingDayData = workingDays.HasDataFor(date);
@@ -166,6 +180,12 @@ public sealed class DayCellViewModel : ObservableObject
     public IReadOnlyList<MilestoneViewModel> Milestones { get; }
 
     /// <summary>マスに並べる予定。溢れたぶんは含まない。</summary>
+    /// <summary>
+    /// またがる予定の帯。段の位置が週のあいだ揃うよう、空の枠も含む。
+    /// <para>予定のチップより上に出す。</para>
+    /// </summary>
+    public IReadOnlyList<EventBandViewModel> Bands { get; }
+
     public IReadOnlyList<EventChipViewModel> Events { get; }
 
     /// <summary>マスに並べるタスク。溢れたぶんは含まない。</summary>
