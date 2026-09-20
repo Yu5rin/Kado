@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App;
@@ -26,11 +27,31 @@ public partial class MainWindow : Window
     /// <summary>幅を入れ終わったか。<c>Loaded</c> は出し直すたびに来るので、一度だけにする。</summary>
     private bool _widthsRestored;
 
+    /// <summary>
+    /// いまの置き場所。
+    /// <para>
+    /// 閉じるときに読むのではなく、動かすたびにここへ控える。閉じたあとでは
+    /// <c>RestoreBounds</c> が当てにならず、更新のための終了（<c>Shutdown</c>）では
+    /// <c>Closing</c> も来ない。動いた時点で控えておけば、どちらの終わり方でも残る。
+    /// </para>
+    /// </summary>
+    private WindowPlacement _placement = WindowPlacement.Unknown;
+
+    /// <summary>置き場所の出し入れ。渡されなければ覚えない。</summary>
+    public WindowPlacementStore? Placements { get; init; }
+
     public MainWindow()
     {
         InitializeComponent();
 
         _clock.Tick += (_, _) => ViewModel?.UpdateNow(DateTime.Now);
+
+        // 窓ができた時点で入れる。出してから動かすと、一度出てから飛ぶのが見える
+        SourceInitialized += (_, _) => RestorePlacement();
+
+        LocationChanged += (_, _) => TrackPlacement();
+        SizeChanged += (_, _) => TrackPlacement();
+        StateChanged += (_, _) => TrackPlacement();
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
         Loaded += (_, _) =>
@@ -44,7 +65,61 @@ public partial class MainWindow : Window
         {
             _clock.Stop();
             SavePaneWidths();
+            Placements?.Save(_placement);
         };
+    }
+
+    // ------------------------------------------------------------------
+    // ウィンドウの置き場所と大きさ
+    // ------------------------------------------------------------------
+
+    /// <summary>前回の置き場所で出す。最大化で終わっていれば最大化で出す。</summary>
+    private void RestorePlacement()
+    {
+        if (Placements is not { } store) return;
+
+        // 前に使っていた画面が無くなっていることがある。外付けのディスプレイを
+        // 外したまま起動すると、画面の外に開いて手が出せなくなる
+        var saved = store.Load().ClampTo(
+            SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+
+        Width = saved.Width;
+        Height = saved.Height;
+
+        if (saved.HasPosition)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = saved.Left;
+            Top = saved.Top;
+        }
+
+        _placement = saved;
+
+        // 大きさを入れたあとで最大化する。先に最大化すると、元に戻したときの
+        // 大きさが既定のまま残る
+        if (saved.IsMaximized) WindowState = WindowState.Maximized;
+    }
+
+    /// <summary>いまの置き場所を控える。</summary>
+    private void TrackPlacement()
+    {
+        switch (WindowState)
+        {
+            // 最小化で終わった次の起動でアイコンのまま出てくると、
+            // 立ち上がったのかどうか分からない。覚えない
+            case WindowState.Minimized:
+                return;
+
+            // 最大化中の大きさは覚えない。覚えるのは元に戻したときの大きさのほう
+            case WindowState.Maximized:
+                _placement = _placement with { IsMaximized = true };
+                return;
+
+            default:
+                _placement = new WindowPlacement(Left, Top, Width, Height, IsMaximized: false);
+                return;
+        }
     }
 
     // ------------------------------------------------------------------
