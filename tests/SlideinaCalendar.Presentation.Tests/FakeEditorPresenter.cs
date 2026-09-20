@@ -73,4 +73,10 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
     public SettingsViewModel? LastSettings { get; private set; }
 
     public void ShowSettings(SettingsViewModel settings) => LastSettings = settings;
+
+    /// <summary>出された実働日計算パネル。開いたかどうかを見るために控える。</summary>
+    public WorkdayCalculatorViewModel? LastCalculator { get; private set; }
+
+    public void ShowWorkdayCalculator(WorkdayCalculatorViewModel calculator) =>
+        LastCalculator = calculator;
 }

@@ -21,10 +21,10 @@ public enum CalendarView
     Week,
     Day,
 
-    /// <summary>年（ストリップ）。Phase 6 で実装する。</summary>
+    /// <summary>年（ストリップ／カレンダー）。年度単位（4月〜翌3月）。</summary>
     Year,
 
-    /// <summary>一覧（アジェンダ）。Phase 6 で実装する。</summary>
+    /// <summary>一覧（アジェンダ）。予定のない日は畳んで流す。</summary>
     Agenda,
 }
 
@@ -157,7 +157,7 @@ public sealed class MainViewModel : ObservableObject
         ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
 
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
-        OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
+        OpenWorkingDayCalculatorCommand = new RelayCommand(ShowWorkdayCalculator);
 
         // 設定を持たない組み立て方（テストなど）では開けない
         OpenSettingsCommand = new RelayCommand(
@@ -249,6 +249,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>日ビュー。</summary>
     public DayViewModel Day { get; private set; }
 
+    /// <summary>年ビュー（ストリップ／カレンダー）。年度単位。</summary>
+    public YearViewModel Year { get; private set; }
+
+    /// <summary>一覧ビュー。予定のない日は畳んで流す。</summary>
+    public AgendaViewModel Agenda { get; private set; }
+
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; private set; }
 
@@ -288,8 +294,12 @@ public sealed class MainViewModel : ObservableObject
             // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
             Week.GoTo(SelectedDate);
             Day.Date = SelectedDate;
+            Year.GoTo(SelectedDate);
+            Agenda.GoTo(SelectedDate);
 
-            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
+            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
+                nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
+            RaiseHeader();
         }
     }
 
@@ -299,6 +309,16 @@ public sealed class MainViewModel : ObservableObject
     public bool IsWeekView => _currentView == CalendarView.Week;
 
     public bool IsDayView => _currentView == CalendarView.Day;
+
+    public bool IsYearView => _currentView == CalendarView.Year;
+
+    public bool IsAgendaView => _currentView == CalendarView.Agenda;
+
+    /// <summary>
+    /// ツールバーの「◀ ▶」で年月を送るビューか。
+    /// <para>一覧は期間を流すので、見出しの年月と食い違わないよう別に扱う。</para>
+    /// </summary>
+    public bool ShowsMonthHeader => _currentView is not CalendarView.Year;
 
     /// <summary>左サイドパネルを開いているか。終了時に保存して次回復元する。</summary>
     public bool IsSidePanelOpen
@@ -418,11 +438,18 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>「2026年9月」。</summary>
     public string Title => Month.Title;
 
-    /// <summary>ツールバーの年。月より一段小さく、薄く出す。</summary>
-    public string TitleYear => Month.Month.Year.ToString(CultureInfo.InvariantCulture);
+    /// <summary>
+    /// ツールバーの年。月より一段小さく、薄く出す。
+    /// <para>年ビューでは年度を出す。「◀ ▶」が年度を送るのに、見出しが月のままだと食い違う。</para>
+    /// </summary>
+    public string TitleYear => _currentView == CalendarView.Year
+        ? Year.FiscalYear.ToString(CultureInfo.InvariantCulture)
+        : Month.Month.Year.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>ツールバーの月。「9月」。</summary>
-    public string TitleMonth => Month.Month.ToString("M月", CultureInfo.InvariantCulture);
+    /// <summary>ツールバーの月。「9月」。年ビューでは「年度」。</summary>
+    public string TitleMonth => _currentView == CalendarView.Year
+        ? "年度"
+        : Month.Month.ToString("M月", CultureInfo.InvariantCulture);
 
     /// <summary>実働日バッジを出せるか。データが無い月では数字を出さない。</summary>
     public bool HasWorkingDayData => Month.HasFullWorkingDayData;
@@ -729,6 +756,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
+    /// <summary>実働日計算パネルを開く。常設はしない（要件書 4.5）。</summary>
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
     /// <summary>設定画面を開く。</summary>
@@ -812,6 +840,16 @@ public sealed class MainViewModel : ObservableObject
                 SyncHeaderTo(Day.Date);
                 break;
 
+            case CalendarView.Year:
+                Year.GoToPreviousYear();
+                RaiseHeader();
+                break;
+
+            case CalendarView.Agenda:
+                Agenda.GoToPrevious();
+                SyncHeaderTo(Agenda.From);
+                break;
+
             default:
                 Month.GoToPreviousMonth();
                 SyncHeaderTo(Month.Month);
@@ -833,6 +871,16 @@ public sealed class MainViewModel : ObservableObject
                 SyncHeaderTo(Day.Date);
                 break;
 
+            case CalendarView.Year:
+                Year.GoToNextYear();
+                RaiseHeader();
+                break;
+
+            case CalendarView.Agenda:
+                Agenda.GoToNext();
+                SyncHeaderTo(Agenda.From);
+                break;
+
             default:
                 Month.GoToNextMonth();
                 SyncHeaderTo(Month.Month);
@@ -846,6 +894,8 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Date = _today;
         Week.GoToToday();
         Day.GoToToday();
+        Year.GoToToday();
+        Agenda.GoToToday();
         MiniCalendar.GoTo(_today);
         MiniCalendar.SelectedDate = _today;
         RaiseHeader();
@@ -1689,6 +1739,8 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Refresh();
         Week.Refresh();
         Day.Refresh();
+        Year.Refresh();
+        Agenda.Refresh();
         MiniCalendar.Refresh();
         RaiseHeader();
     }
@@ -1700,7 +1752,8 @@ public sealed class MainViewModel : ObservableObject
     /// 設定が変わったときは組み直す。
     /// </para>
     /// </summary>
-    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day))]
+    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
+        nameof(Year), nameof(Agenda))]
     private void BuildViews(DateOnly month, DateOnly selected)
     {
         var start = _settings?.DayStart;
@@ -1719,6 +1772,19 @@ public sealed class MainViewModel : ObservableObject
         Week = new WeekViewModel(
             _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
         Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
+
+        Year = new YearViewModel(_workspace, _today, _settings?.YearLayout ?? YearLayout.Strip)
+        {
+            SelectedDate = selected,
+        };
+        Year.GoTo(selected);
+
+        // 出し方は年ビューの中のボタンで切り替える。年ビューを見ているときにしか
+        // 関係しない選び方なので、設定画面には出さない（要件書 5.1）
+        if (_settings is { } settings) Year.LayoutChanged += (_, layout) => settings.YearLayout = layout;
+
+        Agenda = new AgendaViewModel(_workspace, _today, SourceLists);
+        Agenda.GoTo(selected);
     }
 
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
@@ -1726,8 +1792,28 @@ public sealed class MainViewModel : ObservableObject
     {
         BuildViews(Month.Month, SelectedDate);
 
-        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
+            nameof(Year), nameof(Agenda));
         RefreshViews();
+    }
+
+    /// <summary>
+    /// 実働日計算パネルを開く。
+    /// <para>
+    /// 選んでいる日を両方の欄の初期値にする。たいてい「今見ている日から数えたい」ので、
+    /// 開いてすぐ日付を入れ直さずに済む。
+    /// </para>
+    /// </summary>
+    private void ShowWorkdayCalculator()
+    {
+        var calculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today)
+        {
+            RangeFrom = SelectedDate,
+            RangeTo = SelectedDate,
+            BaseDate = SelectedDate,
+        };
+
+        _editors.ShowWorkdayCalculator(calculator);
     }
 
     private void RaiseHeader() => Raise(

@@ -50,6 +50,7 @@ public sealed class AppSettings
     private const string SummaryTimeKey = "notify.summary_time";
     private const string NotifySoundKey = "notify.sound";
     private const string DefaultCalendarKey = "ui.default_calendar";
+    private const string YearLayoutKey = "ui.year_layout";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -68,6 +69,7 @@ public sealed class AppSettings
 
     private ThemeChoice _theme;
     private DayOfWeek _weekStart;
+    private YearLayout _yearLayout;
     private int _dayStartHour;
     private int _dayEndHour;
     private CalendarView _startupView;
@@ -88,6 +90,7 @@ public sealed class AppSettings
         _theme = Read(ThemeKey, ThemeChoice.Auto);
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
+        _yearLayout = Read(YearLayoutKey, YearLayout.Strip);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -355,6 +358,20 @@ public sealed class AppSettings
             _store.Set(DefaultCalendarKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// 年ビューの出し方。
+    /// <para>
+    /// <b>設定画面には出さない。</b>年ビューを見ているときにしか関係しない選び方なので、
+    /// 切り替えは年ビューの中のボタンで行う（要件書 5.1）。ここに置くのは、
+    /// 次の起動でも同じ形で出すため。
+    /// </para>
+    /// </summary>
+    public YearLayout YearLayout
+    {
+        get => _yearLayout;
+        set => Write(ref _yearLayout, value, YearLayoutKey);
     }
 
     /// <summary>時間軸の上端。</summary>

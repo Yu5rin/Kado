@@ -31,6 +31,9 @@ public interface IEditorPresenter
 
     /// <summary>設定画面を出す。変えたその場で効くので、結果は返さない。</summary>
     void ShowSettings(ViewModels.SettingsViewModel settings);
+
+    /// <summary>実働日計算パネルを出す。数えるだけなので、結果は返さない。</summary>
+    void ShowWorkdayCalculator(ViewModels.WorkdayCalculatorViewModel calculator);
 }
 
 /// <summary>何も出さない実装。編集画面を用意していない画面で使う。</summary>
@@ -51,4 +54,6 @@ public sealed class NullEditorPresenter : IEditorPresenter
     public bool Confirm(string title, string message) => false;
 
     public void ShowSettings(ViewModels.SettingsViewModel settings) { }
+
+    public void ShowWorkdayCalculator(ViewModels.WorkdayCalculatorViewModel calculator) { }
 }
