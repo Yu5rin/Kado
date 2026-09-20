@@ -37,6 +37,12 @@
             行の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
         -->
         <ContextMenu x:Key="SourceRowMenu">
+            <MenuItem Header="新しい予定の入れ先にする"
+                      Command="{Binding PlacementTarget.Tag.SetDefaultCalendarCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
             <MenuItem Header="名前と色を変える"
                       Command="{Binding PlacementTarget.Tag.EditSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"

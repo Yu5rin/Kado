@@ -151,6 +151,52 @@
         </Setter>
     </Style>
 
+    <!--
+        ふつうのチェックボックス（設定と編集画面）。
+        WPF の既定は面と枠を OS の色で描くので、暗い配色だと白い四角が浮き、
+        文字も黒いまま残る。四角も文字もこちらで描く。
+    -->
+    <Style TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="3.5"
+                                Margin="0,0,7,0" VerticalAlignment="Center"
+                                Background="{DynamicResource BackgroundBrush}"
+                                BorderThickness="1.5" BorderBrush="{DynamicResource LineStrongBrush}">
+                            <Path x:Name="Mark" Data="{StaticResource IconCheck}"
+                                  Stroke="White" StrokeThickness="2.6" Visibility="Collapsed"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Stretch="Uniform" Width="9" Height="9" />
+                        </Border>
+
+                        <ContentPresenter VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- 検索ボックス -->
     <Style x:Key="SearchBoxStyle" TargetType="TextBox">
         <Setter Property="Height" Value="28" />
@@ -378,6 +424,18 @@
                                 </ToggleButton.Template>
                             </ToggleButton>
 
+                            <!--
+                                新しい予定の入れ先を示す印。右クリックから選び直せる。
+                                どこに入るのかが一覧で分かる
+                            -->
+                            <Path x:Name="DefaultMark" DockPanel.Dock="Right"
+                                  Data="{StaticResource IconStar}" Stretch="Uniform"
+                                  Width="11" Height="11" Margin="4,0,0,0"
+                                  VerticalAlignment="Center"
+                                  Fill="{DynamicResource AccentBrush}"
+                                  ToolTip="新しい予定はここに入ります"
+                                  Visibility="Collapsed" />
+
                             <TextBlock x:Name="Label" Text="{Binding Name}"
                                        VerticalAlignment="Center"
                                        Foreground="{TemplateBinding Foreground}"
@@ -391,6 +449,10 @@
                         </DataTrigger>
                         <DataTrigger Binding="{Binding DropHint}" Value="Below">
                             <Setter TargetName="DropBelow" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+
+                        <DataTrigger Binding="{Binding IsDefault}" Value="True">
+                            <Setter TargetName="DefaultMark" Property="Visibility" Value="Visible" />
                         </DataTrigger>
 
                         <Trigger Property="IsChecked" Value="False">
