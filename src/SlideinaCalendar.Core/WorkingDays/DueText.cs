@@ -47,3 +47,26 @@ public sealed record DueText(
 {
     public override string ToString() => Text;
 }
+
+/// <summary>済んだタスクが期限に間に合ったか。</summary>
+public enum DoneKind
+{
+    /// <summary>期限どおり。</summary>
+    OnTime,
+
+    /// <summary>期限より前に済ませた。</summary>
+    Early,
+
+    /// <summary>期限を過ぎてから済ませた。UI では控えめな赤で出す。</summary>
+    Late,
+}
+
+/// <summary>
+/// 済んだタスクの結果。
+/// <para>「2実働日 遅れて完了」のような一行と、その内訳。</para>
+/// </summary>
+/// <param name="Text">画面に出す文字列。</param>
+/// <param name="Kind">間に合ったかどうか。</param>
+/// <param name="Days">期限との差。単位は <paramref name="IsCalendarUnit"/> で決まる。</param>
+/// <param name="IsCalendarUnit">暦日で数えたか。false なら実働日。</param>
+public sealed record DoneText(string Text, DoneKind Kind, int Days, bool IsCalendarUnit);

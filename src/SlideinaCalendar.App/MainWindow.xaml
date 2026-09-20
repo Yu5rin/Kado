@@ -645,10 +645,27 @@
                                                                    Foreground="{DynamicResource Ink3Brush}"
                                                                    Visibility="{Binding DueSubText, Converter={StaticResource NullToVisibility}}" />
                                                     </StackPanel>
+
+                                                    <!--
+                                                        済んだタスクの結果。期限に間に合ったかどうかは
+                                                        片付いたあとで振り返るときに要る
+                                                    -->
+                                                    <TextBlock x:Name="DoneNote" Text="{Binding DoneText}"
+                                                               FontSize="10.5" Margin="0,1,0,0"
+                                                               Typography.NumeralAlignment="Tabular"
+                                                               Foreground="{DynamicResource Ink3Brush}"
+                                                               Visibility="{Binding DoneText,
+                                                                            Converter={StaticResource NullToVisibility}}" />
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
+                                            <!-- 遅れて済ませたものだけ色を変える。早い・期限どおりは静かに -->
+                                            <DataTrigger Binding="{Binding IsLate}" Value="True">
+                                                <Setter TargetName="DoneNote" Property="Foreground"
+                                                        Value="{DynamicResource SundayBrush}" />
+                                            </DataTrigger>
+
                                             <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Row" Property="Background"
                                                         Value="{DynamicResource SunkenBrush}" />

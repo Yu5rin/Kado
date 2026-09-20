@@ -87,6 +87,54 @@ public sealed class DueDateFormatter(WorkingDayMath math)
     }
 
     /// <summary>
+    /// 済んだタスクの結果を組み立てる。「2実働日 遅れて完了」「3実働日 早く完了」。
+    /// <para>
+    /// 期限に間に合ったかどうかは、済んだあとで振り返るときに要る。Google ToDo は
+    /// 期限と完了日時の両方を持っているので、その差から出せる。<b>どこにも書き足さない。</b>
+    /// </para>
+    /// <para>
+    /// 数え方は期限の表記と同じで、両端が実働日データの範囲に収まっているときだけ
+    /// 実働日で数える。片側でも外れていれば暦日に倒す。
+    /// </para>
+    /// </summary>
+    /// <param name="due">タスクの期限日。</param>
+    /// <param name="completed">済ませた日。</param>
+    public DoneText FormatDone(DateOnly due, DateOnly completed)
+    {
+        // 期限が非稼働日なら、期限の表記と同じく直前の実働日へ寄せて数える
+        var effective = Calendar.HasDataFor(due) && _math.PreviousWorkingDayOrSame(due) is { } snapped
+            ? snapped
+            : due;
+
+        if (completed == effective)
+        {
+            return new DoneText("期限どおり完了", DoneKind.OnTime, 0, IsCalendarUnit: false);
+        }
+
+        var late = completed > effective;
+        var (from, to) = late ? (effective, completed) : (completed, effective);
+
+        // 両端が範囲に入っているときだけ実働日で数える
+        if (Calendar.HasDataFor(from) && Calendar.HasDataFor(to)
+            && _math.CountBetween(from, to) is { } workingDays && workingDays >= 1)
+        {
+            return new DoneText(
+                $"{workingDays}実働日 {(late ? "遅れて" : "早く")}完了",
+                late ? DoneKind.Late : DoneKind.Early, workingDays, IsCalendarUnit: false);
+        }
+
+        var days = to.DayNumber - from.DayNumber;
+        if (days == 0)
+        {
+            return new DoneText("期限どおり完了", DoneKind.OnTime, 0, IsCalendarUnit: false);
+        }
+
+        return new DoneText(
+            $"{days}日 {(late ? "遅れて" : "早く")}完了",
+            late ? DoneKind.Late : DoneKind.Early, days, IsCalendarUnit: true);
+    }
+
+    /// <summary>
     /// 非稼働日を直前の実働日へ寄せたとき、寄せた先を明示する括弧書き。
     /// 「どの日を基準に数えたのか」が分からないと数字を信用できないため必ず出す。
     /// </summary>

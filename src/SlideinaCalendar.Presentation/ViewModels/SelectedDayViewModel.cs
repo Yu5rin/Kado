@@ -20,7 +20,7 @@ public enum DueEmphasis
 }
 
 /// <summary>右ペインに並べるタスク1件。</summary>
-public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
+public sealed class TaskListItemViewModel(TaskItem task, DueText? due, DoneText? done = null)
 {
     /// <summary>元のタスク。</summary>
     public TaskItem Task { get; } = task;
@@ -32,6 +32,21 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due)
 
     /// <summary>「残り 3実働日」などの表示。期限が無ければ null。</summary>
     public string? DueText => due?.Text;
+
+    /// <summary>
+    /// 「2実働日 遅れて完了」などの結果。済んでいない、または期限が無ければ null。
+    /// <para>
+    /// 期限に間に合ったかどうかは、片付いたあとで振り返るときに要る。Google ToDo が
+    /// 期限と完了日時の両方を持っているので、その差から出している。
+    /// </para>
+    /// </summary>
+    public string? DoneText => done?.Text;
+
+    /// <summary>遅れて済ませたか。文字の色を変えるのに使う。</summary>
+    public bool IsLate => done is { Kind: DoneKind.Late };
+
+    /// <summary>期限より早く済ませたか。</summary>
+    public bool IsEarly => done is { Kind: DoneKind.Early };
 
     /// <summary>
     /// 期限の右に添える文字。モックは期限日そのものかタスクリスト名を出している。
@@ -244,6 +259,15 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>まだ残っている数。見出しの分子。</summary>
     public int RemainingTaskCount => _tasks.Count(t => !t.IsDone);
 
+    /// <summary>
+    /// 済んだタスクの結果。期限か完了日時が無ければ null。
+    /// <para>Google から来たタスクは完了日時を持っている。こちらで片付けたものも控えてある。</para>
+    /// </summary>
+    private DoneText? DoneOf(TaskItem task) =>
+        task is { IsDone: true, Due: { } due, CompletedAt: { } at }
+            ? _workspace.DueFormatter.FormatDone(due, DateOnly.FromDateTime(at.LocalDateTime))
+            : null;
+
     /// <summary>読み直す。</summary>
     public void Refresh()
     {
@@ -262,7 +286,9 @@ public sealed class SelectedDayViewModel : ObservableObject
             .OrderBy(t => t.Due)
             .ThenBy(t => t.Title, StringComparer.Ordinal)
             .Select(t => new TaskListItemViewModel(
-                t, t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null))
+                t,
+                t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null,
+                DoneOf(t)))
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
