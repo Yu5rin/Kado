@@ -47,7 +47,9 @@
         </ContextMenu>
     </UserControl.Resources>
 
-    <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
+    <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
+            Background="Transparent"
+            AllowDrop="True" DragOver="OnColumnDragOver" Drop="OnColumnDropped">
         <Grid>
             <!-- 1時間ごとの罫線 -->
             <ItemsControl ItemsSource="{Binding HourLabels, ElementName=Root}" IsHitTestVisible="False">
@@ -92,6 +94,7 @@
                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                 ContextMenu="{StaticResource BlockMenu}"
                                 MouseLeftButtonDown="OnBlockClicked"
+                                MouseMove="OnBlockDragging"
                                 Height="{Binding Height}"
                                 Margin="{Binding Top, Converter={StaticResource TimelineOffsetToMargin}}"
                                 Background="{Binding Color, Converter={StaticResource EventColorFace}}"
