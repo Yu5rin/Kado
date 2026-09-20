@@ -69,7 +69,18 @@ internal static class NativeMethods
     internal static extern bool SystemParametersInfo(
         int uiAction, int uiParam, ref RECT pvParam, int fWinIni);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    /// <summary>
+    /// モニタの矩形を引く。
+    /// <para>
+    /// <b><c>EntryPoint</c> を省いてはいけない。</b>既定は ANSI 版に結び付くのに、
+    /// <see cref="MONITORINFOEX"/> は Unicode で並ぶ（名前が 64 バイト）ので、
+    /// <c>cbSize</c> が ANSI 版の想定と合わず、<b>いつ呼んでも false が返る</b>。
+    /// 失敗は 0 の矩形として素通りするため、画面端の帯が張れずスライドが出てこない、
+    /// ドックの高さが足りない、といった形で遠くに症状が出る。
+    /// </para>
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true,
+        CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 

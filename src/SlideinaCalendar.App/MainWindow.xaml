@@ -356,23 +356,21 @@
                         ToolTip="{Binding Shell.ModeLabel}">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="ウィンドウ" Command="{Binding Shell.ToWindowCommand}"
-                                      IsChecked="{Binding Shell.IsWindowMode, Mode=OneWay}"
+                            <!--
+                                ここは「どちらの端から出すか」を決めるところ。出しかたの
+                                切り替え（ウィンドウ⇔スライド）は左クリックの役目なので、
+                                同じものをメニューにも並べない。
+                            -->
+                            <MenuItem Header="左端から出す"
+                                      Command="{Binding Shell.EdgeLeftCommand}"
+                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
                                       IsCheckable="True"
-                                      InputGestureText="Ctrl+Alt+S" />
-                            <Separator />
-                            <MenuItem Header="スライド（左端から出す）"
-                                      Command="{Binding Shell.SlideLeftCommand}"
-                                      ToolTip="普段は隠れていて、画面の左端にマウスを留めると出てきます" />
-                            <MenuItem Header="スライド（右端から出す）"
-                                      Command="{Binding Shell.SlideRightCommand}"
-                                      ToolTip="普段は隠れていて、画面の右端にマウスを留めると出てきます" />
-                            <Separator />
-                            <MenuItem Header="出したまま固定する（画面を分割）"
-                                      Command="{Binding Shell.TogglePinCommand}"
-                                      IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
+                                      ToolTip="画面の左端にマウスを留めると出てきます" />
+                            <MenuItem Header="右端から出す"
+                                      Command="{Binding Shell.EdgeRightCommand}"
+                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
                                       IsCheckable="True"
-                                      InputGestureText="Ctrl+Alt+P" />
+                                      ToolTip="画面の右端にマウスを留めると出てきます" />
                             <Separator />
                             <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
                                       Command="{Binding ToggleSidePanelCommand}"
@@ -975,7 +973,7 @@
 
             右に寄せていれば内側は左、左に寄せていれば内側は右。辺と逆になる。
         -->
-        <Border x:Name="DockGrip" Width="5" Background="Transparent"
+        <Border x:Name="DockGrip" Width="8" Background="Transparent"
                 HorizontalAlignment="Left" Cursor="SizeWE"
                 ToolTip="ドラッグで幅を変えられます"
                 MouseLeftButtonDown="OnGripPressed"
