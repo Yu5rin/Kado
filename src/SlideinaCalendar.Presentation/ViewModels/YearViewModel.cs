@@ -1,4 +1,5 @@
 using System.Globalization;
+using SlideinaCalendar.Data.Repositories;
 using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Presentation.Infrastructure;
 
@@ -14,6 +15,10 @@ public enum YearLayout
     Grid,
 }
 
+/// <summary>目盛りの1マス。数字を置かない位置は空。</summary>
+/// <param name="Label">出す数字。空なら何も出さない。</param>
+public sealed record RulerMark(string Label);
+
 /// <summary>
 /// 年ストリップの1マス（1日）。
 /// <para>
@@ -21,17 +26,20 @@ public enum YearLayout
 /// 読む</b>ための面なので、予定は出さない。
 /// </para>
 /// </summary>
-public sealed class YearDayViewModel
+public sealed class YearDayViewModel : ObservableObject
 {
+    private bool _isSelected;
+
     internal YearDayViewModel(
-        DateOnly date, bool hasData, bool isWorkingDay, bool isHoliday, bool isToday, bool isSelected)
+        DateOnly date, bool hasData, bool isWorkingDay, bool isHoliday, bool isToday,
+        IReadOnlyList<string?> marks)
     {
         Date = date;
         HasWorkingDayData = hasData;
         IsWorkingDay = isWorkingDay;
         IsHoliday = isHoliday;
         IsToday = isToday;
-        IsSelected = isSelected;
+        Marks = marks;
     }
 
     public DateOnly Date { get; }
@@ -50,7 +58,25 @@ public sealed class YearDayViewModel
 
     public bool IsToday { get; }
 
-    public bool IsSelected { get; }
+    /// <summary>
+    /// この日に入っている予定の色。
+    /// <para>
+    /// 会社配布のカレンダーと同じで、日付の上下に細い帯を重ねる。狭いので
+    /// タイトルは出せないが、<b>詰まっている日がどこかは一目で分かる</b>。
+    /// </para>
+    /// <para>null は色の決まっていないカレンダー。表示側が既定の色を使う。</para>
+    /// </summary>
+    public IReadOnlyList<string?> Marks { get; }
+
+    /// <summary>予定が入っているか。</summary>
+    public bool HasEvents => Marks.Count > 0;
+
+    /// <summary>選んでいる日か。押すたびに動く。</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set => Set(ref _isSelected, value);
+    }
 
     /// <summary>休業として塗る日か。データを持たないうちは塗らない。</summary>
     public bool IsOffDay => HasWorkingDayData && !IsWorkingDay;
@@ -65,10 +91,15 @@ public sealed class YearDayViewModel
         {
             var day = Date.ToString("M月d日（ddd）", CultureInfo.GetCultureInfo("ja-JP"));
 
-            if (IsHoliday) return $"{day} 祝日";
-            if (!HasWorkingDayData) return day;
+            var state = IsHoliday ? "祝日"
+                : !HasWorkingDayData ? null
+                : IsWorkingDay ? "稼働" : "休業";
 
-            return IsWorkingDay ? $"{day} 稼働" : $"{day} 休業";
+            var events = Marks.Count > 0 ? $"予定 {Marks.Count} 件" : null;
+
+            var parts = new[] { day, state, events }.Where(x => x is { Length: > 0 });
+
+            return string.Join(" ・ ", parts);
         }
     }
 }
@@ -130,16 +161,34 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>年度の始まり。4月。</summary>
     public const int FiscalStartMonth = 4;
 
+    /// <summary>1マスの幅の下げ止まり。これより細いと日付が読めない。</summary>
+    public const double MinDayWidth = 15;
+
+    /// <summary>1マスの幅の上げ止まり。広げすぎると間延びする。</summary>
+    public const double MaxDayWidth = 30;
+
+    /// <summary>幅が分からないうちに使う幅。</summary>
+    public const double DefaultDayWidth = 20;
+
+    /// <summary>1マスに重ねる予定の印の上限。増やすと日付が埋まる。</summary>
+    private const int MaxMarksPerDay = 4;
+
     private readonly CalendarWorkspace _workspace;
+    private readonly ICalendarSources? _sources;
     private readonly DateOnly _today;
 
     private int _fiscalYear;
     private YearLayout _layout = YearLayout.Strip;
     private DateOnly _selectedDate;
+    private double _dayWidth = DefaultDayWidth;
+    private int _gridColumns = 4;
 
-    public YearViewModel(CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Strip)
+    public YearViewModel(
+        CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Strip,
+        ICalendarSources? sources = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _sources = sources;
         _today = today;
         _selectedDate = today;
         _layout = layout;
@@ -206,10 +255,106 @@ public sealed class YearViewModel : ObservableObject
             }
             else
             {
-                Refresh();
+                // 組み直さずに印だけ動かす。12か月ぶん作り直すと、押すたびに
+                // 目に見えて詰まる
+                MarkSelected();
             }
 
             Raise(nameof(SelectedDate));
+        }
+    }
+
+    /// <summary>
+    /// 1マスの幅。
+    /// <para>
+    /// 画面の幅から決める。固定にすると、広い画面では右が余り、狭い画面では
+    /// 横のスクロールバーが出る。文字がつぶれない範囲で伸び縮みさせる。
+    /// </para>
+    /// </summary>
+    public double DayWidth
+    {
+        get => _dayWidth;
+        set
+        {
+            var width = double.IsNaN(value) || double.IsInfinity(value)
+                ? DefaultDayWidth
+                : Math.Clamp(value, MinDayWidth, MaxDayWidth);
+
+            if (!Set(ref _dayWidth, width)) return;
+
+            Raise(nameof(DayHeight), nameof(DayFontSize), nameof(MarkWidth));
+        }
+    }
+
+    /// <summary>マスの高さ。幅に合わせて動かすと、正方形に近い形が保てる。</summary>
+    public double DayHeight => Math.Round(_dayWidth * 1.5);
+
+    /// <summary>日付の文字の大きさ。細いマスでつぶれないよう、少し縮める。</summary>
+    public double DayFontSize => _dayWidth < 18 ? 9 : 10.5;
+
+    /// <summary>予定の印の幅。マスより少し内側にする。</summary>
+    public double MarkWidth => Math.Max(6, _dayWidth - 6);
+
+    /// <summary>
+    /// カレンダー表示の列数。
+    /// <para>
+    /// 既定は4列。左から縦に 4〜6月、7〜9月、10〜12月、1〜3月と並ぶ。四半期ごとに
+    /// 縦に揃うので、期のまとまりが読める。画面が狭ければ表示側が減らす。
+    /// </para>
+    /// </summary>
+    public int GridColumns
+    {
+        get => _gridColumns;
+        set
+        {
+            var columns = Math.Clamp(value, 1, 6);
+
+            if (!Set(ref _gridColumns, columns)) return;
+
+            Raise(nameof(GridRows), nameof(GridMonths));
+        }
+    }
+
+    /// <summary>
+    /// 日付の目盛り。1・5・10・15・20・25・30 の位置にだけ数字を置く。
+    /// <para>31 マスぶん並べるので、下の行と縦に揃う。</para>
+    /// </summary>
+    public IReadOnlyList<RulerMark> RulerMarks { get; } =
+        Enumerable.Range(1, 31)
+            .Select(d => new RulerMark(
+                d is 1 or 5 or 10 or 15 or 20 or 25 or 30
+                    ? d.ToString(CultureInfo.InvariantCulture)
+                    : string.Empty))
+            .ToArray();
+
+    /// <summary>カレンダー表示の行数。12か月を列数で割る。</summary>
+    public int GridRows => (int)Math.Ceiling(12.0 / _gridColumns);
+
+    /// <summary>
+    /// カレンダー表示に並べる順。
+    /// <para>
+    /// 入れ物は左から右へ詰めるので、<b>縦に読ませたいぶんだけ順番を入れ替える</b>。
+    /// 4列なら 4月・7月・10月・1月、次の行が 5月・8月・11月・2月…となる。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MonthStripViewModel> GridMonths
+    {
+        get
+        {
+            var rows = GridRows;
+            var ordered = new List<MonthStripViewModel>(Months.Count);
+
+            for (var row = 0; row < rows; row++)
+            {
+                for (var column = 0; column < _gridColumns; column++)
+                {
+                    var index = (column * rows) + row;
+
+                    if (index < Months.Count) ordered.Add(Months[index]);
+                }
+            }
+
+            return ordered;
         }
     }
 
@@ -225,9 +370,29 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>年度を通した実働日数。揃っていない月があれば null。</summary>
     public int? WorkingDayTotal { get; private set; }
 
-    /// <summary>右上に出す文字。</summary>
-    public string WorkingDayTotalText =>
-        WorkingDayTotal is { } total ? $"年度の実働 {total} 日" : "実働日データが揃っていません";
+    /// <summary>年度のうち、今日までに過ぎた実働日数。</summary>
+    public int? WorkingDayElapsed { get; private set; }
+
+    /// <summary>年度に残っている実働日数。</summary>
+    public int? WorkingDayRemaining =>
+        WorkingDayTotal is { } total && WorkingDayElapsed is { } done ? total - done : null;
+
+    /// <summary>
+    /// 見出しに添える数。「実働 243 日・経過 103 日・残り 140 日」。
+    /// <para>年度のどのあたりに居るのかが、これだけで分かる。</para>
+    /// </summary>
+    public string WorkingDayTotalText
+    {
+        get
+        {
+            if (WorkingDayTotal is not { } total) return "実働日データが揃っていません";
+
+            // 今年度でなければ、経過と残りを出しても意味がない
+            if (WorkingDayElapsed is not { } done) return $"実働 {total} 日";
+
+            return $"実働 {total} 日・経過 {done} 日・残り {total - done} 日";
+        }
+    }
 
     /// <summary>前の年度へ。</summary>
     public void GoToPreviousYear() => FiscalYear--;
@@ -245,13 +410,19 @@ public sealed class YearViewModel : ObservableObject
     public void Refresh()
     {
         var workingDays = _workspace.WorkingDays;
+        var from = new DateOnly(_fiscalYear, FiscalStartMonth, 1);
+        var to = from.AddYears(1).AddDays(-1);
+
+        // 1年ぶんまとめて引く。月ごとに引くと同じ表を12回なめることになる
+        var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
+
         var months = new List<MonthStripViewModel>(12);
 
         for (var i = 0; i < 12; i++)
         {
-            var month = new DateOnly(_fiscalYear, FiscalStartMonth, 1).AddMonths(i);
+            var month = from.AddMonths(i);
 
-            months.Add(BuildMonth(month.Year, month.Month, workingDays));
+            months.Add(BuildMonth(month.Year, month.Month, workingDays, eventsByDate));
         }
 
         Months = months;
@@ -264,11 +435,30 @@ public sealed class YearViewModel : ObservableObject
             ? months.Sum(m => m.WorkingDayCount!.Value)
             : null;
 
-        Raise(nameof(FirstHalf), nameof(SecondHalf), nameof(Months),
-            nameof(WorkingDayTotal), nameof(WorkingDayTotalText));
+        // 経過は今年度だけ。過ぎた年度に「残り」を出しても読めない
+        WorkingDayElapsed = WorkingDayTotal is not null && _fiscalYear == FiscalYearOf(_today)
+            ? months.SelectMany(m => m.Days).Count(d => d.IsWorkingDay && d.Date <= _today)
+            : null;
+
+        MarkSelected();
+
+        Raise(nameof(FirstHalf), nameof(SecondHalf), nameof(Months), nameof(GridMonths),
+            nameof(WorkingDayTotal), nameof(WorkingDayElapsed), nameof(WorkingDayRemaining),
+            nameof(WorkingDayTotalText));
     }
 
-    private MonthStripViewModel BuildMonth(int year, int month, WorkingDayCalendar workingDays)
+    /// <summary>どのマスが選ばれているかを反映する。</summary>
+    private void MarkSelected()
+    {
+        foreach (var day in Months.SelectMany(m => m.Days))
+        {
+            day.IsSelected = day.Date == _selectedDate;
+        }
+    }
+
+    private MonthStripViewModel BuildMonth(
+        int year, int month, WorkingDayCalendar workingDays,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate)
     {
         var last = DateTime.DaysInMonth(year, month);
         var days = new List<YearDayViewModel>(last);
@@ -283,7 +473,7 @@ public sealed class YearViewModel : ObservableObject
                 workingDays.IsWorkingDay(date),
                 _workspace.Holidays.NameOf(date) is not null,
                 date == _today,
-                date == _selectedDate));
+                MarksOn(date, eventsByDate)));
         }
 
         // 揃っていない月に数を出すと、本当より少ない数を正しい数として読んでしまう
@@ -292,5 +482,25 @@ public sealed class YearViewModel : ObservableObject
             : (int?)null;
 
         return new MonthStripViewModel(year, month, days, count);
+    }
+
+    /// <summary>
+    /// その日に重ねる印の色。
+    /// <para>
+    /// 日付の行に出すマイルストーンは含めない。あちらは別に出しているので、
+    /// ここにも入れると同じものが二度数えられる。
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string?> MarksOn(
+        DateOnly date, IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate)
+    {
+        if (!eventsByDate.TryGetValue(date, out var scheduled)) return [];
+
+        return scheduled
+            .Where(e => !CalendarWorkspace.IsMilestoneMark(e.Source))
+            .Where(e => _sources?.IncludesEvent(e.Source) ?? true)
+            .Take(MaxMarksPerDay)
+            .Select(e => _sources?.ColorOf(e.Source.CalendarId))
+            .ToArray();
     }
 }

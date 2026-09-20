@@ -232,6 +232,30 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// Ctrl＋ホイールでビューを切り替える。
+    /// <para>
+    /// 一覧 → 年 → 月 → 週 → 日 の並びを1つずつ動く。回すたびに見ている範囲が
+    /// 狭まる（または広がる）。選んでいる日はそのまま持っていくので、切り替えた
+    /// 先でも同じ日を見ている。
+    /// </para>
+    /// <para>
+    /// どのビューの上でも効かせたいので、いちばん外で受ける。中のビューは Ctrl を
+    /// 押しているあいだホイールを受けない作りにしてある。
+    /// </para>
+    /// </summary>
+    private void OnZoomWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+        if (ViewModel is not { } vm) return;
+
+        // 手前に回すと細かく、奥に回すと粗く。地図と同じ向き
+        if (e.Delta < 0) vm.ZoomOutCommand.Execute(null);
+        else vm.ZoomInCommand.Execute(null);
+
+        e.Handled = true;
+    }
+
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
     /// <summary>検索の結果を押したら、その日へ移って開く。</summary>

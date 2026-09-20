@@ -132,6 +132,10 @@ public sealed class MainViewModel : ObservableObject
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
         SwitchViewCommand = new RelayCommand<CalendarView?>(view => { if (view is { } v) CurrentView = v; });
+        ShowMonthOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Month));
+        ShowDayOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Day));
+        ZoomInCommand = new RelayCommand(() => Zoom(1));
+        ZoomOutCommand = new RelayCommand(() => Zoom(-1));
 
         MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
         MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
@@ -301,10 +305,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _currentView, value)) return;
 
             // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
-            Week.GoTo(SelectedDate);
-            Day.Date = SelectedDate;
-            Year.GoTo(SelectedDate);
-            Agenda.GoTo(SelectedDate);
+            FocusOn(SelectedDate);
 
             Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
                 nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
@@ -429,6 +430,12 @@ public sealed class MainViewModel : ObservableObject
             MiniCalendar.SelectedDate = value;
             Week.GoTo(value);
             Day.Date = value;
+
+            // 年と一覧にも伝える。押した日がそこでも光っていないと、
+            // ビューを切り替えたときにどこを見ていたのか分からなくなる
+            Year.SelectedDate = value;
+            Agenda.SelectedDate = value;
+
             Raise();
         }
     }
@@ -765,6 +772,18 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
+    /// <summary>その日を選んで月ビューへ。</summary>
+    public RelayCommand<DateOnly?> ShowMonthOfCommand { get; }
+
+    /// <summary>その日を選んで日ビューへ。</summary>
+    public RelayCommand<DateOnly?> ShowDayOfCommand { get; }
+
+    /// <summary>ひとつ細かいビューへ（一覧 → 年 → 月 → 週 → 日）。</summary>
+    public RelayCommand ZoomInCommand { get; }
+
+    /// <summary>ひとつ粗いビューへ。</summary>
+    public RelayCommand ZoomOutCommand { get; }
+
     /// <summary>実働日計算パネルを開く。常設はしない（要件書 4.5）。</summary>
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
@@ -1787,7 +1806,8 @@ public sealed class MainViewModel : ObservableObject
             _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
         Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
 
-        Year = new YearViewModel(_workspace, _today, _settings?.YearLayout ?? YearLayout.Strip)
+        Year = new YearViewModel(
+            _workspace, _today, _settings?.YearLayout ?? YearLayout.Strip, SourceLists)
         {
             SelectedDate = selected,
         };
@@ -1828,6 +1848,74 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _editors.ShowWorkdayCalculator(calculator);
+    }
+
+    /// <summary>
+    /// 粗いほうから細かいほうへの並び。
+    /// <para>
+    /// 一覧（全期間）・年・月・週・日。左へ行くほど広く、右へ行くほど狭い。
+    /// Ctrl＋ホイールはこの並びを1つずつ動く。
+    /// </para>
+    /// </summary>
+    private static readonly CalendarView[] ZoomOrder =
+    [
+        CalendarView.Agenda,
+        CalendarView.Year,
+        CalendarView.Month,
+        CalendarView.Week,
+        CalendarView.Day,
+    ];
+
+    /// <summary>
+    /// 並びを <paramref name="step"/> だけ動く。
+    /// <para>端では止まる。回し続けて一覧と日を行き来されると、どこに居るか見失う。</para>
+    /// </summary>
+    private void Zoom(int step)
+    {
+        var at = Array.IndexOf(ZoomOrder, _currentView);
+        if (at < 0) return;
+
+        var next = Math.Clamp(at + step, 0, ZoomOrder.Length - 1);
+        if (next == at) return;
+
+        CurrentView = ZoomOrder[next];
+    }
+
+    /// <summary>
+    /// その日を選んでから、そのビューへ移る。
+    /// <para>
+    /// すでにそのビューを出しているときは <see cref="CurrentView"/> が動かないので、
+    /// 日付を合わせるほうは自分で呼ぶ。
+    /// </para>
+    /// </summary>
+    private void ShowOn(DateOnly? date, CalendarView view)
+    {
+        if (date is not { } day) return;
+
+        SelectedDate = day;
+        CurrentView = view;
+        FocusOn(day);
+    }
+
+    /// <summary>
+    /// どのビューへ移ってもその日が出ているようにする。
+    /// <para>
+    /// 年から日へ飛んでも、日から年へ戻っても、見ているものが変わらない。
+    /// 「今日」ボタンも、どのビューでも同じように効く。
+    /// </para>
+    /// </summary>
+    private void FocusOn(DateOnly date)
+    {
+        Month.GoTo(date);
+        MiniCalendar.GoTo(date);
+        Week.GoTo(date);
+        Day.Date = date;
+        Year.GoTo(date);
+        Year.SelectedDate = date;
+        Agenda.SelectedDate = date;
+        Agenda.GoTo(date);
+
+        RaiseHeader();
     }
 
     private void RaiseHeader() => Raise(

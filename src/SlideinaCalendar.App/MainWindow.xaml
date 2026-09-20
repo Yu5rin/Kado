@@ -149,7 +149,7 @@
         <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
     </Window.InputBindings>
 
-    <Grid>
+    <Grid PreviewMouseWheel="OnZoomWheel">
     <DockPanel>
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
@@ -208,7 +208,19 @@
                 <!-- ビュー切替（.seg）。区切り線は右側、最後だけ引かない -->
                 <Border DockPanel.Dock="Left" Margin="10,0,0,0" CornerRadius="5" ClipToBounds="True"
                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                    <!--
+                        粗いほうから細かいほうへ並べる。Ctrl＋ホイールはこの並びを
+                        1つずつ動くので、ボタンの並びと動く向きが合っていないと迷う
+                    -->
                     <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
+                                     ToolTip="予定とタスクを時系列で。予定のない日はまとめます"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Agenda}" />
+                        <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
+                                     ToolTip="年度（4月〜翌3月）。ホイールで年度を送ります"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Year}" />
                         <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Month}" />
@@ -216,17 +228,9 @@
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Week}" />
                         <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
+                                     BorderThickness="0"
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Day}" />
-                        <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
-                                     ToolTip="年度（4月〜翌3月）。ホイールで年度を送ります"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Year}" />
-                        <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
-                                     BorderThickness="0"
-                                     ToolTip="予定とタスクを時系列で。予定のない日はまとめます"
-                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Agenda}" />
                     </StackPanel>
                 </Border>
 
