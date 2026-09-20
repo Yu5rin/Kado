@@ -54,8 +54,11 @@ public sealed class DeleteEventEdit(
 
         if (value.GoogleEventId is { Length: > 0 })
         {
+            // 入れ先も一緒に控える。どのカレンダーのものか分からないと、同期のときに
+            // 別のカレンダーへ削除を投げて 404 になり、削除が Google へ届かない
             tombstones?.Record(
-                value.Id, TombstoneRepository.EventKind, value.GoogleEventId, DateTimeOffset.Now);
+                value.Id, TombstoneRepository.EventKind, value.GoogleEventId, DateTimeOffset.Now,
+                value.CalendarId);
         }
     }
 
@@ -113,7 +116,8 @@ public sealed class DeleteTaskEdit(
         if (value.GoogleTaskId is { Length: > 0 })
         {
             tombstones?.Record(
-                value.Id, TombstoneRepository.TaskKind, value.GoogleTaskId, DateTimeOffset.Now);
+                value.Id, TombstoneRepository.TaskKind, value.GoogleTaskId, DateTimeOffset.Now,
+                value.GoogleTaskListId ?? value.TaskListId);
         }
     }
 

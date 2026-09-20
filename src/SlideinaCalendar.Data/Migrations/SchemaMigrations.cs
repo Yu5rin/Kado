@@ -193,6 +193,23 @@ public static class SchemaMigrations
         ALTER TABLE calendars ADD COLUMN notify_default INTEGER NOT NULL DEFAULT 1;
         """;
 
+    /// <summary>
+    /// 削除の記録に「どこのものか」を足す。
+    /// <para>
+    /// <b>これが無いと、カレンダーが2つ以上あるときに削除が Google へ届かない。</b>
+    /// 同期はカレンダーごとに回る。持ち主が分からないと、いま回っているカレンダーへ
+    /// 片端から削除を投げることになり、他所の予定は 404 で返ってくる。それを
+    /// 「すでに無い」と受け取って記録を捨てるので、本当の持ち主には一度も届かない。
+    /// </para>
+    /// <para>
+    /// 予定ならカレンダーの、タスクならタスクリストの識別子を入れる。版を上げる前から
+    /// 残っている記録は NULL のままなので、持ち主が分からないものとして扱う。
+    /// </para>
+    /// </summary>
+    private const string V5 = """
+        ALTER TABLE tombstones ADD COLUMN source_id TEXT;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -200,6 +217,7 @@ public static class SchemaMigrations
         new(2, "予定に URL を足す", V2),
         new(3, "同期の受け皿（差分判定用の生データ、カレンダー一覧、タスクリスト）", V3),
         new(4, "通知するかどうかを予定ごと・カレンダーごとに持つ", V4),
+        new(5, "削除の記録に持ち主（カレンダー／タスクリスト）を持つ", V5),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

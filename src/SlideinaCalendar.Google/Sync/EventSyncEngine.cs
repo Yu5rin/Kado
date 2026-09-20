@@ -107,7 +107,9 @@ public sealed class EventSyncEngine(
         var deleted = 0;
         var warnings = new List<string>();
 
-        foreach (var tombstone in tombstones.Pending(TombstoneRepository.EventKind))
+        // このカレンダーのものだけ。絞らないと、他のカレンダーの予定まで
+        // ここへ投げることになる
+        foreach (var tombstone in tombstones.Pending(TombstoneRepository.EventKind, calendarId))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -121,8 +123,16 @@ public sealed class EventSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsMissing)
             {
-                // すでに無い。望む状態なので記録だけ片付ける
-                tombstones.Clear(tombstone.Id, TombstoneRepository.EventKind);
+                // このカレンダーには無い。持ち主が分かっているなら、すでに消えている
+                // ということなので記録を片付ける。
+                //
+                // 持ち主が分からない古い記録は、ここで片付けてはいけない。別の
+                // カレンダーに残っているかもしれず、捨てると<b>削除が永久に届かない</b>。
+                // 残しておけば次のカレンダーが拾う。どこにも無ければ Prune が片付ける
+                if (tombstone.SourceId is { Length: > 0 })
+                {
+                    tombstones.Clear(tombstone.Id, TombstoneRepository.EventKind);
+                }
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {
