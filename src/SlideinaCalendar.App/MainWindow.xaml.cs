@@ -117,6 +117,16 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>クイック入力は Enter で入れる。</summary>
+    private void OnQuickKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (ViewModel is not { } vm || !vm.QuickCommand.CanExecute(null)) return;
+
+        vm.QuickCommand.Execute(null);
+        e.Handled = true;
+    }
+
     /// <summary>Esc で検索をやめる。</summary>
     private void OnSearchKeyDown(object sender, KeyEventArgs e)
     {

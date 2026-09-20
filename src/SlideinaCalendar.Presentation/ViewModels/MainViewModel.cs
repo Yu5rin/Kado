@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using SlideinaCalendar.Core.Input;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.Mapping;
 using SlideinaCalendar.Google.OAuth;
@@ -52,6 +53,7 @@ public sealed class MainViewModel : ObservableObject
     private string _searchText = string.Empty;
     private IReadOnlyList<SearchResultViewModel> _searchResults = [];
     private string? _searchMessage;
+    private string _quickText = string.Empty;
     private double _sidePanelWidth;
     private double _detailPaneWidth;
 
@@ -145,6 +147,8 @@ public sealed class MainViewModel : ObservableObject
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
         EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
         DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
+
+        QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
 
         BackupCommand = new RelayCommand(Backup);
         RestoreCommand = new RelayCommand(Restore, () => RestoreBackup is not null);
@@ -412,6 +416,100 @@ public sealed class MainViewModel : ObservableObject
             RunSearch();
         }
     }
+
+    // ------------------------------------------------------------------
+    // クイック入力
+    //
+    // 「明日15時 打合せ @会議室A」と1行打てば入る。編集画面を開いて欄を
+    // 埋めるより速い。読めない言い回しは黙って一部だけ入れず、断って止める
+    // ------------------------------------------------------------------
+
+    /// <summary>クイック入力の1行。</summary>
+    public string QuickText
+    {
+        get => _quickText;
+        set
+        {
+            if (!Set(ref _quickText, value ?? string.Empty)) return;
+
+            Raise(nameof(QuickPreview), nameof(CanCommitQuick));
+            QuickCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// 打った1行をどう読んだか。入れる前に見せる。
+    /// <para>読めなければ、なぜ入れられないのかを出す。</para>
+    /// </summary>
+    public string? QuickPreview
+    {
+        get
+        {
+            if (_quickText.Trim().Length == 0) return null;
+
+            var entry = QuickParser.Parse(_quickText, SelectedDate);
+
+            if (entry.UnsupportedWord is { } word) return $"「{word}」はここでは読めません。予定の画面から入れてください";
+            if (entry.HasDateError) return "その日は暦にありません";
+            if (entry.HasTimeError) return "その時刻はありません";
+            if (entry.Title.Length == 0) return "予定の名前がありません";
+
+            var when = entry.Start is { } start
+                ? $"{entry.Date:M/d}（{Weekday(entry.Date)}） {start:HH\\:mm}"
+                    + (entry.End is { } end ? $"–{end:HH\\:mm}" : string.Empty)
+                : $"{entry.Date:M/d}（{Weekday(entry.Date)}） 終日";
+
+            return entry.Location is { Length: > 0 } place
+                ? $"{when} ・ {entry.Title} ・ {place}"
+                : $"{when} ・ {entry.Title}";
+        }
+    }
+
+    /// <summary>そのまま入れられるか。</summary>
+    public bool CanCommitQuick => QuickParser.Parse(_quickText, SelectedDate).CanCommit;
+
+    /// <summary>1行から予定を入れる。</summary>
+    public RelayCommand QuickCommand { get; }
+
+    private void CommitQuick()
+    {
+        var entry = QuickParser.Parse(_quickText, SelectedDate);
+        if (!entry.CanCommit) return;
+
+        _workspace.AddEvent(new CalendarEvent
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            Title = entry.Title,
+            Date = entry.Date,
+            StartTime = entry.Start,
+
+            // 終わりを書いていなければ1時間。時刻を書いていなければ終日のまま
+            EndTime = entry.End ?? (entry.Start is { } start ? start.AddHours(1) : null),
+            Location = entry.Location,
+            CalendarId = QuickCalendarId,
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        SelectedDate = entry.Date;
+        QuickText = string.Empty;
+        StatusMessage = $"「{entry.Title}」を追加しました";
+    }
+
+    private static string Weekday(DateOnly date) => "日月火水木金土"[(int)date.DayOfWeek].ToString();
+
+    /// <summary>
+    /// クイック入力で入れる先のカレンダー。
+    /// <para>
+    /// 一覧の最初のもの。ただし「inaCalendar」は実働日データの入れ先なので避ける。
+    /// 入れてしまうと、次の取り込みで消える場所に置くことになる。
+    /// </para>
+    /// </summary>
+    private string? QuickCalendarId =>
+        SourceLists.Calendars
+            .FirstOrDefault(c => !string.Equals(
+                c.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal))
+            ?.Id
+        ?? SourceLists.Calendars.FirstOrDefault()?.Id;
 
     /// <summary>検索で見つかったもの。多くても50件までにする。</summary>
     public IReadOnlyList<SearchResultViewModel> SearchResults

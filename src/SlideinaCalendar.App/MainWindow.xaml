@@ -756,7 +756,30 @@
                     <!-- 追加（.dfoot） -->
                     <Border Grid.Row="2" Padding="12,9"
                             BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-                        <UniformGrid Rows="1" Columns="2">
+                        <StackPanel>
+                            <!--
+                                クイック入力。1行打って Enter で入る。
+                                編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
+                            -->
+                            <TextBox Style="{StaticResource SearchBoxStyle}"
+                                     Text="{Binding DataContext.QuickText,
+                                            RelativeSource={RelativeSource AncestorType=Window},
+                                            UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="例: 明日15時 打合せ @会議室A"
+                                     ToolTip="1行で予定を追加します（Enter）&#10;例: 明日15時 打合せ @会議室A"
+                                     KeyDown="OnQuickKeyDown" />
+
+                            <TextBlock Text="{Binding DataContext.QuickPreview,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                       FontSize="10.5" Margin="2,4,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding DataContext.QuickPreview,
+                                                    RelativeSource={RelativeSource AncestorType=Window},
+                                                    Converter={StaticResource NullToVisibility}}" />
+
+                            <Border Height="9" />
+
+                            <UniformGrid Rows="1" Columns="2">
                             <Button Style="{StaticResource AddButtonStyle}" Margin="0,0,3.5,0"
                                     Command="{Binding DataContext.AddEventCommand,
                                               RelativeSource={RelativeSource AncestorType=Window}}">
@@ -777,7 +800,8 @@
                                     <TextBlock Text="タスク" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                        </UniformGrid>
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>
