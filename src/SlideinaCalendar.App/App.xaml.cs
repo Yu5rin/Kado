@@ -6,8 +6,12 @@ using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Google;
 using SlideinaCalendar.App.Update;
 using SlideinaCalendar.App.Views;
+using SlideinaCalendar.App.Notifications;
+using SlideinaCalendar.App.Settings;
 using SlideinaCalendar.App.Themes;
+using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Data;
+using SlideinaCalendar.Data.Backup;
 using SlideinaCalendar.Presentation;
 using SlideinaCalendar.Presentation.Sync;
 using SlideinaCalendar.Presentation.ViewModels;
@@ -68,8 +72,9 @@ public partial class App : Application
             Shutdown(1);
         };
 
-        // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく
-        ThemeManager.Apply(AppTheme.Auto);
+        // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく。
+        // 設定を読むにはデータベースが要るので、ここでは Windows に合わせておく
+        ThemeManager.Apply(ThemeChoice.Auto);
 
         try
         {
@@ -87,6 +92,11 @@ public partial class App : Application
 
         var workspace = new CalendarWorkspace(_connection);
         var today = DateOnly.FromDateTime(DateTime.Today);
+
+        // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない
+        var settings = new AppSettings(workspace.Settings);
+        ThemeManager.Apply(settings.Theme);
+        settings.Changed += (_, _) => ThemeManager.Apply(settings.Theme);
 
         try
         {
@@ -112,9 +122,13 @@ public partial class App : Application
 
             window = new MainWindow
             {
+                // 閉じたときの置き場所と大きさを覚え、次はそこで出す
+                Placements = new WindowPlacementStore(workspace.Settings),
                 DataContext = new MainViewModel(
                     workspace, today, editors: editors, files: files,
-                    googleClient: googleClient, google: _google),
+                    googleClient: googleClient, google: _google,
+                    settings: settings, startup: new StartupRegistration(),
+                    notifier: new ToastNotifier()),
             };
 
             MainWindow = window;
@@ -231,6 +245,33 @@ public partial class App : Application
     /// いつも使っているブラウザの画面で、URL を自分で確かめられるほうがよい。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// バックアップで置き換えて、アプリを立ち上げ直す。
+    /// <para>
+    /// 置き換えは接続を閉じてから。開いたまま差し替えると、書き込み待ちの内容と
+    /// 食い違って壊れる。読み直すには立ち上げ直すのが確実で、途中の状態も残らない。
+    /// </para>
+    /// </summary>
+    private void RestoreAndRestart(string backupPath)
+    {
+        _background?.Dispose();
+        _background = null;
+        _connection?.Dispose();
+        _connection = null;
+
+        DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
+
+        if (Environment.ProcessPath is { Length: > 0 } exe)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                UseShellExecute = true,
+            });
+        }
+
+        Shutdown();
+    }
+
     private static void OpenInBrowser(string url)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)

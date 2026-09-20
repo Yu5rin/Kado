@@ -1,9 +1,16 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
+using SlideinaCalendar.Core.Import;
+using SlideinaCalendar.Core.Input;
 using SlideinaCalendar.Data.Models;
+using SlideinaCalendar.Google.Mapping;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
+using SlideinaCalendar.Presentation.Notifications;
+using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
 
@@ -36,12 +43,26 @@ public sealed class MainViewModel : ObservableObject
     private readonly IFileDialogs _files;
     private readonly GoogleClientSecretsStore? _googleClient;
 
+    private readonly AppSettings? _settings;
+    private readonly IStartupRegistration _startup;
+    private readonly WorkdayFeedClient _feed = new();
+
+    /// <summary>予定の前と朝のまとめを知らせる。設定を渡されていなければ持たない。</summary>
+    private readonly ReminderService? _reminders;
+
+    /// <summary>知らせる口。設定画面の「試しに知らせる」でも使う。</summary>
+    private readonly INotifier _notifier;
+
     private CalendarView _currentView = CalendarView.Month;
+    private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
     private readonly TimeProvider _clock;
     private DateOnly _today;
     private string? _statusMessage;
     private string _searchText = string.Empty;
+    private IReadOnlyList<SearchResultViewModel> _searchResults = [];
+    private string? _searchMessage;
+    private string _quickText = string.Empty;
     private double _sidePanelWidth;
     private double _detailPaneWidth;
 
@@ -49,7 +70,10 @@ public sealed class MainViewModel : ObservableObject
         IEditorPresenter? editors = null, IFileDialogs? files = null,
         GoogleClientSecretsStore? googleClient = null,
         Sync.IGoogleSync? google = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        AppSettings? settings = null,
+        IStartupRegistration? startup = null,
+        INotifier? notifier = null)
     {
         _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
@@ -61,12 +85,41 @@ public sealed class MainViewModel : ObservableObject
         _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
         _detailPaneWidth = ReadWidth(DetailPaneWidthKey, DefaultDetailPaneWidth, MinDetailPaneWidth, MaxDetailPaneWidth);
 
+        // 設定を渡されていれば、そちらが週の始まりを決める。渡されないのはテストと、
+        // 設定を持たない画面。その場合は引数のままにする
+        _settings = settings;
+        _startup = startup ?? NullStartupRegistration.Instance;
+        _notifier = notifier ?? NullNotifier.Instance;
+        _weekStart = settings?.WeekStart ?? weekStart;
+
         SourceLists = new SourceListsViewModel(workspace);
-        Month = new MonthViewModel(workspace, today, today, weekStart, sources: SourceLists) { SelectedDate = today };
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
-        MiniCalendar = new MiniCalendarViewModel(workspace, today, today, weekStart) { SelectedDate = today };
-        Week = new WeekViewModel(workspace, today, today, weekStart, SourceLists);
-        Day = new DayViewModel(workspace, today, today, SourceLists);
+        BuildViews(today, today);
+
+        if (settings is not null)
+        {
+            workspace.CountInCalendarDays = settings.CountInCalendarDays;
+
+            SourceLists.DefaultCalendarId = settings.DefaultCalendarId;
+            SourceLists.DefaultCalendarChanged += (_, id) => settings.DefaultCalendarId = id;
+            _reminders = new ReminderService(workspace, settings, _notifier);
+
+            // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
+            settings.Changed += (_, _) =>
+            {
+                _weekStart = settings.WeekStart;
+                workspace.CountInCalendarDays = settings.CountInCalendarDays;
+                RebuildViews();
+            };
+
+            CurrentView = settings.StartupView;
+
+            // 配信元が決まっていれば、1日1回だけ取りに行く
+            if (settings is { FeedAuto: true, FeedUrl.Length: > 0 } && settings.FeedCheckedOn != today)
+            {
+                _ = FetchFeedAsync(quiet: true);
+            }
+        }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
         NextCommand = new RelayCommand(GoToNext);
@@ -106,10 +159,35 @@ public sealed class MainViewModel : ObservableObject
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
 
+        // 設定を持たない組み立て方（テストなど）では開けない
+        OpenSettingsCommand = new RelayCommand(
+            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup, _notifier)),
+            () => _settings is not null);
+
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
         EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
         DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
+
+        QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
+
+        SetDefaultCalendarCommand = new RelayCommand<SourceListItemViewModel?>(item =>
+        {
+            SourceLists.SetDefaultCalendar(item);
+            if (item is not null) StatusMessage = $"新しい予定は「{item.Name}」に入ります";
+        });
+
+        RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
+
+        FetchWorkingDayFeedCommand = new AsyncRelayCommand(
+            () => FetchFeedAsync(quiet: false),
+            () => _settings is { FeedUrl.Length: > 0 },
+            ex => StatusMessage = $"配信元から取り込めませんでした（{ex.Message}）");
+
+        ExportWorkingDayFeedCommand = new RelayCommand(ExportFeed);
+
+        BackupCommand = new RelayCommand(Backup);
+        RestoreCommand = new RelayCommand(Restore, () => RestoreBackup is not null);
 
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
@@ -160,19 +238,19 @@ public sealed class MainViewModel : ObservableObject
     // ------------------------------------------------------------------
 
     /// <summary>月ビュー。</summary>
-    public MonthViewModel Month { get; }
+    public MonthViewModel Month { get; private set; }
 
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
 
     /// <summary>週ビュー。</summary>
-    public WeekViewModel Week { get; }
+    public WeekViewModel Week { get; private set; }
 
     /// <summary>日ビュー。</summary>
-    public DayViewModel Day { get; }
+    public DayViewModel Day { get; private set; }
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
-    public MiniCalendarViewModel MiniCalendar { get; }
+    public MiniCalendarViewModel MiniCalendar { get; private set; }
 
     /// <summary>左パネルのカレンダー一覧とタスクリスト一覧。</summary>
     public SourceListsViewModel SourceLists { get; }
@@ -367,8 +445,192 @@ public sealed class MainViewModel : ObservableObject
     public string SearchText
     {
         get => _searchText;
-        set => Set(ref _searchText, value ?? string.Empty);
+        set
+        {
+            if (!Set(ref _searchText, value ?? string.Empty)) return;
+
+            RunSearch();
+        }
     }
+
+    // ------------------------------------------------------------------
+    // クイック入力
+    //
+    // 「明日15時 打合せ @会議室A」と1行打てば入る。編集画面を開いて欄を
+    // 埋めるより速い。読めない言い回しは黙って一部だけ入れず、断って止める
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// クイック入力の1行。
+    /// <para>
+    /// 「明日」は<b>今日から見た明日</b>。選んでいる日は見ない。月を送って眺めている
+    /// 最中に打つと、思っていたのと違う日に入る。
+    /// </para>
+    /// </summary>
+    public string QuickText
+    {
+        get => _quickText;
+        set
+        {
+            if (!Set(ref _quickText, value ?? string.Empty)) return;
+
+            Raise(nameof(QuickPreview), nameof(CanCommitQuick));
+            QuickCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// 打った1行をどう読んだか。入れる前に見せる。
+    /// <para>読めなければ、なぜ入れられないのかを出す。</para>
+    /// </summary>
+    public string? QuickPreview
+    {
+        get
+        {
+            if (_quickText.Trim().Length == 0) return null;
+
+            var entry = QuickParser.Parse(_quickText, _today);
+
+            if (entry.UnsupportedWord is { } word) return $"「{word}」はここでは読めません。予定の画面から入れてください";
+            if (entry.HasDateError) return "その日は暦にありません";
+            if (entry.HasTimeError) return "その時刻はありません";
+            if (entry.Title.Length == 0) return "予定の名前がありません";
+
+            var when = entry.Start is { } start
+                ? $"{entry.Date:M/d}（{Weekday(entry.Date)}） {start:HH\\:mm}"
+                    + (entry.End is { } end ? $"–{end:HH\\:mm}" : string.Empty)
+                : $"{entry.Date:M/d}（{Weekday(entry.Date)}） 終日";
+
+            return entry.Location is { Length: > 0 } place
+                ? $"{when} ・ {entry.Title} ・ {place}"
+                : $"{when} ・ {entry.Title}";
+        }
+    }
+
+    /// <summary>そのまま入れられるか。</summary>
+    public bool CanCommitQuick => QuickParser.Parse(_quickText, _today).CanCommit;
+
+    /// <summary>1行から予定を入れる。</summary>
+    public RelayCommand QuickCommand { get; }
+
+    private void CommitQuick()
+    {
+        var entry = QuickParser.Parse(_quickText, _today);
+        if (!entry.CanCommit) return;
+
+        _workspace.AddEvent(new CalendarEvent
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            Title = entry.Title,
+            Date = entry.Date,
+            StartTime = entry.Start,
+
+            // 終わりを書いていなければ1時間。時刻を書いていなければ終日のまま
+            EndTime = entry.End ?? (entry.Start is { } start ? start.AddHours(1) : null),
+            Location = entry.Location,
+            CalendarId = QuickCalendarId,
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        SelectedDate = entry.Date;
+        QuickText = string.Empty;
+        StatusMessage = $"「{entry.Title}」を追加しました";
+    }
+
+    private static string Weekday(DateOnly date) => "日月火水木金土"[(int)date.DayOfWeek].ToString();
+
+    /// <summary>
+    /// 新しい予定を入れる先のカレンダー。
+    /// <para>
+    /// 左の一覧で選ばれているもの。選んでいなければ一覧の先頭で、「inaCalendar」は
+    /// 避ける。入れてしまうと、次の取り込みで消える場所に置くことになる。
+    /// </para>
+    /// </summary>
+    private string? QuickCalendarId => SourceLists.DefaultCalendar?.Id;
+
+    /// <summary>検索で見つかったもの。多くても50件までにする。</summary>
+    public IReadOnlyList<SearchResultViewModel> SearchResults
+    {
+        get => _searchResults;
+        private set => Set(ref _searchResults, value);
+    }
+
+    /// <summary>検索の結果を出しているか。</summary>
+    public bool IsSearching => _searchText.Trim().Length > 0;
+
+    /// <summary>見つからなかったときなどの断り書き。見つかっていれば null。</summary>
+    public string? SearchMessage
+    {
+        get => _searchMessage;
+        private set => Set(ref _searchMessage, value);
+    }
+
+    /// <summary>探すのをやめる。欄を空にして結果も消す。</summary>
+    public void ClearSearch() => SearchText = string.Empty;
+
+    /// <summary>
+    /// 見つかったものを開く。その日へ移って、検索は閉じる。
+    /// </summary>
+    public void OpenSearchResult(SearchResultViewModel? found)
+    {
+        if (found is null) return;
+
+        SelectedDate = found.Date;
+        ClearSearch();
+
+        if (found.IsTask) EditTaskBy(found.Id);
+        else EditEventBy(found.Id);
+    }
+
+    /// <summary>
+    /// 題・場所・メモから探す。
+    /// <para>
+    /// 並びは<b>今日に近い順</b>。単純な日付順だと、件数を絞ったときに古いものだけが
+    /// 残る。出すときは日付の昇順に並べ直す（一覧として読みやすいため）。
+    /// </para>
+    /// </summary>
+    private void RunSearch()
+    {
+        Raise(nameof(IsSearching));
+
+        var text = _searchText.Trim();
+        if (text.Length == 0)
+        {
+            SearchResults = [];
+            SearchMessage = null;
+            return;
+        }
+
+        var events = _workspace.Events.All()
+            .Where(e => !CalendarWorkspace.IsMilestoneMark(e))
+            .Where(e => Hits(text, e.Title, e.Location, e.Note))
+            .Select(SearchResultViewModel.Of);
+
+        var tasks = _workspace.Tasks.All()
+            .Where(t => t.Due is not null && Hits(text, t.Title, null, t.Note))
+            .Select(t => SearchResultViewModel.Of(t, t.Due!.Value));
+
+        var found = events.Concat(tasks)
+            .OrderBy(r => Math.Abs(r.Date.DayNumber - _today.DayNumber))
+            .ThenBy(r => r.Date)
+            .Take(SearchLimit)
+            .OrderBy(r => r.Date)
+            .ThenBy(r => r.Title, StringComparer.Ordinal)
+            .ToArray();
+
+        SearchResults = found;
+        SearchMessage = found.Length == 0 ? "見つかりませんでした" : null;
+    }
+
+    /// <summary>題・場所・メモのどれかに含まれるか。大文字小文字は区別しない。</summary>
+    private static bool Hits(string text, string? title, string? location, string? note) =>
+        Contains(title, text) || Contains(location, text) || Contains(note, text);
+
+    private static bool Contains(string? value, string text) =>
+        value is { Length: > 0 } && value.Contains(text, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>出す件数の上限。これ以上出しても目で追えない。</summary>
+    private const int SearchLimit = 50;
 
     /// <summary>
     /// 同期の状態。
@@ -468,6 +730,42 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
+
+    /// <summary>設定画面を開く。</summary>
+    public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>新しい予定の入れ先にする。</summary>
+    public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }
+
+    /// <summary>同じ内容の予定を1つにまとめる。</summary>
+    public RelayCommand RemoveDuplicatesCommand { get; }
+
+    /// <summary>配信元から実働日データを取りに行く。</summary>
+    public AsyncRelayCommand FetchWorkingDayFeedCommand { get; }
+
+    /// <summary>いまの実働日データを配信用に書き出す。</summary>
+    public RelayCommand ExportWorkingDayFeedCommand { get; }
+
+    /// <summary>いまの内容をファイルに書き出す。</summary>
+    public RelayCommand BackupCommand { get; }
+
+    /// <summary>書き出したファイルで置き換える。</summary>
+    public RelayCommand RestoreCommand { get; }
+
+    /// <summary>
+    /// いまの内容をファイルに書き出す口。App 側が入れる。
+    /// <para>データベースそのものを扱うので、接続を持っている側でないと書けない。</para>
+    /// </summary>
+    public Action<string>? SaveBackup { get; set; }
+
+    /// <summary>
+    /// ファイルで置き換える口。App 側が入れる。
+    /// <para>
+    /// 置き換えは接続を閉じてから行い、そのあとアプリを立ち上げ直す。
+    /// 開いたまま差し替えると壊れる。
+    /// </para>
+    /// </summary>
+    public Action<string>? RestoreBackup { get; set; }
 
     /// <summary>カレンダーを作る。</summary>
     public RelayCommand AddCalendarCommand { get; }
@@ -739,6 +1037,158 @@ public sealed class MainViewModel : ObservableObject
     /// 動かないままになる（要件書 4.1）。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// いまの内容をファイルに書き出す。
+    /// <para>予定・タスク・設定・実働日データが1つのファイルに入る。</para>
+    /// </summary>
+    /// <summary>
+    /// 同じ内容の予定を1つにまとめる。
+    /// <para>
+    /// 消す前に件数を出して尋ねる。Google に繋いでいれば、次の同期で向こうからも消える。
+    /// </para>
+    /// </summary>
+    private void RemoveDuplicates()
+    {
+        var extra = _workspace.FindDuplicateEvents();
+        if (extra.Count == 0)
+        {
+            StatusMessage = "同じ内容の予定は見つかりませんでした";
+            return;
+        }
+
+        var sample = string.Join("\n", extra
+            .Take(5)
+            .Select(e => $"・{e.Date:M/d} {e.Title}"));
+
+        var more = extra.Count > 5 ? $"\n…ほか {extra.Count - 5} 件" : string.Empty;
+
+        if (!_files.Confirm(
+                $"同じ内容の予定が {extra.Count} 件あります",
+                $"次のものを消します。中身の多いほうを1件ずつ残します。\n\n{sample}{more}"
+                + "\n\nCtrl＋Z でまとめて戻せます。"
+                + "\nGoogle に繋いでいれば、次の同期で向こうからも消えます。"))
+        {
+            return;
+        }
+
+        var removed = _workspace.RemoveDuplicateEvents();
+        StatusMessage = $"重複していた予定 {removed} 件を消しました";
+    }
+
+    /// <summary>
+    /// 配信元から実働日データを取りに行く。
+    /// <para>
+    /// <paramref name="quiet"/> のときは起動時の自動取得。取れなくても黙って見送る。
+    /// 繋がらない場所に置かれていることもあり、そのたびに断りを出しても仕方がない。
+    /// </para>
+    /// </summary>
+    private async Task FetchFeedAsync(bool quiet)
+    {
+        if (_settings is not { FeedUrl.Length: > 0 } settings) return;
+
+        try
+        {
+            var result = await _feed.FetchAsync(settings.FeedUrl).ConfigureAwait(true);
+
+            _workspace.ApplyWorkingDays(result);
+            settings.FeedCheckedOn = _today;
+
+            StatusMessage = $"配信元から実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）";
+        }
+        catch (Exception ex) when (quiet && ex is not OperationCanceledException)
+        {
+            // 自動の取得はここで止める。次に開いたときにまた試す
+            settings.FeedCheckedOn = _today;
+        }
+    }
+
+    /// <summary>いまの実働日データを配信用のファイルに書き出す。</summary>
+    private void ExportFeed()
+    {
+        if (_workspace.WorkingDays.Days.Count == 0)
+        {
+            StatusMessage = "書き出せる実働日データがありません";
+            return;
+        }
+
+        if (_files.PickSaveFile(
+                "配信用ファイルの保存先",
+                "実働日データ (*.json)|*.json|すべてのファイル (*.*)|*.*",
+                "feed.json") is not { } path)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(path, WorkdayFeed.Write(_workspace.WorkingDays, _today));
+            StatusMessage = $"実働日データを書き出しました（{Path.GetFileName(path)}）";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            StatusMessage = $"書き出せませんでした（{ex.Message}）";
+        }
+    }
+
+    private void Backup()
+    {
+        if (SaveBackup is null)
+        {
+            StatusMessage = "この画面からは書き出せません";
+            return;
+        }
+
+        var name = $"SlideinaCalendar-{DateTime.Now:yyyyMMdd-HHmm}.db";
+        if (_files.PickSaveFile("バックアップの保存先", BackupFilter, name) is not { } path) return;
+
+        try
+        {
+            SaveBackup(path);
+            StatusMessage = $"バックアップを書き出しました（{Path.GetFileName(path)}）";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"バックアップを書き出せませんでした（{ex.Message}）";
+        }
+    }
+
+    /// <summary>
+    /// 書き出したファイルで置き換える。
+    /// <para>
+    /// <b>いまの内容はすべて置き換わる。</b>元に戻せないので必ず尋ねる。
+    /// 置き換えたあとはアプリを立ち上げ直す。
+    /// </para>
+    /// </summary>
+    private void Restore()
+    {
+        if (RestoreBackup is null)
+        {
+            StatusMessage = "この画面からは復元できません";
+            return;
+        }
+
+        if (_files.PickOpenFile("復元するバックアップを選ぶ", BackupFilter) is not { } path) return;
+
+        if (!_files.Confirm(
+                "バックアップから復元します",
+                "いまの予定・タスク・設定・実働日データは、すべてファイルの内容に置き換わります。"
+                + "元に戻すことはできません。\n\n復元したあとアプリを立ち上げ直します。"))
+        {
+            return;
+        }
+
+        try
+        {
+            RestoreBackup(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        {
+            StatusMessage = $"復元できませんでした（{ex.Message}）";
+        }
+    }
+
+    private const string BackupFilter = "SlideinaCalendar のバックアップ (*.db)|*.db|すべてのファイル (*.*)|*.*";
+
     private void ImportWorkingDays()
     {
         if (_files.PickOpenFile("実働日ファイルを選ぶ", "Excel ブック (*.xlsx)|*.xlsx|すべてのファイル (*.*)|*.*")
@@ -877,9 +1327,182 @@ public sealed class MainViewModel : ObservableObject
     private TimeOnly NowTime => TimeOnly.FromDateTime(_clock.GetLocalNow().DateTime);
 
     /// <summary>選択している日に予定を足す。</summary>
+    // ------------------------------------------------------------------
+    // ドラッグで動かす
+    //
+    // 掴んで落とすのと、編集画面で日付を打ち直すのとでは手数が違う。
+    // Ctrl を押しながらなら複製。どちらも Undo を通る
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 予定を別の日へ移す。時刻はそのまま。<paramref name="copy"/> なら複製する。
+    /// <para>月ビューのように、何日の予定かだけを変えるときに使う。</para>
+    /// </summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventTo(string? id, DateOnly date, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.Keep, null, copy);
+
+    /// <summary>予定を別の日時へ移す。長さは保つ。終日だったものは1時間ぶんになる。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventToTime(string? id, DateOnly date, TimeOnly start, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.SetTo, start, copy);
+
+    /// <summary>予定を終日に変えて別の日へ移す。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveEventToAllDay(string? id, DateOnly date, bool copy = false) =>
+        MoveEvent(id, date, TimeChange.Clear, null, copy);
+
+    /// <summary>移動のときに時刻をどう扱うか。</summary>
+    private enum TimeChange
+    {
+        /// <summary>そのまま。</summary>
+        Keep,
+
+        /// <summary>指定した時刻に置く。</summary>
+        SetTo,
+
+        /// <summary>時刻を外して終日にする。</summary>
+        Clear,
+    }
+
+    /// <summary>
+    /// 予定を動かす。
+    /// <para>
+    /// 期間のある予定は長さ（日数）を保つ。時刻を置くときは、その予定の長さ（時間）も保つ。
+    /// </para>
+    /// <para>
+    /// 休業日と特別出勤は動かせない。識別子にその日付が入っていて、取り込んだ実働日
+    /// データが決めるものだから。仕様期限などのラベルは動かせる。
+    /// </para>
+    /// </summary>
+    /// <returns>動かしたら true。</returns>
+    private bool MoveEvent(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy)
+    {
+        if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } found) return false;
+
+        // 休業日と特別出勤はマスの色を決める印で、識別子にその日付が入っている。
+        // 動かすと取り込んだ実働日データと食い違う。仕様期限などのラベルは動かせる
+        if (CalendarWorkspace.IsClosedDayId(found.Id) || CalendarWorkspace.IsOpenDayId(found.Id))
+        {
+            StatusMessage = "休業日と特別出勤は実働日データが決めるので、動かせません";
+            return false;
+        }
+
+        // 向こうで変えられない予定は動かさない。ここで動かしても伝わらず、
+        // 画面と Google とで日付が食い違うだけ。複製は元を触らないので通す
+        if (!copy && IsLocked(found))
+        {
+            StatusMessage = LockedMessage;
+            return false;
+        }
+
+        var length = found.EndDate is { } end ? end.DayNumber - found.Date.DayNumber : 0;
+        var moved = found with
+        {
+            Date = date,
+            EndDate = found.EndDate is null ? null : date.AddDays(length),
+        };
+
+        moved = change switch
+        {
+            TimeChange.SetTo when start is { } at => moved with { StartTime = at, EndTime = EndOf(at, found) },
+            TimeChange.Clear => moved with { StartTime = null, EndTime = null },
+            _ => moved,
+        };
+
+        // 時刻だけを動かしたときは、日付が同じでも動かしたことになる
+        if (moved.Date == found.Date && moved.StartTime == found.StartTime
+            && moved.EndTime == found.EndTime && !copy)
+        {
+            return false;
+        }
+
+        if (!copy)
+        {
+            if (!_workspace.UpdateEvent(moved)) return false;
+
+            StatusMessage = "予定を移しました";
+            return true;
+        }
+
+        // 複製は向こうにまだ無いものとして作る。相手側の識別子を引き継ぐと、
+        // 次の同期で元の予定のほうが書き換わる
+        _workspace.AddEvent(moved with
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            GoogleEventId = null,
+            GoogleRaw = null,
+            GoogleUpdated = null,
+        });
+
+        StatusMessage = "予定を複製しました";
+        return true;
+    }
+
+    /// <summary>予定の長さ。時刻を持たない予定は1時間として扱う。</summary>
+    private static TimeSpan LengthOf(CalendarEvent value) =>
+        value.StartTime is { } from && value.EndTime is { } to && to > from
+            ? to.ToTimeSpan() - from.ToTimeSpan()
+            : TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// 移した先での終わりの時刻。
+    /// <para>
+    /// <b>日をまたがせない。</b>またぐと終わりが始まりより前になり、時間軸に
+    /// 置けなくなって画面から消える。遅い時刻に移したときは、その日の終わりで止める。
+    /// </para>
+    /// </summary>
+    private static TimeOnly EndOf(TimeOnly start, CalendarEvent value)
+    {
+        var end = start.Add(LengthOf(value));
+
+        return end > start ? end : new TimeOnly(23, 59);
+    }
+
+    /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
+    /// <returns>動かしたら true。</returns>
+    public bool MoveTaskTo(string? id, DateOnly date, bool copy = false)
+    {
+        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } found) return false;
+        if (found.Due == date && !copy) return false;
+
+        var moved = found with { Due = date };
+
+        if (!copy)
+        {
+            if (!_workspace.UpdateTask(moved)) return false;
+
+            StatusMessage = "タスクの期限を移しました";
+            return true;
+        }
+
+        _workspace.AddTask(moved with
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            GoogleTaskId = null,
+            GoogleRaw = null,
+        });
+
+        StatusMessage = "タスクを複製しました";
+        return true;
+    }
+
+    /// <summary>
+    /// 向こうで内容を変えられない予定か。
+    /// <para>
+    /// メールから起こされた予約（美容室やホテルなど）、誕生日、勤務場所がこれにあたる。
+    /// <b>読むだけにする。</b>こちらで変えても向こうへは伝わらず、画面と Google とで
+    /// 食い違うだけになる。消すことはできるので、削除は止めない。
+    /// </para>
+    /// </summary>
+    public static bool IsLocked(CalendarEvent value) => EventMapper.IsLocked(value);
+
+    private const string LockedMessage =
+        "この予定は Google 側で作られたもので、ここからは変えられません（削除はできます）";
+
     private void AddEvent()
     {
-        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime, QuickCalendarId);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
@@ -901,6 +1524,12 @@ public sealed class MainViewModel : ObservableObject
 
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
         if (_workspace.Events.Find(id) is not { } stored) return;
+
+        if (IsLocked(stored))
+        {
+            StatusMessage = LockedMessage;
+            return;
+        }
 
         var editor = new EventEditorViewModel(stored, CalendarNames);
         if (!_editors.ShowEventEditor(editor)) return;
@@ -1038,6 +1667,9 @@ public sealed class MainViewModel : ObservableObject
         var time = TimeOnly.FromDateTime(now);
         Week.UpdateNowLine(time);
         Day.UpdateNowLine(time);
+
+        // 1分ごとに、いま知らせるものがあるかを見る
+        _reminders?.Check(now);
     }
 
     /// <summary>
@@ -1059,6 +1691,43 @@ public sealed class MainViewModel : ObservableObject
         Day.Refresh();
         MiniCalendar.Refresh();
         RaiseHeader();
+    }
+
+    /// <summary>
+    /// 月・週・日・ミニ月暦を組み立てる。
+    /// <para>
+    /// 週の始まりと表示時間帯はそれぞれの ViewModel が作られるときに決まるので、
+    /// 設定が変わったときは組み直す。
+    /// </para>
+    /// </summary>
+    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day))]
+    private void BuildViews(DateOnly month, DateOnly selected)
+    {
+        var start = _settings?.DayStart;
+        var end = _settings?.DayEnd;
+
+        Month = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+        {
+            SelectedDate = selected,
+        };
+        MiniCalendar = new MiniCalendarViewModel(_workspace, month, _today, _weekStart)
+        {
+            SelectedDate = selected,
+        };
+        var hourHeight = _settings?.HourHeight ?? 0;
+
+        Week = new WeekViewModel(
+            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
+        Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
+    }
+
+    /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
+    private void RebuildViews()
+    {
+        BuildViews(Month.Month, SelectedDate);
+
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+        RefreshViews();
     }
 
     private void RaiseHeader() => Raise(

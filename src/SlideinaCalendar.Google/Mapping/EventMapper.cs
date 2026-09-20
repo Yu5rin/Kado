@@ -154,6 +154,49 @@ public static class EventMapper
     }
 
     /// <summary>
+    /// Google 側で内容を変えられない予定か。
+    /// <para>
+    /// こちらで編集させてしまうと、保存はできるのに向こうへ伝わらない。画面から
+    /// 変えさせないために、表示側もこれを見る。
+    /// </para>
+    /// </summary>
+    public static bool IsLocked(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.GoogleRaw is not { Length: > 0 } raw) return false;
+
+        try
+        {
+            return JsonNode.Parse(raw) is JsonObject original && IsLockedOnGoogle(original);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Google 側で内容を変えられない予定か。
+    /// <para>
+    /// メールから起こされた予約（ホテルや美容室など）、誕生日、勤務場所がこれにあたる。
+    /// Google はこれらに <c>locked</c> を立てて返し、書き換えようとすると断る。
+    /// こちらから消すことはできるので、送らないだけにして同期からは外さない。
+    /// </para>
+    /// </summary>
+    private static bool IsLockedOnGoogle(JsonObject original)
+    {
+        if (original["locked"] is JsonValue locked && locked.TryGetValue<bool>(out var isLocked) && isLocked)
+        {
+            return true;
+        }
+
+        return original["eventType"] is JsonValue kind
+            && kind.TryGetValue<string>(out var type)
+            && type is "fromGmail" or "birthday" or "workingLocation";
+    }
+
+    /// <summary>
     /// 書き戻す必要があるか。
     /// <para>
     /// 控えた生データに、こちらの内容を当てたものと見比べる。同じなら送らない。
@@ -170,6 +213,10 @@ public static class EventMapper
         try
         {
             if (JsonNode.Parse(raw) is not JsonObject original) return true;
+
+            // 向こうで内容を変えられない予定は送らない。何度送っても断られるだけで、
+            // そのたびに「一部を伝えられません」と出る
+            if (IsLockedOnGoogle(original)) return false;
 
             var wanted = ToGoogle(value);
             foreach (var pair in wanted)

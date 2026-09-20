@@ -136,3 +136,15 @@ public static class RecurrenceChoice
         return true;
     }
 }
+
+/// <summary>
+/// 通知の指定。
+/// <para>null は「カレンダーに従う」。</para>
+/// </summary>
+/// <param name="Value">指定の中身。</param>
+/// <param name="Label">画面に出す名前。</param>
+public sealed record NotifyChoice(bool? Value, string Label)
+{
+    /// <summary>文字にするときは名前を出す。型の名前がそのまま画面に出るのを防ぐ。</summary>
+    public override string ToString() => Label;
+}

@@ -18,6 +18,7 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EventColorFaceConverter x:Key="EventColorFace" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVisibility" />
 
         <!--
             時間軸に置かれた1件の右クリックメニュー。
@@ -46,7 +47,9 @@
         </ContextMenu>
     </UserControl.Resources>
 
-    <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
+    <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
+            Background="Transparent"
+            AllowDrop="True" DragOver="OnColumnDragOver" Drop="OnColumnDropped">
         <Grid>
             <!-- 1時間ごとの罫線 -->
             <ItemsControl ItemsSource="{Binding HourLabels, ElementName=Root}" IsHitTestVisible="False">
@@ -58,6 +61,26 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!--
+                今の時刻。今日の列にだけ引く。
+                線の左端に丸を置くのは、どの列の線なのかを一目で分かるようにするため。
+                丸は線より背が高いので、上下にはみ出して描かれる
+            -->
+            <Grid VerticalAlignment="Top" Height="1.5" IsHitTestVisible="False" Panel.ZIndex="2"
+                  Margin="{Binding NowOffset, ElementName=Root,
+                           Converter={StaticResource TimelineOffsetToMargin}}">
+                <Grid.Visibility>
+                    <MultiBinding Converter="{StaticResource AllTrueToVisibility}">
+                        <Binding Path="IsToday" />
+                        <Binding Path="ShowNow" ElementName="Root" />
+                    </MultiBinding>
+                </Grid.Visibility>
+
+                <Border Background="{DynamicResource NowLineBrush}" />
+                <Ellipse Width="10" Height="10" Fill="{DynamicResource NowLineBrush}"
+                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-5,0,0,0" />
+            </Grid>
 
             <!-- 予定と作業時間ブロック。重ねて置くので入れ物は Grid -->
             <ItemsControl ItemsSource="{Binding Blocks}">
@@ -71,15 +94,18 @@
                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                 ContextMenu="{StaticResource BlockMenu}"
                                 MouseLeftButtonDown="OnBlockClicked"
+                                MouseMove="OnBlockDragging"
                                 Height="{Binding Height}"
                                 Margin="{Binding Top, Converter={StaticResource TimelineOffsetToMargin}}"
                                 Background="{Binding Color, Converter={StaticResource EventColorFace}}"
                                 BorderThickness="3,0,0,0"
                                 BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}">
+                            <!--
+                                時刻は書かない。置かれている場所そのものが時刻なので、
+                                短い予定だと時刻だけで埋まって題が読めなくなる。
+                                正確な時刻はマウスを載せれば出る
+                            -->
                             <StackPanel ClipToBounds="True">
-                                <TextBlock Text="{Binding TimeText}" FontSize="9.5"
-                                           Foreground="{DynamicResource Ink2Brush}"
-                                           Typography.NumeralAlignment="Tabular" />
                                 <TextBlock Text="{Binding Title}" FontSize="11" LineHeight="14"
                                            Foreground="{DynamicResource InkBrush}"
                                            TextTrimming="CharacterEllipsis" />

@@ -1,0 +1,58 @@
+<!--
+    夜間テーマの色。キーは Light.xaml・Dark.xaml と一対一で揃える。
+
+    ダークより明るいグレーに寄せ、文字とのコントラストを落としてある。
+    真っ暗な画面を長く見ていると目が疲れる、という声に応えるための配色で、
+    旧 inaCalendar の night をそのまま持ってきた。
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="BackgroundColor">#363B40</Color>
+    <Color x:Key="PanelColor">#3E4348</Color>
+    <Color x:Key="SunkenColor">#2E3033</Color>
+
+    <Color x:Key="LineColor">#4A4F54</Color>
+    <Color x:Key="LineStrongColor">#555555</Color>
+
+    <Color x:Key="InkColor">#B8BFC6</Color>
+    <Color x:Key="Ink2Color">#B5B9BE</Color>
+    <Color x:Key="Ink3Color">#AAB0B8</Color>
+
+    <Color x:Key="AccentColor">#6DC1E7</Color>
+    <Color x:Key="AccentSoftColor">#3C4851</Color>
+
+    <Color x:Key="SundayColor">#E07B6E</Color>
+    <Color x:Key="SaturdayColor">#7FB3D5</Color>
+
+    <Color x:Key="WorkingDayColor">#3D4247</Color>
+    <Color x:Key="OffDayColor">#2E3033</Color>
+
+    <!-- マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること -->
+    <Color x:Key="CellHoverColor">#3F4A52</Color>
+    <Color x:Key="CellSelectedColor">#35434D</Color>
+
+    <Color x:Key="CategoryGreenColor">#8FDAD2</Color>
+    <Color x:Key="CategoryAmberColor">#D9A24A</Color>
+
+    <Color x:Key="DoneColor">#7C838B</Color>
+
+    <Color x:Key="MilestoneSpecFaceColor">#4A4530</Color>
+    <Color x:Key="MilestoneSpecTextColor">#E5CE8E</Color>
+    <Color x:Key="MilestoneGoFaceColor">#463732</Color>
+    <Color x:Key="MilestoneGoTextColor">#EB9C92</Color>
+    <Color x:Key="MilestoneSFaceColor">#2F4744</Color>
+    <Color x:Key="MilestoneSTextColor">#8FDAD2</Color>
+    <Color x:Key="MilestoneMFaceColor">#33424C</Color>
+    <Color x:Key="MilestoneMTextColor">#9CC6DF</Color>
+
+    <!-- 実働日データから起こす2つの印。休業日は静かに、休日の実働日は目を引くように -->
+    <Color x:Key="ClosedDayFaceColor">#3A3F44</Color>
+    <Color x:Key="ClosedDayTextColor">#AEB4BB</Color>
+    <Color x:Key="OpenDayFaceColor">#4A4530</Color>
+    <Color x:Key="OpenDayTextColor">#D9A24A</Color>
+
+    <!-- 今の時刻を示す線。暦の中でここだけが「いま」を指す -->
+    <Color x:Key="NowLineColor">#E07B6E</Color>
+
+</ResourceDictionary>

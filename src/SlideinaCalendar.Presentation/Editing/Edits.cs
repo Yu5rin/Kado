@@ -54,8 +54,11 @@ public sealed class DeleteEventEdit(
 
         if (value.GoogleEventId is { Length: > 0 })
         {
+            // 入れ先も一緒に控える。どのカレンダーのものか分からないと、同期のときに
+            // 別のカレンダーへ削除を投げて 404 になり、削除が Google へ届かない
             tombstones?.Record(
-                value.Id, TombstoneRepository.EventKind, value.GoogleEventId, DateTimeOffset.Now);
+                value.Id, TombstoneRepository.EventKind, value.GoogleEventId, DateTimeOffset.Now,
+                value.CalendarId);
         }
     }
 
@@ -113,7 +116,8 @@ public sealed class DeleteTaskEdit(
         if (value.GoogleTaskId is { Length: > 0 })
         {
             tombstones?.Record(
-                value.Id, TombstoneRepository.TaskKind, value.GoogleTaskId, DateTimeOffset.Now);
+                value.Id, TombstoneRepository.TaskKind, value.GoogleTaskId, DateTimeOffset.Now,
+                value.GoogleTaskListId ?? value.TaskListId);
         }
     }
 
@@ -123,5 +127,31 @@ public sealed class DeleteTaskEdit(
         foreach (var block in blocks) repository.UpsertBlock(block);
 
         tombstones?.Clear(value.Id, TombstoneRepository.TaskKind);
+    }
+}
+
+/// <summary>
+/// いくつかの編集を1手にまとめる。
+/// <para>
+/// 重複の整理のように、まとめて片付けたものは、まとめて戻せないと困る。
+/// Ctrl＋Z を消した件数ぶん押させることになる。
+/// </para>
+/// </summary>
+public sealed class CompositeEdit(string description, IReadOnlyList<IUndoableEdit> edits) : IUndoableEdit
+{
+    private readonly IReadOnlyList<IUndoableEdit> _edits =
+        edits ?? throw new ArgumentNullException(nameof(edits));
+
+    public string Description { get; } = description;
+
+    public void Apply()
+    {
+        foreach (var edit in _edits) edit.Apply();
+    }
+
+    public void Revert()
+    {
+        // 戻すときは逆順。順に依存する編集が混ざっても筋が通る
+        for (var i = _edits.Count - 1; i >= 0; i--) _edits[i].Revert();
     }
 }

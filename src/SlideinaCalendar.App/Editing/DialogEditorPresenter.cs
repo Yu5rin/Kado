@@ -19,6 +19,12 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
     public bool ShowCalendarEditor(CalendarEditorViewModel editor) =>
         Show(new CalendarEditorWindow(editor));
 
+    public void ShowSettings(SlideinaCalendar.Presentation.ViewModels.SettingsViewModel settings)
+    {
+        // 設定は変えたその場で効くので、閉じ方（OK・取り消し）は見ない
+        Show(new SettingsWindow(settings));
+    }
+
     public bool ConfirmDelete(string title) =>
         MessageBox.Show(
             ownerProvider() ?? Application.Current.MainWindow,

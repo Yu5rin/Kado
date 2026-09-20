@@ -75,6 +75,8 @@ public sealed class GoogleSyncService(
                     .ConfigureAwait(false);
             }
 
+            PruneTombstones();
+
             return report;
         }
         finally
@@ -83,6 +85,23 @@ public sealed class GoogleSyncService(
             _gate.Release();
         }
     }
+
+    /// <summary>伝えられないまま残った削除の記録を、どれだけ持っておくか。</summary>
+    private static readonly TimeSpan TombstoneLife = TimeSpan.FromDays(90);
+
+    /// <summary>
+    /// 古い削除の記録を片付ける。
+    /// <para>
+    /// ふつうは相手へ伝え終わった時点で消える。残るのは伝えようがなかったものだけ
+    /// （連携を外したあとに消した、持ち主のカレンダーがもう無い、など）。放っておくと
+    /// 溜まり続け、毎回の同期で無駄な問い合わせを生む。
+    /// </para>
+    /// <para>
+    /// <b>短くしすぎない。</b>まだ伝えていない削除を捨てると、次の取り込みで予定が復活する。
+    /// </para>
+    /// </summary>
+    private void PruneTombstones() =>
+        workspace.Tombstones.Prune(DateTimeOffset.Now - TombstoneLife);
 
     /// <summary>
     /// 実働日データの入れ先を Google 側へ移す。

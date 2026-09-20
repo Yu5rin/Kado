@@ -75,36 +75,50 @@ public class EventEditorViewModelTests
         // 単日なら打ち間違い
         Assert.False(vm.CanSave);
 
-        vm.IsMultiDay = true;
+        // 終了日を後ろにすればまたがる予定になる
         vm.EndDate = D(2026, 9, 25);
 
+        Assert.True(vm.IsMultiDay);
         Assert.True(vm.CanSave);
         Assert.Equal(D(2026, 9, 25), vm.ToModel().EndDate);
     }
 
     [Fact]
-    public void 終了日を開始日より前にはできない()
+    public void 終了日を開始日より前にすると開始日に寄せる()
     {
         var vm = New();
         vm.Title = "棚卸";
         vm.IsAllDay = true;
-        vm.IsMultiDay = true;
+
+        // 前の日を選んでも、保存できない状態にはしない
         vm.EndDate = D(2026, 9, 20);
 
-        Assert.Contains("終了日", vm.ValidationMessage);
+        Assert.Equal(vm.Date, vm.EndDate);
+        Assert.False(vm.IsMultiDay);
+        Assert.True(vm.CanSave);
+    }
+
+    [Fact]
+    public void 終了日が同じ日なら1日の予定()
+    {
+        var vm = New();
+        vm.Title = "棚卸";
+
+        Assert.False(vm.IsMultiDay);
+        Assert.Null(vm.ToModel().EndDate);
     }
 
     [Fact]
     public void 開始日を後ろへ動かすと終了日も付いてくる()
     {
         var vm = New();
-        vm.IsMultiDay = true;
-        vm.EndDate = D(2026, 9, 25);
+        vm.EndDate = D(2026, 9, 25);   // 開始は 9/24。2日にまたがる
 
         vm.Date = D(2026, 9, 28);
 
-        // 取り残して「終了日が前」の状態にしない
-        Assert.Equal(D(2026, 9, 28), vm.EndDate);
+        // またがる日数はそのまま。取り残して「終了日が前」の状態にしない
+        Assert.Equal(D(2026, 9, 29), vm.EndDate);
+        Assert.True(vm.IsMultiDay);
     }
 
     [Fact]
@@ -199,6 +213,34 @@ public class EventEditorViewModelTests
         // 1時間30分のまま。終わりを打ち直させない
         Assert.Equal("14:30", vm.EndTimeText);
         Assert.Equal("1時間30分", vm.DurationText);
+    }
+
+    [Fact]
+    public void 既にある予定でも開始を動かすと終了が付いてくる()
+    {
+        var vm = new EventEditorViewModel(new CalendarEvent
+        {
+            Id = "e1", Title = "課内会議", Date = new DateOnly(2026, 9, 14),
+            StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(10, 0),
+        }, null);
+
+        vm.StartTimeText = "13:00";
+
+        // 30分のまま後ろへずれる
+        Assert.Equal("13:30", vm.EndTimeText);
+    }
+
+    [Fact]
+    public void 候補から選んだ終了は時刻だけを残す()
+    {
+        var vm = New();
+        vm.Title = "会議";
+        vm.StartTimeText = "09:00";
+
+        // 一覧には「10:00（1時間）」と出るが、欄に残るのは時刻だけ
+        vm.EndTimeText = "10:00（1時間）";
+
+        Assert.Equal("10:00", vm.EndTimeText);
     }
 
     [Fact]

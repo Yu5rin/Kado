@@ -1,4 +1,5 @@
 using System.Globalization;
+using SlideinaCalendar.Data.Repositories;
 using SlideinaCalendar.Presentation.Infrastructure;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -164,12 +165,23 @@ public sealed class MonthViewModel : ObservableObject
         var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
         var workingDays = _workspace.WorkingDays;
 
+        // 左パネルでチェックを外したカレンダーは、ここで落とす
+        var visible = new Dictionary<DateOnly, IReadOnlyList<ScheduledEvent>>();
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
+            visible[date] = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
+        }
+
+        // またがる予定は週の行ごとに段を決める。日ごとに組むと上下に動いて、
+        // 1日ずつ切れているように見える
+        var bandsByDate = EventBands.Build(from, to, visible, _sources);
+
         var cells = new List<DayCellViewModel>();
         for (var date = from; date <= to; date = date.AddDays(1))
         {
-            // 左パネルでチェックを外したカレンダーは、ここで落とす
             var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
-            var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
+            var events = visible[date];
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
 
@@ -183,7 +195,8 @@ public sealed class MonthViewModel : ObservableObject
                 _workspace.Holidays.NameOf(date),
                 _sources,
                 _maxChipsPerCell,
-                milestones: MilestoneRow.For(date, all, _sources)));
+                milestones: MilestoneRow.For(date, all, _sources),
+                bands: bandsByDate.TryGetValue(date, out var b) ? b : null));
         }
 
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;

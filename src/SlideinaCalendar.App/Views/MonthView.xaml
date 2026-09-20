@@ -9,13 +9,19 @@
       .chip   11px / padding 1px 5px / radius 3px / 左に 3px の帯
       .more   10px / 補助色
 
+    またがる予定は .chip では出さず、週の行ごとに段を決めた「帯」として並べる
+    （EventBands）。1日ずつ切って並べると、同じ予定が日ごとに別々に入っている
+    ように見える。
+
     実働日の通し番号はここには出さない（要件書 4.3）。
 -->
 <UserControl x:Class="SlideinaCalendar.App.Views.MonthView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
-             Background="{DynamicResource BackgroundBrush}">
+             Background="{DynamicResource BackgroundBrush}"
+             AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished"
+             PreviewMouseWheel="OnWheel">
 
     <UserControl.Resources>
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
@@ -83,7 +89,8 @@
                     BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource EventChipMenu}"
-                    MouseLeftButtonDown="OnEventChipClicked">
+                    MouseLeftButtonDown="OnEventChipClicked"
+                    MouseMove="OnChipDragging">
                 <TextBlock Text="{Binding Label}" FontSize="11" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
@@ -92,13 +99,85 @@
             </Border>
         </DataTemplate>
 
+        <!--
+            またがる予定の帯。1日ずつ角を丸めて左に帯を立てると、隣のマスに別の予定が
+            並んでいるように見える。端だけを丸め、途中の日は左右の余白（5px）ぶん
+            はみ出させて、マスの境まで伸ばす。残るのは 1px の罫線だけになる。
+
+            途中の日は文字を出さない（EventChipViewModel.Text）。毎日タイトルを
+            繰り返すのが、切れて見える一番の理由だった。週をまたぐときは行の頭で出す。
+        -->
+        <DataTemplate x:Key="EventBandTemplate">
+            <Border x:Name="Band" CornerRadius="3,0,0,3" Padding="5,1" Margin="0,2,-5,0"
+                    Background="{Binding Color, Converter={StaticResource EventColorFace}}"
+                    BorderThickness="3,0,0,0"
+                    BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource EventChipMenu}"
+                    MouseLeftButtonDown="OnEventChipClicked"
+                    MouseMove="OnChipDragging">
+                <TextBlock Text="{Binding Text}" FontSize="11" LineHeight="16"
+                           Foreground="{DynamicResource InkBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           Typography.NumeralAlignment="Tabular"
+                           ToolTip="{Binding Tooltip}" />
+            </Border>
+
+            <DataTemplate.Triggers>
+                <!-- 途中の日。左右とも隣へ繋ぐので、角も帯も立てない -->
+                <DataTrigger Binding="{Binding Span}" Value="Middle">
+                    <Setter TargetName="Band" Property="CornerRadius" Value="0" />
+                    <Setter TargetName="Band" Property="Margin" Value="-5,2,-5,0" />
+                    <Setter TargetName="Band" Property="BorderThickness" Value="0" />
+                </DataTrigger>
+
+                <!-- 最終日。右だけ丸める -->
+                <DataTrigger Binding="{Binding Span}" Value="End">
+                    <Setter TargetName="Band" Property="CornerRadius" Value="0,3,3,0" />
+                    <Setter TargetName="Band" Property="Margin" Value="-5,2,0,0" />
+                    <Setter TargetName="Band" Property="BorderThickness" Value="0" />
+                </DataTrigger>
+
+                <!--
+                    週をまたいで続く行の頭。ここだけはタイトルが出るので、左は
+                    はみ出させない。出すと文字が罫線の下に潜る
+                -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Span}" Value="Middle" />
+                        <Condition Binding="{Binding ShowsTitle}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Band" Property="Margin" Value="0,2,-5,0" />
+                </MultiDataTrigger>
+
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Span}" Value="End" />
+                        <Condition Binding="{Binding ShowsTitle}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Band" Property="Margin" Value="0,2,0,0" />
+                </MultiDataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!--
+            帯の1段。予定が無くても高さぶんの場所を空ける。空けないと、その日だけ
+            下の予定がせり上がって、隣の日と段が揃わない
+        -->
+        <DataTemplate x:Key="EventBandSlotTemplate">
+            <ContentControl Height="20" Content="{Binding Chip}"
+                            ContentTemplate="{StaticResource EventBandTemplate}"
+                            HorizontalContentAlignment="Stretch" />
+        </DataTemplate>
+
         <!-- タスクは帯を持たず、丸印を添えて予定と区別する -->
         <DataTemplate x:Key="TaskChipTemplate">
             <!-- 押せる面を作るため Background を敷く。透明でも当たり判定は残る -->
             <Border Background="Transparent" Margin="2,2,0,0"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource TaskChipMenu}"
-                    MouseLeftButtonDown="OnTaskChipClicked">
+                    MouseLeftButtonDown="OnTaskChipClicked"
+                    MouseMove="OnChipDragging">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
@@ -136,7 +215,9 @@
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource MilestoneMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
-                    Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー">
+                    MouseMove="OnChipDragging"
+                    Cursor="Hand"
+                    ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー&#10;ドラッグで別の日へ移動">
                 <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
@@ -170,8 +251,11 @@
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
                             ClipToBounds="True" Cursor="Hand"
-                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー"
-                            MouseLeftButtonDown="OnCellClicked">
+                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー&#10;ドラッグで別の日へ移動 ・ Ctrl＋ドラッグで複製"
+                            MouseLeftButtonDown="OnCellClicked"
+                            AllowDrop="True"
+                            DragOver="OnCellDragOver" DragLeave="OnCellDragLeft"
+                            Drop="OnCellDropped">
                         <!--
                             月ビューは日を選ぶための面でもある。押しても右ペインが動かないと、
                             ミニ月暦からしか日を選べない。InputBinding からは
@@ -202,6 +286,8 @@
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
+                            <ItemsControl ItemsSource="{Binding Bands}"
+                                          ItemTemplate="{StaticResource EventBandSlotTemplate}" />
                             <ItemsControl ItemsSource="{Binding Events}"
                                           ItemTemplate="{StaticResource EventChipTemplate}" />
                             <ItemsControl ItemsSource="{Binding Tasks}"
@@ -272,6 +358,20 @@
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource CellSelectedBrush}" />
+                        </DataTrigger>
+
+                        <!--
+                            落とし先。いちばん最後に置いて、ホバーや選択より強く出す
+                            （後に書いたトリガが勝つ）。掴んだものがどこへ入るのか
+                            分からないと、落とす手が止まる
+                        -->
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter TargetName="Cell" Property="Background"
+                                    Value="{DynamicResource AccentSoftBrush}" />
+                            <Setter TargetName="Cell" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="Cell" Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Cell" Property="Padding" Value="3,1,3,2" />
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>

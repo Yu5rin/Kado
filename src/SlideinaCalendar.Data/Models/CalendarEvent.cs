@@ -81,6 +81,15 @@ public sealed record CalendarEvent
     /// <summary>取り込み元。</summary>
     public string? Source { get; init; }
 
+    /// <summary>
+    /// この予定だけ通知するかどうか。
+    /// <para>
+    /// null なら、入れてあるカレンダーの決まりに従う。全部の予定に印を付けさせない
+    /// ためのもので、ふつうはカレンダー側で決める。
+    /// </para>
+    /// </summary>
+    public bool? Notify { get; init; }
+
     /// <summary>ローカルでの更新時刻。</summary>
     public DateTimeOffset UpdatedAt { get; init; }
 

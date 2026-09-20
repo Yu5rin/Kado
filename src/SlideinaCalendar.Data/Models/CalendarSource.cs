@@ -36,6 +36,12 @@ public sealed record CalendarSource
     /// <summary>並び順。</summary>
     public int SortOrder { get; init; }
 
+    /// <summary>
+    /// このカレンダーの予定を、既定で通知するか。
+    /// <para>左パネルのベルで切り替える。予定ごとの指定があれば、そちらが勝つ。</para>
+    /// </summary>
+    public bool NotifyDefault { get; init; } = true;
+
     /// <summary>最後に Google から受け取った姿。</summary>
     public string? GoogleRaw { get; init; }
 

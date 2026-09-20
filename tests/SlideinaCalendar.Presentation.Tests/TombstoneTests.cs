@@ -33,6 +33,42 @@ public class TombstoneTests
     }
 
     [Fact]
+    public void 記録には入れ先のカレンダーも残る()
+    {
+        using var test = TestWorkspace.Create();
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            CalendarId = "shigoto", GoogleEventId = "g1", Source = "google",
+        });
+
+        test.Workspace.DeleteEvent("e1");
+
+        // 持ち主が分からないと、同期のときに別のカレンダーへ削除を投げて 404 になり、
+        // 本当の持ち主には一度も届かない
+        var pending = Assert.Single(test.Workspace.Tombstones.Pending(TombstoneRepository.EventKind));
+        Assert.Equal("shigoto", pending.SourceId);
+
+        // 持ち主で絞れる
+        Assert.Single(test.Workspace.Tombstones.Pending(TombstoneRepository.EventKind, "shigoto"));
+        Assert.Empty(test.Workspace.Tombstones.Pending(TombstoneRepository.EventKind, "shumi"));
+    }
+
+    [Fact]
+    public void 持ち主の分からない記録はどのカレンダーでも拾う()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 版を上げる前から残っている記録のつもり
+        test.Workspace.Tombstones.Record(
+            "e1", TombstoneRepository.EventKind, "g1", DateTimeOffset.Now);
+
+        Assert.Single(test.Workspace.Tombstones.Pending(TombstoneRepository.EventKind, "shigoto"));
+        Assert.Single(test.Workspace.Tombstones.Pending(TombstoneRepository.EventKind, "shumi"));
+    }
+
+    [Fact]
     public void 同期していない予定では記録を残さない()
     {
         using var test = TestWorkspace.Create();
