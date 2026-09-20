@@ -772,11 +772,10 @@
                                 クイック入力。1行打って Enter で入る。
                                 編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
                             -->
-                            <TextBox Style="{StaticResource SearchBoxStyle}"
+                            <TextBox Style="{StaticResource QuickInputBoxStyle}"
                                      Text="{Binding DataContext.QuickText,
                                             RelativeSource={RelativeSource AncestorType=Window},
                                             UpdateSourceTrigger=PropertyChanged}"
-                                     Tag="例: 明日15時 打合せ @会議室A"
                                      ToolTip="1行で予定を追加します（Enter）&#10;例: 明日15時 打合せ @会議室A"
                                      KeyDown="OnQuickKeyDown" />
 

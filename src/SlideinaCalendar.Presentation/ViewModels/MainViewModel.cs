@@ -50,6 +50,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>予定の前と朝のまとめを知らせる。設定を渡されていなければ持たない。</summary>
     private readonly ReminderService? _reminders;
 
+    /// <summary>知らせる口。設定画面の「試しに知らせる」でも使う。</summary>
+    private readonly INotifier _notifier;
+
     private CalendarView _currentView = CalendarView.Month;
     private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
@@ -86,6 +89,7 @@ public sealed class MainViewModel : ObservableObject
         // 設定を持たない画面。その場合は引数のままにする
         _settings = settings;
         _startup = startup ?? NullStartupRegistration.Instance;
+        _notifier = notifier ?? NullNotifier.Instance;
         _weekStart = settings?.WeekStart ?? weekStart;
 
         SourceLists = new SourceListsViewModel(workspace);
@@ -95,7 +99,7 @@ public sealed class MainViewModel : ObservableObject
         if (settings is not null)
         {
             workspace.CountInCalendarDays = settings.CountInCalendarDays;
-            _reminders = new ReminderService(workspace, settings, notifier ?? NullNotifier.Instance);
+            _reminders = new ReminderService(workspace, settings, _notifier);
 
             // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
             settings.Changed += (_, _) =>
@@ -154,7 +158,7 @@ public sealed class MainViewModel : ObservableObject
 
         // 設定を持たない組み立て方（テストなど）では開けない
         OpenSettingsCommand = new RelayCommand(
-            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup)),
+            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup, _notifier)),
             () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
@@ -1388,7 +1392,7 @@ public sealed class MainViewModel : ObservableObject
 
         moved = change switch
         {
-            TimeChange.SetTo when start is { } at => moved with { StartTime = at, EndTime = at.Add(LengthOf(found)) },
+            TimeChange.SetTo when start is { } at => moved with { StartTime = at, EndTime = EndOf(at, found) },
             TimeChange.Clear => moved with { StartTime = null, EndTime = null },
             _ => moved,
         };
@@ -1427,6 +1431,20 @@ public sealed class MainViewModel : ObservableObject
         value.StartTime is { } from && value.EndTime is { } to && to > from
             ? to.ToTimeSpan() - from.ToTimeSpan()
             : TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// 移した先での終わりの時刻。
+    /// <para>
+    /// <b>日をまたがせない。</b>またぐと終わりが始まりより前になり、時間軸に
+    /// 置けなくなって画面から消える。遅い時刻に移したときは、その日の終わりで止める。
+    /// </para>
+    /// </summary>
+    private static TimeOnly EndOf(TimeOnly start, CalendarEvent value)
+    {
+        var end = start.Add(LengthOf(value));
+
+        return end > start ? end : new TimeOnly(23, 59);
+    }
 
     /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
     /// <returns>動かしたら true。</returns>

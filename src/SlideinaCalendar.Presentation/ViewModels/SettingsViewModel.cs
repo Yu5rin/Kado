@@ -1,5 +1,6 @@
 using System.Globalization;
 using SlideinaCalendar.Presentation.Infrastructure;
+using SlideinaCalendar.Presentation.Notifications;
 using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.Presentation.ViewModels;
@@ -27,11 +28,38 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _runAtLogon;
     private string? _message;
 
-    public SettingsViewModel(AppSettings settings, IStartupRegistration? startup = null)
+    private readonly INotifier _notifier;
+
+    public SettingsViewModel(
+        AppSettings settings, IStartupRegistration? startup = null, INotifier? notifier = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startup = startup ?? NullStartupRegistration.Instance;
+        _notifier = notifier ?? NullNotifier.Instance;
         _runAtLogon = _startup.IsSupported && _startup.IsEnabled;
+
+        TestNotifyCommand = new Infrastructure.RelayCommand(TestNotify);
+    }
+
+    /// <summary>
+    /// 試しに1つ出してみる。
+    /// <para>
+    /// 通知が出る場所と見え方は、実際に出してみないと分からない。設定を入れたのに
+    /// 何も起きないとき、アプリ側の問題か時刻待ちかを切り分けられる。
+    /// </para>
+    /// </summary>
+    public Infrastructure.RelayCommand TestNotifyCommand { get; }
+
+    private void TestNotify()
+    {
+        if (!_notifier.IsSupported)
+        {
+            Message = "この環境では知らせられません";
+            return;
+        }
+
+        _notifier.Notify("試しの知らせ", "この形で予定の前にお知らせします");
+        Message = null;
     }
 
     /// <summary>配色の選択肢。</summary>

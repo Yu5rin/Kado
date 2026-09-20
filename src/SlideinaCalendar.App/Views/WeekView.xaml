@@ -13,6 +13,7 @@
              xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
              xmlns:views="clr-namespace:SlideinaCalendar.App.Views"
              AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished"
+             PreviewMouseWheel="OnWheel"
              x:Name="Root"
              Background="{DynamicResource BackgroundBrush}">
 
@@ -249,7 +250,7 @@
         <!-- 選んだ時間帯を、ここで測った高さに割り付ける -->
         <!-- バーは常に出す。上の段はこの幅ぶんを空けてあり、消えると列がずれる -->
         <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled"
-                      SizeChanged="OnTimelineResized">
+                      SizeChanged="OnTimelineResized" PreviewMouseWheel="OnTimelineWheel">
             <Grid Height="{Binding TimelineHeight}">
                 <DockPanel>
                     <ItemsControl DockPanel.Dock="Left" Width="46" ItemsSource="{Binding HourLabels}">

@@ -16,7 +16,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
              Background="{DynamicResource BackgroundBrush}"
-             AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished">
+             AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished"
+             PreviewMouseWheel="OnWheel">
 
     <UserControl.Resources>
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />

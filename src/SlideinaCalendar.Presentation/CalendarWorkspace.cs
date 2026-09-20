@@ -698,6 +698,34 @@ public sealed class CalendarWorkspace
             ?? CreateCalendar(WorkingDayCalendarName);
     }
 
+    /// <summary>
+    /// この予定を知らせるか。
+    /// <para>
+    /// 予定ごとの指定があればそれが勝つ。無ければ、入れてあるカレンダーの決まりに従う。
+    /// 全部の予定に印を付けさせないための組み方で、ふつうはカレンダー側で決める。
+    /// </para>
+    /// </summary>
+    public bool NotifiesFor(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Notify is { } chosen) return chosen;
+
+        return Sources.Calendars()
+            .FirstOrDefault(c => string.Equals(c.Id, value.CalendarId, StringComparison.Ordinal))
+            ?.NotifyDefault ?? true;
+    }
+
+    /// <summary>カレンダーの予定を既定で知らせるかどうかを切り替える。</summary>
+    /// <returns>切り替えたら true。</returns>
+    public bool SetCalendarNotify(string id, bool notify)
+    {
+        if (!Sources.SetCalendarNotify(id, notify)) return false;
+
+        NotifyChanged();
+        return true;
+    }
+
     /// <summary>「inaCalendar」という名前のカレンダー。Google のものを先に返す。</summary>
     public IReadOnlyList<CalendarSource> WorkingDayCalendars() =>
         Sources.Calendars()

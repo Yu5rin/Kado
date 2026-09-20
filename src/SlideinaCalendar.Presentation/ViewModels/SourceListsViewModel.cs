@@ -90,19 +90,40 @@ public enum DropHint
 public sealed class SourceListItemViewModel : ObservableObject
 {
     private readonly Action<SourceListItemViewModel> _onToggled;
+    private readonly Action<SourceListItemViewModel>? _onNotifyToggled;
     private bool _isVisible = true;
+    private bool _notifies = true;
     private DropHint _dropHint;
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
-        bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled)
+        bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled,
+        bool notifies = true, Action<SourceListItemViewModel>? onNotifyToggled = null)
     {
         Id = id;
         Name = name;
         SwatchColor = swatchColor;
         _isVisible = isVisible;
+        _notifies = notifies;
         IsGoogle = isGoogle;
         _onToggled = onToggled;
+        _onNotifyToggled = onNotifyToggled;
     }
+
+    /// <summary>
+    /// このカレンダーの予定を既定で知らせるか。
+    /// <para>ベルを押して切り替える。予定ごとの指定があれば、そちらが勝つ。</para>
+    /// </summary>
+    public bool Notifies
+    {
+        get => _notifies;
+        set
+        {
+            if (Set(ref _notifies, value)) _onNotifyToggled?.Invoke(this);
+        }
+    }
+
+    /// <summary>ベルを出すか。タスクリストは通知の対象にしていないので出さない。</summary>
+    public bool HasNotifyToggle => _onNotifyToggled is not null;
 
     /// <summary>
     /// Google 側にあるものか。
@@ -250,6 +271,10 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>タスクリストを分けて見出しを出すか。</summary>
     public bool ShowsTaskListGroups => _localTaskLists.Count > 0 && _googleTaskLists.Count > 0;
 
+    /// <summary>ベルを押したとき。表のほうにも控える。</summary>
+    private void OnCalendarNotifyToggled(SourceListItemViewModel item) =>
+        _workspace.SetCalendarNotify(item.Id, item.Notifies);
+
     /// <summary>一覧を読み直す。チェックの状態は引き継ぐ。</summary>
     public void Refresh()
     {
@@ -257,7 +282,8 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         Calendars = _workspace.Sources.Calendars()
             .Select(c => new SourceListItemViewModel(
                 c.Id, c.DisplayName, c.BackgroundColor ?? CalendarPalette.ColorFor(c.Id),
-                c.IsVisible, IsFromGoogle(c.GoogleRaw), OnCalendarToggled))
+                c.IsVisible, IsFromGoogle(c.GoogleRaw), OnCalendarToggled,
+                c.NotifyDefault, OnCalendarNotifyToggled))
             .ToArray();
 
         TaskLists = _workspace.Sources.TaskLists()

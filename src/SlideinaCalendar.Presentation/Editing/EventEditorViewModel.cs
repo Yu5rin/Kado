@@ -39,6 +39,7 @@ public sealed class EventEditorViewModel : ObservableObject
     private string _title = string.Empty;
     private DateOnly _date;
     private bool _isAllDay;
+    private bool? _notify;
     private string _startTimeText = "09:00";
     private string _endTimeText = "10:00";
     private bool _isMultiDay;
@@ -95,6 +96,7 @@ public sealed class EventEditorViewModel : ObservableObject
 
         _isMultiDay = value.EndDate is { } endDate && endDate > value.Date;
         _endDate = value.EndDate ?? value.Date;
+        _notify = value.Notify;
     }
 
     /// <summary>新規か。見出しとボタンの文言を変える。</summary>
@@ -125,6 +127,27 @@ public sealed class EventEditorViewModel : ObservableObject
             // 「毎週 木曜日」は開始日で決まる。日付を動かしたら表示も付いてくる
             Raise(nameof(RecurrenceOptions));
         }
+    }
+
+    /// <summary>
+    /// この予定を知らせるか。
+    /// <para>
+    /// 「カレンダーに従う」「知らせる」「知らせない」の3つ。既定は従う。
+    /// ふつうはカレンダー側（左パネルのベル）で決め、例外だけここで指す。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<NotifyChoice> NotifyOptions { get; } =
+    [
+        new(null, "カレンダーに従う"),
+        new(true, "知らせる"),
+        new(false, "知らせない"),
+    ];
+
+    /// <summary>選ばれている通知の指定。</summary>
+    public bool? Notify
+    {
+        get => _notify;
+        set => Set(ref _notify, value);
     }
 
     /// <summary>終日か。時刻欄を使うかどうかが変わる。</summary>
@@ -307,6 +330,7 @@ public sealed class EventEditorViewModel : ObservableObject
             Note = Blank(_note),
             Url = Blank(_url),
             CalendarId = _calendarId,
+            Notify = _notify,
 
             // 色は所属カレンダーで決まる。1件ずつは選ばせない。
             // 取り込んだ予定が持っている色は、上書きせずそのまま残す

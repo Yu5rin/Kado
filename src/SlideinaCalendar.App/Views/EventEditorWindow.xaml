@@ -139,6 +139,20 @@
                               SelectedValue="{Binding Recurrence}" />
                 </StackPanel>
 
+                <StackPanel Margin="0,0,10,0">
+                    <TextBlock Text="通知" Style="{StaticResource FieldLabelStyle}" />
+                    <ComboBox Width="140" Style="{StaticResource FieldComboBoxStyle}"
+                              ItemsSource="{Binding NotifyOptions}"
+                              SelectedValuePath="Value" SelectedValue="{Binding Notify}"
+                              ToolTip="ふつうはカレンダー側（左の一覧のベル）で決めます">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
                 <StackPanel Visibility="{Binding Calendars, Converter={StaticResource NullToVisibility}}">
                     <TextBlock Text="カレンダー" Style="{StaticResource FieldLabelStyle}" />
                     <ComboBox Width="176" Style="{StaticResource FieldComboBoxStyle}"
