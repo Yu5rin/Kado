@@ -435,7 +435,16 @@ public sealed class CalendarWorkspace
     {
         ArgumentNullException.ThrowIfNull(xlsx);
 
-        var result = new WorkdayFileImporter().Import(xlsx);
+        return ApplyWorkingDays(new WorkdayFileImporter().Import(xlsx));
+    }
+
+    /// <summary>
+    /// 読み取った実働日データを反映する。Excel でも配信のファイルでも通り道は同じ。
+    /// </summary>
+    public ImportResult ApplyWorkingDays(ImportResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
         WorkingDayStore.Apply(result);
         ReloadWorkingDays();
 

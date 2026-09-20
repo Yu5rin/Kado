@@ -327,4 +327,47 @@ public class SettingsTests
 
         Assert.Equal(ThemeChoice.Night, new AppSettings(test.Workspace.Settings).Theme);
     }
+
+    [Theory]
+    [InlineData("https://example.com/feed.json", true)]
+    [InlineData("http://example.com/feed.json", false)]
+    [InlineData("file:///C:/feed.json", false)]
+    [InlineData("feed.json", false)]
+    [InlineData("", false)]
+    public void 配信元はhttpsだけ通す(string url, bool usable)
+    {
+        Assert.Equal(usable, AppSettings.IsUsableFeedUrl(url));
+    }
+
+    [Fact]
+    public void 配信元は次に開いたときも残る()
+    {
+        using var test = TestWorkspace.Create();
+        new AppSettings(test.Workspace.Settings) { FeedUrl = "https://example.com/feed.json" };
+
+        Assert.Equal("https://example.com/feed.json", new AppSettings(test.Workspace.Settings).FeedUrl);
+    }
+
+    [Fact]
+    public void 配信元がhttpsでなければ断る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = new SettingsViewModel(new AppSettings(test.Workspace.Settings))
+        {
+            FeedUrl = "http://example.com/feed.json",
+        };
+
+        Assert.NotNull(vm.Message);
+    }
+
+    [Fact]
+    public void 配信元が空なら取りに行けない()
+    {
+        using var test = TestWorkspace.Create();
+        var main = new MainViewModel(
+            test.Workspace, today: new DateOnly(2026, 9, 24),
+            settings: new AppSettings(test.Workspace.Settings));
+
+        Assert.False(main.FetchWorkingDayFeedCommand.CanExecute(null));
+    }
 }

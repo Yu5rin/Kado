@@ -124,6 +124,21 @@
 
             <Border Height="18" />
 
+            <!-- 実働日データ -->
+            <TextBlock Text="実働日データ" Style="{StaticResource SectionHeadStyle}" />
+
+            <TextBlock Text="配信元（feed.json の URL）" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                     Text="{Binding FeedUrl, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock Text="1か所に置いたファイルを取りに行きます。https:// のみ。空なら取りに行きません。"
+                       Style="{StaticResource FieldNoteStyle}" />
+
+            <Border Height="8" />
+
+            <CheckBox Content="1日に1回、自動で取りに行く" IsChecked="{Binding FeedAuto}" Cursor="Hand" />
+
+            <Border Height="18" />
+
             <!-- 起動 -->
             <TextBlock Text="起動" Style="{StaticResource SectionHeadStyle}" />
 

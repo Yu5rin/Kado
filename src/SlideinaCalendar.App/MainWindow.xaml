@@ -236,6 +236,12 @@
                                       Command="{Binding ImportWorkingDaysCommand}" />
                             <MenuItem Header="旧 inaCalendar のバックアップを取り込む…（JSON）"
                                       Command="{Binding ImportLegacyBackupCommand}" />
+                            <MenuItem Header="配信元から実働日を取り込む"
+                                      Command="{Binding FetchWorkingDayFeedCommand}"
+                                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
+                            <MenuItem Header="実働日を配信用に書き出す…（feed.json）"
+                                      Command="{Binding ExportWorkingDayFeedCommand}"
+                                      ToolTip="いまの実働日データを、配る側のファイルとして書き出します" />
                             <Separator />
                             <MenuItem Header="Google に接続…"
                                       Command="{Binding Sync.ConnectCommand}"
