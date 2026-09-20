@@ -157,15 +157,17 @@
             <DockPanel LastChildFill="False" Margin="12,9">
 
                 <!--
-                    ピン。押すと画面を分割し、最大化した他のウィンドウと重ならなくなる
-                    （要件書 2.2）。オーバーレイのままでは重なりを避けられない
+                    ピン。押すと画面端に寄り、画面を分割する。最大化した他のウィンドウと
+                    重ならなくなる（要件書 2.2）。
+
+                    常に出しておく。端へドラッグしてから押す作りにしていたが、Windows の
+                    スナップ（端に寄せると画面の半分に広がる）と取り合いになって、
+                    寄せてもピンが出ないことがあった
                 -->
                 <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
                               IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
                               Command="{Binding Shell.TogglePinCommand}"
-                              ToolTip="{Binding Shell.PinLabel}"
-                              Visibility="{Binding Shell.IsAtEdge,
-                                           Converter={StaticResource BoolToVisibility}}">
+                              ToolTip="{Binding Shell.PinLabel}">
                     <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -217,7 +219,7 @@
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Day}" />
                         <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
-                                     ToolTip="年度（4月〜翌3月）。Ctrl＋ホイールで年度を送ります"
+                                     ToolTip="年度（4月〜翌3月）。ホイールで年度を送ります"
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Year}" />
                         <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
@@ -309,6 +311,7 @@
                                           ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
                             </MenuItem>
                             <Separator />
+                            <MenuItem Header="ショートカット…" Command="{Binding ShowShortcutsCommand}" />
                             <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
                         </ContextMenu>
                     </Button.ContextMenu>

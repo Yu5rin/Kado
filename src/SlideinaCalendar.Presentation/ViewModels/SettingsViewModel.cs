@@ -244,6 +244,22 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 閉じるボタンでトレイに入れるか。
+    /// <para>切ると、閉じるボタンでそのまま終わる。</para>
+    /// </summary>
+    public bool CloseToTray
+    {
+        get => _settings.CloseToTray;
+        set
+        {
+            if (_settings.CloseToTray == value) return;
+
+            _settings.CloseToTray = value;
+            Raise();
+        }
+    }
+
     /// <summary>知らせるときに音を鳴らすか。</summary>
     public bool NotifySound
     {

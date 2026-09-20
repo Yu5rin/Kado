@@ -51,6 +51,7 @@ public sealed class AppSettings
     private const string NotifySoundKey = "notify.sound";
     private const string DefaultCalendarKey = "ui.default_calendar";
     private const string YearLayoutKey = "ui.year_layout";
+    private const string CloseToTrayKey = "ui.close_to_tray";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -70,6 +71,7 @@ public sealed class AppSettings
     private ThemeChoice _theme;
     private DayOfWeek _weekStart;
     private YearLayout _yearLayout;
+    private bool _closeToTray = true;
     private int _dayStartHour;
     private int _dayEndHour;
     private CalendarView _startupView;
@@ -91,6 +93,7 @@ public sealed class AppSettings
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
         _yearLayout = Read(YearLayoutKey, YearLayout.Strip);
+        _closeToTray = !string.Equals(_store.Get(CloseToTrayKey), "false", StringComparison.Ordinal);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -372,6 +375,27 @@ public sealed class AppSettings
     {
         get => _yearLayout;
         set => Write(ref _yearLayout, value, YearLayoutKey);
+    }
+
+    /// <summary>
+    /// 閉じるボタンでトレイに入れるか。
+    /// <para>
+    /// 既定は入れる（要件書 7.4）。裏で通知を出し続けるため、閉じても終わらせない。
+    /// ただし「閉じたら終わってほしい」という人もいるので選べるようにする。
+    /// </para>
+    /// <para>切ったときは、閉じるボタンでそのまま終わる。トレイのアイコンは出したまま。</para>
+    /// </summary>
+    public bool CloseToTray
+    {
+        get => _closeToTray;
+        set
+        {
+            if (_closeToTray == value) return;
+
+            _closeToTray = value;
+            _store.Set(CloseToTrayKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>時間軸の上端。</summary>

@@ -79,4 +79,9 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
 
     public void ShowWorkdayCalculator(WorkdayCalculatorViewModel calculator) =>
         LastCalculator = calculator;
+
+    /// <summary>ショートカットの一覧を開いた回数。</summary>
+    public int ShortcutsShown { get; private set; }
+
+    public void ShowShortcuts() => ShortcutsShown++;
 }

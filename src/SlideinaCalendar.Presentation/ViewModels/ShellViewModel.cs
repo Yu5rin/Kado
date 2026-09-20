@@ -26,6 +26,9 @@ public sealed class ShellViewModel : ObservableObject
     private SidebarTab _tab = SidebarTab.Events;
     private double _layoutWidth = double.NaN;
 
+    /// <summary>ピンを外したときに戻る先。留める前の居かたを覚えておく。</summary>
+    private ShellMode _beforePin = ShellMode.Window;
+
     public ShellViewModel(DockPlacement placement)
     {
         var usable = placement.WithUsableWidth();
@@ -152,8 +155,8 @@ public sealed class ShellViewModel : ObservableObject
 
     /// <summary>ピンボタンの説明。押すと何が起きるかを書く。</summary>
     public string PinLabel => IsPinned
-        ? "ピンを外す（画面の分割をやめ、重ねて出す）"
-        : "ピン留めする（画面を分割し、他のウィンドウと重ならないようにする）";
+        ? "ピンを外す（画面の分割をやめ、元の出しかたに戻す）"
+        : "ピン留めする（画面端に寄せて画面を分割し、他のウィンドウと重ならないようにする）";
 
     /// <summary>いまの居場所。終了時に控える。</summary>
     public DockPlacement Placement(string? monitorId = null) =>
@@ -162,12 +165,24 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>
     /// ピンを切り替える。
     /// <para>
-    /// ピンを外してもウィンドウには戻さない。オーバーレイに落として、そのまま
-    /// 端に居続ける（要件書 2.1）。戻したいときはウィンドウを選ぶ。
+    /// <b>ウィンドウからでもひと押しで留まる。</b>要件書 2.1 は「端へドラッグして
+    /// オーバーレイ → ピンでドック」という順だが、端へ寄せる操作は Windows の
+    /// スナップ（画面の半分に広がる）と取り合いになって当てにならない。ボタンを
+    /// 常時出し、押したらそのまま画面の分割まで行く。
     /// </para>
+    /// <para>外すときは、留める前の居かたへ戻す。</para>
     /// </summary>
-    private void TogglePin() =>
-        Mode = _mode == ShellMode.Dock ? ShellMode.Overlay : ShellMode.Dock;
+    private void TogglePin()
+    {
+        if (_mode == ShellMode.Dock)
+        {
+            Mode = _beforePin;
+            return;
+        }
+
+        _beforePin = _mode;
+        Mode = ShellMode.Dock;
+    }
 
     public RelayCommand TogglePinCommand { get; }
 
