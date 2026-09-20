@@ -301,10 +301,46 @@ public class MainViewModelTests
         vm.NextCommand.Execute(null);
         Assert.Equal(D(2026, 9, 27), vm.Week.WeekStart);
 
-        // 日ビューでは日単位
+        // 日ビューでは日単位。週を送ったぶん、選んでいる日も曜日を保って
+        // 10/1（木）へ移っているので、そこから1日進む
+        vm.SwitchViewCommand.Execute(CalendarView.Day);
+        Assert.Equal(D(2026, 10, 1), vm.Day.Date);
+
+        vm.NextCommand.Execute(null);
+        Assert.Equal(D(2026, 10, 2), vm.Day.Date);
+    }
+
+    [Fact]
+    public void 送ると右ペインの日付も付いてくる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 置いていくと、中央は 9/18 を出しているのに右ペインは 9/22 のまま、
+        // ということになる
         vm.SwitchViewCommand.Execute(CalendarView.Day);
         vm.NextCommand.Execute(null);
-        Assert.Equal(D(2026, 9, 25), vm.Day.Date);
+        Assert.Equal(vm.Day.Date, vm.SelectedDay.Date);
+
+        // 月は日にちを保って翌月へ
+        vm.SwitchViewCommand.Execute(CalendarView.Month);
+        var before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.AddMonths(1), vm.SelectedDay.Date);
+
+        // 週は曜日を保って翌週へ
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.AddDays(7), vm.SelectedDay.Date);
+
+        // 年は同じ月日の翌年度へ
+        vm.SwitchViewCommand.Execute(CalendarView.Year);
+        before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.Month, vm.SelectedDay.Date.Month);
+        Assert.Equal(before.Day, vm.SelectedDay.Date.Day);
+        Assert.Equal(before.Year + 1, vm.SelectedDay.Date.Year);
     }
 
     [Fact]

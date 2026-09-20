@@ -33,6 +33,16 @@ public sealed class ShellController : IDisposable
     /// <summary>ウィンドウモードに戻すときの姿。端へ寄せる前に控える。</summary>
     private WindowPlacement? _windowed;
 
+    /// <summary>
+    /// ピン留めする前の作業領域。
+    /// <para>
+    /// <b>外した直後に測ってはいけない。</b>ワークエリアの変更はすぐには行き渡らず、
+    /// 解除の直後はまだ削られたままの値が返る。それを画面端の基準に使うと、
+    /// 削っていた幅ぶん内側――つまり画面の真ん中にスライドが出る。
+    /// </para>
+    /// </summary>
+    private Rect? _workBeforeDock;
+
     private bool _disposed;
 
     public ShellController(Window window, ShellViewModel shell, DockPlacementStore store)
@@ -168,6 +178,7 @@ public sealed class ShellController : IDisposable
             case ShellMode.Window:
                 _appBar.Undock();
                 _hotZone.Disarm();
+                _workBeforeDock = null;
                 ToWindow();
                 Show();
                 break;
@@ -189,6 +200,10 @@ public sealed class ShellController : IDisposable
 
             case ShellMode.Dock:
                 _hotZone.Disarm();
+
+                // 削る前に控える。外したあとでは正しい値が取れない
+                _workBeforeDock ??= SystemParameters.WorkArea;
+
                 ToEdge();
 
                 // ドックのあいだは最前面にしない。場所を譲ってもらっているので、
@@ -275,7 +290,11 @@ public sealed class ShellController : IDisposable
     {
         if (!_shell.IsAtEdge || _shell.IsPinned) return;
 
-        var work = SystemParameters.WorkArea;
+        // 留める前に控えた値があればそちらを使い、使ったら捨てる。次に出すときには
+        // ワークエリアも戻っているので、そのときは素直に測ってよい
+        var work = _workBeforeDock ?? SystemParameters.WorkArea;
+        _workBeforeDock = null;
+
         var width = _shell.DockWidth;
 
         _window.Top = work.Top;
