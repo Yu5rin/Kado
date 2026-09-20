@@ -79,15 +79,23 @@
                     <ComboBox Width="86" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding StartTimeOptions}"
                               Text="{Binding StartTimeText, UpdateSourceTrigger=LostFocus}"
+                              SelectionChanged="OnTimeSelected"
                               PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel"
-                              ToolTip="「9」「930」「9:30」のどれでも入ります。上下キーで15分ずつ" />
+                              ToolTip="「9」「930」「9:30」のどれでも入ります。上下キーで15分ずつ&#10;動かすと終了も同じ長さのまま付いてきます" />
                 </StackPanel>
 
                 <StackPanel Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
                     <TextBlock Text="終了" Style="{StaticResource FieldLabelStyle}" />
+                    <!--
+                        一覧には「10:00（1時間）」と長さを添えるが、欄に残るのは時刻だけ。
+                        TextSearch.TextPath を指さないと、長さの添え字まで欄に入って
+                        幅を食い、時刻のほうが見切れる
+                    -->
                     <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
+                              TextSearch.TextPath="Text"
                               Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
+                              SelectionChanged="OnTimeSelected"
                               PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel"
                               ToolTip="長さから選べます。上下キーで15分ずつ" />
                 </StackPanel>
@@ -117,6 +125,7 @@
                         <ComboBox Width="86" Style="{StaticResource TimeComboBoxStyle}"
                                   ItemsSource="{Binding StartTimeOptions}"
                                   Text="{Binding StartTimeText, UpdateSourceTrigger=LostFocus}"
+                                  SelectionChanged="OnTimeSelected"
                                   PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
                     </StackPanel>
 
@@ -124,7 +133,9 @@
                         <TextBlock Text="終了時刻" Style="{StaticResource FieldLabelStyle}" />
                         <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                                   ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
+                                  TextSearch.TextPath="Text"
                                   Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
+                                  SelectionChanged="OnTimeSelected"
                                   PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
                     </StackPanel>
                 </StackPanel>

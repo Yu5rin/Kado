@@ -34,6 +34,21 @@ public partial class EventEditorWindow : Window
     public RelayCommand SaveCommand { get; }
 
     /// <summary>上下キーで15分ずつ動かす。打ち直すより速い。</summary>
+    /// <summary>
+    /// 一覧から選んだら、その場で伝える。
+    /// <para>
+    /// 時刻の欄は打ち込みの途中で整形されないよう、フォーカスが外れるまで
+    /// 伝えない作りにしてある。選んだときまで待たせると、開始を選んでも
+    /// 終了が動かないように見える。
+    /// </para>
+    /// </summary>
+    private void OnTimeSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox box) return;
+
+        box.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();
+    }
+
     private void OnTimeKeyDown(object sender, KeyEventArgs e)
     {
         var step = e.Key switch
