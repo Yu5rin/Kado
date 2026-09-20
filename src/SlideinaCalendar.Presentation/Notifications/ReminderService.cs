@@ -59,7 +59,7 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         if (items.Length == 0)
         {
-            _notifier.Notify(heading, "予定はありません");
+            _notifier.Notify(heading, "予定はありません", _settings.NotifySound);
             return;
         }
 
@@ -71,7 +71,8 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         var more = items.Length > SummaryLimit ? $"\n…ほか {items.Length - SummaryLimit} 件" : string.Empty;
 
-        _notifier.Notify($"{heading} {items.Length}件", string.Join("\n", lines) + more);
+        _notifier.Notify(
+            $"{heading} {items.Length}件", string.Join("\n", lines) + more, _settings.NotifySound);
     }
 
     /// <summary>そろそろ始まる予定。設定した分だけ前に知らせる。</summary>
@@ -97,7 +98,7 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
             var key = $"{value.Id}|{scheduled.Date:yyyy-MM-dd}";
             if (!_notified.Add(key)) continue;
 
-            _notifier.Notify(value.Title, Detail(value, start));
+            _notifier.Notify(value.Title, Detail(value, start), _settings.NotifySound);
         }
     }
 

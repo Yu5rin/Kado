@@ -96,16 +96,33 @@ public class QuickEntryTests
     }
 
     [Fact]
-    public void 日付を書かなければ選んでいる日に入る()
+    public void 日付を書かなければ今日に入る()
     {
         using var test = TestWorkspace.Create();
         var main = Create(test);
+
+        // 別の日を眺めていても、基準は今日
         main.SelectedDate = new DateOnly(2026, 9, 30);
 
         main.QuickText = "棚卸";
         main.QuickCommand.Execute(null);
 
-        Assert.Equal(new DateOnly(2026, 9, 30),
-            test.Workspace.Events.All().Single(e => e.Title == "棚卸").Date);
+        Assert.Equal(Today, test.Workspace.Events.All().Single(e => e.Title == "棚卸").Date);
+    }
+
+    [Fact]
+    public void 明日は今日から見た明日()
+    {
+        using var test = TestWorkspace.Create();
+        var main = Create(test);
+
+        // 来月を眺めている最中でも、「明日」は今日の次の日
+        main.SelectedDate = new DateOnly(2026, 10, 15);
+
+        main.QuickText = "明日 打合せ";
+        main.QuickCommand.Execute(null);
+
+        Assert.Equal(Today.AddDays(1),
+            test.Workspace.Events.All().Single(e => e.Title == "打合せ").Date);
     }
 }

@@ -16,11 +16,11 @@ public sealed class ToastNotifier : INotifier
 {
     public bool IsSupported => Application.Current is not null;
 
-    public void Notify(string title, string message)
+    public void Notify(string title, string message, bool withSound = true)
     {
         if (Application.Current is not { Dispatcher: { } dispatcher }) return;
 
         // 時計は画面の筋から来るが、念のため画面の筋に戻してから出す
-        dispatcher.Invoke(() => ToastWindow.Show(title, message));
+        dispatcher.Invoke(() => ToastWindow.Show(title, message, withSound));
     }
 }

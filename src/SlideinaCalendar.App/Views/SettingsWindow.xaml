@@ -136,6 +136,10 @@
 
             <Border Height="12" />
 
+            <CheckBox Content="知らせるときに音を鳴らす" IsChecked="{Binding NotifySound}" Cursor="Hand" />
+
+            <Border Height="12" />
+
             <CheckBox Content="朝にその日の予定をまとめて知らせる"
                       IsChecked="{Binding SummaryEnabled}" Cursor="Hand" />
             <Border Height="8" />

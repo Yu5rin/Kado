@@ -42,14 +42,47 @@ public partial class ToastWindow : Window
     }
 
     /// <summary>知らせを出す。</summary>
-    public static void Show(string title, string message)
+    /// <param name="title">見出し。</param>
+    /// <param name="message">本文。</param>
+    /// <param name="withSound">音を鳴らすか。続けて何件も出すときは最初の1件だけにする。</param>
+    public static void Show(string title, string message, bool withSound = true)
     {
+        // 古いものから引っ込める。積み上がると画面が埋まる
+        while (Shown.Count >= MaxShown) Shown[0].Close();
+
         var toast = new ToastWindow(title, message);
         Shown.Add(toast);
 
         // 触らせない。入力を奪うと、打っている最中に文字が飛ぶ
         toast.Show();
+
+        if (withSound) PlaySound();
     }
+
+    /// <summary>
+    /// 音で気づかせる。
+    /// <para>
+    /// 画面を見ていないときに出しても意味がない。Windows の「メッセージ（情報）」の
+    /// 音を借りる。利用者が音を切っていれば鳴らない。
+    /// </para>
+    /// </summary>
+    private static void PlaySound()
+    {
+        try
+        {
+            System.Media.SystemSounds.Asterisk.Play();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException)
+        {
+            // 鳴らせなくても知らせは出す
+        }
+    }
+
+    /// <summary>積み上げの上限。これ以上は画面を埋めるだけ。</summary>
+    public const int MaxShown = 4;
+
+    /// <summary>いま出ている数。</summary>
+    public static int Count => Shown.Count;
 
     /// <summary>右下に置く。すでに出ているものがあれば、その上に積む。</summary>
     private void Place()

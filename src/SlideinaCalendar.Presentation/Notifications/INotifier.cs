@@ -15,7 +15,8 @@ public interface INotifier
     /// <summary>知らせる。</summary>
     /// <param name="title">見出し。</param>
     /// <param name="message">本文。複数行になることがある。</param>
-    void Notify(string title, string message);
+    /// <param name="withSound">音を鳴らすか。</param>
+    void Notify(string title, string message, bool withSound = true);
 }
 
 /// <summary>何も出さない実装。テストと、通知を扱えない環境で使う。</summary>
@@ -27,5 +28,5 @@ public sealed class NullNotifier : INotifier
 
     public bool IsSupported => false;
 
-    public void Notify(string title, string message) { }
+    public void Notify(string title, string message, bool withSound = true) { }
 }

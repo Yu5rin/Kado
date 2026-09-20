@@ -11,7 +11,14 @@ internal sealed class FakeNotifier : INotifier
 
     public bool IsSupported => true;
 
-    public void Notify(string title, string message) => Sent.Add((title, message));
+    /// <summary>音を鳴らすよう頼まれたか。</summary>
+    public bool LastWithSound { get; private set; }
+
+    public void Notify(string title, string message, bool withSound = true)
+    {
+        Sent.Add((title, message));
+        LastWithSound = withSound;
+    }
 }
 
 /// <summary>
@@ -185,5 +192,41 @@ public class ReminderTests
         service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
 
         Assert.Contains("予定はありません", notifier.Sent.Single().Message);
+    }
+
+    [Fact]
+    public void 音を鳴らすかは設定に従う()
+    {
+        using var test = TestWorkspace.Create();
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+            s.NotifySound = false;
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 9, 51, 0));
+
+        Assert.Single(notifier.Sent);
+        Assert.False(notifier.LastWithSound);
+    }
+
+    [Fact]
+    public void 既定では音を鳴らす()
+    {
+        using var test = TestWorkspace.Create();
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 9, 51, 0));
+
+        Assert.True(notifier.LastWithSound);
     }
 }
