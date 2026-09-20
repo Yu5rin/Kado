@@ -247,6 +247,11 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
   視覚ツリーに居ないため。マスや行のダブルクリックはコードビハインドで受けている
 - **`RelayCommand` は `CommandManager` に乗っていない。** `RaiseCanExecuteChanged` を
   自分で呼ばないと、保存できるようになってもボタンが無効のまま戻らない
+- **`Application.Shutdown()` は `Window.Closing` を出さない。** 更新のための終了は
+  これを通るので、そこで保存していると何も残らない。ウィンドウの置き場所は動いた
+  時点で控え、`Closed` で書き出している（`MainWindow.TrackPlacement`）
+- **閉じたあとの `RestoreBounds` は当てにならない。** 窓のハンドルがもう無い。
+  元に戻したときの大きさが要るなら、閉じる前に控えておく
 
 `tests/SlideinaCalendar.App.Tests` が1つ目を静的に検査する。2つ目と3つ目は
 検査できていないので、同じ書き方をしないよう上に残した。

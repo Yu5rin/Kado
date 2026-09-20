@@ -122,6 +122,8 @@ public partial class App : Application
 
             window = new MainWindow
             {
+                // 閉じたときの置き場所と大きさを覚え、次はそこで出す
+                Placements = new WindowPlacementStore(workspace.Settings),
                 DataContext = new MainViewModel(
                     workspace, today, editors: editors, files: files,
                     googleClient: googleClient, google: _google,
