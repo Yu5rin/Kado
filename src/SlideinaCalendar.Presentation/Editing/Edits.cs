@@ -125,3 +125,29 @@ public sealed class DeleteTaskEdit(
         tombstones?.Clear(value.Id, TombstoneRepository.TaskKind);
     }
 }
+
+/// <summary>
+/// いくつかの編集を1手にまとめる。
+/// <para>
+/// 重複の整理のように、まとめて片付けたものは、まとめて戻せないと困る。
+/// Ctrl＋Z を消した件数ぶん押させることになる。
+/// </para>
+/// </summary>
+public sealed class CompositeEdit(string description, IReadOnlyList<IUndoableEdit> edits) : IUndoableEdit
+{
+    private readonly IReadOnlyList<IUndoableEdit> _edits =
+        edits ?? throw new ArgumentNullException(nameof(edits));
+
+    public string Description { get; } = description;
+
+    public void Apply()
+    {
+        foreach (var edit in _edits) edit.Apply();
+    }
+
+    public void Revert()
+    {
+        // 戻すときは逆順。順に依存する編集が混ざっても筋が通る
+        for (var i = _edits.Count - 1; i >= 0; i--) _edits[i].Revert();
+    }
+}

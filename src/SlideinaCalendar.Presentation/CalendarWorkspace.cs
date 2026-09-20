@@ -757,6 +757,56 @@ public sealed class CalendarWorkspace
         return true;
     }
 
+    // ------------------------------------------------------------------
+    // 重複の整理
+    //
+    // 取り込みや再連携で、同じ予定が2つできることがある。見た目で気づきにくく、
+    // 両方を手で消すのは骨が折れる
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 同じ内容が2件以上ある予定のうち、消してよいほうを挙げる。
+    /// <para>
+    /// 同じカレンダーの、同じ日・同じ時刻・同じ題を「同じ内容」と見なす。
+    /// 残すのは中身の濃いほう（場所やメモ、相手側との結び付きを持っているもの）。
+    /// </para>
+    /// <para>実働日データから起こした印は対象にしない。別の仕組みで入れ替えている。</para>
+    /// </summary>
+    public IReadOnlyList<CalendarEvent> FindDuplicateEvents() =>
+        Events.All()
+            .Where(e => !IsMilestoneMark(e))
+            .GroupBy(e => (e.CalendarId, e.Date, e.EndDate, e.StartTime, e.EndTime, e.Title))
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g
+                .OrderByDescending(Weight)
+                .ThenBy(e => e.Id, StringComparer.Ordinal)
+                .Skip(1))
+            .ToArray();
+
+    /// <summary>どれを残すかの目安。中身が多いほど重い。</summary>
+    private static int Weight(CalendarEvent value) =>
+        (value.GoogleEventId is { Length: > 0 } ? 4 : 0)
+        + (value.Location is { Length: > 0 } ? 2 : 0)
+        + (value.Note is { Length: > 0 } ? 2 : 0)
+        + (value.Url is { Length: > 0 } ? 1 : 0)
+        + (value.Recurrence is { Length: > 0 } ? 1 : 0);
+
+    /// <summary>
+    /// 重複を消す。<b>1手で戻せる</b>ようにまとめて積む。
+    /// </summary>
+    /// <returns>消した件数。</returns>
+    public int RemoveDuplicateEvents()
+    {
+        var extra = FindDuplicateEvents();
+        if (extra.Count == 0) return 0;
+
+        Run(new CompositeEdit(
+            $"重複の整理（{extra.Count}件）",
+            extra.Select(e => (IUndoableEdit)new DeleteEventEdit(Events, e, Tombstones)).ToArray()));
+
+        return extra.Count;
+    }
+
     /// <summary>タスクの完了を切り替える。</summary>
     /// <returns>対象が見つかって切り替えたら true。</returns>
     public bool ToggleTaskDone(string id)
