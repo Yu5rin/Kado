@@ -27,4 +27,8 @@
     <PathGeometry x:Key="IconBellOff"
                   Figures="M12 3a5 5 0 0 0-5 5v3.5L5.5 14h13L17 11.5V8a5 5 0 0 0-5-5zM10 17a2 2 0 0 0 4 0M4 4l16 16" />
 
+    <!-- 新しい予定の入れ先を示す印 -->
+    <PathGeometry x:Key="IconStar"
+                  Figures="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.7l5.9-.9z" />
+
 </ResourceDictionary>

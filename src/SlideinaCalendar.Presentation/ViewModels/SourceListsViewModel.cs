@@ -93,6 +93,7 @@ public sealed class SourceListItemViewModel : ObservableObject
     private readonly Action<SourceListItemViewModel>? _onNotifyToggled;
     private bool _isVisible = true;
     private bool _notifies = true;
+    private bool _isDefault;
     private DropHint _dropHint;
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
@@ -124,6 +125,16 @@ public sealed class SourceListItemViewModel : ObservableObject
 
     /// <summary>ベルを出すか。タスクリストは通知の対象にしていないので出さない。</summary>
     public bool HasNotifyToggle => _onNotifyToggled is not null;
+
+    /// <summary>
+    /// 新しい予定の入れ先か。
+    /// <para>どこに入るのかが一覧で分かるよう、印を出す。</para>
+    /// </summary>
+    public bool IsDefault
+    {
+        get => _isDefault;
+        internal set => Set(ref _isDefault, value);
+    }
 
     /// <summary>
     /// Google 側にあるものか。
@@ -271,6 +282,40 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>タスクリストを分けて見出しを出すか。</summary>
     public bool ShowsTaskListGroups => _localTaskLists.Count > 0 && _googleTaskLists.Count > 0;
 
+    /// <summary>
+    /// 新しい予定の入れ先。
+    /// <para>決まっていなければ一覧の先頭。「inaCalendar」は実働日データの入れ先なので避ける。</para>
+    /// </summary>
+    public SourceListItemViewModel? DefaultCalendar =>
+        _calendars.FirstOrDefault(c => string.Equals(c.Id, DefaultCalendarId, StringComparison.Ordinal))
+        ?? _calendars.FirstOrDefault(c => !string.Equals(
+            c.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal))
+        ?? _calendars.FirstOrDefault();
+
+    /// <summary>設定で選ばれている入れ先。設定を持たない組み立て方では null。</summary>
+    public string? DefaultCalendarId { get; set; }
+
+    /// <summary>入れ先が変わったときに呼ばれる。設定に控えるのは持ち主の仕事。</summary>
+    public event EventHandler<string>? DefaultCalendarChanged;
+
+    /// <summary>入れ先を選び直す。</summary>
+    public void SetDefaultCalendar(SourceListItemViewModel? item)
+    {
+        if (item is null) return;
+
+        DefaultCalendarId = item.Id;
+        MarkDefault();
+        DefaultCalendarChanged?.Invoke(this, item.Id);
+    }
+
+    /// <summary>どれが入れ先かを行に反映する。</summary>
+    private void MarkDefault()
+    {
+        var current = DefaultCalendar;
+
+        foreach (var item in _calendars) item.IsDefault = ReferenceEquals(item, current);
+    }
+
     /// <summary>ベルを押したとき。表のほうにも控える。</summary>
     private void OnCalendarNotifyToggled(SourceListItemViewModel item) =>
         _workspace.SetCalendarNotify(item.Id, item.Notifies);
@@ -291,6 +336,8 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
                 t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible,
                 IsFromGoogle(t.GoogleRaw), OnTaskListToggled))
             .ToArray();
+
+        MarkDefault();
 
         LocalCalendars = _calendars.Where(c => !c.IsGoogle).ToArray();
         GoogleCalendars = _calendars.Where(c => c.IsGoogle).ToArray();

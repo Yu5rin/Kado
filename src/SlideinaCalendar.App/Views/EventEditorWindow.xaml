@@ -60,23 +60,35 @@
                      Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <CheckBox Content="終日" IsChecked="{Binding IsAllDay}" Margin="0,0,16,0" />
-                <CheckBox Content="複数日にまたがる" IsChecked="{Binding IsMultiDay}" />
+                <CheckBox Content="終日" IsChecked="{Binding IsAllDay}" />
             </StackPanel>
 
-            <!-- 単日：日付と時刻を横に並べる。日付欄は中身ぶんの幅で足りる -->
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12"
-                        Visibility="{Binding IsMultiDay, Converter={StaticResource InverseBoolToVisibility}}">
-                <StackPanel Margin="0,0,10,0">
+            <!--
+                日付は「開始 〜 終了」を常に並べて出す。
+                チェックを入れてから終了日を出す作りだと、ひと手間多い。
+                同じ日なら1日の予定、後ろの日にすればまたがる予定になる。
+            -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <StackPanel Margin="0,0,8,0">
                     <TextBlock Text="日付" Style="{StaticResource FieldLabelStyle}" />
                     <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
                                 SelectedDate="{Binding Date, Converter={StaticResource DateOnlyToDateTime}}" />
                 </StackPanel>
 
-                <StackPanel Margin="0,0,10,0"
-                            Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
+                <StackPanel Margin="0,0,10,0">
+                    <TextBlock Text="終了日" Style="{StaticResource FieldLabelStyle}" />
+                    <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
+                                SelectedDate="{Binding EndDate, Converter={StaticResource DateOnlyToDateTime}}"
+                                ToolTip="開始と同じ日なら1日の予定。後ろの日にすると、その日までまたがります" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- 時刻。終日なら使わない -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12"
+                        Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
+                <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="開始" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox Width="86" Style="{StaticResource TimeComboBoxStyle}"
+                    <ComboBox Width="110" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding StartTimeOptions}"
                               Text="{Binding StartTimeText, UpdateSourceTrigger=LostFocus}"
                               SelectionChanged="OnTimeSelected"
@@ -84,60 +96,20 @@
                               ToolTip="「9」「930」「9:30」のどれでも入ります。上下キーで15分ずつ&#10;動かすと終了も同じ長さのまま付いてきます" />
                 </StackPanel>
 
-                <StackPanel Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
+                <StackPanel>
                     <TextBlock Text="終了" Style="{StaticResource FieldLabelStyle}" />
                     <!--
                         一覧には「10:00（1時間）」と長さを添えるが、欄に残るのは時刻だけ。
                         TextSearch.TextPath を指さないと、長さの添え字まで欄に入って
                         幅を食い、時刻のほうが見切れる
                     -->
-                    <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
+                    <ComboBox Tag="End" Width="110" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
                               TextSearch.TextPath="Time"
                               Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
                               SelectionChanged="OnTimeSelected"
                               PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel"
                               ToolTip="長さから選べます。上下キーで15分ずつ" />
-                </StackPanel>
-            </StackPanel>
-
-            <!-- 複数日：開始日と終了日を横に並べる -->
-            <StackPanel Margin="0,0,0,12"
-                        Visibility="{Binding IsMultiDay, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <StackPanel Margin="0,0,10,0">
-                        <TextBlock Text="開始日" Style="{StaticResource FieldLabelStyle}" />
-                        <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
-                                    SelectedDate="{Binding Date, Converter={StaticResource DateOnlyToDateTime}}" />
-                    </StackPanel>
-
-                    <StackPanel Margin="0,0,10,0">
-                        <TextBlock Text="終了日" Style="{StaticResource FieldLabelStyle}" />
-                        <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
-                                    SelectedDate="{Binding EndDate, Converter={StaticResource DateOnlyToDateTime}}" />
-                    </StackPanel>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
-                            Visibility="{Binding IsAllDay, Converter={StaticResource InverseBoolToVisibility}}">
-                    <StackPanel Margin="0,0,10,0">
-                        <TextBlock Text="開始時刻" Style="{StaticResource FieldLabelStyle}" />
-                        <ComboBox Width="86" Style="{StaticResource TimeComboBoxStyle}"
-                                  ItemsSource="{Binding StartTimeOptions}"
-                                  Text="{Binding StartTimeText, UpdateSourceTrigger=LostFocus}"
-                                  SelectionChanged="OnTimeSelected"
-                                  PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
-                    </StackPanel>
-
-                    <StackPanel>
-                        <TextBlock Text="終了時刻" Style="{StaticResource FieldLabelStyle}" />
-                        <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
-                                  ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
-                                  TextSearch.TextPath="Time"
-                                  Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
-                                  SelectionChanged="OnTimeSelected"
-                                  PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
-                    </StackPanel>
                 </StackPanel>
             </StackPanel>
 

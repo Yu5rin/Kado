@@ -42,7 +42,6 @@ public sealed class EventEditorViewModel : ObservableObject
     private bool? _notify;
     private string _startTimeText = "09:00";
     private string _endTimeText = "10:00";
-    private bool _isMultiDay;
     private DateOnly _endDate;
     private string? _location;
     private string? _note;
@@ -58,12 +57,19 @@ public sealed class EventEditorViewModel : ObservableObject
     /// </para>
     /// </summary>
     /// <param name="now">いまの時刻。渡さなければ 9:00〜10:00 のまま。</param>
-    public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars, TimeOnly? now = null)
+    /// <param name="date">開く日。</param>
+    /// <param name="calendars">選べるカレンダー。</param>
+    /// <param name="now">いまの時刻。開始時刻の初期値に使う。</param>
+    /// <param name="defaultCalendarId">入れ先の既定。左の一覧で選ばれているもの。</param>
+    public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars, TimeOnly? now = null,
+        string? defaultCalendarId = null)
     {
         Calendars = calendars;
         _date = date;
         _endDate = date;
-        _calendarId = calendars.Count > 0 ? calendars[0].Id : null;
+        _calendarId = calendars.Any(c => string.Equals(c.Id, defaultCalendarId, StringComparison.Ordinal))
+            ? defaultCalendarId
+            : calendars.Count > 0 ? calendars[0].Id : null;
 
         if (now is { } value)
         {
@@ -94,7 +100,6 @@ public sealed class EventEditorViewModel : ObservableObject
         if (value.StartTime is { } start) _startTimeText = TimeInput.Format(start);
         if (value.EndTime is { } end) _endTimeText = TimeInput.Format(end);
 
-        _isMultiDay = value.EndDate is { } endDate && endDate > value.Date;
         _endDate = value.EndDate ?? value.Date;
         _notify = value.Notify;
     }
@@ -119,13 +124,20 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _date;
         set
         {
+            var span = _endDate.DayNumber - _date.DayNumber;
+
             if (!SetAndRevalidate(ref _date, value)) return;
 
             // 終了日が開始日より前に取り残されるのを防ぐ
             if (_endDate < _date) EndDate = _date;
 
+            // またがる日数を保ったまま、終了日も動かす。
+            // 置いていくと「終わりが始まりより前」になる
+            if (span > 0) EndDate = _date.AddDays(span);
+            else if (_endDate < _date) EndDate = _date;
+
             // 「毎週 木曜日」は開始日で決まる。日付を動かしたら表示も付いてくる
-            Raise(nameof(RecurrenceOptions));
+            Raise(nameof(RecurrenceOptions), nameof(IsMultiDay));
         }
     }
 
@@ -221,16 +233,32 @@ public sealed class EventEditorViewModel : ObservableObject
             : null;
 
     /// <summary>複数日にまたがるか。</summary>
-    public bool IsMultiDay
-    {
-        get => _isMultiDay;
-        set => SetAndRevalidate(ref _isMultiDay, value);
-    }
+    /// <summary>
+    /// 2日以上にまたがるか。
+    /// <para>
+    /// <b>終了日そのものが決める。</b>始まりと同じ日なら1日、後ろなら複数日。
+    /// チェックを入れさせてから終了日を出す作りだと、ひと手間多い。
+    /// </para>
+    /// </summary>
+    public bool IsMultiDay => _endDate > _date;
 
+    /// <summary>
+    /// 終了日。
+    /// <para>
+    /// 始まりより前には置けない。前の日を選んだら、始まりと同じ日に直す。
+    /// 「終わりが始まりより前」という保存できない状態を作らせない。
+    /// </para>
+    /// </summary>
     public DateOnly EndDate
     {
         get => _endDate;
-        set => SetAndRevalidate(ref _endDate, value);
+        set
+        {
+            var end = value < _date ? _date : value;
+            if (!SetAndRevalidate(ref _endDate, end)) return;
+
+            Raise(nameof(IsMultiDay), nameof(DurationText));
+        }
     }
 
     /// <summary>繰り返し。Google Calendar の <c>recurrence</c> にあたる。</summary>
@@ -293,10 +321,12 @@ public sealed class EventEditorViewModel : ObservableObject
                 if (TimeInput.Parse(_endTimeText) is not { } end) return "終了時刻を「9:30」の形で入れてください。";
 
                 // 日をまたぐ予定は終了日のほうで表す。時刻の逆転は打ち間違いとみなす
-                if (!_isMultiDay && end <= start) return "終了時刻は開始時刻より後にしてください。";
+                if (!IsMultiDay && end <= start) return "終了時刻は開始時刻より後にしてください。";
             }
 
-            if (_isMultiDay && _endDate < _date) return "終了日は開始日以降にしてください。";
+            // 終了日は入れるときに始まりへ寄せてあるので、ここに来ることはない。
+            // 別の道から入った値の取りこぼしを拾うための番人として残す
+            if (_endDate < _date) return "終了日は開始日以降にしてください。";
 
             return null;
         }
@@ -323,7 +353,7 @@ public sealed class EventEditorViewModel : ObservableObject
             Id = _original?.Id ?? NewId(),
             Title = _title.Trim(),
             Date = _date,
-            EndDate = _isMultiDay && _endDate > _date ? _endDate : null,
+            EndDate = _endDate > _date ? _endDate : null,
             StartTime = _isAllDay ? null : TimeInput.Parse(_startTimeText),
             EndTime = _isAllDay ? null : TimeInput.Parse(_endTimeText),
             Location = Blank(_location),

@@ -49,6 +49,7 @@ public sealed class AppSettings
     private const string SummaryKey = "notify.summary_enabled";
     private const string SummaryTimeKey = "notify.summary_time";
     private const string NotifySoundKey = "notify.sound";
+    private const string DefaultCalendarKey = "ui.default_calendar";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -334,6 +335,24 @@ public sealed class AppSettings
 
             _summaryTime = value;
             _store.Set(SummaryTimeKey, value.ToString("HH:mm", CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 新しい予定を入れる先のカレンダー。
+    /// <para>
+    /// 左の一覧から選ぶ。決めていなければ、一覧の先頭（「inaCalendar」を除く）になる。
+    /// </para>
+    /// </summary>
+    public string? DefaultCalendarId
+    {
+        get => _store.Get(DefaultCalendarKey) is { Length: > 0 } id ? id : null;
+        set
+        {
+            if (string.Equals(DefaultCalendarId, value, StringComparison.Ordinal)) return;
+
+            _store.Set(DefaultCalendarKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

@@ -99,6 +99,9 @@ public sealed class MainViewModel : ObservableObject
         if (settings is not null)
         {
             workspace.CountInCalendarDays = settings.CountInCalendarDays;
+
+            SourceLists.DefaultCalendarId = settings.DefaultCalendarId;
+            SourceLists.DefaultCalendarChanged += (_, id) => settings.DefaultCalendarId = id;
             _reminders = new ReminderService(workspace, settings, _notifier);
 
             // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
@@ -167,6 +170,12 @@ public sealed class MainViewModel : ObservableObject
         DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
 
         QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
+
+        SetDefaultCalendarCommand = new RelayCommand<SourceListItemViewModel?>(item =>
+        {
+            SourceLists.SetDefaultCalendar(item);
+            if (item is not null) StatusMessage = $"新しい予定は「{item.Name}」に入ります";
+        });
 
         RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
 
@@ -531,18 +540,13 @@ public sealed class MainViewModel : ObservableObject
     private static string Weekday(DateOnly date) => "日月火水木金土"[(int)date.DayOfWeek].ToString();
 
     /// <summary>
-    /// クイック入力で入れる先のカレンダー。
+    /// 新しい予定を入れる先のカレンダー。
     /// <para>
-    /// 一覧の最初のもの。ただし「inaCalendar」は実働日データの入れ先なので避ける。
-    /// 入れてしまうと、次の取り込みで消える場所に置くことになる。
+    /// 左の一覧で選ばれているもの。選んでいなければ一覧の先頭で、「inaCalendar」は
+    /// 避ける。入れてしまうと、次の取り込みで消える場所に置くことになる。
     /// </para>
     /// </summary>
-    private string? QuickCalendarId =>
-        SourceLists.Calendars
-            .FirstOrDefault(c => !string.Equals(
-                c.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal))
-            ?.Id
-        ?? SourceLists.Calendars.FirstOrDefault()?.Id;
+    private string? QuickCalendarId => SourceLists.DefaultCalendar?.Id;
 
     /// <summary>検索で見つかったもの。多くても50件までにする。</summary>
     public IReadOnlyList<SearchResultViewModel> SearchResults
@@ -729,6 +733,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>設定画面を開く。</summary>
     public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>新しい予定の入れ先にする。</summary>
+    public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }
 
     /// <summary>同じ内容の予定を1つにまとめる。</summary>
     public RelayCommand RemoveDuplicatesCommand { get; }
@@ -1495,7 +1502,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void AddEvent()
     {
-        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime);
+        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime, QuickCalendarId);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
