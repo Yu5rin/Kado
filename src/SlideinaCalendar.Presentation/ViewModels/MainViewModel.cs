@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using SlideinaCalendar.Core.Import;
 using SlideinaCalendar.Core.Input;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.Mapping;
@@ -43,6 +44,7 @@ public sealed class MainViewModel : ObservableObject
 
     private readonly AppSettings? _settings;
     private readonly IStartupRegistration _startup;
+    private readonly WorkdayFeedClient _feed = new();
 
     private CalendarView _currentView = CalendarView.Month;
     private DayOfWeek _weekStart;
@@ -98,6 +100,12 @@ public sealed class MainViewModel : ObservableObject
             };
 
             CurrentView = settings.StartupView;
+
+            // 配信元が決まっていれば、1日1回だけ取りに行く
+            if (settings is { FeedAuto: true, FeedUrl.Length: > 0 } && settings.FeedCheckedOn != today)
+            {
+                _ = FetchFeedAsync(quiet: true);
+            }
         }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
@@ -151,6 +159,13 @@ public sealed class MainViewModel : ObservableObject
         QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
 
         RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
+
+        FetchWorkingDayFeedCommand = new AsyncRelayCommand(
+            () => FetchFeedAsync(quiet: false),
+            () => _settings is { FeedUrl.Length: > 0 },
+            ex => StatusMessage = $"配信元から取り込めませんでした（{ex.Message}）");
+
+        ExportWorkingDayFeedCommand = new RelayCommand(ExportFeed);
 
         BackupCommand = new RelayCommand(Backup);
         RestoreCommand = new RelayCommand(Restore, () => RestoreBackup is not null);
@@ -702,6 +717,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>同じ内容の予定を1つにまとめる。</summary>
     public RelayCommand RemoveDuplicatesCommand { get; }
 
+    /// <summary>配信元から実働日データを取りに行く。</summary>
+    public AsyncRelayCommand FetchWorkingDayFeedCommand { get; }
+
+    /// <summary>いまの実働日データを配信用に書き出す。</summary>
+    public RelayCommand ExportWorkingDayFeedCommand { get; }
+
     /// <summary>いまの内容をファイルに書き出す。</summary>
     public RelayCommand BackupCommand { get; }
 
@@ -1029,6 +1050,61 @@ public sealed class MainViewModel : ObservableObject
 
         var removed = _workspace.RemoveDuplicateEvents();
         StatusMessage = $"重複していた予定 {removed} 件を消しました";
+    }
+
+    /// <summary>
+    /// 配信元から実働日データを取りに行く。
+    /// <para>
+    /// <paramref name="quiet"/> のときは起動時の自動取得。取れなくても黙って見送る。
+    /// 繋がらない場所に置かれていることもあり、そのたびに断りを出しても仕方がない。
+    /// </para>
+    /// </summary>
+    private async Task FetchFeedAsync(bool quiet)
+    {
+        if (_settings is not { FeedUrl.Length: > 0 } settings) return;
+
+        try
+        {
+            var result = await _feed.FetchAsync(settings.FeedUrl).ConfigureAwait(true);
+
+            _workspace.ApplyWorkingDays(result);
+            settings.FeedCheckedOn = _today;
+
+            StatusMessage = $"配信元から実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）";
+        }
+        catch (Exception ex) when (quiet && ex is not OperationCanceledException)
+        {
+            // 自動の取得はここで止める。次に開いたときにまた試す
+            settings.FeedCheckedOn = _today;
+        }
+    }
+
+    /// <summary>いまの実働日データを配信用のファイルに書き出す。</summary>
+    private void ExportFeed()
+    {
+        if (_workspace.WorkingDays.Days.Count == 0)
+        {
+            StatusMessage = "書き出せる実働日データがありません";
+            return;
+        }
+
+        if (_files.PickSaveFile(
+                "配信用ファイルの保存先",
+                "実働日データ (*.json)|*.json|すべてのファイル (*.*)|*.*",
+                "feed.json") is not { } path)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(path, WorkdayFeed.Write(_workspace.WorkingDays, _today));
+            StatusMessage = $"実働日データを書き出しました（{Path.GetFileName(path)}）";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            StatusMessage = $"書き出せませんでした（{ex.Message}）";
+        }
     }
 
     private void Backup()

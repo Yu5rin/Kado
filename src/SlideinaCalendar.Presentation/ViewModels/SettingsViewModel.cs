@@ -170,6 +170,36 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>実働日データの配信元（feed.json の URL）。</summary>
+    public string FeedUrl
+    {
+        get => _settings.FeedUrl;
+        set
+        {
+            if (string.Equals(_settings.FeedUrl, value, StringComparison.Ordinal)) return;
+
+            _settings.FeedUrl = value ?? string.Empty;
+            Message = _settings.FeedUrl.Length > 0 && !AppSettings.IsUsableFeedUrl(_settings.FeedUrl)
+                ? "配信元は https:// で始まる URL にしてください"
+                : null;
+
+            Raise();
+        }
+    }
+
+    /// <summary>配信元から自動で取りに行くか。</summary>
+    public bool FeedAuto
+    {
+        get => _settings.FeedAuto;
+        set
+        {
+            if (_settings.FeedAuto == value) return;
+
+            _settings.FeedAuto = value;
+            Raise();
+        }
+    }
+
     /// <summary>自動起動を出せるか。扱えない環境では欄ごと隠す。</summary>
     public bool CanRunAtLogon => _startup.IsSupported;
 

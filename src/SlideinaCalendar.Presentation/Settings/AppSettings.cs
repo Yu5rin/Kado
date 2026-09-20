@@ -41,6 +41,9 @@ public sealed class AppSettings
     private const string StartupViewKey = "ui.startup_view";
     private const string CountInCalendarDaysKey = "count.calendar_days";
     private const string HourHeightKey = "ui.hour_height";
+    private const string FeedUrlKey = "workday.feed_url";
+    private const string FeedAutoKey = "workday.feed_auto";
+    private const string FeedCheckedKey = "workday.feed_checked";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -64,6 +67,8 @@ public sealed class AppSettings
     private CalendarView _startupView;
     private bool _countInCalendarDays;
     private int _hourHeight;
+    private string _feedUrl = string.Empty;
+    private bool _feedAuto;
 
     public AppSettings(SettingsRepository store)
     {
@@ -74,6 +79,8 @@ public sealed class AppSettings
         _startupView = Read(StartupViewKey, CalendarView.Month);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
+        _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
+        _feedAuto = !string.Equals(_store.Get(FeedAutoKey), "false", StringComparison.Ordinal);
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -179,6 +186,56 @@ public sealed class AppSettings
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    /// 実働日データの配信元（feed.json の URL）。
+    /// <para>
+    /// 配布の Excel を全員に配る代わりに、1か所に置いたファイルを各端末が取りに行く。
+    /// <b>https のみ。</b>途中で書き換えられたものを取り込むわけにいかない。
+    /// </para>
+    /// </summary>
+    public string FeedUrl
+    {
+        get => _feedUrl;
+        set
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            if (string.Equals(_feedUrl, trimmed, StringComparison.Ordinal)) return;
+
+            _feedUrl = trimmed;
+            _store.Set(FeedUrlKey, trimmed);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>配信元から自動で取りに行くか。1日に1回まで。</summary>
+    public bool FeedAuto
+    {
+        get => _feedAuto;
+        set
+        {
+            if (_feedAuto == value) return;
+
+            _feedAuto = value;
+            _store.Set(FeedAutoKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>配信元を最後に見に行った日。1日1回に抑えるために控える。</summary>
+    public DateOnly? FeedCheckedOn
+    {
+        get => DateOnly.TryParseExact(
+            _store.Get(FeedCheckedKey), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var date) ? date : null;
+        set => _store.Set(
+            FeedCheckedKey, value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+
+    /// <summary>配信元として受け取れる URL か。https だけを通す。</summary>
+    public static bool IsUsableFeedUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+        && string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>時間軸の上端。</summary>
     public TimeOnly DayStart => new(_dayStartHour, 0);
