@@ -33,6 +33,7 @@ public sealed class AppSettings
     private const string DayStartKey = "ui.day_start_hour";
     private const string DayEndKey = "ui.day_end_hour";
     private const string StartupViewKey = "ui.startup_view";
+    private const string CountInCalendarDaysKey = "count.calendar_days";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -54,6 +55,7 @@ public sealed class AppSettings
     private int _dayStartHour;
     private int _dayEndHour;
     private CalendarView _startupView;
+    private bool _countInCalendarDays;
 
     public AppSettings(SettingsRepository store)
     {
@@ -62,6 +64,7 @@ public sealed class AppSettings
         _theme = Read(ThemeKey, ThemeChoice.Auto);
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
+        _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -124,6 +127,27 @@ public sealed class AppSettings
     {
         get => _startupView;
         set => Write(ref _startupView, value, StartupViewKey);
+    }
+
+    /// <summary>
+    /// 日数を暦日で数えるか。
+    /// <para>
+    /// 既定は実働日。立てると、期限までの残り・遅れ・済んだタスクの結果を、
+    /// 土日や休みも含めた暦のとおりに数える。
+    /// </para>
+    /// <para><b>実働日計算のほうは、この設定に関わらず常に実働日で数える。</b></para>
+    /// </summary>
+    public bool CountInCalendarDays
+    {
+        get => _countInCalendarDays;
+        set
+        {
+            if (_countInCalendarDays == value) return;
+
+            _countInCalendarDays = value;
+            _store.Set(CountInCalendarDaysKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>時間軸の上端。</summary>

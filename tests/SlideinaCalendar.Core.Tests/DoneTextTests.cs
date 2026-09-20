@@ -74,4 +74,28 @@ public class DoneTextTests
         Assert.Equal("1実働日 遅れて完了", done.Text);
         Assert.False(done.IsCalendarUnit);
     }
+
+    [Fact]
+    public void 暦日で数える設定なら休みも数える()
+    {
+        var calendarDays = new DueDateFormatter(TestCalendars.September2026Math, countInCalendarDays: true);
+
+        // 9/24 期限を 9/28 に済ませた。実働日なら2日だが、暦では4日
+        var done = calendarDays.FormatDone(due: D(24), completed: D(28));
+
+        Assert.Equal("4日 遅れて完了", done.Text);
+        Assert.True(done.IsCalendarUnit);
+    }
+
+    [Fact]
+    public void 暦日で数える設定なら期限も暦日で出す()
+    {
+        var calendarDays = new DueDateFormatter(TestCalendars.September2026Math, countInCalendarDays: true);
+
+        // 9/18 から見た 9/24。実働日なら1日、暦では6日
+        var due = calendarDays.Format(due: D(24), today: D(18));
+
+        Assert.Equal("残り 6日", due.Text);
+        Assert.Equal(DueKind.CalendarDays, due.Kind);
+    }
 }

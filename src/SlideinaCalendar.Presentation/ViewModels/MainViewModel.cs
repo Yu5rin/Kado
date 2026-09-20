@@ -82,10 +82,13 @@ public sealed class MainViewModel : ObservableObject
 
         if (settings is not null)
         {
+            workspace.CountInCalendarDays = settings.CountInCalendarDays;
+
             // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
             settings.Changed += (_, _) =>
             {
                 _weekStart = settings.WeekStart;
+                workspace.CountInCalendarDays = settings.CountInCalendarDays;
                 RebuildViews();
             };
 

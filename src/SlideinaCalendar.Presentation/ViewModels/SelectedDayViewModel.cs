@@ -225,11 +225,18 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>
     /// 「月末まで 5実働日」。今日から月末までの残り。データが無ければ null。
     /// <para>選択日ではなく今日を起点にする。あとどれだけ働けるかを知りたいので。</para>
+    /// <para>暦日で数える設定なら「月末まで 9日」。こちらは実働日データが要らない。</para>
     /// </summary>
     public string? RemainingInMonthText
     {
         get
         {
+            if (_workspace.CountInCalendarDays)
+            {
+                var last = DateTime.DaysInMonth(_today.Year, _today.Month);
+                return $"月末まで {last - _today.Day}日";
+            }
+
             if (!_workspace.WorkingDays.IsMonthFullyCovered(_today.Year, _today.Month)) return null;
 
             return $"月末まで {_workspace.WorkingDays.RemainingInMonth(_today)}実働日";
