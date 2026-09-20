@@ -221,11 +221,12 @@ public class YearViewModelTests
         var vm = Create(test);
 
         Assert.True(Day(vm, D(2026, 9, 24)).HasEvents);
+        Assert.Single(Day(vm, D(2026, 9, 24)).BottomMarks);
         Assert.False(Day(vm, D(2026, 9, 25)).HasEvents);
     }
 
     [Fact]
-    public void 印は多くても四本まで()
+    public void 印は上下それぞれ二本まで()
     {
         using var test = TestWorkspace.Create();
 
@@ -238,18 +239,43 @@ public class YearViewModelTests
         }
 
         // 増やすと日付が埋まって読めない
-        Assert.Equal(4, Day(Create(test), D(2026, 9, 24)).Marks.Count);
+        Assert.Equal(2, Day(Create(test), D(2026, 9, 24)).BottomMarks.Count);
     }
 
     [Fact]
-    public void 日付の行のマイルストーンは印にしない()
+    public void 実働日カレンダーの予定は日付の上それ以外は下に置く()
     {
-        using var test = TestWorkspace.Create(withMilestones: true);
+        using var test = TestWorkspace.Create();
 
-        var vm = Create(test, D(2026, 9, 14));
+        // 実働日データを取り込むと「inaCalendar」ができ、仕様期限などが入る
+        var ina = test.Workspace.CreateCalendar(CalendarWorkspace.WorkingDayCalendarName);
 
-        // マイルストーンは日付の行に出すもの。ここにも入れると二度数えられる
-        Assert.False(Day(vm, D(2026, 9, 14)).HasEvents);
+        test.Workspace.AddEvent(new Data.Models.CalendarEvent
+        {
+            Id = "m1", Title = "仕様期限", Date = D(2026, 9, 14), CalendarId = ina.Id,
+        });
+        test.Workspace.AddEvent(new Data.Models.CalendarEvent
+        {
+            Id = "e1", Title = "自分の用事", Date = D(2026, 9, 14), CalendarId = "仕事",
+        });
+
+        var day = Day(Create(test, D(2026, 9, 14)), D(2026, 9, 14));
+
+        // 仕様期限などの区切りと自分の用事は意味が違う。混ぜて並べると見分けられない
+        Assert.NotEmpty(day.TopMarks);
+        Assert.Single(day.BottomMarks);
+    }
+
+    [Fact]
+    public void 何も無い日には印が付かない()
+    {
+        using var test = TestWorkspace.Create();
+
+        var day = Day(Create(test), D(2026, 9, 25));
+
+        Assert.Empty(day.TopMarks);
+        Assert.Empty(day.BottomMarks);
+        Assert.False(day.HasEvents);
     }
 
     // ------------------------------------------------------------------

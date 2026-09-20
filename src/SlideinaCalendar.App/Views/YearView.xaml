@@ -23,6 +23,14 @@
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
 
+        <!-- 予定1件ぶんの帯。日付の上下に重ねる -->
+        <DataTemplate x:Key="DayMarkTemplate">
+            <Border Height="2" CornerRadius="1" Margin="0,0,0,1"
+                    Width="{Binding DataContext.MarkWidth,
+                            RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    Background="{Binding Converter={StaticResource EventColorBrush}}" />
+        </DataTemplate>
+
         <!--
             マスの右クリックメニュー。
             ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に
@@ -72,20 +80,16 @@
                                HorizontalAlignment="Center" LineHeight="10"
                                Foreground="{DynamicResource Ink3Brush}" />
 
-                    <!-- 予定の印。上に2本まで -->
-                    <ItemsControl ItemsSource="{Binding Marks}" Margin="0,1,0,0"
-                                  HorizontalAlignment="Center">
+                    <!--
+                        日付の上は「inaCalendar」の予定だけ。仕様期限などの区切りは
+                        自分の用事とは意味が違うので、混ぜずに上下へ分ける
+                    -->
+                    <ItemsControl ItemsSource="{Binding TopMarks}" Margin="0,1,0,0"
+                                  HorizontalAlignment="Center"
+                                  ItemTemplate="{StaticResource DayMarkTemplate}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Height="2" CornerRadius="1" Margin="0,0,0,1"
-                                        Width="{Binding DataContext.MarkWidth,
-                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        Background="{Binding Converter={StaticResource EventColorBrush}}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <TextBlock x:Name="Number" Text="{Binding DayNumber}"
@@ -94,6 +98,15 @@
                                HorizontalAlignment="Center" LineHeight="14"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}" />
+
+                    <!-- 日付の下はそれ以外の予定 -->
+                    <ItemsControl ItemsSource="{Binding BottomMarks}" Margin="0,1,0,0"
+                                  HorizontalAlignment="Center"
+                                  ItemTemplate="{StaticResource DayMarkTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
 
