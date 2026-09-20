@@ -74,6 +74,18 @@ public readonly record struct DockPlacement(
     public static DockPlacement Unknown { get; } =
         new(ShellMode.Window, DockEdge.Left, DefaultWidth, null);
 
+    /// <summary>
+    /// 固定（ピン留め）のときの幅。
+    /// <para>
+    /// スライドとは別に覚える。ちょっと覗くためのスライドと、画面を分け合う固定とで
+    /// 使いたい幅が違う。片方を変えたらもう片方まで変わる、では毎回直すことになる。
+    /// </para>
+    /// </summary>
+    public double DockedWidth { get; init; } = DefaultWidth;
+
+    /// <summary>その出しかたで使う幅。</summary>
+    public double WidthFor(ShellMode mode) => mode == ShellMode.Dock ? DockedWidth : Width;
+
     /// <summary>ワークエリアを削っている状態か。</summary>
     public bool ReservesWorkArea => Mode == ShellMode.Dock;
 
@@ -83,10 +95,15 @@ public readonly record struct DockPlacement(
     /// <summary>幅を使える範囲に収める。</summary>
     public DockPlacement WithUsableWidth() => this with
     {
-        Width = double.IsNaN(Width) || double.IsInfinity(Width)
-            ? DefaultWidth
-            : Math.Clamp(Width, MinWidth, MaxWidth),
+        Width = Usable(Width),
+        DockedWidth = Usable(DockedWidth),
     };
+
+    /// <summary>使える範囲に収めた幅。</summary>
+    public static double Usable(double width) =>
+        double.IsNaN(width) || double.IsInfinity(width)
+            ? DefaultWidth
+            : Math.Clamp(width, MinWidth, MaxWidth);
 
     /// <summary>
     /// 画面の幅に対して広すぎないか見て、必要なら縮める。
@@ -102,7 +119,11 @@ public readonly record struct DockPlacement(
 
         // 半分より狭くできないほど画面が小さいなら、下限を優先する。
         // 中身が読めないほど細い帯を置いても仕方がない
-        return placement with { Width = Math.Max(MinWidth, Math.Min(placement.Width, half)) };
+        return placement with
+        {
+            Width = Math.Max(MinWidth, Math.Min(placement.Width, half)),
+            DockedWidth = Math.Max(MinWidth, Math.Min(placement.DockedWidth, half)),
+        };
     }
 }
 
@@ -119,6 +140,7 @@ public sealed class DockPlacementStore(SettingsRepository store)
     private const string ModeKey = "shell.mode";
     private const string EdgeKey = "shell.edge";
     private const string WidthKey = "shell.width";
+    private const string DockedWidthKey = "shell.docked_width";
     private const string MonitorKey = "shell.monitor";
 
     /// <summary>ワークエリアを削っている最中か。きれいに終われば false に戻る。</summary>
@@ -136,7 +158,17 @@ public sealed class DockPlacementStore(SettingsRepository store)
                 && Enum.IsDefined(edge) ? edge : DockEdge.Left,
             double.TryParse(_store.Get(WidthKey), NumberStyles.Float, CultureInfo.InvariantCulture,
                 out var width) ? width : DockPlacement.DefaultWidth,
-            _store.Get(MonitorKey) is { Length: > 0 } monitor ? monitor : null);
+            _store.Get(MonitorKey) is { Length: > 0 } monitor ? monitor : null)
+        {
+            // 覚えていなければ、スライドと同じ幅から始める
+            DockedWidth = double.TryParse(_store.Get(DockedWidthKey), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out var docked)
+                ? docked
+                : double.TryParse(_store.Get(WidthKey), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var fallback)
+                    ? fallback
+                    : DockPlacement.DefaultWidth,
+        };
 
         return placement.WithUsableWidth();
     }
@@ -147,6 +179,7 @@ public sealed class DockPlacementStore(SettingsRepository store)
         _store.Set(ModeKey, placement.Mode.ToString());
         _store.Set(EdgeKey, placement.Edge.ToString());
         _store.Set(WidthKey, placement.Width.ToString("R", CultureInfo.InvariantCulture));
+        _store.Set(DockedWidthKey, placement.DockedWidth.ToString("R", CultureInfo.InvariantCulture));
         _store.Set(MonitorKey, placement.MonitorId ?? string.Empty);
     }
 

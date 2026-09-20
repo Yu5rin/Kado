@@ -101,12 +101,21 @@ public sealed class ShellController : IDisposable
             _resizeSettle.Start();
         };
 
-        // 幅をつまみ終えたら、見張る範囲を今の姿に合わせ直す
         _shell.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName != nameof(ShellViewModel.IsResizing)) return;
-            if (_shell.IsResizing || !SlideOutOnLeave) return;
-            if (_shell.Mode != ShellMode.Overlay || !_window.IsVisible) return;
+            if (args.PropertyName != nameof(ShellViewModel.IsResizing) || _shell.IsResizing) return;
+
+            // つまみ終えた。留めているなら、待たずに譲る幅を決め直す。
+            // 隣のアプリはワークエリアを見て並ぶので、ここで初めて動く
+            if (_shell.IsPinned)
+            {
+                _resizeSettle.Stop();
+                _appBar.Resize(_shell.DockWidth);
+                return;
+            }
+
+            // スライドなら、見張る範囲を今の姿に合わせ直す
+            if (!SlideOutOnLeave || _shell.Mode != ShellMode.Overlay || !_window.IsVisible) return;
 
             _hotZone.WatchLeaving(WindowRectAt(_window.Left));
         };

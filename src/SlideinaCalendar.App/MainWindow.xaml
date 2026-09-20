@@ -1043,15 +1043,28 @@
 
             右に寄せていれば内側は左、左に寄せていれば内側は右。辺と逆になる。
         -->
-        <Border x:Name="DockGrip" Width="8" Background="Transparent"
-                HorizontalAlignment="Left" Cursor="SizeWE"
+        <Border x:Name="DockGrip" Width="8" Cursor="SizeWE"
                 ToolTip="ドラッグで幅を変えられます"
                 MouseLeftButtonDown="OnGripPressed"
                 MouseMove="OnGripDragging"
                 MouseLeftButtonUp="OnGripReleased"
                 Visibility="{Binding Shell.IsAtEdge, Converter={StaticResource BoolToVisibility}}">
+            <!--
+                寄せかたと色は、どちらも Style から与える。
+
+                <b>直に書いてはいけない。</b>タグに直接書いた値は、Style の
+                トリガーより強い。ここに HorizontalAlignment="Left" と書いていたら、
+                左端に寄せたときに内側（右端）へ移すトリガーが効かず、掴みしろが
+                画面の外側の縁に居座っていた。既定が左端なので、<b>スライドでも
+                ピン留めでも幅を変えられない</b>という形で出た。
+            -->
             <Border.Style>
                 <Style TargetType="Border">
+                    <Setter Property="Background" Value="Transparent" />
+
+                    <!-- 右に寄せていれば内側は左。辺と逆になる -->
+                    <Setter Property="HorizontalAlignment" Value="Left" />
+
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding Shell.IsAtLeft}" Value="True">
                             <Setter Property="HorizontalAlignment" Value="Right" />
