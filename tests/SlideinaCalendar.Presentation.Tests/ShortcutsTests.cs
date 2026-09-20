@@ -54,6 +54,14 @@ public class ShortcutsTests
     }
 
     [Fact]
+    public void ビューの切り替えが載っている()
+    {
+        var keys = Shortcuts.All.SelectMany(g => g.Items).Select(s => s.Keys).ToArray();
+
+        Assert.Contains("Ctrl＋ホイール", keys);
+    }
+
+    [Fact]
     public void 同じまとまりの中で二度書かない()
     {
         // まとまりをまたげば同じ名前が出てよい。「ホイール」はカレンダーの上と

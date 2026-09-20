@@ -21,21 +21,76 @@
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
 
         <!--
-            ストリップの1日。幅は 20px で固定する。月ごとに幅が変わると、
-            1日から31日までの位置が縦に揃わず、休みの並びが読めない
+            マスの右クリックメニュー。
+            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に
+            届かない。Tag に MainViewModel を入れて PlacementTarget 経由で引く
+        -->
+        <ContextMenu x:Key="YearDayMenu">
+            <MenuItem Header="この日に予定を追加"
+                      Command="{Binding PlacementTarget.Tag.AddEventOnCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="この日の月を見る"
+                      Command="{Binding PlacementTarget.Tag.ShowMonthOfCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="この日を1日で見る"
+                      Command="{Binding PlacementTarget.Tag.ShowDayOfCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <!--
+            ストリップの1日。
+
+            幅は画面に合わせて伸び縮みするが、同じ年度の中では全部同じ幅。月ごとに
+            変えると 1日から31日までの位置が縦に揃わず、休みの並びが読めない。
+
+            日付の上下に、その日の予定を細い帯で重ねる。狭いのでタイトルは出せないが、
+            詰まっている日がどこかは一目で分かる（会社配布のカレンダーと同じ考え方）。
         -->
         <DataTemplate x:Key="StripDayTemplate">
-            <Border x:Name="Cell" Width="20" Height="30" Margin="0,0,1,0" CornerRadius="2"
+            <Border x:Name="Cell" Margin="0,0,1,0" CornerRadius="2"
+                    Width="{Binding DataContext.DayWidth,
+                            RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    Height="{Binding DataContext.DayHeight,
+                             RelativeSource={RelativeSource AncestorType=UserControl}}"
                     Background="{DynamicResource PanelBrush}"
                     Cursor="Hand" ToolTip="{Binding Tooltip}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource YearDayMenu}"
                     MouseLeftButtonDown="OnDayClicked">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="8"
                                HorizontalAlignment="Center" LineHeight="10"
                                Foreground="{DynamicResource Ink3Brush}" />
-                    <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
+
+                    <!-- 予定の印。上に2本まで -->
+                    <ItemsControl ItemsSource="{Binding Marks}" Margin="0,1,0,0"
+                                  HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Height="2" CornerRadius="1" Margin="0,0,0,1"
+                                        Width="{Binding DataContext.MarkWidth,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Background="{Binding Converter={StaticResource EventColorBrush}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="Number" Text="{Binding DayNumber}"
+                               FontSize="{Binding DataContext.DayFontSize,
+                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
                                HorizontalAlignment="Center" LineHeight="14"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}" />
@@ -123,24 +178,45 @@
             <Border Margin="0,0,10,10" Padding="8,6" CornerRadius="5"
                     Background="{DynamicResource PanelBrush}"
                     BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
-                <StackPanel Width="176">
-                    <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
-                               Margin="0,0,0,4"
-                               Foreground="{DynamicResource InkBrush}" />
+                <StackPanel Width="182">
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock DockPanel.Dock="Right" FontSize="10.5" VerticalAlignment="Center"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink3Brush}">
+                            <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
+                        </TextBlock>
+
+                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource InkBrush}" />
+                    </DockPanel>
 
                     <ItemsControl ItemsSource="{Binding Days}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Width="176" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel Width="182" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="Cell" Width="24" Height="20" CornerRadius="2"
+                                <Border x:Name="Cell" Width="26" Height="22" CornerRadius="3"
                                         Cursor="Hand" ToolTip="{Binding Tooltip}"
+                                        Tag="{Binding DataContext,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
-                                    <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Typography.NumeralAlignment="Tabular"
-                                               Foreground="{DynamicResource InkBrush}" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
+                                                   HorizontalAlignment="Center" LineHeight="13"
+                                                   Typography.NumeralAlignment="Tabular"
+                                                   Foreground="{DynamicResource InkBrush}" />
+
+                                        <!-- 予定が入っている日に点を添える。日付を隠さない -->
+                                        <Ellipse Width="3" Height="3" Margin="0,1,0,0"
+                                                 HorizontalAlignment="Center"
+                                                 Fill="{DynamicResource AccentBrush}"
+                                                 Visibility="{Binding HasEvents,
+                                                              Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
                                 </Border>
 
                                 <DataTemplate.Triggers>
@@ -203,11 +279,33 @@
             </DockPanel>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                      Padding="12,10">
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="12,10" SizeChanged="OnResized">
             <Grid>
                 <!-- ストリップ。上期・下期を見出しで分ける -->
                 <StackPanel Visibility="{Binding IsStrip, Converter={StaticResource BoolToVisibility}}">
+                    <!--
+                        日付の目盛り。1・5・10・15・20・25・30 の位置に数字を置く。
+                        31 マスぶんの幅に合わせて動くので、下の行と縦に揃う
+                    -->
+                    <ItemsControl x:Name="Ruler" ItemsSource="{Binding RulerMarks}" Margin="46,0,0,2">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" FontSize="9"
+                                           Margin="0,0,1,0"
+                                           Width="{Binding DataContext.DayWidth,
+                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="{DynamicResource Ink3Brush}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <TextBlock Text="上期（4〜9月）" FontSize="11" FontWeight="SemiBold"
                                Margin="6,0,0,4"
                                Foreground="{DynamicResource Ink3Brush}" />
@@ -222,11 +320,21 @@
                 </StackPanel>
 
                 <!-- カレンダー12枚 -->
-                <ItemsControl ItemsSource="{Binding Months}"
+                <!--
+                    カレンダー12枚。左から縦に 4〜6月、7〜9月、10〜12月、1〜3月。
+                    四半期ごとに縦へ揃うので、期のまとまりが読める。入れ物は左から右へ
+                    詰めるので、並べる順のほうを ViewModel で入れ替えてある
+                -->
+                <ItemsControl ItemsSource="{Binding GridMonths}"
                               ItemTemplate="{StaticResource MonthGridTemplate}"
                               Visibility="{Binding IsGrid, Converter={StaticResource BoolToVisibility}}">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding DataContext.GridColumns,
+                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                         Rows="{Binding DataContext.GridRows,
+                                               RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
             </Grid>
