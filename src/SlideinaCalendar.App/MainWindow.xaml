@@ -149,6 +149,7 @@
         <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
     </Window.InputBindings>
 
+    <Grid>
     <DockPanel>
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
@@ -860,4 +861,33 @@
             </Border>
         </Grid>
     </DockPanel>
+
+        <!--
+            ドック幅のグリップ（要件書 7.2）。
+            端に寄せているあいだは枠を消しているので、OS の掴みしろが無い。
+            画面の内側にあたる辺に、自前の掴みしろを置く。
+
+            右に寄せていれば内側は左、左に寄せていれば内側は右。辺と逆になる。
+        -->
+        <Border x:Name="DockGrip" Width="5" Background="Transparent"
+                HorizontalAlignment="Left" Cursor="SizeWE"
+                ToolTip="ドラッグで幅を変えられます"
+                MouseLeftButtonDown="OnGripPressed"
+                MouseMove="OnGripDragging"
+                MouseLeftButtonUp="OnGripReleased"
+                Visibility="{Binding Shell.IsAtEdge, Converter={StaticResource BoolToVisibility}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Shell.IsAtLeft}" Value="True">
+                            <Setter Property="HorizontalAlignment" Value="Right" />
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+    </Grid>
 </Window>

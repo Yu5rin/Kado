@@ -189,6 +189,49 @@ public partial class MainWindow : Window
         vm.DetailPaneWidth = DetailColumn.ActualWidth;
     }
 
+    // ------------------------------------------------------------------
+    // ドック幅のグリップ（要件書 7.2）
+    //
+    // 端に寄せているあいだは枠を消しているので、OS の掴みしろが無い。
+    // 画面の内側にあたる辺に自前の掴みしろを置き、ここで幅を変える。
+    // ------------------------------------------------------------------
+
+    /// <summary>掴んだときの画面上の位置。ウィンドウ内の座標だと、動かすたびにずれる。</summary>
+    private Point? _gripFrom;
+
+    /// <summary>掴んだときの幅。</summary>
+    private double _gripWidth;
+
+    private void OnGripPressed(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+
+        _gripFrom = PointToScreen(e.GetPosition(this));
+        _gripWidth = vm.Shell.DockWidth;
+
+        ((UIElement)sender).CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnGripDragging(object sender, MouseEventArgs e)
+    {
+        if (_gripFrom is not { } from || ViewModel is not { } vm) return;
+
+        var moved = PointToScreen(e.GetPosition(this)).X - from.X;
+
+        // 右に寄せていれば、左へ引くほど広くなる。左に寄せていれば逆
+        vm.Shell.DockWidth = vm.Shell.IsAtLeft ? _gripWidth + moved : _gripWidth - moved;
+    }
+
+    private void OnGripReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (_gripFrom is null) return;
+
+        _gripFrom = null;
+        ((UIElement)sender).ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
     /// <summary>検索の結果を押したら、その日へ移って開く。</summary>
