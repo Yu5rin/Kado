@@ -46,6 +46,10 @@ public partial class EventEditorWindow : Window
     {
         if (sender is not ComboBox box) return;
 
+        // 終了の候補は「10:00（1時間）」と長さを添えて並べている。
+        // 欄に入れるのは時刻のほうだけ
+        if (box.SelectedItem is EndTimeOption option) box.Text = option.Time;
+
         box.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource();
     }
 
