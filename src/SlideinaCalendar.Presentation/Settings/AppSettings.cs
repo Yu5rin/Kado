@@ -92,7 +92,7 @@ public sealed class AppSettings
         _theme = Read(ThemeKey, ThemeChoice.Auto);
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
-        _yearLayout = Read(YearLayoutKey, YearLayout.Strip);
+        _yearLayout = Read(YearLayoutKey, YearLayout.Grid);
         _closeToTray = !string.Equals(_store.Get(CloseToTrayKey), "false", StringComparison.Ordinal);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);

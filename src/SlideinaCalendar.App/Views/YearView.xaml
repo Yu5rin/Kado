@@ -27,9 +27,13 @@
             カレンダー表示の印。マスが小さいので帯ではなく点にする。
             横に並べて、何件あるかも分かるようにする
         -->
+        <!--
+            カレンダー表示の予定1件ぶん。ストリップと同じ帯にする。点だと、色は
+            分かっても「何件あるか」がつかめない
+        -->
         <DataTemplate x:Key="GridMarkTemplate">
-            <Ellipse Width="3.5" Height="3.5" Margin="0.5"
-                     Fill="{Binding Converter={StaticResource DayMarkBrush}}" />
+            <Border Height="2.5" CornerRadius="1.25" Margin="1.5,0.5"
+                    Background="{Binding Converter={StaticResource DayMarkBrush}}" />
         </DataTemplate>
 
         <!-- 予定1件ぶんの帯。日付の上下に重ねる -->
@@ -197,95 +201,96 @@
 
         <!-- カレンダー表示の1か月。日付を引き当てる用途なので、実働日は塗らない -->
         <DataTemplate x:Key="MonthGridTemplate">
+            <!--
+                1枚は入れ物いっぱいに広がる。中身を固定の大きさで組んで Viewbox で
+                拡大する作りにしていたが、縦横の比が入れ物と合わず、幅に合わせると
+                下が大きく余った。マスそのものを伸ばす。
+            -->
             <Border Margin="0,0,10,10" Padding="8,6" CornerRadius="5"
                     Background="{DynamicResource PanelBrush}"
                     BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
-                <!--
-                    マスは入れ物の大きさに合わせて伸びる。中身は 182px 前提で組んであるので、
-                    Viewbox に任せて丸ごと拡大する。横幅だけ広がっても間延びしないよう Uniform。
-                -->
-                <Viewbox Stretch="Uniform" StretchDirection="Both">
-                    <StackPanel Width="182">
-                        <DockPanel Margin="0,0,0,4">
-                            <TextBlock DockPanel.Dock="Right" FontSize="10.5" VerticalAlignment="Center"
-                                       Typography.NumeralAlignment="Tabular"
-                                       Foreground="{DynamicResource Ink3Brush}">
-                                <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
-                                     FontWeight="SemiBold"
-                                     Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
-                            </TextBlock>
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <TextBlock DockPanel.Dock="Right" FontSize="10.5" VerticalAlignment="Center"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink3Brush}">
+                            <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
+                        </TextBlock>
 
-                            <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource InkBrush}" />
-                        </DockPanel>
+                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource InkBrush}" />
+                    </DockPanel>
 
-                        <ItemsControl ItemsSource="{Binding Days}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Width="182" /></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border x:Name="Cell" Width="26" Height="26" CornerRadius="3"
-                                            Cursor="Hand" ToolTip="{Binding Tooltip}"
-                                            Tag="{Binding DataContext,
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                            ContextMenu="{StaticResource YearDayMenu}"
-                                            MouseLeftButtonDown="OnDayClicked">
-                                        <StackPanel VerticalAlignment="Center">
-                                            <!-- ストリップと同じで、上が inaCalendar、下がそれ以外 -->
-                                            <ItemsControl ItemsSource="{Binding TopMarks}"
-                                                          HorizontalAlignment="Center"
-                                                          ItemTemplate="{StaticResource GridMarkTemplate}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Horizontal" />
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                            </ItemsControl>
+                    <!--
+                        7列5行に等分する。ストリップと同じで1日から順に折り返すだけで、
+                        曜日は揃えない（空の枠を置くと月によって右端がぶれる）。
 
-                                            <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                                       HorizontalAlignment="Center" LineHeight="13"
-                                                       Typography.NumeralAlignment="Tabular"
-                                                       Foreground="{DynamicResource InkBrush}" />
+                        行数を 5 で固定するのは、31日の月も28日の月も同じ高さのマスに
+                        するため。任せると、短い月だけマスが縦に伸びて不揃いになる。
+                        高さは入れ物から配られるので、縦に余ったぶんもマスが受け取る
+                    -->
+                    <ItemsControl ItemsSource="{Binding Days}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Rows="5" Columns="7" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Cell" Margin="0.5" CornerRadius="3" MinHeight="26"
+                                        Cursor="Hand" ToolTip="{Binding Tooltip}"
+                                        Tag="{Binding DataContext,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ContextMenu="{StaticResource YearDayMenu}"
+                                        MouseLeftButtonDown="OnDayClicked">
+                                    <DockPanel>
+                                        <!-- ストリップと同じで、上が inaCalendar、下がそれ以外 -->
+                                        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding TopMarks}"
+                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
 
-                                            <ItemsControl ItemsSource="{Binding BottomMarks}"
-                                                          HorizontalAlignment="Center"
-                                                          ItemTemplate="{StaticResource GridMarkTemplate}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Horizontal" />
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Border>
+                                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding BottomMarks}"
+                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
 
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding IsSaturday}" Value="True">
-                                            <Setter TargetName="Number" Property="Foreground"
-                                                    Value="{DynamicResource SaturdayBrush}" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
-                                            <Setter TargetName="Number" Property="Foreground"
-                                                    Value="{DynamicResource SundayBrush}" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                            <Setter TargetName="Cell" Property="Background"
-                                                    Value="{DynamicResource CellSelectedBrush}" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                            <Setter TargetName="Cell" Property="Background"
-                                                    Value="{DynamicResource AccentSoftBrush}" />
-                                            <Setter TargetName="Number" Property="FontWeight" Value="Bold" />
-                                            <Setter TargetName="Number" Property="Foreground"
-                                                    Value="{DynamicResource AccentBrush}" />
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Viewbox>
+                                        <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Typography.NumeralAlignment="Tabular"
+                                                   Foreground="{DynamicResource InkBrush}" />
+                                    </DockPanel>
+                                </Border>
+
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsSaturday}" Value="True">
+                                        <Setter TargetName="Number" Property="Foreground"
+                                                Value="{DynamicResource SaturdayBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                                        <Setter TargetName="Number" Property="Foreground"
+                                                Value="{DynamicResource SundayBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter TargetName="Cell" Property="Background"
+                                                Value="{DynamicResource CellSelectedBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                        <Setter TargetName="Cell" Property="Background"
+                                                Value="{DynamicResource AccentSoftBrush}" />
+                                        <Setter TargetName="Number" Property="FontWeight" Value="Bold" />
+                                        <Setter TargetName="Number" Property="Foreground"
+                                                Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
             </Border>
         </DataTemplate>
     </UserControl.Resources>
@@ -327,8 +332,12 @@
             </DockPanel>
         </Border>
 
+        <!--
+            細い帯として使っているときは、31日ぶんが横に入りきらない。切り捨てると
+            月末が見えなくなるので、横にも送れるようにしておく
+        -->
         <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
+                      HorizontalScrollBarVisibility="Auto"
                       Padding="12,10" SizeChanged="OnResized">
             <Grid>
                 <!-- ストリップ。上期・下期を見出しで分ける -->

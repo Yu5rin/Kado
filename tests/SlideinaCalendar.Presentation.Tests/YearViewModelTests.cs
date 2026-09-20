@@ -160,14 +160,15 @@ public class YearViewModelTests
         YearLayout? told = null;
         vm.LayoutChanged += (_, layout) => told = layout;
 
-        Assert.True(vm.IsStrip);
+        // 既定はカレンダー。会社で配るものと同じ形のほうが通りがいい
+        Assert.True(vm.IsGrid);
 
-        vm.Layout = YearLayout.Grid;
+        vm.Layout = YearLayout.Strip;
 
         // 設定に控えるのは持ち主の仕事。次の起動でも同じ形で出すため
-        Assert.Equal(YearLayout.Grid, told);
-        Assert.True(vm.IsGrid);
-        Assert.False(vm.IsStrip);
+        Assert.Equal(YearLayout.Strip, told);
+        Assert.True(vm.IsStrip);
+        Assert.False(vm.IsGrid);
     }
 
     // ------------------------------------------------------------------

@@ -32,6 +32,18 @@ public partial class YearView : UserControl
     /// <summary>ScrollViewer の Padding="12,10" のうち、上下ぶん。</summary>
     private const double ScrollPadding = 20;
 
+    /// <summary>
+    /// ストリップで、12行の外側に要る高さ。
+    /// <para>目盛りの行、「上期」「下期」の見出し2つ、そのあいだの余白ぶん。</para>
+    /// </summary>
+    private const double StripChrome = 96;
+
+    /// <summary>ストリップの行数。上期6か月＋下期6か月。</summary>
+    private const int StripRows = 12;
+
+    /// <summary>ストリップの行と行のあいだ。</summary>
+    private const double StripRowGap = 5;
+
     /// <summary>縦のスクロールバーが出たぶん。出てから測ると幅が揺れる</summary>
     private const double ScrollRoom = 14;
 
@@ -97,5 +109,11 @@ public partial class YearView : UserControl
         // 低すぎるときだけ、はみ出したぶんをスクロールさせる
         var height = e.NewSize.Height - ScrollPadding;
         GridHost.Height = Math.Max(year.GridRows * GridCardMinHeight, height);
+
+        // ストリップも同じ。12行しか無いので、余ったぶんは行の高さに配る
+        var rows = height - StripChrome;
+        year.DayHeight = rows > 0
+            ? (rows / StripRows) - StripRowGap
+            : YearViewModel.MinDayHeight;
     }
 }
