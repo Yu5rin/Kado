@@ -126,6 +126,22 @@ public sealed class ShellController : IDisposable
         _window.Hide();
     }
 
+    /// <summary>いま窓が乗っているモニタ全体（物理ピクセル）。</summary>
+    private NativeMethods.RECT ScreenOfWindow()
+    {
+        var handle = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+        if (handle == IntPtr.Zero) return default;
+
+        var monitor = NativeMethods.MonitorFromWindow(handle, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        var info = new NativeMethods.MONITORINFOEX
+        {
+            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFOEX>(),
+            szDevice = string.Empty,
+        };
+
+        return NativeMethods.GetMonitorInfo(monitor, ref info) ? info.rcMonitor : default;
+    }
+
     /// <summary>いま前にいるのが、自分の出した窓か。</summary>
     private bool OwnsForeground() =>
         Application.Current?.Windows.OfType<Window>()
@@ -163,11 +179,13 @@ public sealed class ShellController : IDisposable
                 ToEdge();
                 ApplyOverlayBounds();
 
-                // ピン留め中は張らない。常時出ているので呼び出す口が要らない
-                _hotZone.Arm(_shell.Edge);
+                // ピン留め中は張らない。常時出ているので呼び出す口が要らない。
+                // 見張る画面は、いま窓が乗っているモニタ
+                _hotZone.Arm(_shell.Edge, ScreenOfWindow());
 
-                // スライドは普段は隠れている。画面端に触れるまで出てこない。
-                // 切り替えた直後だけは、何が起きたのか分かるよう出したままにする
+                // 切り替えた直後は出したままにする。いきなり消えると、何が起きたのか
+                // 分からない。他のアプリへ移った時点で引っ込む
+                Show();
                 break;
 
             case ShellMode.Dock:

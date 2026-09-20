@@ -371,6 +371,7 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsMainViewOpen));
             Raise(nameof(ShowsCalendarTools));
+            RaiseHeader();
         }
     }
 
@@ -508,6 +509,9 @@ public sealed class MainViewModel : ObservableObject
             Year.SelectedDate = value;
             Agenda.SelectedDate = value;
 
+            // 中央を畳んでいるときは、見出しが選んだ日そのものになっている
+            if (!_isMainViewOpen) RaiseHeader();
+
             Raise();
         }
     }
@@ -530,14 +534,21 @@ public sealed class MainViewModel : ObservableObject
     /// ツールバーの年。月より一段小さく、薄く出す。
     /// <para>年ビューでは年度を出す。「◀ ▶」が年度を送るのに、見出しが月のままだと食い違う。</para>
     /// </summary>
-    public string TitleYear => _currentView == CalendarView.Year
-        ? Year.FiscalYear.ToString(CultureInfo.InvariantCulture)
-        : Month.Month.Year.ToString(CultureInfo.InvariantCulture);
+    public string TitleYear => this switch
+    {
+        // 中央を畳んでいるときは、出ている日そのものを見出しにする
+        { _isMainViewOpen: false } => SelectedDate.Year.ToString(CultureInfo.InvariantCulture),
+        { _currentView: CalendarView.Year } => Year.FiscalYear.ToString(CultureInfo.InvariantCulture),
+        _ => Month.Month.Year.ToString(CultureInfo.InvariantCulture),
+    };
 
-    /// <summary>ツールバーの月。「9月」。年ビューでは「年度」。</summary>
-    public string TitleMonth => _currentView == CalendarView.Year
-        ? "年度"
-        : Month.Month.ToString("M月", CultureInfo.InvariantCulture);
+    /// <summary>ツールバーの月。「9月」。年ビューでは「年度」。中央を畳んでいれば「9月21日」。</summary>
+    public string TitleMonth => this switch
+    {
+        { _isMainViewOpen: false } => SelectedDate.ToString("M月d日", CultureInfo.InvariantCulture),
+        { _currentView: CalendarView.Year } => "年度",
+        _ => Month.Month.ToString("M月", CultureInfo.InvariantCulture),
+    };
 
     /// <summary>実働日バッジを出せるか。データが無い月では数字を出さない。</summary>
     public bool HasWorkingDayData => Month.HasFullWorkingDayData;
@@ -946,6 +957,14 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void GoToPrevious()
     {
+        // 中央を畳んでいると、出ているのは選んだ日の予定だけ。月を送っても
+        // 手応えが無いので、日を送る
+        if (!_isMainViewOpen)
+        {
+            SelectedDate = SelectedDate.AddDays(-1);
+            return;
+        }
+
         switch (_currentView)
         {
             case CalendarView.Week:
@@ -979,6 +998,12 @@ public sealed class MainViewModel : ObservableObject
 
     private void GoToNext()
     {
+        if (!_isMainViewOpen)
+        {
+            SelectedDate = SelectedDate.AddDays(1);
+            return;
+        }
+
         switch (_currentView)
         {
             case CalendarView.Week:

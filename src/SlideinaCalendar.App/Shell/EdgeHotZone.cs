@@ -24,10 +24,16 @@ namespace SlideinaCalendar.App.Shell;
 /// 他の操作を一切邪魔せず、止められる心配もない。
 /// </para>
 /// </summary>
-public sealed class EdgeHotZone : IDisposable
+internal sealed class EdgeHotZone : IDisposable
 {
-    /// <summary>帯の幅（物理ピクセル）。要件書 7.1 の3〜5px。</summary>
-    private const int ZoneWidth = 4;
+    /// <summary>
+    /// 帯の幅（物理ピクセル）。
+    /// <para>
+    /// 要件書は3〜5px だが、実機で「端に当てても出てこない」となった。高 DPI では
+    /// 数ピクセルが目視でほとんど無いに等しく、当てたつもりで外していた。少し広げる。
+    /// </para>
+    /// </summary>
+    private const int ZoneWidth = 8;
 
     /// <summary>カーソルを見にいく間隔。</summary>
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(100);
@@ -38,6 +44,7 @@ public sealed class EdgeHotZone : IDisposable
     private readonly DispatcherTimer _timer;
 
     private DockEdge _edge = DockEdge.Right;
+    private RECT _screen;
     private DateTime? _since;
     private bool _disposed;
 
@@ -46,7 +53,9 @@ public sealed class EdgeHotZone : IDisposable
 
     public EdgeHotZone()
     {
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = Tick };
+        // Background だと、他のアプリを操作しているあいだに後回しにされることがある。
+        // 出てこない、という報告の元になっていた可能性がある
+        _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = Tick };
         _timer.Tick += (_, _) => Check(DateTime.UtcNow);
     }
 
@@ -57,11 +66,20 @@ public sealed class EdgeHotZone : IDisposable
     /// 帯を張る。
     /// <para>ピン留め中は張らない。常時出ているので、呼び出す口が要らない（要件書 2.2）。</para>
     /// </summary>
-    public void Arm(DockEdge edge)
+    /// <param name="edge">寄せる辺。</param>
+    /// <param name="screen">
+    /// 見張る画面（物理ピクセル）。
+    /// <para>
+    /// 張るときに1回だけ決める。毎回カーソルからモニタを引き直す作りにしていたが、
+    /// 呼び出しが1つ増えるぶん失敗する余地があり、失敗すると黙って出てこなくなる。
+    /// </para>
+    /// </param>
+    public void Arm(DockEdge edge, RECT screen)
     {
         if (_disposed) return;
 
         _edge = edge;
+        _screen = screen;
         _since = null;
         _timer.Start();
     }
@@ -116,25 +134,19 @@ public sealed class EdgeHotZone : IDisposable
     /// <summary>
     /// 帯の中か。
     /// <para>
-    /// モニタが複数あるときは、カーソルが乗っている画面の端で見る。仮想画面の端で
-    /// 見ると、真ん中の画面では二度と出なくなる。
+    /// 張るときに決めた画面の端で見る。仮想画面の端で見ると、真ん中の画面では
+    /// 二度と出なくなる。
     /// </para>
+    /// <para>縦は画面の中に居ればよい。上下の端まで使えたほうが当てやすい。</para>
     /// </summary>
     private bool IsInZone(POINT point)
     {
-        var monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
-        var info = new MONITORINFOEX
-        {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>(),
-            szDevice = string.Empty,
-        };
+        if (_screen.Width <= 0) return false;
 
-        if (!GetMonitorInfo(monitor, ref info)) return false;
-
-        var screen = info.rcMonitor;
+        if (point.y < _screen.top || point.y > _screen.bottom) return false;
 
         return _edge == DockEdge.Left
-            ? point.x <= screen.left + ZoneWidth
-            : point.x >= screen.right - 1 - ZoneWidth;
+            ? point.x <= _screen.left + ZoneWidth
+            : point.x >= _screen.right - 1 - ZoneWidth;
     }
 }
