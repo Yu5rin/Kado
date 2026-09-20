@@ -1,17 +1,74 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
 
 /// <summary>
 /// 一覧ビュー。
-/// <para>予定・タスクはダブルクリックで編集、右クリックでメニュー。</para>
+/// <para>
+/// 持っているぶんを全部出すので、送るのではなくスクロールで動く。行を押すと
+/// その日を選ぶ。予定・タスクはダブルクリックで編集、右クリックでメニュー。
+/// </para>
 /// </summary>
 public partial class AgendaView : UserControl
 {
-    public AgendaView() => InitializeComponent();
+    private AgendaViewModel? _bound;
+
+    public AgendaView()
+    {
+        InitializeComponent();
+
+        // 全部出しているので、送るのは画面のほう。頼まれた日まで動かす
+        DataContextChanged += (_, args) =>
+        {
+            if (_bound is not null) _bound.ScrollRequested -= OnScrollRequested;
+
+            _bound = args.NewValue as AgendaViewModel;
+
+            if (_bound is not null) _bound.ScrollRequested += OnScrollRequested;
+        };
+
+        // 開いたときは今日のあたりを出す。先頭は何年も前かもしれない
+        Loaded += (_, _) =>
+        {
+            if (_bound is { } agenda) ScrollTo(agenda.TodayRow);
+        };
+    }
+
+    private void OnScrollRequested(object? sender, DateOnly date)
+    {
+        if (_bound is { } agenda) ScrollTo(agenda.RowOn(date));
+    }
+
+    /// <summary>その行が見えるところまで動かす。</summary>
+    private void ScrollTo(AgendaRowViewModel? row)
+    {
+        if (row is null) return;
+
+        // 描き終わる前に呼ばれると、行の入れ物がまだ無い
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (Rows.ItemContainerGenerator.ContainerFromItem(row) is FrameworkElement container)
+            {
+                container.BringIntoView();
+            }
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>行を押したらその日を選ぶ。月ビューのマスと同じ。</summary>
+    private void OnRowClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not AgendaRowViewModel row) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        if (e.ClickCount == 2) main.AddEventOnCommand.Execute(row.Date);
+        else main.SelectDateCommand.Execute(row.Date);
+
+        e.Handled = true;
+    }
 
     private void OnEventClicked(object sender, MouseButtonEventArgs e) =>
         Open(sender, e, (main, item) => main.EditEventCommand.Execute(item));
@@ -19,34 +76,32 @@ public partial class AgendaView : UserControl
     private void OnTaskClicked(object sender, MouseButtonEventArgs e) =>
         Open(sender, e, (main, item) => main.EditTaskCommand.Execute(item));
 
-    private static void Open(object sender, MouseButtonEventArgs e, Action<MainViewModel, object> open)
-    {
-        if (sender is not FrameworkElement element) return;
-        if (element.DataContext is not { } item) return;
-        if (Window.GetWindow(element)?.DataContext is not MainViewModel main) return;
-
-        if (e.ClickCount == 2)
-        {
-            open(main, item);
-            e.Handled = true;
-        }
-    }
-
     /// <summary>
-    /// ホイールで期間を送る。
+    /// 予定やタスクを押したとき。
     /// <para>
-    /// 縦に長いので、ふつうに回せば中身が動く。Ctrl を押しているあいだだけ
-    /// 前後の期間へ移る（年ビューと同じ決まり）。
+    /// ここで止めないと行側の受け手に流れ、その日に新しい予定を足すことになる。
+    /// 1回押しは行と同じでその日を選ぶ。
     /// </para>
     /// </summary>
-    private void OnWheel(object sender, MouseWheelEventArgs e)
+    private static void Open(object sender, MouseButtonEventArgs e, Action<MainViewModel, object> open)
     {
-        if (DataContext is not AgendaViewModel agenda) return;
-        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (sender is not FrameworkElement element || element.DataContext is not { } item) return;
+        if (Window.GetWindow(element)?.DataContext is not MainViewModel main) return;
 
-        if (e.Delta > 0) agenda.GoToPrevious();
-        else agenda.GoToNext();
+        if (e.ClickCount == 2) open(main, item);
+        else if (Row(element) is { } row) main.SelectDateCommand.Execute(row.Date);
 
         e.Handled = true;
+    }
+
+    /// <summary>その中身が載っている行。日を選ぶのに要る。</summary>
+    private static AgendaRowViewModel? Row(DependencyObject from)
+    {
+        for (var at = from; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is FrameworkElement { DataContext: AgendaRowViewModel row }) return row;
+        }
+
+        return null;
     }
 }

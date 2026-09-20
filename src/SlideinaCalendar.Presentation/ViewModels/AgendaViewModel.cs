@@ -21,8 +21,10 @@ public enum AgendaRowKind
 /// 予定のある日はその日ぶん、無い日は連続分をまとめて1行にする。
 /// </para>
 /// </summary>
-public sealed class AgendaRowViewModel
+public sealed class AgendaRowViewModel : ObservableObject
 {
+    private bool _isSelected;
+
     private static readonly CultureInfo Japanese = CultureInfo.GetCultureInfo("ja-JP");
 
     private AgendaRowViewModel(
@@ -59,6 +61,13 @@ public sealed class AgendaRowViewModel
     public int? WorkingDayIndex { get; }
 
     public bool IsToday { get; }
+
+    /// <summary>選んでいる行か。押したときに面で示す。</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set => Set(ref _isSelected, value);
+    }
 
     /// <summary>まとめた日数。まとめていない行は 0。</summary>
     public int SkippedDays { get; }
@@ -100,53 +109,57 @@ public sealed class AgendaRowViewModel
 /// 一般的なカレンダーアプリのように消してしまうと、間がどれだけ空いているのか
 /// 分からなくなり、実働日の感覚が飛ぶ。畳んでも日付の連続性は保つ。
 /// </para>
+/// <para>
+/// <b>持っているぶんを全部出す。</b>はじめは60日ずつ送る作りにしていたが、一覧は
+/// 「端から端まで眺める」ための面なので、区切ると探しているものが隣の期間にある
+/// ことになって使いにくい。畳みが効くので、何年ぶんあっても行数はそれほど増えない。
+/// </para>
 /// </summary>
 public sealed class AgendaViewModel : ObservableObject
 {
-    /// <summary>一度に流す日数。ひと月ぶん＋前後の余白。</summary>
-    public const int DefaultSpanDays = 60;
+    /// <summary>
+    /// 何も無いときに出す前後の日数。
+    /// <para>データが1件も無くても、今日のまわりが空であることは見せる。</para>
+    /// </summary>
+    public const int EmptySpanDays = 30;
+
+    /// <summary>
+    /// 今日から前後に遡れる年数。
+    /// <para>
+    /// 遠い未来や過去に1件でも紛れ込むと、そこまで日をたどることになる。畳むので
+    /// 行数は増えないが、日をなぞる処理は日数ぶん回る。念のため止めておく。
+    /// </para>
+    /// </summary>
+    private const int MaxYears = 10;
 
     private readonly CalendarWorkspace _workspace;
     private readonly ICalendarSources _sources;
     private readonly DateOnly _today;
-    private readonly int _spanDays;
 
     private DateOnly _from;
+    private DateOnly _to;
+    private DateOnly _selectedDate;
 
-    public AgendaViewModel(
-        CalendarWorkspace workspace, DateOnly today, ICalendarSources sources,
-        int spanDays = DefaultSpanDays)
+    public AgendaViewModel(CalendarWorkspace workspace, DateOnly today, ICalendarSources sources)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _sources = sources ?? throw new ArgumentNullException(nameof(sources));
         _today = today;
-        _spanDays = Math.Max(1, spanDays);
-        _from = today;
+        _selectedDate = today;
 
         Refresh();
     }
 
-    /// <summary>流し始める日。</summary>
-    public DateOnly From
-    {
-        get => _from;
-        set
-        {
-            if (_from == value) return;
+    /// <summary>流し始める日。持っているデータの先頭。</summary>
+    public DateOnly From => _from;
 
-            _from = value;
-            Refresh();
-            Raise(nameof(From), nameof(HeaderText));
-        }
-    }
+    /// <summary>流し終わる日。持っているデータの末尾。</summary>
+    public DateOnly To => _to;
 
-    /// <summary>流し終わる日。</summary>
-    public DateOnly To => _from.AddDays(_spanDays - 1);
-
-    /// <summary>「2026年9月20日 〜 11月18日」。</summary>
+    /// <summary>「2023年1月5日 〜 2027年3月31日」。</summary>
     public string HeaderText =>
         $"{_from.ToString("yyyy年M月d日", CultureInfo.GetCultureInfo("ja-JP"))} 〜 " +
-        $"{To.ToString("M月d日", CultureInfo.GetCultureInfo("ja-JP"))}";
+        $"{_to.ToString("yyyy年M月d日", CultureInfo.GetCultureInfo("ja-JP"))}";
 
     /// <summary>並べる行。</summary>
     public IReadOnlyList<AgendaRowViewModel> Rows { get; private set; } = [];
@@ -154,23 +167,64 @@ public sealed class AgendaViewModel : ObservableObject
     /// <summary>1件も無いか。案内を出すのに使う。</summary>
     public bool IsEmpty => Rows.Count == 0 || Rows.All(r => r.IsGap);
 
-    /// <summary>次の期間へ。</summary>
-    public void GoToNext() => From = To.AddDays(1);
+    /// <summary>
+    /// その日を含む行。
+    /// <para>開いたときに今日のあたりへ送るために使う。</para>
+    /// </summary>
+    public AgendaRowViewModel? RowOn(DateOnly date) =>
+        Rows.FirstOrDefault(r => r.Date <= date && date <= r.LastDate);
 
-    /// <summary>前の期間へ。</summary>
-    public void GoToPrevious() => From = _from.AddDays(-_spanDays);
+    /// <summary>今日を含む行。</summary>
+    public AgendaRowViewModel? TodayRow => RowOn(_today);
 
-    /// <summary>今日から流し直す。</summary>
-    public void GoToToday() => From = _today;
+    /// <summary>
+    /// 選んでいる日。
+    /// <para>その日を含む行に印を付ける。畳んだ行の中の日を選んでも、その行が光る。</para>
+    /// </summary>
+    public DateOnly SelectedDate
+    {
+        get => _selectedDate;
+        set
+        {
+            if (_selectedDate == value) return;
 
-    /// <summary>その日から流し直す。</summary>
-    public void GoTo(DateOnly date) => From = date;
+            _selectedDate = value;
+            MarkSelected();
+            Raise(nameof(SelectedDate));
+        }
+    }
+
+    /// <summary>どの行が選ばれているかを反映する。</summary>
+    private void MarkSelected()
+    {
+        foreach (var row in Rows)
+        {
+            row.IsSelected = row.Date <= _selectedDate && _selectedDate <= row.LastDate;
+        }
+    }
+
+    /// <summary>
+    /// その日のあたりまで送ってほしい。
+    /// <para>
+    /// 全部出しているので並べ直しは要らない。動かすのは画面のスクロール位置だけ
+    /// なので、表示側に頼む。
+    /// </para>
+    /// </summary>
+    public event EventHandler<DateOnly>? ScrollRequested;
+
+    /// <summary>その日のあたりへ送る。</summary>
+    public void GoTo(DateOnly date) => ScrollRequested?.Invoke(this, date);
+
+    /// <summary>今日のあたりへ送る。</summary>
+    public void GoToToday() => GoTo(_today);
 
     /// <summary>データを読み直して並べ直す。</summary>
     public void Refresh()
     {
-        var from = _from;
-        var to = To;
+        var (from, to) = Span();
+
+        _from = from;
+        _to = to;
 
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
         var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
@@ -224,7 +278,41 @@ public sealed class AgendaViewModel : ObservableObject
         FlushGap(to);
 
         Rows = rows;
-        Raise(nameof(Rows), nameof(IsEmpty));
+        MarkSelected();
+        Raise(nameof(Rows), nameof(IsEmpty), nameof(From), nameof(To), nameof(HeaderText),
+            nameof(TodayRow));
+    }
+
+    /// <summary>
+    /// 出す範囲。持っているデータの端から端まで。
+    /// <para>1件も無ければ、今日のまわりだけ出す。</para>
+    /// </summary>
+    private (DateOnly From, DateOnly To) Span()
+    {
+        var dates = _workspace.Events.All()
+            .Where(e => !CalendarWorkspace.IsMilestoneMark(e))
+            .SelectMany(e => new[] { e.Date, e.LastDate })
+            .Concat(_workspace.Tasks.All().Where(t => t.Due is not null).Select(t => t.Due!.Value))
+            .ToArray();
+
+        if (dates.Length == 0)
+        {
+            return (_today.AddDays(-EmptySpanDays), _today.AddDays(EmptySpanDays));
+        }
+
+        // 今日が範囲の外にあっても、今日の行は出す。「いまどこにいるのか」が
+        // 分からないと、上下どちらへ送ればよいのか決められない
+        var first = dates.Min();
+        var last = dates.Max();
+
+        if (first > _today) first = _today;
+        if (last < _today) last = _today;
+
+        // 遠い未来や過去に紛れ込んだ1件で、日をなぞる処理が延々と回るのを止める
+        var floor = _today.AddYears(-MaxYears);
+        var ceiling = _today.AddYears(MaxYears);
+
+        return (first < floor ? floor : first, last > ceiling ? ceiling : last);
     }
 
     private TaskListItemViewModel Row(TaskItem task) =>

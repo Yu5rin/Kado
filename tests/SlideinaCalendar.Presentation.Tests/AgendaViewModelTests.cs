@@ -14,11 +14,11 @@ public class AgendaViewModelTests
 {
     private static DateOnly D(int y, int m, int d) => new(y, m, d);
 
-    private static AgendaViewModel Create(TestWorkspace test, int spanDays = 14)
+    private static AgendaViewModel Create(TestWorkspace test)
     {
         var sources = new SourceListsViewModel(test.Workspace);
 
-        return new AgendaViewModel(test.Workspace, D(2026, 9, 20), sources, spanDays);
+        return new AgendaViewModel(test.Workspace, D(2026, 9, 20), sources);
     }
 
     private static void Add(TestWorkspace test, string id, string title, DateOnly date,
@@ -50,8 +50,9 @@ public class AgendaViewModelTests
 
         var vm = Create(test);
 
-        // 9/20〜9/23 が1行、9/24 が1行、9/25〜10/3 が1行
-        Assert.Equal(3, vm.Rows.Count);
+        // 今日（9/20）から 9/23 が1行、9/24 が1行。
+        // 範囲は最後の予定で終わるので、うしろに空の行は出ない
+        Assert.Equal(2, vm.Rows.Count);
 
         var before = vm.Rows[0];
         Assert.True(before.IsGap);
@@ -60,10 +61,26 @@ public class AgendaViewModelTests
         Assert.Equal(4, before.SkippedDays);
         Assert.Equal("予定なし 4日", before.GapText);
 
-        var after = vm.Rows[2];
-        Assert.True(after.IsGap);
-        Assert.Equal(D(2026, 9, 25), after.Date);
-        Assert.Equal(D(2026, 10, 3), after.LastDate);
+        Assert.False(vm.Rows[1].IsGap);
+        Assert.Equal(D(2026, 9, 24), vm.Rows[1].Date);
+    }
+
+    [Fact]
+    public void 予定と予定のあいだも畳む()
+    {
+        using var test = TestWorkspace.Create();
+        Add(test, "e1", "棚卸", D(2026, 9, 20));
+        Add(test, "e2", "会議", D(2026, 9, 28));
+
+        var vm = Create(test);
+
+        Assert.Equal(3, vm.Rows.Count);
+
+        var between = vm.Rows[1];
+        Assert.True(between.IsGap);
+        Assert.Equal(D(2026, 9, 21), between.Date);
+        Assert.Equal(D(2026, 9, 27), between.LastDate);
+        Assert.Equal("予定なし 7日", between.GapText);
     }
 
     [Fact]
@@ -76,7 +93,7 @@ public class AgendaViewModelTests
         var vm = Create(test);
 
         // 先頭から末尾まで、途切れずに並ぶ
-        var expected = D(2026, 9, 20);
+        var expected = vm.From;
         foreach (var row in vm.Rows)
         {
             Assert.Equal(expected, row.Date);
@@ -169,25 +186,87 @@ public class AgendaViewModelTests
     }
 
     [Fact]
-    public void 期間を前後に送れる()
+    public void 持っているぶんを全部出す()
     {
         using var test = TestWorkspace.Create();
+        Add(test, "e1", "ずっと前", D(2024, 4, 1));
+        Add(test, "e2", "ずっと先", D(2028, 3, 31));
+
         var vm = Create(test);
 
+        // 区切ると、探しているものが隣の期間にあることになって使いにくい
+        Assert.Equal(D(2024, 4, 1), vm.From);
+        Assert.Equal(D(2028, 3, 31), vm.To);
+
+        Assert.Contains(vm.Rows, r => r.Date == D(2024, 4, 1));
+        Assert.Contains(vm.Rows, r => r.Date == D(2028, 3, 31));
+    }
+
+    [Fact]
+    public void データが今日より後ろだけでも今日の行は出す()
+    {
+        using var test = TestWorkspace.Create();
+        Add(test, "e1", "ずっと先", D(2027, 4, 1));
+
+        var vm = Create(test);
+
+        // いまどこにいるのか分からないと、上下どちらへ送ればよいか決められない
         Assert.Equal(D(2026, 9, 20), vm.From);
-        Assert.Equal(D(2026, 10, 3), vm.To);
+        Assert.NotNull(vm.TodayRow);
+    }
 
-        vm.GoToNext();
-        Assert.Equal(D(2026, 10, 4), vm.From);
+    [Fact]
+    public void 一件も無ければ今日のまわりを出す()
+    {
+        using var test = TestWorkspace.Create();
 
-        vm.GoToPrevious();
-        Assert.Equal(D(2026, 9, 20), vm.From);
+        var vm = Create(test);
 
-        vm.GoTo(D(2026, 11, 1));
-        Assert.Equal(D(2026, 11, 1), vm.From);
+        Assert.Equal(D(2026, 9, 20).AddDays(-AgendaViewModel.EmptySpanDays), vm.From);
+        Assert.Equal(D(2026, 9, 20).AddDays(AgendaViewModel.EmptySpanDays), vm.To);
+    }
 
-        vm.GoToToday();
-        Assert.Equal(D(2026, 9, 20), vm.From);
+    [Fact]
+    public void 遠すぎるデータでは範囲を切る()
+    {
+        using var test = TestWorkspace.Create();
+        Add(test, "e1", "まぎれこみ", D(1990, 1, 1));
+
+        var vm = Create(test);
+
+        // 日をなぞる処理が延々と回るのを止める
+        Assert.True(vm.From >= D(2016, 9, 20));
+    }
+
+    [Fact]
+    public void 選んだ日を含む行に印が付く()
+    {
+        using var test = TestWorkspace.Create();
+        Add(test, "e1", "棚卸", D(2026, 9, 24));
+
+        var vm = Create(test);
+
+        vm.SelectedDate = D(2026, 9, 24);
+        Assert.True(vm.Rows.Single(r => r.Date == D(2026, 9, 24)).IsSelected);
+
+        // 畳んだ行の中の日を選んでも、その行が光る
+        vm.SelectedDate = D(2026, 9, 22);
+        Assert.True(vm.Rows[0].IsSelected);
+        Assert.False(vm.Rows.Single(r => r.Date == D(2026, 9, 24)).IsSelected);
+    }
+
+    [Fact]
+    public void その日を含む行を引ける()
+    {
+        using var test = TestWorkspace.Create();
+        Add(test, "e1", "棚卸", D(2026, 9, 24));
+
+        var vm = Create(test);
+
+        Assert.Equal(D(2026, 9, 24), vm.RowOn(D(2026, 9, 24))?.Date);
+
+        // 畳んだ行の中の日でも引ける
+        Assert.True(vm.RowOn(D(2026, 9, 22))?.IsGap);
     }
 
     [Fact]

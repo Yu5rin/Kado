@@ -97,6 +97,15 @@ public partial class App : Application
         // 終了の合図（サインアウトやシャットダウン）でも外す
         SessionEnding += (_, _) => ReleaseShell();
 
+        // あとから開く窓（編集画面・設定・ショートカットなど）にも当てる。
+        // タイトルバーは OS が描くので、窓ごとに頼まないと白いまま残る
+        EventManager.RegisterClassHandler(
+            typeof(Window), FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) =>
+            {
+                if (sender is Window window) TitleBarTheme.Apply(window);
+            }));
+
         // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく。
         // 設定を読むにはデータベースが要るので、ここでは Windows に合わせておく
         ThemeManager.Apply(ThemeChoice.Auto);

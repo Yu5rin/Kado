@@ -51,6 +51,9 @@ public static class ThemeManager
 
         rebuilt.MergedDictionaries[PaletteIndex] = new ResourceDictionary { Source = source };
         merged[0] = rebuilt;
+
+        // タイトルバーは OS が描くので、辞書を入れ替えても追随しない。別に頼む
+        TitleBarTheme.ApplyToAll();
     }
 
     /// <summary>
