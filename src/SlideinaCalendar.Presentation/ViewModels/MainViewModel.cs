@@ -857,9 +857,11 @@ public sealed class MainViewModel : ObservableObject
                 RaiseHeader();
                 break;
 
+            // 一覧は全部出しているので、送るのは選んでいる日のほう。
+            // そこまで画面が動く
             case CalendarView.Agenda:
-                Agenda.GoToPrevious();
-                SyncHeaderTo(Agenda.From);
+                SelectedDate = SelectedDate.AddMonths(-1);
+                Agenda.GoTo(SelectedDate);
                 break;
 
             default:
@@ -889,8 +891,8 @@ public sealed class MainViewModel : ObservableObject
                 break;
 
             case CalendarView.Agenda:
-                Agenda.GoToNext();
-                SyncHeaderTo(Agenda.From);
+                SelectedDate = SelectedDate.AddMonths(1);
+                Agenda.GoTo(SelectedDate);
                 break;
 
             default:
