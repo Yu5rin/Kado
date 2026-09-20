@@ -36,25 +36,25 @@
             <Border CornerRadius="5" ClipToBounds="True"
                     BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                 <UniformGrid Rows="1" Columns="4">
-                    <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
+                    <ToggleButton Content="月" Style="{StaticResource SegmentButtonStyle}"
                                  IsChecked="{Binding CurrentView, Mode=OneWay,
                                              Converter={StaticResource EnumToBool},
                                              ConverterParameter=Month}"
                                  Command="{Binding SwitchViewCommand}"
                                  CommandParameter="Month" />
-                    <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
+                    <ToggleButton Content="週" Style="{StaticResource SegmentButtonStyle}"
                                  IsChecked="{Binding CurrentView, Mode=OneWay,
                                              Converter={StaticResource EnumToBool},
                                              ConverterParameter=Week}"
                                  Command="{Binding SwitchViewCommand}"
                                  CommandParameter="Week" />
-                    <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
+                    <ToggleButton Content="日" Style="{StaticResource SegmentButtonStyle}"
                                  IsChecked="{Binding CurrentView, Mode=OneWay,
                                              Converter={StaticResource EnumToBool},
                                              ConverterParameter=Day}"
                                  Command="{Binding SwitchViewCommand}"
                                  CommandParameter="Day" />
-                    <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
+                    <ToggleButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
                                  BorderThickness="0"
                                  IsChecked="{Binding CurrentView, Mode=OneWay,
                                              Converter={StaticResource EnumToBool},
@@ -109,10 +109,10 @@
                     <Border CornerRadius="5" ClipToBounds="True"
                             BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                         <UniformGrid Rows="1" Columns="2">
-                            <RadioButton Content="予定" Style="{StaticResource SegmentButtonStyle}"
+                            <ToggleButton Content="予定" Style="{StaticResource SegmentButtonStyle}"
                                          IsChecked="{Binding Shell.ShowsEvents, Mode=OneWay}"
                                          Command="{Binding Shell.ShowEventsCommand}" />
-                            <RadioButton Content="タスク" Style="{StaticResource SegmentButtonStyle}"
+                            <ToggleButton Content="タスク" Style="{StaticResource SegmentButtonStyle}"
                                          BorderThickness="0"
                                          IsChecked="{Binding Shell.ShowsTasks, Mode=OneWay}"
                                          Command="{Binding Shell.ShowTasksCommand}" />

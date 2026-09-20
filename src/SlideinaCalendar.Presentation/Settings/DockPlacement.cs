@@ -68,9 +68,9 @@ public readonly record struct DockPlacement(
     /// </summary>
     public const double SidebarThreshold = 520;
 
-    /// <summary>覚えていないとき。</summary>
+    /// <summary>覚えていないとき。既定は左。</summary>
     public static DockPlacement Unknown { get; } =
-        new(ShellMode.Window, DockEdge.Right, DefaultWidth, null);
+        new(ShellMode.Window, DockEdge.Left, DefaultWidth, null);
 
     /// <summary>ワークエリアを削っている状態か。</summary>
     public bool ReservesWorkArea => Mode == ShellMode.Dock;
@@ -131,7 +131,7 @@ public sealed class DockPlacementStore(SettingsRepository store)
             Enum.TryParse<ShellMode>(_store.Get(ModeKey), ignoreCase: true, out var mode)
                 && Enum.IsDefined(mode) ? mode : ShellMode.Window,
             Enum.TryParse<DockEdge>(_store.Get(EdgeKey), ignoreCase: true, out var edge)
-                && Enum.IsDefined(edge) ? edge : DockEdge.Right,
+                && Enum.IsDefined(edge) ? edge : DockEdge.Left,
             double.TryParse(_store.Get(WidthKey), NumberStyles.Float, CultureInfo.InvariantCulture,
                 out var width) ? width : DockPlacement.DefaultWidth,
             _store.Get(MonitorKey) is { Length: > 0 } monitor ? monitor : null);

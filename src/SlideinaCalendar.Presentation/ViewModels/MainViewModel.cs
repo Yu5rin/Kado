@@ -309,11 +309,12 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!Set(ref _currentView, value)) return;
 
-            // 出す番になった。溜めてあった組み直しをここで済ませる
-            RefreshHeavyIfShown();
-
-            // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
+            // 先に日を合わせる。年ビューは年度が変われば自分で組み直すので、
+            // 順序を逆にすると同じ組み立てを2回やることになる
             FocusOn(SelectedDate);
+
+            // 出す番になった。まだ溜まっていれば、ここで済ませる
+            RefreshHeavyIfShown();
 
             Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
                 nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
@@ -1960,8 +1961,13 @@ public sealed class MainViewModel : ObservableObject
         MiniCalendar.GoTo(date);
         Week.GoTo(date);
         Day.Date = date;
-        Year.GoTo(date);
+
+        // 年度が変われば、ここで組み直される。溜めてある印を下ろしておかないと、
+        // このあと同じ組み立てをもう一度やることになる
+        var fiscal = Year.FiscalYear;
         Year.SelectedDate = date;
+        if (Year.FiscalYear != fiscal) _yearStale = false;
+
         Agenda.SelectedDate = date;
         Agenda.GoTo(date);
 

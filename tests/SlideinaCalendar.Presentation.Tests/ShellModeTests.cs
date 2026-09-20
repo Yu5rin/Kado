@@ -73,12 +73,13 @@ public class ShellModeTests
         DockEdge? told = null;
         vm.EdgeChanged += (_, edge) => told = edge;
 
-        Assert.True(vm.IsAtRight);
+        // 既定は左。右利きの画面では左端のほうが邪魔になりにくい
+        Assert.True(vm.IsAtLeft);
 
         vm.ToggleEdgeCommand.Execute(null);
 
-        Assert.True(vm.IsAtLeft);
-        Assert.Equal(DockEdge.Left, told);
+        Assert.True(vm.IsAtRight);
+        Assert.Equal(DockEdge.Right, told);
     }
 
     [Fact]
@@ -163,6 +164,7 @@ public class ShellModeTests
         var read = store.Load();
 
         Assert.Equal(ShellMode.Window, read.Mode);
+        Assert.Equal(DockEdge.Left, read.Edge);
         Assert.Equal(DockPlacement.DefaultWidth, read.Width);
         Assert.Null(read.MonitorId);
     }

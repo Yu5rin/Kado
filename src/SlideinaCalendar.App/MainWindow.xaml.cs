@@ -56,6 +56,8 @@ public partial class MainWindow : Window
 
             // 幅でレイアウトを切り替える。同じ UI を縮小して使い回さない（要件書 5.1）
             if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
+
+            TrimToolbar();
         };
         StateChanged += (_, _) => TrackPlacement();
 
@@ -187,6 +189,27 @@ public partial class MainWindow : Window
 
         vm.SidePanelWidth = SideColumn.ActualWidth > 0 ? SideColumn.ActualWidth : _sideWidth;
         vm.DetailPaneWidth = DetailColumn.ActualWidth;
+    }
+
+    /// <summary>
+    /// 狭いときはツールバーの飾りを畳む。
+    /// <para>
+    /// <c>DockPanel</c> は左に詰めたものを先に描くので、場所が残らないぶんは右へ
+    /// はみ出してピンの上に重なる。<b>ピンが押せないとドックを解除できなくなる</b>ので、
+    /// 実働日のバッジのほうを先に引っ込める。左パネルにも同じ数字が出ている。
+    /// </para>
+    /// </summary>
+    private void TrimToolbar()
+    {
+        // ピン・⚙・検索と、年月・送り・ビュー切り替えに要るおおよその幅
+        const double RoomForBadges = 760;
+
+        var show = ActualWidth >= RoomForBadges;
+
+        // 出す条件（データがあるか）は XAML のバインドが持っている。
+        // ここは「狭いから畳む」だけを重ねる
+        WorkingDayBadge.MaxWidth = show ? double.PositiveInfinity : 0;
+        RemainingBadge.MaxWidth = show ? double.PositiveInfinity : 0;
     }
 
     // ------------------------------------------------------------------
