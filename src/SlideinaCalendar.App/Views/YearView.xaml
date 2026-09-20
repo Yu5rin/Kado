@@ -231,20 +231,33 @@
                         するため。任せると、短い月だけマスが縦に伸びて不揃いになる。
                         高さは入れ物から配られるので、縦に余ったぶんもマスが受け取る
                     -->
-                    <ItemsControl ItemsSource="{Binding Days}">
+                    <ItemsControl ItemsSource="{Binding Days}"
+                                  BorderThickness="1,1,0,0"
+                                  BorderBrush="{DynamicResource LineBrush}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><UniformGrid Rows="5" Columns="7" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="Cell" Margin="0.5" CornerRadius="3" MinHeight="26"
+                                <!--
+                                    マスは線で区切る。帯と日付が続けて並ぶので、
+                                    区切りが無いと隣の日のものか下の週のものか分からない
+                                -->
+                                <Border x:Name="Cell" MinHeight="28"
+                                        BorderThickness="0,0,1,1"
+                                        BorderBrush="{DynamicResource LineBrush}"
                                         Cursor="Hand" ToolTip="{Binding Tooltip}"
                                         Tag="{Binding DataContext,
                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
-                                    <DockPanel>
-                                        <!-- ストリップと同じで、上が inaCalendar、下がそれ以外 -->
+                                    <DockPanel Margin="1,2,1,1">
+                                        <!--
+                                            予定は帯にしてマスの上へまとめ、日付は下に敷く。
+                                            日付を挟んで上下に置いていたら、下の帯が次の週の
+                                            日付とくっついて、どちらの日のものか読めなかった。
+                                            上が inaCalendar、その下がそれ以外
+                                        -->
                                         <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding TopMarks}"
                                                       ItemTemplate="{StaticResource GridMarkTemplate}">
                                             <ItemsControl.ItemsPanel>
@@ -252,7 +265,7 @@
                                             </ItemsControl.ItemsPanel>
                                         </ItemsControl>
 
-                                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding BottomMarks}"
+                                        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding BottomMarks}"
                                                       ItemTemplate="{StaticResource GridMarkTemplate}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
@@ -260,7 +273,7 @@
                                         </ItemsControl>
 
                                         <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                    Typography.NumeralAlignment="Tabular"
                                                    Foreground="{DynamicResource InkBrush}" />
                                     </DockPanel>

@@ -405,6 +405,26 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void 週ビューでも選んだ日に印が付く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        vm.SelectDateCommand.Execute(D(2026, 9, 22));
+
+        // 右ペインとの対応が分かるよう、列の見出しにも印を出す
+        Assert.Equal(D(2026, 9, 22), vm.SelectedDay.Date);
+        Assert.Single(vm.Week.Days, d => d.IsSelected);
+        Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 22)).IsSelected);
+
+        // 週を送っても、印は選んでいる日に付いたまま
+        vm.NextCommand.Execute(null);
+        Assert.Single(vm.Week.Days, d => d.IsSelected);
+        Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 29)).IsSelected);
+    }
+
+    [Fact]
     public void 送ると右ペインの日付も付いてくる()
     {
         using var test = TestWorkspace.Create();

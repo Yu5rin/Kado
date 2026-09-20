@@ -107,7 +107,11 @@
 
         <!-- 日付ヘッダ1つ分 -->
         <DataTemplate x:Key="DayHeaderTemplate">
-            <Border x:Name="Head" Padding="0,5,0,6"
+            <!-- 見出しを押すと、その日を選ぶ。右ペインがその日に入れ替わる -->
+            <Border x:Name="Head" Padding="0,5,0,6" Cursor="Hand"
+                    Background="Transparent"
+                    ToolTip="押すとその日を選びます"
+                    MouseLeftButtonDown="OnDayHeaderClicked"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
                     <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
@@ -166,6 +170,12 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
+                </DataTrigger>
+
+                <!-- 選んでいる日。実働日の塗りより後に置いてこちらを勝たせる -->
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Head" Property="Background"
+                            Value="{DynamicResource CellSelectedBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
