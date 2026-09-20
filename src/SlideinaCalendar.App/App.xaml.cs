@@ -10,6 +10,7 @@ using SlideinaCalendar.App.Settings;
 using SlideinaCalendar.App.Themes;
 using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Data;
+using SlideinaCalendar.Data.Backup;
 using SlideinaCalendar.Presentation;
 using SlideinaCalendar.Presentation.Sync;
 using SlideinaCalendar.Presentation.ViewModels;
@@ -240,6 +241,33 @@ public partial class App : Application
     /// いつも使っているブラウザの画面で、URL を自分で確かめられるほうがよい。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// バックアップで置き換えて、アプリを立ち上げ直す。
+    /// <para>
+    /// 置き換えは接続を閉じてから。開いたまま差し替えると、書き込み待ちの内容と
+    /// 食い違って壊れる。読み直すには立ち上げ直すのが確実で、途中の状態も残らない。
+    /// </para>
+    /// </summary>
+    private void RestoreAndRestart(string backupPath)
+    {
+        _background?.Dispose();
+        _background = null;
+        _connection?.Dispose();
+        _connection = null;
+
+        DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
+
+        if (Environment.ProcessPath is { Length: > 0 } exe)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                UseShellExecute = true,
+            });
+        }
+
+        Shutdown();
+    }
+
     private static void OpenInBrowser(string url)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)

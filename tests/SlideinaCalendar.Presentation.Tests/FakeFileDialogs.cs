@@ -8,6 +8,12 @@ internal sealed class FakeFileDialogs : IFileDialogs
     /// <summary>選ばせたことにするパス。null なら取り消し。</summary>
     public string? FileToPick { get; set; }
 
+    /// <summary>保存先として返すパス。null なら取り消し。</summary>
+    public string? FileToSave { get; set; }
+
+    /// <summary>保存先として渡された既定の名前。</summary>
+    public string? LastSuggestedName { get; private set; }
+
     /// <summary>確認にどう答えるか。</summary>
     public bool Confirms { get; set; } = true;
 
@@ -23,6 +29,12 @@ internal sealed class FakeFileDialogs : IFileDialogs
     {
         WasAskedForFile = true;
         return FileToPick;
+    }
+
+    public string? PickSaveFile(string title, string filter, string suggestedName)
+    {
+        LastSuggestedName = suggestedName;
+        return FileToSave;
     }
 
     public bool Confirm(string title, string message) => Confirms;

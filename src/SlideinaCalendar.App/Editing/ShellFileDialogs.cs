@@ -23,6 +23,19 @@ public sealed class ShellFileDialogs(Func<Window?> ownerProvider) : IFileDialogs
         return dialog.ShowDialog(ownerProvider()) == true ? dialog.FileName : null;
     }
 
+    public string? PickSaveFile(string title, string filter, string suggestedName)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            FileName = suggestedName,
+            OverwritePrompt = true,
+        };
+
+        return dialog.ShowDialog(ownerProvider()) == true ? dialog.FileName : null;
+    }
+
     public bool Confirm(string title, string message) =>
         MessageBox.Show(
             ownerProvider() ?? Application.Current.MainWindow,
