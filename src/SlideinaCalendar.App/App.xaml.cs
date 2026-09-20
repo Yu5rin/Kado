@@ -426,10 +426,10 @@ public partial class App : Application
         Add("表示", BringToFront);
         menu.Items.Add(new System.Windows.Controls.Separator());
 
-        Add("ウィンドウ", () => main.Shell.Mode = ShellMode.Window);
-        Add("画面端に寄せる", () => main.Shell.Mode = ShellMode.Overlay);
-        Add("ピン留め（画面を分割）", () => main.Shell.Mode = ShellMode.Dock);
-        Add("左右を入れ替える", () => main.Shell.ToggleEdgeCommand.Execute(null));
+        Add("ウィンドウ", () => main.Shell.ToWindowCommand.Execute(null));
+        Add("スライド（左端から出す）", () => main.Shell.SlideLeftCommand.Execute(null));
+        Add("スライド（右端から出す）", () => main.Shell.SlideRightCommand.Execute(null));
+        Add("出したまま固定する・やめる", () => main.Shell.TogglePinCommand.Execute(null));
         menu.Items.Add(new System.Windows.Controls.Separator());
 
         Add("いますぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
@@ -445,6 +445,19 @@ public partial class App : Application
 
     private void OnHotKey(MainViewModel main, Shell.HotKeyKind kind)
     {
+        switch (kind)
+        {
+            // 画面端に留めると枠が消える。ここが最後の戻り口になるので、
+            // 前に出すより先に外す
+            case Shell.HotKeyKind.Pin:
+                main.Shell.TogglePinCommand.Execute(null);
+                return;
+
+            case Shell.HotKeyKind.Slide:
+                main.Shell.ToggleSlideCommand.Execute(null);
+                return;
+        }
+
         BringToFront();
 
         // クイック入力の欄へ飛ばす。呼び出してから手で探させない

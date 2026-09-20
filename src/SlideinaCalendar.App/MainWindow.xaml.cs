@@ -57,7 +57,6 @@ public partial class MainWindow : Window
             // 幅でレイアウトを切り替える。同じ UI を縮小して使い回さない（要件書 5.1）
             if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
 
-            TrimToolbar();
         };
         StateChanged += (_, _) => TrackPlacement();
 
@@ -147,14 +146,22 @@ public partial class MainWindow : Window
         _widthsRestored = true;
 
         _sideWidth = vm.SidePanelWidth;
+        _detailWidth = vm.DetailPaneWidth;
         DetailColumn.Width = new GridLength(vm.DetailPaneWidth);
         ApplySidePanel(vm.IsSidePanelOpen);
+
+        ApplyPanes(vm);
 
         vm.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(MainViewModel.IsSidePanelOpen))
             {
                 ApplySidePanel(vm.IsSidePanelOpen);
+            }
+            else if (args.PropertyName is nameof(MainViewModel.IsMainViewOpen)
+                     or nameof(MainViewModel.IsDetailPaneOpen))
+            {
+                ApplyPanes(vm);
             }
         };
     }
@@ -182,34 +189,41 @@ public partial class MainWindow : Window
         SideColumn.Width = new GridLength(0);
     }
 
+    /// <summary>
+    /// 中央と右ペインの出し分け。
+    /// <para>
+    /// 畳むときは列ごと 0 にする。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
+    /// 中央を畳んだときは、右ペインが伸びて残りを受け取る。
+    /// </para>
+    /// </summary>
+    private void ApplyPanes(MainViewModel vm)
+    {
+        if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
+
+        // 中央を畳んだら、右ペインが「*」になって残りを埋める。
+        // ピクセルのままだと、窓を広げたぶんが誰にも行き渡らない
+        DetailColumn.Width = vm switch
+        {
+            { IsDetailPaneOpen: false } => new GridLength(0),
+            { IsMainViewOpen: false } => new GridLength(1, GridUnitType.Star),
+            _ => new GridLength(_detailWidth),
+        };
+
+        DetailColumn.MinWidth = vm.IsDetailPaneOpen ? MainViewModel.MinDetailPaneWidth : 0;
+    }
+
+    /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
+    private double _detailWidth = MainViewModel.DefaultDetailPaneWidth;
+
     /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
     private void SavePaneWidths()
     {
         if (ViewModel is not { } vm) return;
 
         vm.SidePanelWidth = SideColumn.ActualWidth > 0 ? SideColumn.ActualWidth : _sideWidth;
-        vm.DetailPaneWidth = DetailColumn.ActualWidth;
-    }
-
-    /// <summary>
-    /// 狭いときはツールバーの飾りを畳む。
-    /// <para>
-    /// <c>DockPanel</c> は左に詰めたものを先に描くので、場所が残らないぶんは右へ
-    /// はみ出してピンの上に重なる。<b>ピンが押せないとドックを解除できなくなる</b>ので、
-    /// 実働日のバッジのほうを先に引っ込める。左パネルにも同じ数字が出ている。
-    /// </para>
-    /// </summary>
-    private void TrimToolbar()
-    {
-        // ピン・⚙・検索と、年月・送り・ビュー切り替えに要るおおよその幅
-        const double RoomForBadges = 760;
-
-        var show = ActualWidth >= RoomForBadges;
-
-        // 出す条件（データがあるか）は XAML のバインドが持っている。
-        // ここは「狭いから畳む」だけを重ねる
-        WorkingDayBadge.MaxWidth = show ? double.PositiveInfinity : 0;
-        RemainingBadge.MaxWidth = show ? double.PositiveInfinity : 0;
+        vm.DetailPaneWidth = vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0
+            ? DetailColumn.ActualWidth
+            : _detailWidth;
     }
 
     // ------------------------------------------------------------------
@@ -328,6 +342,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
+    /// <summary>
+    /// 出しかたとパネルの選び方を出す。
+    /// <para>⚙ と同じで、右クリック待ちではなく左クリックで開く。</para>
+    /// </summary>
+    private void OnLayoutMenuClicked(object sender, RoutedEventArgs e) => OnSettingsClicked(sender, e);
+
     private void OnSettingsClicked(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { ContextMenu: { } menu } button) return;

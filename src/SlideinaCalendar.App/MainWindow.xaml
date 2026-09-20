@@ -154,7 +154,21 @@
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-            <DockPanel LastChildFill="False" Margin="12,9">
+            <!--
+                左（年月・送り・ビュー切り替え・実働日）と右（検索・同期・ピン・設定）を
+                別の列に分ける。
+
+                ひとつの DockPanel に混ぜていたら、窓が狭いときに左の中身が右へ
+                はみ出して、ピンや設定の上に重なった。右側が押せないと、画面端に
+                留めたあと戻す口が無くなる。列を分ければ、右は必ず場所を確保できる。
+            -->
+            <Grid Margin="12,9">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <DockPanel Grid.Column="0" LastChildFill="False" ClipToBounds="True">
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
                         Command="{Binding ToggleSidePanelCommand}" ToolTip="サイドパネルの表示切替">
@@ -173,6 +187,7 @@
                 </TextBlock>
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
+                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
                         Command="{Binding PreviousCommand}" ToolTip="前の月">
                     <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -186,10 +201,12 @@
                 </Button>
 
                 <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0"
+                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
                         Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}" />
 
                 <!-- ビュー切替（.seg）。区切り線は右側、最後だけ引かない -->
                 <Border DockPanel.Dock="Left" Margin="10,0,0,0" CornerRadius="5" ClipToBounds="True"
+                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                     <!--
                         粗いほうから細かいほうへ並べる。Ctrl＋ホイールはこの並びを
@@ -235,12 +252,8 @@
                 <!--
                     実働日バッジ（.wdchip）。左パネルを閉じても実働日が読めるようにここに置く。
 
-                    狭いときは畳む。DockPanel は左に詰めたものを先に描くので、残らない
-                    ぶんは右へはみ出してピンの上に重なる。ピンが押せないと、ドックを
-                    解除できなくなる
                 -->
                 <Border DockPanel.Dock="Left" Margin="12,0,0,0" CornerRadius="5" Padding="10,3"
-                        x:Name="WorkingDayBadge"
                         VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                         Visibility="{Binding HasWorkingDayData, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
@@ -251,7 +264,6 @@
                     </TextBlock>
                 </Border>
                 <Border DockPanel.Dock="Left" Margin="6,0,0,0" CornerRadius="5" Padding="10,3"
-                        x:Name="RemainingBadge"
                         VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                         Visibility="{Binding HasRemainingWorkingDays, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
@@ -266,7 +278,10 @@
                            Foreground="{DynamicResource Ink3Brush}"
                            Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
 
+                </DockPanel>
+
                 <!-- 右端。設定・ピン・同期・検索の順に並べる（右から左へ積む） -->
+                <DockPanel Grid.Column="1" LastChildFill="False">
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         ToolTip="取り込みと設定" Click="OnSettingsClicked">
                     <Button.ContextMenu>
@@ -326,6 +341,51 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                     <Path Data="{StaticResource IconSettings}" Stretch="Uniform" Width="16" Height="16"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Button>
+
+                <!--
+                    出しかたと、出すパネルの選び方。
+                    ドック中は枠が消えるので、ここが唯一の戻り口になる
+                -->
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
+                        Margin="0,0,2,0" ToolTip="{Binding Shell.ModeLabel}"
+                        Click="OnLayoutMenuClicked">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="ウィンドウ" Command="{Binding Shell.ToWindowCommand}"
+                                      IsChecked="{Binding Shell.IsWindowMode, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <Separator />
+                            <MenuItem Header="スライド（左端から出す）"
+                                      Command="{Binding Shell.SlideLeftCommand}"
+                                      ToolTip="普段は隠れていて、画面の左端にマウスを留めると出てきます" />
+                            <MenuItem Header="スライド（右端から出す）"
+                                      Command="{Binding Shell.SlideRightCommand}"
+                                      ToolTip="普段は隠れていて、画面の右端にマウスを留めると出てきます" />
+                            <Separator />
+                            <MenuItem Header="出したまま固定する（画面を分割）"
+                                      Command="{Binding Shell.TogglePinCommand}"
+                                      IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
+                                      IsCheckable="True"
+                                      InputGestureText="Ctrl+Alt+P" />
+                            <Separator />
+                            <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
+                                      Command="{Binding ToggleSidePanelCommand}"
+                                      IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <MenuItem Header="中央（カレンダー）"
+                                      Command="{Binding ToggleMainViewCommand}"
+                                      IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <MenuItem Header="右パネル（予定・タスク）"
+                                      Command="{Binding ToggleDetailPaneCommand}"
+                                      IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <Path Data="{StaticResource IconPanes}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
@@ -428,7 +488,8 @@
                         </Border>
                     </Popup>
                 </Grid>
-            </DockPanel>
+                </DockPanel>
+            </Grid>
         </Border>
 
         <!--
@@ -612,7 +673,9 @@
                           Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}" />
 
             <!-- 中央（.main） -->
-            <DockPanel Grid.Column="2" Background="{DynamicResource BackgroundBrush}">
+            <DockPanel Grid.Column="2" x:Name="MainPane"
+                       Background="{DynamicResource BackgroundBrush}"
+                       Visibility="{Binding IsMainViewOpen, Converter={StaticResource BoolToVisibility}}">
                 <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
                 <Grid>
                     <views:MonthView DataContext="{Binding Month}"
@@ -642,7 +705,9 @@
             <GridSplitter Grid.Column="3" Style="{StaticResource PaneSplitterStyle}" />
 
             <!-- 右ペイン（.detail 296px） -->
-            <Border Grid.Column="4" Background="{DynamicResource PanelBrush}"
+            <Border Grid.Column="4" x:Name="DetailPane"
+                    Visibility="{Binding IsDetailPaneOpen, Converter={StaticResource BoolToVisibility}}"
+                    Background="{DynamicResource PanelBrush}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
                     DataContext="{Binding SelectedDay}">
                 <Grid>

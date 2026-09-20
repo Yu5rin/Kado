@@ -42,6 +42,10 @@ public sealed class ShellViewModel : ObservableObject
         ToOverlayCommand = new RelayCommand(() => Mode = ShellMode.Overlay);
         ToggleEdgeCommand = new RelayCommand(
             () => Edge = _edge == DockEdge.Left ? DockEdge.Right : DockEdge.Left);
+        SlideLeftCommand = new RelayCommand(() => SlideTo(DockEdge.Left));
+        SlideRightCommand = new RelayCommand(() => SlideTo(DockEdge.Right));
+        ToggleSlideCommand = new RelayCommand(
+            () => Mode = _mode == ShellMode.Window ? ShellMode.Overlay : ShellMode.Window);
         ShowEventsCommand = new RelayCommand(() => Tab = SidebarTab.Events);
         ShowTasksCommand = new RelayCommand(() => Tab = SidebarTab.Tasks);
     }
@@ -63,7 +67,7 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref _mode, value)) return;
 
             Raise(nameof(IsWindowMode), nameof(IsOverlayMode), nameof(IsPinned),
-                nameof(IsAtEdge), nameof(PinLabel));
+                nameof(IsAtEdge), nameof(PinLabel), nameof(ModeLabel));
             ModeChanged?.Invoke(this, value);
         }
     }
@@ -75,7 +79,7 @@ public sealed class ShellViewModel : ObservableObject
         {
             if (!Set(ref _edge, value)) return;
 
-            Raise(nameof(IsAtLeft), nameof(IsAtRight));
+            Raise(nameof(IsAtLeft), nameof(IsAtRight), nameof(ModeLabel));
             EdgeChanged?.Invoke(this, value);
         }
     }
@@ -155,8 +159,16 @@ public sealed class ShellViewModel : ObservableObject
 
     /// <summary>ピンボタンの説明。押すと何が起きるかを書く。</summary>
     public string PinLabel => IsPinned
-        ? "ピンを外す（画面の分割をやめ、元の出しかたに戻す）"
-        : "ピン留めする（画面端に寄せて画面を分割し、他のウィンドウと重ならないようにする）";
+        ? "ピンを外す（スライドに戻す。Ctrl＋Alt＋P）"
+        : "ピン留めする（出したまま固定し、画面を分割する。Ctrl＋Alt＋P）";
+
+    /// <summary>いまの出しかたの名前。ボタンに出す。</summary>
+    public string ModeLabel => _mode switch
+    {
+        ShellMode.Overlay => _edge == DockEdge.Left ? "スライド（左）" : "スライド（右）",
+        ShellMode.Dock => _edge == DockEdge.Left ? "固定（左）" : "固定（右）",
+        _ => "ウィンドウ",
+    };
 
     /// <summary>いまの居場所。終了時に控える。</summary>
     public DockPlacement Placement(string? monitorId = null) =>
@@ -176,7 +188,9 @@ public sealed class ShellViewModel : ObservableObject
     {
         if (_mode == ShellMode.Dock)
         {
-            Mode = _beforePin;
+            // 外したらスライドに戻す。ウィンドウから留めた場合も、そのまま
+            // 画面端に居続けるほうが「出しておきたくて留めた」流れに合う
+            Mode = _beforePin == ShellMode.Window ? ShellMode.Overlay : _beforePin;
             return;
         }
 
@@ -191,6 +205,26 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand ToOverlayCommand { get; }
 
     public RelayCommand ToggleEdgeCommand { get; }
+
+    /// <summary>左端のスライドにする。</summary>
+    public RelayCommand SlideLeftCommand { get; }
+
+    /// <summary>右端のスライドにする。</summary>
+    public RelayCommand SlideRightCommand { get; }
+
+    /// <summary>ウィンドウとスライドを行き来する。</summary>
+    public RelayCommand ToggleSlideCommand { get; }
+
+    /// <summary>
+    /// その辺のスライドにする。
+    /// <para>ピン留め中に辺だけ変えたいこともあるので、留めている状態は崩さない。</para>
+    /// </summary>
+    private void SlideTo(DockEdge edge)
+    {
+        Edge = edge;
+
+        if (_mode == ShellMode.Window) Mode = ShellMode.Overlay;
+    }
 
     public RelayCommand ShowEventsCommand { get; }
 
