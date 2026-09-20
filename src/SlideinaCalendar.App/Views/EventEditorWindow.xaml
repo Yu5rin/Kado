@@ -93,7 +93,7 @@
                     -->
                     <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                               ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
-                              TextSearch.TextPath="Text"
+                              TextSearch.TextPath="Time"
                               Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
                               SelectionChanged="OnTimeSelected"
                               PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel"
@@ -133,7 +133,7 @@
                         <TextBlock Text="終了時刻" Style="{StaticResource FieldLabelStyle}" />
                         <ComboBox Tag="End" Width="86" Style="{StaticResource TimeComboBoxStyle}"
                                   ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
-                                  TextSearch.TextPath="Text"
+                                  TextSearch.TextPath="Time"
                                   Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
                                   SelectionChanged="OnTimeSelected"
                                   PreviewKeyDown="OnTimeKeyDown" PreviewMouseWheel="OnTimeWheel" />
@@ -141,36 +141,48 @@
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <StackPanel Margin="0,0,10,0">
+            <!--
+                3つ横に並べるとカレンダー名が見切れる。2行に分け、
+                カレンダーは残り幅いっぱいに伸ばす（名前が長いことがある）
+            -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="176" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
                     <TextBlock Text="繰り返し" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox Width="176" Style="{StaticResource FieldComboBoxStyle}"
+                    <ComboBox Style="{StaticResource FieldComboBoxStyle}"
                               ItemsSource="{Binding RecurrenceOptions}"
                               DisplayMemberPath="Label" SelectedValuePath="Kind"
                               SelectedValue="{Binding Recurrence}" />
                 </StackPanel>
 
-                <StackPanel Margin="0,0,10,0">
-                    <TextBlock Text="通知" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox Width="140" Style="{StaticResource FieldComboBoxStyle}"
-                              ItemsSource="{Binding NotifyOptions}"
-                              SelectedValuePath="Value" SelectedValue="{Binding Notify}"
-                              ToolTip="ふつうはカレンダー側（左の一覧のベル）で決めます">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                </StackPanel>
-
-                <StackPanel Visibility="{Binding Calendars, Converter={StaticResource NullToVisibility}}">
+                <StackPanel Grid.Column="2"
+                            Visibility="{Binding Calendars, Converter={StaticResource NullToVisibility}}">
                     <TextBlock Text="カレンダー" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox Width="176" Style="{StaticResource FieldComboBoxStyle}"
+                    <ComboBox Style="{StaticResource FieldComboBoxStyle}"
                               ItemsSource="{Binding Calendars}"
                               SelectedValuePath="Id"
                               SelectedValue="{Binding CalendarId}" />
                 </StackPanel>
+            </Grid>
+
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="通知" Style="{StaticResource FieldLabelStyle}" />
+                <ComboBox Width="176" HorizontalAlignment="Left"
+                          Style="{StaticResource FieldComboBoxStyle}"
+                          ItemsSource="{Binding NotifyOptions}"
+                          SelectedValuePath="Value" SelectedValue="{Binding Notify}"
+                          ToolTip="ふつうはカレンダー側（左の一覧のベル）で決めます">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
 
             <TextBlock Text="場所" Style="{StaticResource FieldLabelStyle}" />
