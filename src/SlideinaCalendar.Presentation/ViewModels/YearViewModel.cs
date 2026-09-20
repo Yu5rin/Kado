@@ -32,14 +32,15 @@ public sealed class YearDayViewModel : ObservableObject
 
     internal YearDayViewModel(
         DateOnly date, bool hasData, bool isWorkingDay, bool isHoliday, bool isToday,
-        IReadOnlyList<string?> marks)
+        IReadOnlyList<string?> topMarks, IReadOnlyList<string?> bottomMarks)
     {
         Date = date;
         HasWorkingDayData = hasData;
         IsWorkingDay = isWorkingDay;
         IsHoliday = isHoliday;
         IsToday = isToday;
-        Marks = marks;
+        TopMarks = topMarks;
+        BottomMarks = bottomMarks;
     }
 
     public DateOnly Date { get; }
@@ -59,17 +60,23 @@ public sealed class YearDayViewModel : ObservableObject
     public bool IsToday { get; }
 
     /// <summary>
-    /// この日に入っている予定の色。
+    /// 日付の<b>上</b>に重ねる色。「inaCalendar」に入っているものだけ。
     /// <para>
-    /// 会社配布のカレンダーと同じで、日付の上下に細い帯を重ねる。狭いので
-    /// タイトルは出せないが、<b>詰まっている日がどこかは一目で分かる</b>。
+    /// 仕様期限などの区切りは、自分の予定とは意味が違う。混ぜて並べると、どれが
+    /// 会社の決めた日でどれが自分の用事なのか見分けられない。上下に分けて置く。
     /// </para>
     /// <para>null は色の決まっていないカレンダー。表示側が既定の色を使う。</para>
     /// </summary>
-    public IReadOnlyList<string?> Marks { get; }
+    public IReadOnlyList<string?> TopMarks { get; }
+
+    /// <summary>日付の<b>下</b>に重ねる色。「inaCalendar」以外の予定。</summary>
+    public IReadOnlyList<string?> BottomMarks { get; }
+
+    /// <summary>この日に入っている予定の数。</summary>
+    public int MarkCount => TopMarks.Count + BottomMarks.Count;
 
     /// <summary>予定が入っているか。</summary>
-    public bool HasEvents => Marks.Count > 0;
+    public bool HasEvents => MarkCount > 0;
 
     /// <summary>選んでいる日か。押すたびに動く。</summary>
     public bool IsSelected
@@ -95,7 +102,7 @@ public sealed class YearDayViewModel : ObservableObject
                 : !HasWorkingDayData ? null
                 : IsWorkingDay ? "稼働" : "休業";
 
-            var events = Marks.Count > 0 ? $"予定 {Marks.Count} 件" : null;
+            var events = MarkCount > 0 ? $"予定 {MarkCount} 件" : null;
 
             var parts = new[] { day, state, events }.Where(x => x is { Length: > 0 });
 
@@ -170,8 +177,8 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>幅が分からないうちに使う幅。</summary>
     public const double DefaultDayWidth = 20;
 
-    /// <summary>1マスに重ねる予定の印の上限。増やすと日付が埋まる。</summary>
-    private const int MaxMarksPerDay = 4;
+    /// <summary>日付の上下それぞれに重ねる印の上限。増やすと日付が埋まる。</summary>
+    private const int MaxMarksPerSide = 2;
 
     private readonly CalendarWorkspace _workspace;
     private readonly ICalendarSources? _sources;
@@ -416,13 +423,19 @@ public sealed class YearViewModel : ObservableObject
         // 1年ぶんまとめて引く。月ごとに引くと同じ表を12回なめることになる
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
 
+        // 「inaCalendar」の予定は日付の上、それ以外は下に置く
+        var workingDayCalendars = _workspace.WorkingDayCalendars()
+            .Select(c => c.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
         var months = new List<MonthStripViewModel>(12);
 
         for (var i = 0; i < 12; i++)
         {
             var month = from.AddMonths(i);
 
-            months.Add(BuildMonth(month.Year, month.Month, workingDays, eventsByDate));
+            months.Add(BuildMonth(
+                month.Year, month.Month, workingDays, eventsByDate, workingDayCalendars));
         }
 
         Months = months;
@@ -458,7 +471,8 @@ public sealed class YearViewModel : ObservableObject
 
     private MonthStripViewModel BuildMonth(
         int year, int month, WorkingDayCalendar workingDays,
-        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate)
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate,
+        IReadOnlySet<string> workingDayCalendars)
     {
         var last = DateTime.DaysInMonth(year, month);
         var days = new List<YearDayViewModel>(last);
@@ -473,7 +487,8 @@ public sealed class YearViewModel : ObservableObject
                 workingDays.IsWorkingDay(date),
                 _workspace.Holidays.NameOf(date) is not null,
                 date == _today,
-                MarksOn(date, eventsByDate)));
+                MarksOn(date, eventsByDate, workingDayCalendars, inside: true),
+                MarksOn(date, eventsByDate, workingDayCalendars, inside: false)));
         }
 
         // 揃っていない月に数を出すと、本当より少ない数を正しい数として読んでしまう
@@ -487,20 +502,42 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>
     /// その日に重ねる印の色。
     /// <para>
-    /// 日付の行に出すマイルストーンは含めない。あちらは別に出しているので、
-    /// ここにも入れると同じものが二度数えられる。
+    /// <paramref name="inside"/> が true なら「inaCalendar」に入っているものだけ、
+    /// false ならそれ以外。仕様期限などの区切りと自分の用事は意味が違うので、
+    /// 日付の上下に分けて置く。
     /// </para>
     /// </summary>
     private IReadOnlyList<string?> MarksOn(
-        DateOnly date, IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate)
+        DateOnly date,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate,
+        IReadOnlySet<string> workingDayCalendars,
+        bool inside)
     {
         if (!eventsByDate.TryGetValue(date, out var scheduled)) return [];
 
         return scheduled
-            .Where(e => !CalendarWorkspace.IsMilestoneMark(e.Source))
-            .Where(e => _sources?.IncludesEvent(e.Source) ?? true)
-            .Take(MaxMarksPerDay)
+            .Where(e => IsWorkingDayCalendar(e.Source.CalendarId, workingDayCalendars) == inside)
+            .Where(Shown)
+            .Take(MaxMarksPerSide)
             .Select(e => _sources?.ColorOf(e.Source.CalendarId))
             .ToArray();
     }
+
+    /// <summary>
+    /// 左パネルのチェックを通ったものか。
+    /// <para>
+    /// <c>IncludesEvent</c> はマイルストーンを外す。日付の行に出すものを予定の並びにも
+    /// 出さないためだが、<b>年ビューには日付の行が無い</b>。外したままだと仕様期限が
+    /// どこにも出ないので、こちらでは両方を見る。
+    /// </para>
+    /// </summary>
+    private bool Shown(ScheduledEvent scheduled)
+    {
+        if (_sources is not { } sources) return true;
+
+        return sources.IncludesEvent(scheduled.Source) || sources.IncludesMilestone(scheduled.Source);
+    }
+
+    private static bool IsWorkingDayCalendar(string? calendarId, IReadOnlySet<string> ids) =>
+        calendarId is { Length: > 0 } id && ids.Contains(id);
 }
