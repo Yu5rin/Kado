@@ -353,6 +353,22 @@ public partial class App : Application
         if (window.DataContext is not MainViewModel main || _dockStore is null) return;
 
         _shellController = new Shell.ShellController(window, main.Shell, _dockStore);
+
+        // 削れなかったときは理由を出す。黙って諦めると、押しても何も起きないとしか
+        // 見えない。同じ理由を何度も出さないよう、1回だけにする
+        var dockComplaint = (string?)null;
+        _shellController.DockFailed += (_, reason) =>
+        {
+            if (string.Equals(dockComplaint, reason, StringComparison.Ordinal)) return;
+
+            dockComplaint = reason;
+
+            MessageBox.Show(
+                window,
+                $"{reason}\n\n画面端には寄せましたが、他のウィンドウを最大化すると重なります。",
+                "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Warning);
+        };
+
         _shellController.Restore();
 
         _tray = new Shell.TrayIcon("SlideinaCalendar", BuildTrayMenu(main));

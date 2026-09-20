@@ -37,18 +37,30 @@
                     BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                 <UniformGrid Rows="1" Columns="4">
                     <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Month}" />
+                                 IsChecked="{Binding CurrentView, Mode=OneWay,
+                                             Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Month}"
+                                 Command="{Binding SwitchViewCommand}"
+                                 CommandParameter="Month" />
                     <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Week}" />
+                                 IsChecked="{Binding CurrentView, Mode=OneWay,
+                                             Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Week}"
+                                 Command="{Binding SwitchViewCommand}"
+                                 CommandParameter="Week" />
                     <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Day}" />
+                                 IsChecked="{Binding CurrentView, Mode=OneWay,
+                                             Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Day}"
+                                 Command="{Binding SwitchViewCommand}"
+                                 CommandParameter="Day" />
                     <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
                                  BorderThickness="0"
-                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Agenda}" />
+                                 IsChecked="{Binding CurrentView, Mode=OneWay,
+                                             Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Agenda}"
+                                 Command="{Binding SwitchViewCommand}"
+                                 CommandParameter="Agenda" />
                 </UniformGrid>
             </Border>
         </Border>

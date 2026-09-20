@@ -201,7 +201,8 @@
         </Border>
 
         <Grid>
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource LineBrush}">
+            <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto"
+                          Background="{DynamicResource LineBrush}">
                 <ItemsControl x:Name="Rows" ItemsSource="{Binding Rows}"
                               ItemTemplate="{StaticResource AgendaRowTemplate}" />
             </ScrollViewer>

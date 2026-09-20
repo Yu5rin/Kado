@@ -23,6 +23,15 @@
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
 
+        <!--
+            カレンダー表示の印。マスが小さいので帯ではなく点にする。
+            横に並べて、何件あるかも分かるようにする
+        -->
+        <DataTemplate x:Key="GridMarkTemplate">
+            <Ellipse Width="3" Height="3" Margin="0.5,0.5,0.5,0.5"
+                     Fill="{Binding Converter={StaticResource EventColorBrush}}" />
+        </DataTemplate>
+
         <!-- 予定1件ぶんの帯。日付の上下に重ねる -->
         <DataTemplate x:Key="DayMarkTemplate">
             <Border Height="2" CornerRadius="1" Margin="0,0,0,1"
@@ -211,24 +220,38 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="Cell" Width="26" Height="22" CornerRadius="3"
+                                <Border x:Name="Cell" Width="26" Height="26" CornerRadius="3"
                                         Cursor="Hand" ToolTip="{Binding Tooltip}"
                                         Tag="{Binding DataContext,
                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
                                     <StackPanel VerticalAlignment="Center">
+                                        <!-- ストリップと同じで、上が inaCalendar、下がそれ以外 -->
+                                        <ItemsControl ItemsSource="{Binding TopMarks}"
+                                                      HorizontalAlignment="Center"
+                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+
                                         <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
                                                    HorizontalAlignment="Center" LineHeight="13"
                                                    Typography.NumeralAlignment="Tabular"
                                                    Foreground="{DynamicResource InkBrush}" />
 
-                                        <!-- 予定が入っている日に点を添える。日付を隠さない -->
-                                        <Ellipse Width="3" Height="3" Margin="0,1,0,0"
-                                                 HorizontalAlignment="Center"
-                                                 Fill="{DynamicResource AccentBrush}"
-                                                 Visibility="{Binding HasEvents,
-                                                              Converter={StaticResource BoolToVisibility}}" />
+                                        <ItemsControl ItemsSource="{Binding BottomMarks}"
+                                                      HorizontalAlignment="Center"
+                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
                                     </StackPanel>
                                 </Border>
 
@@ -271,12 +294,18 @@
                     <StackPanel Orientation="Horizontal">
                         <RadioButton Content="ストリップ" Style="{StaticResource SegmentButtonStyle}"
                                      ToolTip="1行1か月。休みの並びと繁閑が縦に揃って読めます"
-                                     IsChecked="{Binding Layout, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Strip}" />
+                                     IsChecked="{Binding Layout, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Strip}"
+                                     Command="{Binding SetLayoutCommand}"
+                                     CommandParameter="Strip" />
                         <RadioButton Content="カレンダー" Style="{StaticResource SegmentButtonStyle}"
                                      BorderThickness="0" ToolTip="ミニカレンダー12枚。日付を引き当てる用途"
-                                     IsChecked="{Binding Layout, Converter={StaticResource EnumToBool},
-                                                 ConverterParameter=Grid}" />
+                                     IsChecked="{Binding Layout, Mode=OneWay,
+                                                 Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Grid}"
+                                     Command="{Binding SetLayoutCommand}"
+                                     CommandParameter="Grid" />
                     </StackPanel>
                 </Border>
 

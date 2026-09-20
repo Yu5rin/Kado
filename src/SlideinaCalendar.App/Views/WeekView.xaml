@@ -220,7 +220,7 @@
                 <Border DockPanel.Dock="Left" Width="46" />
                 <!-- 下のスクロールバーぶん。空けないと列が横にずれる -->
                 <Border DockPanel.Dock="Right"
-                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+                        Width="{DynamicResource ScrollBarThickness}" />
                 <ItemsControl ItemsSource="{Binding Days}" ItemTemplate="{StaticResource DayHeaderTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><UniformGrid Rows="1" Columns="7" /></ItemsPanelTemplate>
@@ -237,7 +237,7 @@
                            TextAlignment="Right" Padding="0,4,5,0"
                            Foreground="{DynamicResource Ink3Brush}" />
                 <Border DockPanel.Dock="Right"
-                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+                        Width="{DynamicResource ScrollBarThickness}" />
                 <ItemsControl ItemsSource="{Binding Days}" ItemTemplate="{StaticResource AllDayCellTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><UniformGrid Rows="1" Columns="7" /></ItemsPanelTemplate>
