@@ -192,6 +192,8 @@ public partial class App : Application
 
             // 起動したときに一度だけ確かめる。最新なら何も出さない
             _ = CheckForUpdateAsync(showWhenLatest: false);
+
+            WatchForResume(window);
         }
         catch (Exception ex)
         {
@@ -354,6 +356,33 @@ public partial class App : Application
         main.Shell.ModeChanged += (_, _) => _shellController?.Save();
         main.Shell.EdgeChanged += (_, _) => _shellController?.Save();
         main.Shell.DockWidthChanged += (_, _) => _shellController?.Save();
+    }
+
+    /// <summary>
+    /// スリープから戻ったら、すぐ追いつく（要件書 7.5）。
+    /// <para>
+    /// 眠っているあいだタイマーは止まっている。起きたあと次の1分を待つと、その間に
+    /// 知らせるはずだった予定が遅れる。<see cref="ReminderService"/> は「知らせる時刻を
+    /// 過ぎていて、まだ始まっていないもの」を出す作りなので、起こしてやれば取り戻せる。
+    /// </para>
+    /// <para>
+    /// この知らせは UI のスレッドには来ないので、渡し直してから触る。
+    /// </para>
+    /// </summary>
+    private void WatchForResume(MainWindow window)
+    {
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        Exit += (_, _) => Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+
+        void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs args)
+        {
+            if (args.Mode != Microsoft.Win32.PowerModes.Resume) return;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (window.DataContext is MainViewModel resumed) resumed.UpdateNow(DateTime.Now);
+            });
+        }
     }
 
     /// <summary>トレイのメニュー（要件書 7.4）。</summary>
