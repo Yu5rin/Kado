@@ -86,6 +86,17 @@
 
             <Border Height="18" />
 
+            <!-- 数え方 -->
+            <TextBlock Text="日数の数え方" Style="{StaticResource SectionHeadStyle}" />
+
+            <ComboBox Style="{StaticResource FieldComboBoxStyle}"
+                      ItemsSource="{Binding DayCounts}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                      SelectedValuePath="Value" SelectedValue="{Binding CountInCalendarDays}" />
+            <TextBlock Text="期限までの残り・遅れ・済んだタスクの結果に効きます。今月の実働日数と実働日計算は、いつも実働日で数えます。"
+                       Style="{StaticResource FieldNoteStyle}" />
+
+            <Border Height="18" />
+
             <!-- 時間軸 -->
             <TextBlock Text="週ビュー・日ビュー" Style="{StaticResource SectionHeadStyle}" />
 

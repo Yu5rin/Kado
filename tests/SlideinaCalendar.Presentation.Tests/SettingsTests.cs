@@ -263,4 +263,33 @@ public class SettingsTests
 
         Assert.False(main.Week.ShowNowLine);
     }
+
+    [Fact]
+    public void 暦日で数える設定は期限の表記に効く()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 18), settings: settings);
+
+        // 9/18 から 9/24 まで。実働日なら1日（あいだが3連休）、暦では6日
+        Assert.Equal("残り 1実働日", test.Workspace.DueFormatter
+            .Format(new DateOnly(2026, 9, 24), new DateOnly(2026, 9, 18)).Text);
+
+        settings.CountInCalendarDays = true;
+
+        Assert.Equal("残り 6日", test.Workspace.DueFormatter
+            .Format(new DateOnly(2026, 9, 24), new DateOnly(2026, 9, 18)).Text);
+
+        // 画面も引き直されている
+        Assert.NotNull(main.SelectedDay);
+    }
+
+    [Fact]
+    public void 数え方は次に開いたときも残る()
+    {
+        using var test = TestWorkspace.Create();
+        new AppSettings(test.Workspace.Settings) { CountInCalendarDays = true };
+
+        Assert.True(new AppSettings(test.Workspace.Settings).CountInCalendarDays);
+    }
 }

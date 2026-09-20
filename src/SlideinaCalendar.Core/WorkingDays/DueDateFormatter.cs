@@ -16,7 +16,7 @@ namespace SlideinaCalendar.Core.WorkingDays;
 /// 境界規則は<b>今日は数えず、期限日は数える</b>。データ範囲の内外が混在する場合は暦日側に倒す。
 /// </para>
 /// </summary>
-public sealed class DueDateFormatter(WorkingDayMath math)
+public sealed class DueDateFormatter(WorkingDayMath math, bool countInCalendarDays = false)
 {
     private readonly WorkingDayMath _math =
         math ?? throw new ArgumentNullException(nameof(math));
@@ -24,6 +24,19 @@ public sealed class DueDateFormatter(WorkingDayMath math)
     /// <summary>カレンダーから直接組み立てる場合の簡易コンストラクタ。</summary>
     public DueDateFormatter(WorkingDayCalendar calendar)
         : this(new WorkingDayMath(calendar)) { }
+
+    /// <summary>
+    /// 暦日で数えるか。
+    /// <para>
+    /// 実働日で数えるのがこのアプリの既定だが、暦のとおりに数えたい人もいる。
+    /// 立てると、実働日データがあっても土日や休みを飛ばさずに数える。
+    /// </para>
+    /// <para>
+    /// <b>実働日計算のほうは、この設定に関わらず常に実働日で数える。</b>
+    /// 実働日を数えるための道具なので、暦日にしては用をなさない。
+    /// </para>
+    /// </summary>
+    public bool CountInCalendarDays { get; } = countInCalendarDays;
 
     private WorkingDayCalendar Calendar => _math.Calendar;
 
@@ -42,7 +55,9 @@ public sealed class DueDateFormatter(WorkingDayMath math)
 
         // 2. 両端が実働日データの範囲に収まっているときだけ実働日で数える。
         //    片側でも範囲外なら数え間違えるので、混在は暦日側に倒す。
-        if (Calendar.HasDataFor(due) && Calendar.HasDataFor(today)
+        //    暦日で数える設定なら、ここは通さない。
+        if (!CountInCalendarDays
+            && Calendar.HasDataFor(due) && Calendar.HasDataFor(today)
             && _math.PreviousWorkingDayOrSame(due) is { } effective)
         {
             var snapped = effective != due;
@@ -101,8 +116,10 @@ public sealed class DueDateFormatter(WorkingDayMath math)
     /// <param name="completed">済ませた日。</param>
     public DoneText FormatDone(DateOnly due, DateOnly completed)
     {
-        // 期限が非稼働日なら、期限の表記と同じく直前の実働日へ寄せて数える
-        var effective = Calendar.HasDataFor(due) && _math.PreviousWorkingDayOrSame(due) is { } snapped
+        // 期限が非稼働日なら、期限の表記と同じく直前の実働日へ寄せて数える。
+        // 暦日で数えるときは寄せない。暦のとおりに見たいということなので
+        var effective = !CountInCalendarDays
+            && Calendar.HasDataFor(due) && _math.PreviousWorkingDayOrSame(due) is { } snapped
             ? snapped
             : due;
 
@@ -115,7 +132,8 @@ public sealed class DueDateFormatter(WorkingDayMath math)
         var (from, to) = late ? (effective, completed) : (completed, effective);
 
         // 両端が範囲に入っているときだけ実働日で数える
-        if (Calendar.HasDataFor(from) && Calendar.HasDataFor(to)
+        if (!CountInCalendarDays
+            && Calendar.HasDataFor(from) && Calendar.HasDataFor(to)
             && _math.CountBetween(from, to) is { } workingDays && workingDays >= 1)
         {
             return new DoneText(

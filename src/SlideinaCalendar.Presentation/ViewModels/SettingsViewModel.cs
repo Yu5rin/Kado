@@ -114,6 +114,26 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>日数の数え方。実働日か暦日か。</summary>
+    public IReadOnlyList<SettingChoice<bool>> DayCounts { get; } =
+    [
+        new(false, "実働日で数える"),
+        new(true, "暦日で数える"),
+    ];
+
+    /// <summary>暦日で数えるか。</summary>
+    public bool CountInCalendarDays
+    {
+        get => _settings.CountInCalendarDays;
+        set
+        {
+            if (_settings.CountInCalendarDays == value) return;
+
+            _settings.CountInCalendarDays = value;
+            Raise();
+        }
+    }
+
     public CalendarView StartupView
     {
         get => _settings.StartupView;

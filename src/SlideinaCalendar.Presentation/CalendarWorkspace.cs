@@ -104,7 +104,29 @@ public sealed class CalendarWorkspace
         _workingDays = WorkingDayMarks.Overlay(WorkingDayStore.Load(), RebuildFromMarks());
 
         WorkingDayMath = new WorkingDayMath(_workingDays);
-        DueFormatter = new DueDateFormatter(WorkingDayMath);
+        DueFormatter = new DueDateFormatter(WorkingDayMath, _countInCalendarDays);
+    }
+
+    private bool _countInCalendarDays;
+
+    /// <summary>
+    /// 日数を暦日で数えるか。設定から渡される。
+    /// <para>
+    /// 期限までの残り・遅れ・済んだタスクの結果に効く。<b>実働日そのものの数
+    /// （今月の実働日数や通し番号）は、この設定に関わらず実働日のまま。</b>
+    /// </para>
+    /// </summary>
+    public bool CountInCalendarDays
+    {
+        get => _countInCalendarDays;
+        set
+        {
+            if (_countInCalendarDays == value) return;
+
+            _countInCalendarDays = value;
+            DueFormatter = new DueDateFormatter(WorkingDayMath, value);
+            NotifyChanged();
+        }
     }
 
     /// <summary>「inaCalendar」に入っている印から稼働日を組み立てる。</summary>
