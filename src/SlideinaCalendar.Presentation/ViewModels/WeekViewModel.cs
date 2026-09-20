@@ -166,6 +166,9 @@ public sealed class WeekViewModel : ObservableObject
 
     /// <summary>最後に受け取った「いま」。高さが変わったときに引き直すために控える。</summary>
     private TimeOnly? _now;
+
+    /// <summary>設定で決め打ちにされた1時間の高さ。0 なら画面に合わせる。</summary>
+    private readonly double _fixedHourHeight;
     private readonly DayOfWeek _weekStart;
 
     private DateOnly _anchor;
@@ -174,9 +177,12 @@ public sealed class WeekViewModel : ObservableObject
 
     public WeekViewModel(CalendarWorkspace workspace, DateOnly anchor, DateOnly today,
         DayOfWeek weekStart = DayOfWeek.Sunday, ICalendarSources? sources = null,
-        TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
+        TimeOnly? dayStart = null, TimeOnly? dayEnd = null, double fixedHourHeight = 0)
     {
-        _timeline = new TimelineBuilder(workspace, sources, dayStart, dayEnd);
+        _fixedHourHeight = fixedHourHeight;
+        _timeline = new TimelineBuilder(
+            workspace, sources, dayStart, dayEnd,
+            fixedHourHeight > 0 ? fixedHourHeight : TimelineBuilder.WeekHourHeight);
         _weekStart = weekStart;
         _anchor = anchor;
         _today = today;
@@ -274,6 +280,9 @@ public sealed class WeekViewModel : ObservableObject
         set
         {
             if (double.IsNaN(value) || value <= 0) return;
+
+            // 高さを決め打ちにしているなら、画面に合わせない
+            if (_fixedHourHeight > 0) return;
 
             var height = _timeline.HourHeightFor(value);
             if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;

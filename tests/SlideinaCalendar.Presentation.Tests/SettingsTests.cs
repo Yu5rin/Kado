@@ -292,4 +292,39 @@ public class SettingsTests
 
         Assert.True(new AppSettings(test.Workspace.Settings).CountInCalendarDays);
     }
+
+    [Fact]
+    public void 高さを決め打ちにすると画面に合わせない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings) { HourHeight = 44 };
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        main.Week.ViewportHeight = 720;
+
+        Assert.Equal(44, main.Week.HourHeight);
+        Assert.Equal(44 * 24, main.Week.TimelineHeight);
+    }
+
+    [Fact]
+    public void 高さを自動に戻すと画面に合わせる()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings) { HourHeight = 44 };
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        settings.HourHeight = 0;
+        main.Week.ViewportHeight = 720;
+
+        Assert.Equal(30, main.Week.HourHeight);
+    }
+
+    [Fact]
+    public void 夜間の配色も選べる()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings) { Theme = ThemeChoice.Night };
+
+        Assert.Equal(ThemeChoice.Night, new AppSettings(test.Workspace.Settings).Theme);
+    }
 }

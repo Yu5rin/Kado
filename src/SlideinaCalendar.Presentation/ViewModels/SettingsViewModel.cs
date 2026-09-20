@@ -40,6 +40,7 @@ public sealed class SettingsViewModel : ObservableObject
         new(ThemeChoice.Auto, "Windows に合わせる"),
         new(ThemeChoice.Light, "ライト"),
         new(ThemeChoice.Dark, "ダーク"),
+        new(ThemeChoice.Night, "夜間（ダークより明るく、目にやさしい）"),
     ];
 
     /// <summary>週の始まりの選択肢。</summary>
@@ -63,6 +64,29 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>時間軸の下端に選べる時刻。</summary>
     public IReadOnlyList<SettingChoice<int>> EndHours { get; } = Hours(1, 24);
+
+    /// <summary>1時間の高さの選び方。</summary>
+    public IReadOnlyList<SettingChoice<int>> HourHeights { get; } =
+    [
+        new(0, "自動（縦いっぱいに割り付ける）"),
+        new(28, "28px（詰めて出す）"),
+        new(36, "36px"),
+        new(44, "44px"),
+        new(56, "56px（ゆったり）"),
+    ];
+
+    /// <summary>1時間の高さ。0 なら画面に合わせる。</summary>
+    public int HourHeight
+    {
+        get => _settings.HourHeight;
+        set
+        {
+            if (_settings.HourHeight == value) return;
+
+            _settings.HourHeight = value;
+            Raise();
+        }
+    }
 
     public ThemeChoice Theme
     {
