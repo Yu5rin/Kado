@@ -198,6 +198,15 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>幅が分からないうちに使う幅。</summary>
     public const double DefaultDayWidth = 20;
 
+    /// <summary>ストリップ1行の高さの下げ止まり。</summary>
+    public const double MinDayHeight = 18;
+
+    /// <summary>
+    /// ストリップ1行の高さの上げ止まり。
+    /// <para>12行しかないので、背の高い画面では行を伸ばして縦を使い切る。</para>
+    /// </summary>
+    public const double MaxDayHeight = 56;
+
     /// <summary>日付の上下それぞれに重ねる印の上限。増やすと日付が埋まる。</summary>
     private const int MaxMarksPerSide = 2;
 
@@ -206,13 +215,15 @@ public sealed class YearViewModel : ObservableObject
     private readonly DateOnly _today;
 
     private int _fiscalYear;
-    private YearLayout _layout = YearLayout.Strip;
+    /// <summary>出し方の既定はカレンダー。会社で配るものと同じ形のほうが通りがいい。</summary>
+    private YearLayout _layout = YearLayout.Grid;
     private DateOnly _selectedDate;
     private double _dayWidth = DefaultDayWidth;
+    private double _dayHeight = DefaultDayWidth * 1.5;
     private int _gridColumns = 4;
 
     public YearViewModel(
-        CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Strip,
+        CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Grid,
         ICalendarSources? sources = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
@@ -326,12 +337,29 @@ public sealed class YearViewModel : ObservableObject
 
             if (!Set(ref _dayWidth, width)) return;
 
-            Raise(nameof(DayHeight), nameof(DayFontSize), nameof(MarkWidth));
+            Raise(nameof(DayFontSize), nameof(MarkWidth));
         }
     }
 
-    /// <summary>マスの高さ。幅に合わせて動かすと、正方形に近い形が保てる。</summary>
-    public double DayHeight => Math.Round(_dayWidth * 1.5);
+    /// <summary>
+    /// ストリップ1行の高さ。
+    /// <para>
+    /// 幅と同じく、入れ物の大きさから決める。幅の 1.5 倍で固定していたら、背の
+    /// 高い画面で下が大きく余った。12行しか無いので、余ったぶんは行に配る。
+    /// </para>
+    /// </summary>
+    public double DayHeight
+    {
+        get => _dayHeight;
+        set
+        {
+            var height = double.IsNaN(value) || double.IsInfinity(value)
+                ? DefaultDayWidth * 1.5
+                : Math.Clamp(value, MinDayHeight, MaxDayHeight);
+
+            Set(ref _dayHeight, height);
+        }
+    }
 
     /// <summary>日付の文字の大きさ。細いマスでつぶれないよう、少し縮める。</summary>
     public double DayFontSize => _dayWidth < 18 ? 9 : 10.5;
