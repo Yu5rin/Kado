@@ -264,6 +264,10 @@ public class YearViewModelTests
         // 仕様期限などの区切りと自分の用事は意味が違う。混ぜて並べると見分けられない
         Assert.NotEmpty(day.TopMarks);
         Assert.Single(day.BottomMarks);
+
+        // 区切りは名前ごとに色が決まる。カレンダーの色で塗ると全部同じ色になる
+        Assert.Equal("仕様期限", day.TopMarks[0].MilestoneName);
+        Assert.Null(day.BottomMarks[0].MilestoneName);
     }
 
     [Fact]

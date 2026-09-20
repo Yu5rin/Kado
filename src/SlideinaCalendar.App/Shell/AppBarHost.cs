@@ -70,8 +70,13 @@ public sealed class AppBarHost : IDisposable
 
     /// <summary>
     /// ピン留めする。ワークエリアを削り、そのぶん他のウィンドウが寄る。
+    /// <para>
+    /// <b>削れたかどうかを測ってはいけない。</b>作業領域の変更はすぐには行き渡らず、
+    /// 頼んだ直後に測ると変わっていないように見える。実際には削れているのに
+    /// 「譲りませんでした」と断る羽目になった。登録が通ったかどうかだけを見る。
+    /// </para>
     /// </summary>
-    /// <returns>削れたら true。</returns>
+    /// <returns>登録できたら true。</returns>
     public bool Dock(DockEdge edge, double width)
     {
         LastFailure = null;
@@ -106,32 +111,8 @@ public sealed class AppBarHost : IDisposable
             Hook(hwnd);
         }
 
-        var before = WorkRect(hwnd);
         Reposition();
-        var after = WorkRect(hwnd);
-
-        // 削れたかどうかを見る。登録できても場所を譲ってもらえないことがある
-        if (before.Width == after.Width && before.Height == after.Height)
-        {
-            Undock();
-            LastFailure = "画面端の枠は登録できましたが、Windows が作業領域を譲りませんでした。";
-            return false;
-        }
-
         return true;
-    }
-
-    /// <summary>このウィンドウが乗っているモニタの作業領域。削れたかどうかを見るのに使う。</summary>
-    private static RECT WorkRect(IntPtr hwnd)
-    {
-        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        var info = new MONITORINFOEX
-        {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFOEX>(),
-            szDevice = string.Empty,
-        };
-
-        return GetMonitorInfo(monitor, ref info) ? info.rcWork : default;
     }
 
     /// <summary>通知を受け取る口を付ける。二重に付けないよう、付けた先を覚えておく。</summary>

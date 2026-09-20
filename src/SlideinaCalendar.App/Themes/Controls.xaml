@@ -225,8 +225,18 @@
         RadioButton の既定テンプレートだと丸印が出てしまうので、丸ごと差し替える。
         選択中はアクセントで塗り、区切り線は右側に引く（最後だけ BorderThickness=0）。
     -->
-    <Style x:Key="SegmentButtonStyle" TargetType="RadioButton">
-        <Setter Property="GroupName" Value="MainView" />
+    <!--
+        セグメント（一覧・年・月・週・日、ストリップ・カレンダー、予定・タスク）。
+
+        RadioButton ではなく ToggleButton にしてある。RadioButton は仲間どうしで
+        自動的に打ち消し合うが、その「仲間」は GroupName か親で決まる。ここは共通の
+        見た目なので GroupName を1つ書いてしまい、<b>ビューの切り替えと年ビューの
+        ストリップ／カレンダーが同じ仲間になって、互いに消し合っていた</b>。
+
+        どれが選ばれているかは ViewModel が持っていて、表示は片方向に流すだけでよい。
+        打ち消し合う仕掛けそのものが要らない。
+    -->
+    <Style x:Key="SegmentButtonStyle" TargetType="ToggleButton">
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="13,0" />
         <Setter Property="FontSize" Value="12" />
@@ -235,7 +245,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="RadioButton">
+                <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="Root" Background="{DynamicResource PanelBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             BorderBrush="{DynamicResource LineStrongBrush}">

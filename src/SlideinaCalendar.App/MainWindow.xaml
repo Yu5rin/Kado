@@ -156,23 +156,6 @@
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
             <DockPanel LastChildFill="False" Margin="12,9">
 
-                <!--
-                    ピン。押すと画面端に寄り、画面を分割する。最大化した他のウィンドウと
-                    重ならなくなる（要件書 2.2）。
-
-                    常に出しておく。端へドラッグしてから押す作りにしていたが、Windows の
-                    スナップ（端に寄せると画面の半分に広がる）と取り合いになって、
-                    寄せてもピンが出ないことがあった
-                -->
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
-                              IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
-                              Command="{Binding Shell.TogglePinCommand}"
-                              ToolTip="{Binding Shell.PinLabel}">
-                    <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                </ToggleButton>
-
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
                         Command="{Binding ToggleSidePanelCommand}" ToolTip="サイドパネルの表示切替">
                     <Path Data="{StaticResource IconMenu}" Stretch="Uniform" Width="16" Height="16"
@@ -213,33 +196,33 @@
                         1つずつ動くので、ボタンの並びと動く向きが合っていないと迷う
                     -->
                     <StackPanel Orientation="Horizontal">
-                        <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
+                        <ToggleButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
                                      ToolTip="予定とタスクを時系列で。予定のない日はまとめます"
                                      IsChecked="{Binding CurrentView, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Agenda}"
                                      Command="{Binding SwitchViewCommand}"
                                      CommandParameter="Agenda" />
-                        <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
+                        <ToggleButton Content="年" Style="{StaticResource SegmentButtonStyle}"
                                      ToolTip="年度（4月〜翌3月）。ホイールで年度を送ります"
                                      IsChecked="{Binding CurrentView, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Year}"
                                      Command="{Binding SwitchViewCommand}"
                                      CommandParameter="Year" />
-                        <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
+                        <ToggleButton Content="月" Style="{StaticResource SegmentButtonStyle}"
                                      IsChecked="{Binding CurrentView, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Month}"
                                      Command="{Binding SwitchViewCommand}"
                                      CommandParameter="Month" />
-                        <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
+                        <ToggleButton Content="週" Style="{StaticResource SegmentButtonStyle}"
                                      IsChecked="{Binding CurrentView, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Week}"
                                      Command="{Binding SwitchViewCommand}"
                                      CommandParameter="Week" />
-                        <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
+                        <ToggleButton Content="日" Style="{StaticResource SegmentButtonStyle}"
                                      BorderThickness="0"
                                      IsChecked="{Binding CurrentView, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
@@ -249,8 +232,15 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 実働日バッジ（.wdchip）。左パネルを閉じても実働日が読めるようにここに置く -->
+                <!--
+                    実働日バッジ（.wdchip）。左パネルを閉じても実働日が読めるようにここに置く。
+
+                    狭いときは畳む。DockPanel は左に詰めたものを先に描くので、残らない
+                    ぶんは右へはみ出してピンの上に重なる。ピンが押せないと、ドックを
+                    解除できなくなる
+                -->
                 <Border DockPanel.Dock="Left" Margin="12,0,0,0" CornerRadius="5" Padding="10,3"
+                        x:Name="WorkingDayBadge"
                         VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                         Visibility="{Binding HasWorkingDayData, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
@@ -261,6 +251,7 @@
                     </TextBlock>
                 </Border>
                 <Border DockPanel.Dock="Left" Margin="6,0,0,0" CornerRadius="5" Padding="10,3"
+                        x:Name="RemainingBadge"
                         VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                         Visibility="{Binding HasRemainingWorkingDays, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
@@ -275,7 +266,7 @@
                            Foreground="{DynamicResource Ink3Brush}"
                            Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                <!-- 右端。設定・同期・検索の順に並べる（右から左へ積む） -->
+                <!-- 右端。設定・ピン・同期・検索の順に並べる（右から左へ積む） -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         ToolTip="取り込みと設定" Click="OnSettingsClicked">
                     <Button.ContextMenu>
@@ -338,6 +329,26 @@
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
+
+                <!--
+                    ピン。押すと画面端に寄り、画面を分割する。最大化した他のウィンドウと
+                    重ならなくなる（要件書 2.2）。もう一度押すと元の出しかたに戻る。
+
+                    常に出しておく。端へドラッグしてから押す作りにしていたが、Windows の
+                    スナップ（端に寄せると画面の半分に広がる）と取り合いになって、
+                    寄せてもピンが出ないことがあった。
+
+                    ⚙ の左に置く。ドック中は枠が消えるので、ここが唯一の戻り口になる
+                -->
+                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
+                              x:Name="PinButton" Margin="0,0,2,0"
+                              IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
+                              Command="{Binding Shell.TogglePinCommand}"
+                              ToolTip="{Binding Shell.PinLabel}">
+                    <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </ToggleButton>
 
                 <!--
                     押すと同期する。繋いでいなければ押せない（⚙から接続する）。

@@ -15,6 +15,21 @@ public enum YearLayout
     Grid,
 }
 
+/// <summary>
+/// 年ビューのマスに重ねる印1件。
+/// <para>
+/// 仕様期限・1次GO のような日付の行の印は、<b>名前ごとに色が決まっている</b>
+/// （月ビューと同じ決まり）。カレンダーの色で塗ると、inaCalendar のものが
+/// 全部同じ色になってしまい、何の区切りなのか分からない。
+/// </para>
+/// </summary>
+/// <param name="Color">所属カレンダーの色（<c>#rrggbb</c>）。決まっていなければ null。</param>
+/// <param name="MilestoneName">
+/// 日付の行の印なら、その名前。ふつうの予定なら null。
+/// <para>名前が入っていれば、表示側は名前から決まる色を使う。</para>
+/// </param>
+public sealed record DayMark(string? Color, string? MilestoneName);
+
 /// <summary>目盛りの1マス。数字を置かない位置は空。</summary>
 /// <param name="Label">出す数字。空なら何も出さない。</param>
 public sealed record RulerMark(string Label);
@@ -32,7 +47,7 @@ public sealed class YearDayViewModel : ObservableObject
 
     internal YearDayViewModel(
         DateOnly date, bool hasData, bool isWorkingDay, bool isHoliday, bool isToday,
-        IReadOnlyList<string?> topMarks, IReadOnlyList<string?> bottomMarks)
+        IReadOnlyList<DayMark> topMarks, IReadOnlyList<DayMark> bottomMarks)
     {
         Date = date;
         HasWorkingDayData = hasData;
@@ -67,10 +82,10 @@ public sealed class YearDayViewModel : ObservableObject
     /// </para>
     /// <para>null は色の決まっていないカレンダー。表示側が既定の色を使う。</para>
     /// </summary>
-    public IReadOnlyList<string?> TopMarks { get; }
+    public IReadOnlyList<DayMark> TopMarks { get; }
 
     /// <summary>日付の<b>下</b>に重ねる色。「inaCalendar」以外の予定。</summary>
-    public IReadOnlyList<string?> BottomMarks { get; }
+    public IReadOnlyList<DayMark> BottomMarks { get; }
 
     /// <summary>この日に入っている予定の数。</summary>
     public int MarkCount => TopMarks.Count + BottomMarks.Count;
@@ -529,7 +544,7 @@ public sealed class YearViewModel : ObservableObject
     /// 日付の上下に分けて置く。
     /// </para>
     /// </summary>
-    private IReadOnlyList<string?> MarksOn(
+    private IReadOnlyList<DayMark> MarksOn(
         DateOnly date,
         IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledEvent>> eventsByDate,
         IReadOnlySet<string> workingDayCalendars,
@@ -541,7 +556,12 @@ public sealed class YearViewModel : ObservableObject
             .Where(e => IsWorkingDayCalendar(e.Source.CalendarId, workingDayCalendars) == inside)
             .Where(Shown)
             .Take(MaxMarksPerSide)
-            .Select(e => _sources?.ColorOf(e.Source.CalendarId))
+            // inaCalendar のものは名前ごとに色を決める。仕様期限は黄、1次GO は赤…と、
+            // 月ビューの日付の行と同じ色になる。カレンダーの色で塗ると全部同じ色に
+            // なってしまい、何の区切りなのか分からない
+            .Select(e => new DayMark(
+                _sources?.ColorOf(e.Source.CalendarId),
+                inside ? e.Source.Title : null))
             .ToArray();
     }
 
