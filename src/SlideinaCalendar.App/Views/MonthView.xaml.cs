@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
@@ -35,6 +36,73 @@ public partial class MonthView : UserControl
         month.MaxChipsPerCell = DayCellViewModel.CapacityFor(e.NewSize.Height / rows);
     }
 
+    // ------------------------------------------------------------------
+    // ドラッグで別の日へ移す
+    //
+    // 掴んで落とすのと、編集画面で日付を打ち直すのとでは手数が違う。
+    // Ctrl を押しながらなら複製。掴み方と見せ方は DragSession が持つ
+    // ------------------------------------------------------------------
+
+    /// <summary>押したまま動かしたらドラッグを始める。</summary>
+    private void OnChipDragging(object sender, MouseEventArgs e) =>
+        DragSession.Current.DragIfMoved(sender, e);
+
+    /// <summary>ドラッグ中、掴んでいるものをマウスに追わせる。</summary>
+    private void OnDragMoving(object sender, DragEventArgs e) =>
+        DragSession.Current.Follow(e, this);
+
+    /// <summary>落ちたら掴んでいるものを消す。マスの外に落ちたときもここを通る。</summary>
+    private void OnDragFinished(object sender, DragEventArgs e) => DragSession.Current.End();
+
+    /// <summary>マスの上を通っているあいだ。落とせるかどうかをカーソルと面で示す。</summary>
+    private void OnCellDragOver(object sender, DragEventArgs e)
+    {
+        var cell = (sender as FrameworkElement)?.DataContext as DayCellViewModel;
+        var ok = cell is not null && DragSession.Payload(e) is not null;
+
+        DragSession.ShowEffect(e, ok);
+
+        if (cell is not null) cell.IsDropTarget = ok;
+    }
+
+    /// <summary>マスから出たら印を消す。</summary>
+    private void OnCellDragLeft(object sender, DragEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DayCellViewModel cell) cell.IsDropTarget = false;
+    }
+
+    /// <summary>落とされたら、その日へ移す。Ctrl を押していれば複製する。</summary>
+    private void OnCellDropped(object sender, DragEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DayCellViewModel cell) return;
+
+        cell.IsDropTarget = false;
+        e.Handled = true;
+
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        var copy = DragSession.IsCopy(e);
+
+        switch (DragSession.Payload(e))
+        {
+            case EventChipViewModel chip:
+                main.MoveEventTo(chip.Id, cell.Date, copy);
+                break;
+            case MilestoneViewModel milestone:
+                main.MoveEventTo(milestone.Id, cell.Date, copy);
+                break;
+
+            // 週ビューの時間軸から持ってきたもの。月ビューは時刻を持たないので、
+            // 日だけを変えて時刻はそのままにする
+            case TimeBlockViewModel block:
+                main.MoveEventTo(block.IsWorkBlock ? null : block.Id, cell.Date, copy);
+                break;
+            case TaskItem task:
+                main.MoveTaskTo(task.Id, cell.Date, copy);
+                break;
+        }
+    }
+
     /// <summary>1回押しでその日を選び、2回でその日に予定を足す。</summary>
     private void OnCellClicked(object sender, MouseButtonEventArgs e)
     {
@@ -66,6 +134,9 @@ public partial class MonthView : UserControl
         if ((sender as FrameworkElement)?.DataContext is not { } item) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
+        // 1回押しは日を選ぶと同時に、ドラッグの始まりでもある
+        DragSession.Current.Press(sender, e);
+
         if (e.ClickCount == 2) open(main, item);
         else if (FindCell(sender as DependencyObject) is { } cell) main.SelectDateCommand.Execute(cell.Date);
 
@@ -86,11 +157,34 @@ public partial class MonthView : UserControl
     /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
     private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount != 2) return;
         if ((sender as FrameworkElement)?.DataContext is not MilestoneViewModel milestone) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
+        // 1回押しはドラッグの始まり。仕様期限なども別の日へ動かせる
+        DragSession.Current.Press(sender, e);
+
+        if (e.ClickCount != 2) return;
+
         main.EditMilestoneCommand.Execute(milestone);
+        e.Handled = true;
+    }
+
+    // ------------------------------------------------------------------
+    // ホイールで送る
+    //
+    // 月なら前後の月、週なら前後の週、日なら前後の日。指を止めずに見渡せる
+    // ------------------------------------------------------------------
+
+    /// <summary>ホイールを回したら前後へ送る。</summary>
+    private void OnWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        var command = e.Delta > 0 ? main.PreviousCommand : main.NextCommand;
+        if (!command.CanExecute(null)) return;
+
+        command.Execute(null);
         e.Handled = true;
     }
 }

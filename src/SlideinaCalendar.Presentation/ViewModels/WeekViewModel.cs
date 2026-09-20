@@ -62,7 +62,7 @@ public sealed class TimeBlockViewModel
 
     public string? Location { get; }
 
-    /// <summary>「09:00」。ブロックの頭に出す。</summary>
+    /// <summary>「09:00」。ブロックには書かず、マウスを載せたときの説明に使う。</summary>
     public string TimeText => Start.ToString("HH:mm", CultureInfo.InvariantCulture);
 
     public string Tooltip => Location is { Length: > 0 }
@@ -162,7 +162,13 @@ public sealed class WeekDayColumnViewModel
 /// </summary>
 public sealed class WeekViewModel : ObservableObject
 {
-    private readonly TimelineBuilder _timeline;
+    private TimelineBuilder _timeline;
+
+    /// <summary>最後に受け取った「いま」。高さが変わったときに引き直すために控える。</summary>
+    private TimeOnly? _now;
+
+    /// <summary>設定で決め打ちにされた1時間の高さ。0 なら画面に合わせる。</summary>
+    private readonly double _fixedHourHeight;
     private readonly DayOfWeek _weekStart;
 
     private DateOnly _anchor;
@@ -171,9 +177,12 @@ public sealed class WeekViewModel : ObservableObject
 
     public WeekViewModel(CalendarWorkspace workspace, DateOnly anchor, DateOnly today,
         DayOfWeek weekStart = DayOfWeek.Sunday, ICalendarSources? sources = null,
-        TimeOnly? dayStart = null, TimeOnly? dayEnd = null)
+        TimeOnly? dayStart = null, TimeOnly? dayEnd = null, double fixedHourHeight = 0)
     {
-        _timeline = new TimelineBuilder(workspace, sources, dayStart, dayEnd);
+        _fixedHourHeight = fixedHourHeight;
+        _timeline = new TimelineBuilder(
+            workspace, sources, dayStart, dayEnd,
+            fixedHourHeight > 0 ? fixedHourHeight : TimelineBuilder.WeekHourHeight);
         _weekStart = weekStart;
         _anchor = anchor;
         _today = today;
@@ -224,6 +233,9 @@ public sealed class WeekViewModel : ObservableObject
     /// <summary>1時間分の高さ。罫線の間隔もこれで決まる。</summary>
     public double HourHeight => _timeline.HourHeight;
 
+    /// <summary>時間軸の上端の時。落とした場所から時刻を出すのに要る。</summary>
+    public int DayStartHour => _timeline.DayStart.Hour;
+
     /// <summary>時間軸全体の高さ。</summary>
     public double TimelineHeight => _timeline.TimelineHeight;
 
@@ -248,6 +260,9 @@ public sealed class WeekViewModel : ObservableObject
     /// <summary>現在時刻の線を動かす。</summary>
     public void UpdateNowLine(TimeOnly now)
     {
+        // 1時間の高さが変わると線の位置も変わる。控えておいて引き直せるようにする
+        _now = now;
+
         var inRange = _timeline.Covers(now);
 
         ShowNowLine = inRange && _today >= WeekStart && _today <= WeekEnd;
@@ -256,12 +271,35 @@ public sealed class WeekViewModel : ObservableObject
         Raise(nameof(ShowNowLine), nameof(NowOffset));
     }
 
+    /// <summary>
+    /// 時間軸に使える高さ。表示側が測って渡す。
+    /// <para>選んだ時間帯をこの高さに割り付ける。入りきらなければスクロールになる。</para>
+    /// </summary>
+    public double ViewportHeight
+    {
+        set
+        {
+            if (double.IsNaN(value) || value <= 0) return;
+
+            // 高さを決め打ちにしているなら、画面に合わせない
+            if (_fixedHourHeight > 0) return;
+
+            var height = _timeline.HourHeightFor(value);
+            if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;
+
+            _timeline = _timeline.WithHourHeight(height);
+            Refresh();
+
+            if (_now is { } now) UpdateNowLine(now);
+        }
+    }
+
     /// <summary>データを読み直して列を組み直す。</summary>
     public void Refresh()
     {
         Days = _timeline.Build(WeekStart, WeekEnd, _today);
 
         Raise(nameof(Title), nameof(WeekStart), nameof(WeekEnd),
-              nameof(HourLabels), nameof(TimelineHeight));
+              nameof(HourLabels), nameof(HourHeight), nameof(DayStartHour), nameof(TimelineHeight));
     }
 }

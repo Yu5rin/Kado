@@ -20,6 +20,7 @@ public sealed class SourceRepository(SqliteConnection connection)
         id AS Id, summary AS Summary, summary_override AS SummaryOverride,
         background_color AS BackgroundColor, foreground_color AS ForegroundColor,
         is_primary AS IsPrimary, is_visible AS IsVisible, sort_order AS SortOrder,
+        notify_default AS NotifyDefault,
         google_raw AS GoogleRaw, updated_at AS UpdatedAt
         """;
 
@@ -57,10 +58,10 @@ public sealed class SourceRepository(SqliteConnection connection)
             """
             INSERT INTO calendars (
                 id, summary, summary_override, background_color, foreground_color,
-                is_primary, is_visible, sort_order, google_raw, updated_at
+                is_primary, is_visible, sort_order, notify_default, google_raw, updated_at
             ) VALUES (
                 @Id, @Summary, @SummaryOverride, @BackgroundColor, @ForegroundColor,
-                @IsPrimary, @IsVisible, @SortOrder, @GoogleRaw, @UpdatedAt
+                @IsPrimary, @IsVisible, @SortOrder, @NotifyDefault, @GoogleRaw, @UpdatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
                 summary = excluded.summary, summary_override = excluded.summary_override,
@@ -190,6 +191,15 @@ public sealed class SourceRepository(SqliteConnection connection)
         _connection.Execute(
             "UPDATE calendars SET is_visible = @isVisible WHERE id = @id;",
             new { id, isVisible }) > 0;
+
+    /// <summary>
+    /// このカレンダーの予定を既定で知らせるかどうかを切り替える。
+    /// <para>表示のチェックと同じく、取り込みの Upsert では上書きしない。</para>
+    /// </summary>
+    public bool SetCalendarNotify(string id, bool notify) =>
+        _connection.Execute(
+            "UPDATE calendars SET notify_default = @notify WHERE id = @id;",
+            new { id, notify }) > 0;
 
     public bool SetTaskListVisible(string id, bool isVisible) =>
         _connection.Execute(

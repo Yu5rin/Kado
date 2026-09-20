@@ -8,7 +8,12 @@ namespace SlideinaCalendar.Data.Repositories;
 /// <param name="Kind"><c>event</c> か <c>task</c>。</param>
 /// <param name="GoogleId">Google 側の識別子。未同期のまま消したなら null。</param>
 /// <param name="DeletedAt">消した時刻。</param>
-public sealed record Tombstone(string Id, string Kind, string? GoogleId, DateTimeOffset DeletedAt);
+/// <param name="SourceId">
+/// 持ち主。予定ならカレンダー、タスクならタスクリストの識別子。
+/// <para>版を上げる前から残っている記録では null。</para>
+/// </param>
+public sealed record Tombstone(
+    string Id, string Kind, string? GoogleId, DateTimeOffset DeletedAt, string? SourceId = null);
 
 /// <summary>
 /// 消したことの記録。
@@ -34,39 +39,52 @@ public sealed class TombstoneRepository(SqliteConnection connection)
     private readonly SqliteConnection _connection =
         connection ?? throw new ArgumentNullException(nameof(connection));
 
-    /// <summary>消したことを記録する。同じものを二度消しても1件にまとまる。</summary>
+    /// <summary>
+    /// 消したことを記録する。同じものを二度消しても1件にまとまる。
+    /// <para>
+    /// <paramref name="sourceId"/> は<b>必ず渡す</b>。持ち主が分からないと、同期のときに
+    /// 関係の無いカレンダーへ削除を投げてしまう。
+    /// </para>
+    /// </summary>
     public void Record(string id, string kind, string? googleId, DateTimeOffset deletedAt,
-        SqliteTransaction? transaction = null)
+        string? sourceId = null, SqliteTransaction? transaction = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
 
         _connection.Execute(
             """
-            INSERT INTO tombstones (id, kind, google_id, deleted_at)
-            VALUES (@id, @kind, @googleId, @deletedAt)
+            INSERT INTO tombstones (id, kind, google_id, deleted_at, source_id)
+            VALUES (@id, @kind, @googleId, @deletedAt, @sourceId)
             ON CONFLICT (id, kind) DO UPDATE SET
                 google_id  = COALESCE(excluded.google_id, tombstones.google_id),
-                deleted_at = excluded.deleted_at;
+                deleted_at = excluded.deleted_at,
+                source_id  = COALESCE(excluded.source_id, tombstones.source_id);
             """,
-            new { id, kind, googleId, deletedAt = deletedAt.ToUnixTimeSeconds() },
+            new { id, kind, googleId, deletedAt = deletedAt.ToUnixTimeSeconds(), sourceId },
             transaction);
     }
 
     /// <summary>
     /// まだ伝えていない削除。
     /// <para>Google 側の識別子が無いものは伝えようがないので含めない。</para>
+    /// <para>
+    /// <paramref name="sourceId"/> を渡すと、<b>その持ち主のものだけ</b>返す。同期は
+    /// カレンダーごとに回るので、絞らないと他所の予定まで投げてしまう。持ち主が分からない
+    /// 古い記録は、どこのものか決められないので一緒に返す。
+    /// </para>
     /// </summary>
-    public IReadOnlyList<Tombstone> Pending(string kind) =>
-        _connection.Query<(string Id, string Kind, string? GoogleId, long DeletedAt)>(
+    public IReadOnlyList<Tombstone> Pending(string kind, string? sourceId = null) =>
+        _connection.Query<(string Id, string Kind, string? GoogleId, long DeletedAt, string? SourceId)>(
                 """
-                SELECT id, kind, google_id, deleted_at FROM tombstones
+                SELECT id, kind, google_id, deleted_at, source_id FROM tombstones
                 WHERE kind = @kind AND google_id IS NOT NULL
+                  AND (@sourceId IS NULL OR source_id IS NULL OR source_id = @sourceId)
                 ORDER BY deleted_at;
                 """,
-                new { kind })
+                new { kind, sourceId })
             .Select(r => new Tombstone(
-                r.Id, r.Kind, r.GoogleId, DateTimeOffset.FromUnixTimeSeconds(r.DeletedAt)))
+                r.Id, r.Kind, r.GoogleId, DateTimeOffset.FromUnixTimeSeconds(r.DeletedAt), r.SourceId))
             .ToArray();
 
     /// <summary>この識別子は消されたか。相手から降ってきたものを復活させないために見る。</summary>

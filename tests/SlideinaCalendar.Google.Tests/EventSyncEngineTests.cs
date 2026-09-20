@@ -180,13 +180,44 @@ public class EventSyncEngineTests : IDisposable
     [Fact]
     public async Task すでに無いものの削除は成功として片付ける()
     {
-        Tombstones.Record("e1", TombstoneRepository.EventKind, "kieta", DateTimeOffset.Now);
+        Tombstones.Record("e1", TombstoneRepository.EventKind, "kieta", DateTimeOffset.Now, "primary");
 
         _remote.ThrowOnWrite = new GoogleApiException(HttpStatusCode.NotFound, "notFound");
         await Engine.SyncAsync("primary", "local:shigoto");
 
         // 消したいのだから、無いのは望む状態
         Assert.Equal(0, Tombstones.Count());
+    }
+
+    [Fact]
+    public async Task 他のカレンダーの削除はここへ投げない()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        // 別のカレンダーで消した予定
+        Tombstones.Record("e1", TombstoneRepository.EventKind, "yoso", DateTimeOffset.Now, "shigoto");
+
+        var report = await Engine.SyncAsync("primary", "local:shigoto");
+
+        // ここへ投げれば 404 が返るだけ。持ち主のカレンダーが回るまで取っておく
+        Assert.DoesNotContain("yoso", _remote.Deleted);
+        Assert.Equal(0, report.DeletedRemote);
+        Assert.Equal(1, Tombstones.Count());
+    }
+
+    [Fact]
+    public async Task 持ち主の分からない削除は404でも記録を残す()
+    {
+        // 版を上げる前に消したもの。どのカレンダーのものか分からない
+        Tombstones.Record("e1", TombstoneRepository.EventKind, "mukashi", DateTimeOffset.Now);
+
+        _remote.ThrowOnWrite = new GoogleApiException(HttpStatusCode.NotFound, "notFound");
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        // ここに無いだけで、別のカレンダーには残っているかもしれない。
+        // 捨てると削除が永久に届かなくなる
+        Assert.Equal(1, Tombstones.Count());
     }
 
     [Fact]

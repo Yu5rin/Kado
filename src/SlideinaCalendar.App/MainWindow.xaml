@@ -37,6 +37,12 @@
             行の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
         -->
         <ContextMenu x:Key="SourceRowMenu">
+            <MenuItem Header="新しい予定の入れ先にする"
+                      Command="{Binding PlacementTarget.Tag.SetDefaultCalendarCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
             <MenuItem Header="名前と色を変える"
                       Command="{Binding PlacementTarget.Tag.EditSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -236,6 +242,12 @@
                                       Command="{Binding ImportWorkingDaysCommand}" />
                             <MenuItem Header="旧 inaCalendar のバックアップを取り込む…（JSON）"
                                       Command="{Binding ImportLegacyBackupCommand}" />
+                            <MenuItem Header="配信元から実働日を取り込む"
+                                      Command="{Binding FetchWorkingDayFeedCommand}"
+                                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
+                            <MenuItem Header="実働日を配信用に書き出す…（feed.json）"
+                                      Command="{Binding ExportWorkingDayFeedCommand}"
+                                      ToolTip="いまの実働日データを、配る側のファイルとして書き出します" />
                             <Separator />
                             <MenuItem Header="Google に接続…"
                                       Command="{Binding Sync.ConnectCommand}"
@@ -246,6 +258,19 @@
                             <MenuItem Header="Google との接続を切る"
                                       Command="{Binding Sync.DisconnectCommand}"
                                       ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
+
+                            <Separator />
+                            <MenuItem Header="重複した予定を整理…"
+                                      Command="{Binding RemoveDuplicatesCommand}"
+                                      ToolTip="同じ日・同じ時刻・同じ名前の予定を1つにまとめます" />
+
+                            <Separator />
+                            <MenuItem Header="バックアップを保存…"
+                                      Command="{Binding BackupCommand}"
+                                      ToolTip="予定・タスク・設定・実働日データを1つのファイルに書き出します" />
+                            <MenuItem Header="バックアップから復元…"
+                                      Command="{Binding RestoreCommand}"
+                                      ToolTip="いまの内容はすべて置き換わります。復元後にアプリを立ち上げ直します" />
 
                             <Separator />
                             <MenuItem Header="更新を確認…"
@@ -263,8 +288,7 @@
                                           ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
                             </MenuItem>
                             <Separator />
-                            <MenuItem Header="設定" IsEnabled="False"
-                                      ToolTip="このあとのフェーズで実装します" />
+                            <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
                         </ContextMenu>
                     </Button.ContextMenu>
                     <Path Data="{StaticResource IconSettings}" Stretch="Uniform" Width="16" Height="16"
@@ -288,8 +312,68 @@
                     </StackPanel>
                 </Button>
 
-                <TextBox DockPanel.Dock="Right" Style="{StaticResource SearchBoxStyle}" Margin="0,0,8,0"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                <!--
+                    検索。打つたびに探し、下に結果を垂らす。
+                    Popup にすると本体の配置を動かさずに重ねられる
+                -->
+                <Grid DockPanel.Dock="Right" Margin="0,0,8,0">
+                    <TextBox x:Name="SearchBox" Style="{StaticResource SearchBoxStyle}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             KeyDown="OnSearchKeyDown" />
+
+                    <Popup IsOpen="{Binding IsSearching, Mode=OneWay}" PlacementTarget="{Binding ElementName=SearchBox}"
+                           Placement="Bottom" AllowsTransparency="True" StaysOpen="True"
+                           HorizontalOffset="0" VerticalOffset="3">
+                        <Border MinWidth="320" MaxWidth="440" MaxHeight="420" CornerRadius="6"
+                                Background="{DynamicResource PanelBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding SearchMessage}"
+                                           Margin="12,10" FontSize="12"
+                                           Foreground="{DynamicResource Ink3Brush}"
+                                           Visibility="{Binding SearchMessage,
+                                                        Converter={StaticResource NullToVisibility}}" />
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding SearchResults}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="Row" Padding="12,7" Cursor="Hand"
+                                                        Background="Transparent"
+                                                        MouseLeftButtonDown="OnSearchResultClicked">
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding DateText}"
+                                                                   FontSize="10.5" Margin="10,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Typography.NumeralAlignment="Tabular"
+                                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Title}" FontSize="12.5"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource InkBrush}" />
+                                                            <TextBlock Text="{Binding Detail}" FontSize="10.5"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource Ink3Brush}"
+                                                                       Visibility="{Binding Detail,
+                                                                                    Converter={StaticResource NullToVisibility}}" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+
+                                                <DataTemplate.Triggers>
+                                                    <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Row" Property="Background"
+                                                                Value="{DynamicResource SunkenBrush}" />
+                                                    </Trigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
             </DockPanel>
         </Border>
 
@@ -646,10 +730,27 @@
                                                                    Foreground="{DynamicResource Ink3Brush}"
                                                                    Visibility="{Binding DueSubText, Converter={StaticResource NullToVisibility}}" />
                                                     </StackPanel>
+
+                                                    <!--
+                                                        済んだタスクの結果。期限に間に合ったかどうかは
+                                                        片付いたあとで振り返るときに要る
+                                                    -->
+                                                    <TextBlock x:Name="DoneNote" Text="{Binding DoneText}"
+                                                               FontSize="10.5" Margin="0,1,0,0"
+                                                               Typography.NumeralAlignment="Tabular"
+                                                               Foreground="{DynamicResource Ink3Brush}"
+                                                               Visibility="{Binding DoneText,
+                                                                            Converter={StaticResource NullToVisibility}}" />
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
+                                            <!-- 遅れて済ませたものだけ色を変える。早い・期限どおりは静かに -->
+                                            <DataTrigger Binding="{Binding IsLate}" Value="True">
+                                                <Setter TargetName="DoneNote" Property="Foreground"
+                                                        Value="{DynamicResource SundayBrush}" />
+                                            </DataTrigger>
+
                                             <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Row" Property="Background"
                                                         Value="{DynamicResource SunkenBrush}" />
@@ -672,7 +773,29 @@
                     <!-- 追加（.dfoot） -->
                     <Border Grid.Row="2" Padding="12,9"
                             BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-                        <UniformGrid Rows="1" Columns="2">
+                        <StackPanel>
+                            <!--
+                                クイック入力。1行打って Enter で入る。
+                                編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
+                            -->
+                            <TextBox Style="{StaticResource QuickInputBoxStyle}"
+                                     Text="{Binding DataContext.QuickText,
+                                            RelativeSource={RelativeSource AncestorType=Window},
+                                            UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="1行で予定を追加します（Enter）&#10;例: 明日15時 打合せ @会議室A"
+                                     KeyDown="OnQuickKeyDown" />
+
+                            <TextBlock Text="{Binding DataContext.QuickPreview,
+                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                       FontSize="10.5" Margin="2,4,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding DataContext.QuickPreview,
+                                                    RelativeSource={RelativeSource AncestorType=Window},
+                                                    Converter={StaticResource NullToVisibility}}" />
+
+                            <Border Height="9" />
+
+                            <UniformGrid Rows="1" Columns="2">
                             <Button Style="{StaticResource AddButtonStyle}" Margin="0,0,3.5,0"
                                     Command="{Binding DataContext.AddEventCommand,
                                               RelativeSource={RelativeSource AncestorType=Window}}">
@@ -693,7 +816,8 @@
                                     <TextBlock Text="タスク" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                        </UniformGrid>
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>

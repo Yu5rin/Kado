@@ -296,3 +296,21 @@ public sealed class SyncStateBrushConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// すべて true のときだけ出す。
+/// <para>
+/// 条件が2つ以上ある出し分けに使う。Style の中の条件で書くと、名前で指した要素が
+/// 解けずに黙って出なくなることがある。こちらは Style を通らないので確実。
+/// </para>
+/// </summary>
+public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+        values is { Length: > 0 } && values.All(v => v is true)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

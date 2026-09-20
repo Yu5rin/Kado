@@ -80,4 +80,52 @@ public class EventMapperBlankTests
         // 場所を消したなら、消したことを伝える必要がある
         Assert.True(EventMapper.NeedsPush(value with { Location = null }));
     }
+
+    [Fact]
+    public void メールから起こされた予約は送り返さない()
+    {
+        // 美容室やホテルの予約は Gmail から作られ、Google 側では内容を変えられない。
+        // 送ると毎回断られ、そのたびに「一部を伝えられません」と出ていた
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e30", "summary": "HotPepper Beauty のサロン予約", "status": "confirmed",
+              "eventType": "fromGmail", "locked": true,
+              "start": { "dateTime": "2026-09-24T10:00:00+09:00" },
+              "end": { "dateTime": "2026-09-24T11:00:00+09:00" }
+            }
+            """), "primary");
+
+        Assert.False(EventMapper.NeedsPush(value));
+
+        // 題を変えても送らない。向こうが受け付けないことに変わりはない
+        Assert.False(EventMapper.NeedsPush(value with { Title = "別の名前" }));
+    }
+
+    [Fact]
+    public void 誕生日も送り返さない()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e31", "summary": "誕生日", "status": "confirmed",
+              "eventType": "birthday",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" }
+            }
+            """), "primary");
+
+        Assert.False(EventMapper.NeedsPush(value with { Title = "変えてみる" }));
+    }
+
+    [Fact]
+    public void ふつうの予定は変えたら送る()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e32", "summary": "打ち合わせ", "status": "confirmed",
+              "start": { "dateTime": "2026-09-24T10:00:00+09:00" },
+              "end": { "dateTime": "2026-09-24T11:00:00+09:00" }
+            }
+            """), "primary");
+
+        Assert.True(EventMapper.NeedsPush(value with { Title = "打ち合わせ（変更）" }));
+    }
 }

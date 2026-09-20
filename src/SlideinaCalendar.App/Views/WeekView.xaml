@@ -12,6 +12,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
              xmlns:views="clr-namespace:SlideinaCalendar.App.Views"
+             AllowDrop="True" PreviewDragOver="OnDragMoving" PreviewDrop="OnDragFinished"
+             PreviewMouseWheel="OnWheel"
              x:Name="Root"
              Background="{DynamicResource BackgroundBrush}">
 
@@ -78,7 +80,8 @@
                     ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource AllDayTaskMenu}"
-                    MouseLeftButtonDown="OnAllDayTaskClicked">
+                    MouseLeftButtonDown="OnAllDayTaskClicked"
+                    MouseMove="OnAllDayDragging">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
@@ -94,6 +97,7 @@
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource AllDayEventMenu}"
                     MouseLeftButtonDown="OnAllDayEventClicked"
+                    MouseMove="OnAllDayDragging"
                     Background="{DynamicResource AccentSoftBrush}">
                 <TextBlock Text="{Binding Label}" FontSize="10.5"
                            Foreground="{DynamicResource InkBrush}"
@@ -128,12 +132,10 @@
                                Foreground="{DynamicResource SundayBrush}"
                                Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
 
-                    <!-- 週ビューの日付ヘッダは実働日の通し番号を出す場所（要件書 4.3） -->
-                    <TextBlock Text="{Binding WorkingDayLabel}" FontSize="9.5"
-                               HorizontalAlignment="Center" Opacity="0.75"
-                               Foreground="{DynamicResource AccentBrush}"
-                               Typography.NumeralAlignment="Tabular"
-                               Visibility="{Binding WorkingDayLabel, Converter={StaticResource NullToVisibility}}" />
+                    <!--
+                        実働日の通し番号はここには出さない。7日ぶん並ぶと数字が多すぎて、
+                        日付そのものが読みにくくなる。日ビューと上部のバーには出る
+                    -->
 
                     <ItemsControl ItemsSource="{Binding Milestones}" Margin="0,2,0,0"
                                   HorizontalAlignment="Center">
@@ -188,8 +190,9 @@
 
         <!-- 終日レーン1つ分 -->
         <DataTemplate x:Key="AllDayCellTemplate">
-            <Border x:Name="Cell" Padding="3" MinHeight="30"
-                    BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <Border x:Name="Cell" Padding="3" MinHeight="30" Background="Transparent"
+                    BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
+                    AllowDrop="True" DragOver="OnAllDayDragOver" Drop="OnAllDayDropped">
                 <StackPanel>
                     <ItemsControl ItemsSource="{Binding AllDayEvents}"
                                   ItemTemplate="{StaticResource AllDayEventTemplate}" />
@@ -244,19 +247,27 @@
         </Border>
 
         <!-- 時間軸 -->
-        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+        <!-- 選んだ時間帯を、ここで測った高さに割り付ける -->
+        <!-- バーは常に出す。上の段はこの幅ぶんを空けてあり、消えると列がずれる -->
+        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled"
+                      SizeChanged="OnTimelineResized" PreviewMouseWheel="OnTimelineWheel">
             <Grid Height="{Binding TimelineHeight}">
                 <DockPanel>
                     <ItemsControl DockPanel.Dock="Left" Width="46" ItemsSource="{Binding HourLabels}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <!-- 罫線の高さに合わせつつ、文字は線の上に出す -->
-                                <TextBlock Text="{Binding}"
-                                           Height="{Binding DataContext.HourHeight, ElementName=Root}"
-                                           FontSize="10"
-                                           TextAlignment="Right" Padding="0,0,6,0" Margin="0,-5,0,0"
-                                           Foreground="{DynamicResource Ink3Brush}"
-                                           Typography.NumeralAlignment="Tabular" />
+                                <!--
+                                    高さは枠で取り、文字だけを線の上へずらす。
+                                    文字に負の余白を付けると、その分だけ1行ずつ詰まって
+                                    見出しと罫線が食い違っていく（24時間ぶんで2時間ずれる）
+                                -->
+                                <Border Height="{Binding DataContext.HourHeight, ElementName=Root}">
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Top"
+                                               FontSize="10"
+                                               TextAlignment="Right" Padding="0,0,6,0" Margin="0,-5,0,0"
+                                               Foreground="{DynamicResource Ink3Brush}"
+                                               Typography.NumeralAlignment="Tabular" />
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -269,18 +280,14 @@
                             <DataTemplate>
                                 <views:TimelineColumnView
                                     HourLabels="{Binding DataContext.HourLabels, ElementName=Root}"
-                                    RowHeight="{Binding DataContext.HourHeight, ElementName=Root}" />
+                                    RowHeight="{Binding DataContext.HourHeight, ElementName=Root}"
+                                    NowOffset="{Binding DataContext.NowOffset, ElementName=Root}"
+                                    ShowNow="{Binding DataContext.ShowNowLine, ElementName=Root}"
+                                    DayStartHour="{Binding DataContext.DayStartHour, ElementName=Root}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </DockPanel>
-
-                <!-- 現在時刻。時刻の見出しぶんだけ右に寄せる -->
-                <Grid VerticalAlignment="Top" Margin="46,0,0,0" IsHitTestVisible="False"
-                      Visibility="{Binding ShowNowLine, Converter={StaticResource BoolToVisibility}}">
-                    <Border Height="1.5" VerticalAlignment="Top" Background="#c4372f"
-                            Margin="{Binding NowOffset, Converter={StaticResource TimelineOffsetToMargin}}" />
-                </Grid>
             </Grid>
         </ScrollViewer>
     </DockPanel>

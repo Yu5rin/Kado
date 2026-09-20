@@ -86,7 +86,8 @@ public sealed class TaskSyncEngine(
         var deleted = 0;
         var warnings = new List<string>();
 
-        foreach (var tombstone in tombstones.Pending(TombstoneRepository.TaskKind))
+        // このタスクリストのものだけ。予定のときと同じ理由（EventSyncEngine を見よ）
+        foreach (var tombstone in tombstones.Pending(TombstoneRepository.TaskKind, taskListId))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -99,7 +100,11 @@ public sealed class TaskSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsMissing)
             {
-                tombstones.Clear(tombstone.Id, TombstoneRepository.TaskKind);
+                // 持ち主が分からない古い記録は、次のリストが拾えるよう残す
+                if (tombstone.SourceId is { Length: > 0 })
+                {
+                    tombstones.Clear(tombstone.Id, TombstoneRepository.TaskKind);
+                }
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {

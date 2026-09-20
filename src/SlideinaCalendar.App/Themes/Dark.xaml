@@ -49,4 +49,7 @@
     <Color x:Key="OpenDayFaceColor">#4B3116</Color>
     <Color x:Key="OpenDayTextColor">#F0BE85</Color>
 
+    <!-- 今の時刻を示す線。暦の中でここだけが「いま」を指す -->
+    <Color x:Key="NowLineColor">#e0827c</Color>
+
 </ResourceDictionary>

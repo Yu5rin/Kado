@@ -518,6 +518,58 @@ public class SourceListsViewModelTests
     }
 
     [Fact]
+    public void 新しい予定の入れ先に印が付く()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // 決めていなければ一覧の先頭。印はひとつだけ
+        Assert.Single(vm.Calendars, c => c.IsDefault);
+        Assert.Same(vm.Calendars.First(c => c.IsDefault), vm.DefaultCalendar);
+    }
+
+    [Fact]
+    public void 入れ先を選び直すと印が移る()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        var line = vm.Calendars.Single(c => c.Id == "生産ライン");
+
+        string? told = null;
+        vm.DefaultCalendarChanged += (_, id) => told = id;
+
+        vm.SetDefaultCalendar(line);
+
+        Assert.Equal("生産ライン", told);
+        Assert.True(line.IsDefault);
+        Assert.Single(vm.Calendars, c => c.IsDefault);
+        Assert.Same(line, vm.DefaultCalendar);
+    }
+
+    [Fact]
+    public void 入れ先に選んだカレンダーが消えたら先頭に戻す()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace)
+        {
+            // もう一覧に無い ID を持っている状態
+            DefaultCalendarId = "むかしのカレンダー",
+        };
+
+        vm.Refresh();
+
+        // 印が消えたままだと、どこへ入るのか分からない
+        Assert.NotNull(vm.DefaultCalendar);
+        Assert.Single(vm.Calendars, c => c.IsDefault);
+    }
+
+    [Fact]
     public void 実働日データだけでも日付の行に出る()
     {
         // 書き出しをするようになる前に取り込んだデータは予定を持たない。起動時に補う
