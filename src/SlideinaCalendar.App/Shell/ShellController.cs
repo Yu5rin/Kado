@@ -62,8 +62,12 @@ public sealed class ShellController : IDisposable
             _resizeSettle.Start();
         };
 
-        // 帯に留まったら前に出す
-        _hotZone.Triggered += (_, _) => Show();
+        // 帯に留まったらスライドさせる
+        _hotZone.Triggered += (_, _) => SlideIn();
+
+        // 他のアプリへ移ったら引っ込める。スライドは「用があるときだけ出る」もので、
+        // 出しっぱなしにしたいならピンで留める
+        _window.Deactivated += (_, _) => SlideOutIfIdle();
 
         // 全画面アプリなどで外れたら、見た目も合わせる
         _appBar.Undocked += (_, _) =>
@@ -93,6 +97,40 @@ public sealed class ShellController : IDisposable
         _window.Activate();
     }
 
+    /// <summary>
+    /// スライドさせて出す。
+    /// <para>位置を決めてから出す。出してから動かすと、一度別の場所に見えて飛ぶ。</para>
+    /// </summary>
+    private void SlideIn()
+    {
+        if (_shell.Mode != ShellMode.Overlay) return;
+
+        ApplyOverlayBounds();
+        Show();
+    }
+
+    /// <summary>
+    /// 引っ込める。
+    /// <para>
+    /// スライド中だけ。ピンで留めているあいだは、他のアプリへ移っても出したままにする。
+    /// </para>
+    /// </summary>
+    private void SlideOutIfIdle()
+    {
+        if (_shell.Mode != ShellMode.Overlay) return;
+
+        // 自分が出した窓（編集画面など）に移っただけなら、引っ込めない。
+        // 予定を書いている最中に本体が消えると、書き終わって戻る先が無くなる
+        if (OwnsForeground()) return;
+
+        _window.Hide();
+    }
+
+    /// <summary>いま前にいるのが、自分の出した窓か。</summary>
+    private bool OwnsForeground() =>
+        Application.Current?.Windows.OfType<Window>()
+            .Any(w => !ReferenceEquals(w, _window) && w.IsActive) ?? false;
+
     /// <summary>いまの居場所を控える。</summary>
     public void Save() => _store.Save(_shell.Placement());
 
@@ -117,6 +155,7 @@ public sealed class ShellController : IDisposable
                 _appBar.Undock();
                 _hotZone.Disarm();
                 ToWindow();
+                Show();
                 break;
 
             case ShellMode.Overlay:
@@ -126,6 +165,9 @@ public sealed class ShellController : IDisposable
 
                 // ピン留め中は張らない。常時出ているので呼び出す口が要らない
                 _hotZone.Arm(_shell.Edge);
+
+                // スライドは普段は隠れている。画面端に触れるまで出てこない。
+                // 切り替えた直後だけは、何が起きたのか分かるよう出したままにする
                 break;
 
             case ShellMode.Dock:

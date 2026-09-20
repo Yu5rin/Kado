@@ -12,6 +12,12 @@ public enum HotKeyKind
 
     /// <summary>クイック入力に飛ぶ。</summary>
     QuickEntry,
+
+    /// <summary>出したまま固定する・やめる。</summary>
+    Pin,
+
+    /// <summary>ウィンドウとスライドを行き来する。</summary>
+    Slide,
 }
 
 /// <summary>
@@ -62,10 +68,17 @@ public sealed class GlobalHotKeys : IDisposable
 
         const uint VK_C = 0x43;
         const uint VK_N = 0x4E;
+        const uint VK_P = 0x50;
+        const uint VK_S = 0x53;
         const uint Modifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
 
         keys.Register(HotKeyKind.Show, Modifiers, VK_C);
         keys.Register(HotKeyKind.QuickEntry, Modifiers, VK_N);
+
+        // 画面端に留めると枠が消える。どこからでも外せる口を用意しておかないと、
+        // 戻しかたが分からなくなる
+        keys.Register(HotKeyKind.Pin, Modifiers, VK_P);
+        keys.Register(HotKeyKind.Slide, Modifiers, VK_S);
 
         return keys;
     }

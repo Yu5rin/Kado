@@ -30,11 +30,57 @@ public class ShellModeTests
         vm.TogglePinCommand.Execute(null);
         Assert.True(vm.IsPinned);
 
-        // 外したら、留める前の居かたへ戻す
+        // 外したらスライドに戻す。ウィンドウから留めた場合も、そのまま画面端に
+        // 居続けるほうが「出しておきたくて留めた」流れに合う
         vm.TogglePinCommand.Execute(null);
-        Assert.Equal(ShellMode.Window, vm.Mode);
+        Assert.Equal(ShellMode.Overlay, vm.Mode);
 
-        Assert.Equal([ShellMode.Dock, ShellMode.Window], told);
+        Assert.Equal([ShellMode.Dock, ShellMode.Overlay], told);
+    }
+
+    [Fact]
+    public void スライドは辺を選んで切り替える()
+    {
+        var vm = Create();
+
+        vm.SlideRightCommand.Execute(null);
+        Assert.Equal(ShellMode.Overlay, vm.Mode);
+        Assert.True(vm.IsAtRight);
+
+        vm.SlideLeftCommand.Execute(null);
+        Assert.True(vm.IsAtLeft);
+
+        // 留めているあいだに辺だけ変えても、留めたままにする
+        vm.TogglePinCommand.Execute(null);
+        vm.SlideRightCommand.Execute(null);
+        Assert.True(vm.IsPinned);
+        Assert.True(vm.IsAtRight);
+    }
+
+    [Fact]
+    public void ウィンドウとスライドを行き来できる()
+    {
+        var vm = Create();
+
+        vm.ToggleSlideCommand.Execute(null);
+        Assert.Equal(ShellMode.Overlay, vm.Mode);
+
+        vm.ToggleSlideCommand.Execute(null);
+        Assert.Equal(ShellMode.Window, vm.Mode);
+    }
+
+    [Fact]
+    public void いまの出しかたに名前が付く()
+    {
+        var vm = Create();
+
+        Assert.Equal("ウィンドウ", vm.ModeLabel);
+
+        vm.SlideLeftCommand.Execute(null);
+        Assert.Equal("スライド（左）", vm.ModeLabel);
+
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal("固定（左）", vm.ModeLabel);
     }
 
     [Fact]

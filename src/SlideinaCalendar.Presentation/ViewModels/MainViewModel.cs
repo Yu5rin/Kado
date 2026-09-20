@@ -56,6 +56,8 @@ public sealed class MainViewModel : ObservableObject
     private CalendarView _currentView = CalendarView.Month;
     private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
+    private bool _isMainViewOpen = true;
+    private bool _isDetailPaneOpen = true;
     private readonly TimeProvider _clock;
     private DateOnly _today;
     private string? _statusMessage;
@@ -127,6 +129,8 @@ public sealed class MainViewModel : ObservableObject
         NextCommand = new RelayCommand(GoToNext);
         TodayCommand = new RelayCommand(GoToToday);
         ToggleSidePanelCommand = new RelayCommand(() => IsSidePanelOpen = !IsSidePanelOpen);
+        ToggleMainViewCommand = new RelayCommand(() => IsMainViewOpen = !IsMainViewOpen);
+        ToggleDetailPaneCommand = new RelayCommand(() => IsDetailPaneOpen = !IsDetailPaneOpen);
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
         UndoCommand = new RelayCommand(Undo, () => _workspace.Undo.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
@@ -343,7 +347,66 @@ public sealed class MainViewModel : ObservableObject
     public bool IsSidePanelOpen
     {
         get => _isSidePanelOpen;
-        set => Set(ref _isSidePanelOpen, value);
+        set
+        {
+            if (!Set(ref _isSidePanelOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsSidePanelOpen));
+            Raise(nameof(ShowsCalendarTools));
+        }
+    }
+
+    /// <summary>
+    /// 中央のカレンダーを出しているか。
+    /// <para>
+    /// 画面端に細く留めているときは、カレンダー本体を畳んで予定だけを見たいことがある。
+    /// </para>
+    /// </summary>
+    public bool IsMainViewOpen
+    {
+        get => _isMainViewOpen;
+        set
+        {
+            if (!Set(ref _isMainViewOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsMainViewOpen));
+            Raise(nameof(ShowsCalendarTools));
+        }
+    }
+
+    /// <summary>右の選択日パネルを出しているか。</summary>
+    public bool IsDetailPaneOpen
+    {
+        get => _isDetailPaneOpen;
+        set
+        {
+            if (!Set(ref _isDetailPaneOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsDetailPaneOpen));
+            Raise(nameof(ShowsCalendarTools));
+        }
+    }
+
+    /// <summary>
+    /// ツールバーにカレンダーの操作を出すか。
+    /// <para>
+    /// 中央を畳んでいるとき、ビューの切り替えや「◀ ▶」は効かせどころが無い。
+    /// 出したままだと、押しても何も起きないボタンが並ぶ。
+    /// </para>
+    /// </summary>
+    public bool ShowsCalendarTools => _isMainViewOpen;
+
+    /// <summary>
+    /// 3つとも畳もうとしたら、最後の1つは残す。
+    /// <para>全部消すと、窓だけがそこにあって何もできなくなる。</para>
+    /// </summary>
+    private void EnsureSomethingShows(string justChanged)
+    {
+        if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen) return;
+
+        // いま閉じたものではなく、中央を戻す。何を見る画面なのかが分かる
+        if (justChanged == nameof(IsMainViewOpen)) Set(ref _isDetailPaneOpen, true, nameof(IsDetailPaneOpen));
+        else Set(ref _isMainViewOpen, true, nameof(IsMainViewOpen));
     }
 
     // ------------------------------------------------------------------
@@ -810,6 +873,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>ショートカットの一覧を開く。押せることを知らないと使われない。</summary>
     public RelayCommand ShowShortcutsCommand { get; }
+
+    /// <summary>中央のカレンダーを出す・畳む。</summary>
+    public RelayCommand ToggleMainViewCommand { get; }
+
+    /// <summary>右の選択日パネルを出す・畳む。</summary>
+    public RelayCommand ToggleDetailPaneCommand { get; }
 
     /// <summary>新しい予定の入れ先にする。</summary>
     public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }
