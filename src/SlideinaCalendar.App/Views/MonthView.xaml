@@ -78,6 +78,16 @@
         </ContextMenu>
 
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
+        <!--
+            詰めた形（スリムパネル）の印。名前は出さず、予定が入っていることだけを
+            色で示す。中身は下の一覧で読む
+        -->
+        <DataTemplate x:Key="CompactMarkTemplate">
+            <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+                    ToolTip="{Binding Tooltip}"
+                    Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
+        </DataTemplate>
+
         <DataTemplate x:Key="EventChipTemplate">
             <!--
                 ダブルクリックでその予定を開く。マス側の受け手が先に取ると
@@ -261,7 +271,8 @@
                             ミニ月暦からしか日を選べない。InputBinding からは
                             RelativeSource の祖先をたどれないので、コードビハインドで受ける
                         -->
-                        <StackPanel>
+                        <Grid>
+                        <StackPanel x:Name="Full">
                             <!-- 日付とマイルストーン。日付は左に固定 -->
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -298,9 +309,49 @@
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding OverflowLabel, Converter={StaticResource NullToVisibility}}" />
                         </StackPanel>
+
+                        <!-- 詰めた形。日付を真ん中に置き、予定は色の点だけ -->
+                        <StackPanel x:Name="Compact" Visibility="Collapsed"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
+                                       FontSize="12.5" LineHeight="17"
+                                       HorizontalAlignment="Center"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource InkBrush}" />
+
+                            <ItemsControl ItemsSource="{Binding Bands}" HorizontalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+                                                Background="{Binding Chip.Color,
+                                                            Converter={StaticResource EventColorBrush}}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding Events}" HorizontalAlignment="Center"
+                                          ItemTemplate="{StaticResource CompactMarkTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <DataTemplate.Triggers>
+                        <!-- スリムパネルでは、マスに予定の名前を並べても読めない -->
+                        <DataTrigger Value="True"
+                                     Binding="{Binding DataContext.IsCompact,
+                                               RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Setter TargetName="Full" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Compact" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Cell" Property="Padding" Value="2" />
+                        </DataTrigger>
+
                         <!--
                             実働日データを持つ日は、稼働する日と休業する日で面を分ける。
                             データを持たない日はどちらでもないので、そのままにしておく。

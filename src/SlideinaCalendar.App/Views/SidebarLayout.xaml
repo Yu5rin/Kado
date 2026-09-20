@@ -68,7 +68,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <!-- 上下の割り振りは手で変えられる。既定はカレンダーを広めに取る -->
-                <RowDefinition x:Name="CalendarRow" Height="3*" MinHeight="140" />
+                <RowDefinition x:Name="CalendarRow" Height="3*" MinHeight="120" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
@@ -102,24 +102,14 @@
                           ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
                           Cursor="SizeNS" />
 
-            <!-- 下：予定／タスクのタブ -->
-            <DockPanel Grid.Row="2" Background="{DynamicResource PanelBrush}">
-                <Border DockPanel.Dock="Top" Padding="10,6"
-                        BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-                    <Border CornerRadius="5" ClipToBounds="True"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
-                        <UniformGrid Rows="1" Columns="2">
-                            <ToggleButton Content="予定" Style="{StaticResource SegmentButtonStyle}"
-                                         IsChecked="{Binding Shell.ShowsEvents, Mode=OneWay}"
-                                         Command="{Binding Shell.ShowEventsCommand}" />
-                            <ToggleButton Content="タスク" Style="{StaticResource SegmentButtonStyle}"
-                                         BorderThickness="0"
-                                         IsChecked="{Binding Shell.ShowsTasks, Mode=OneWay}"
-                                         Command="{Binding Shell.ShowTasksCommand}" />
-                        </UniformGrid>
-                    </Border>
-                </Border>
+            <!--
+                下：選んだ日の予定とタスク。
 
+                タブで切り替えていたが、予定を見ているあいだタスクが見えない。
+                右ペインと同じで、節を縦に続けてひとつのスクロールに入れる。
+                どちらも一度に目に入る。
+            -->
+            <DockPanel Grid.Row="2" Background="{DynamicResource PanelBrush}">
                 <!-- 選択した日の見出し。どの日の予定を見ているのか分からなくなる -->
                 <Border DockPanel.Dock="Top" Padding="10,6,10,4"
                         DataContext="{Binding SelectedDay}">
@@ -134,11 +124,18 @@
                     </DockPanel>
                 </Border>
 
-                <Grid DataContext="{Binding SelectedDay}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
-                                  Visibility="{Binding DataContext.Shell.ShowsEvents,
-                                               RelativeSource={RelativeSource AncestorType=UserControl},
-                                               Converter={StaticResource BoolToVisibility}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
+                              DataContext="{Binding SelectedDay}">
+                    <StackPanel>
+                        <DockPanel Margin="0,2,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding EventCountText}"
+                                       FontSize="10.5"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                            <TextBlock Text="予定" FontSize="10.5"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                        </DockPanel>
+
                         <ItemsControl ItemsSource="{Binding Events}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -162,12 +159,16 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
 
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
-                                  Visibility="{Binding DataContext.Shell.ShowsTasks,
-                                               RelativeSource={RelativeSource AncestorType=UserControl},
-                                               Converter={StaticResource BoolToVisibility}}">
+                        <DockPanel Margin="0,10,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding TaskCountText}"
+                                       FontSize="10.5"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                            <TextBlock Text="タスク" FontSize="10.5"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                        </DockPanel>
+
                         <ItemsControl ItemsSource="{Binding Tasks}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -205,8 +206,8 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
+                    </StackPanel>
+                </ScrollViewer>
             </DockPanel>
         </Grid>
     </DockPanel>
