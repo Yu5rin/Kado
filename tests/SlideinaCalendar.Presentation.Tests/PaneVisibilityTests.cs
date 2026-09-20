@@ -116,6 +116,32 @@ public class PaneVisibilityTests
     }
 
     [Fact]
+    public void 右ペインだけのときは日送りを日付欄へ移す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // ふだんはツールバーに年月と「◀ ▶」を出す
+        Assert.True(vm.ShowsToolbarDate);
+        Assert.False(vm.ShowsDayNav);
+
+        vm.ToggleSidePanelCommand.Execute(null);
+        vm.ToggleMainViewCommand.Execute(null);
+
+        // 右ペインだけになったら、ツールバーの年月は日付欄と同じことを
+        // 二度言うことになる。送りも日付のすぐ隣へ移す
+        Assert.True(vm.ShowsDayNav);
+        Assert.False(vm.ShowsToolbarDate);
+
+        // 右ペインも畳んだら（左パネルだけ）、置き場はツールバーに戻る
+        vm.ToggleSidePanelCommand.Execute(null);
+        vm.ToggleDetailPaneCommand.Execute(null);
+
+        Assert.False(vm.ShowsDayNav);
+        Assert.True(vm.ShowsToolbarDate);
+    }
+
+    [Fact]
     public void 中央を最後に畳んだら右パネルを残す()
     {
         using var test = TestWorkspace.Create();

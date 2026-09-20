@@ -184,9 +184,15 @@
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
 
-                <!-- 年は一段小さく薄く。月のほうを大きく出して視線を集める -->
+                <!--
+                    年は一段小さく薄く。月のほうを大きく出して視線を集める。
+
+                    中央を畳んで右ペインだけで使っているときは出さない。すぐ下の
+                    日付欄と同じことを二度言うことになる（送りもそちらへ移す）
+                -->
                 <TextBlock DockPanel.Dock="Left" MinWidth="{Binding TitleRoom}" Margin="8,0,0,0"
                            VerticalAlignment="Center" FontSize="19" FontWeight="SemiBold"
+                           Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}"
                            Typography.NumeralAlignment="Tabular">
                     <Run Text="{Binding TitleYear, Mode=OneWay}" FontSize="14" FontWeight="Medium"
                          Foreground="{DynamicResource Ink3Brush}" /><Run Text=" " /><Run
@@ -194,13 +200,15 @@
                 </TextBlock>
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
-                        Command="{Binding PreviousCommand}" ToolTip="前の月">
+                        Command="{Binding PreviousCommand}" ToolTip="前の月"
+                        Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
-                        Command="{Binding NextCommand}" ToolTip="次の月">
+                        Command="{Binding NextCommand}" ToolTip="次の月"
+                        Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -760,6 +768,39 @@
                     <!-- 日付ヘッダ（.dhead）。実働日の通し番号を出す場所のひとつ（要件書 4.3） -->
                     <Border Grid.Row="0" Padding="14,11,14,9"
                             BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+                        <DockPanel>
+                            <!--
+                                日送り。中央を畳んで右ペインだけで使っているときだけ、
+                                ここに出る。日付のすぐ隣にあるほうが近い。
+                                DataContext は SelectedDay なので、コマンドは窓から引く
+                            -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                        VerticalAlignment="Center" Margin="8,0,0,0"
+                                        Visibility="{Binding DataContext.ShowsDayNav,
+                                                     RelativeSource={RelativeSource AncestorType=Window},
+                                                     Converter={StaticResource BoolToVisibility}}">
+                                <Button Style="{StaticResource IconButtonStyle}" ToolTip="前の日"
+                                        Command="{Binding DataContext.PreviousCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}">
+                                    <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
+                                          Width="16" Height="16"
+                                          Stroke="{Binding Foreground,
+                                                   RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.7"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                </Button>
+                                <Button Style="{StaticResource IconButtonStyle}" ToolTip="次の日"
+                                        Command="{Binding DataContext.NextCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}">
+                                    <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                                          Width="16" Height="16"
+                                          Stroke="{Binding Foreground,
+                                                   RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.7"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                </Button>
+                            </StackPanel>
+
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
@@ -790,6 +831,7 @@
                                            Visibility="{Binding RemainingInMonthText, Converter={StaticResource NullToVisibility}}" />
                             </StackPanel>
                         </StackPanel>
+                        </DockPanel>
                     </Border>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
