@@ -17,8 +17,20 @@ public partial class YearView : UserControl
     /// <summary>左の月名と、右の実働日数に取ってある幅。残りを31日で割る。</summary>
     private const double SideRoom = 46 + 60 + 24;
 
-    /// <summary>カレンダー表示の1枚ぶんの幅（外側の余白を含む）。</summary>
-    private const double GridCardWidth = 202;
+    /// <summary>
+    /// カレンダー表示を4列に並べたいときの、1枚ぶんの最小の幅。
+    /// <para>
+    /// 1枚の中身は Viewbox で入れ物に合わせて伸び縮みするので、素の 202px より
+    /// 狭くても読める。四半期が縦に揃う並びを崩したくないので、ここは低めに取る。
+    /// </para>
+    /// </summary>
+    private const double GridCardWidth = 160;
+
+    /// <summary>カレンダー1枚を、これより低くはしない。下回るぶんはスクロールさせる。</summary>
+    private const double GridCardMinHeight = 150;
+
+    /// <summary>ScrollViewer の Padding="12,10" のうち、上下ぶん。</summary>
+    private const double ScrollPadding = 20;
 
     /// <summary>縦のスクロールバーが出たぶん。出てから測ると幅が揺れる</summary>
     private const double ScrollRoom = 14;
@@ -44,14 +56,19 @@ public partial class YearView : UserControl
     /// </summary>
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
-        if (DataContext is not YearViewModel year) return;
+        if (e.Delta == 0) return;
 
         // Ctrl はビューの切り替えに使う。ここでは受けない
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
 
-        if (e.Delta > 0) year.GoToPreviousYear();
-        else year.GoToNextYear();
+        // 年ビューに直に頼まない。ツールバーの見出しは MainViewModel が出しているので、
+        // 素通りするとツールバーが「2026 年度」のまま中身だけ 2027 年度になる
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
+        var command = e.Delta > 0 ? main.PreviousCommand : main.NextCommand;
+        if (!command.CanExecute(null)) return;
+
+        command.Execute(null);
         e.Handled = true;
     }
 
@@ -74,5 +91,11 @@ public partial class YearView : UserControl
         // 12枚を何列で並べるか。4列に収まらなければ減らす
         var fits = (int)(e.NewSize.Width / GridCardWidth);
         year.GridColumns = Math.Clamp(fits, 1, 4);
+
+        // 高さを渡さないと、12枚が上に寄ったまま下が余る。ScrollViewer は
+        // 中身に高さを聞くので、ここで見えている高さを教えてやる必要がある。
+        // 低すぎるときだけ、はみ出したぶんをスクロールさせる
+        var height = e.NewSize.Height - ScrollPadding;
+        GridHost.Height = Math.Max(year.GridRows * GridCardMinHeight, height);
     }
 }
