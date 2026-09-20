@@ -187,8 +187,8 @@
                 <!--
                     年は一段小さく薄く。月のほうを大きく出して視線を集める。
 
-                    中央を畳んで右ペインだけで使っているときは出さない。すぐ下の
-                    日付欄と同じことを二度言うことになる（送りもそちらへ移す）
+                    中央を畳んでいるときは出さない。見ているのは選んだ1日で、
+                    右ペインの日付欄やミニ月暦と同じことを二度言うことになる
                 -->
                 <TextBlock DockPanel.Dock="Left" MinWidth="{Binding TitleRoom}" Margin="8,0,0,0"
                            VerticalAlignment="Center" FontSize="19" FontWeight="SemiBold"
@@ -201,14 +201,14 @@
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
                         Command="{Binding PreviousCommand}" ToolTip="前の月"
-                        Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}">
+                        Visibility="{Binding ShowsToolbarNav, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
                         Command="{Binding NextCommand}" ToolTip="次の月"
-                        Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}">
+                        Visibility="{Binding ShowsToolbarNav, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
