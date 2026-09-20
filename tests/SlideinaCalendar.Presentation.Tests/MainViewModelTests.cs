@@ -310,6 +310,100 @@ public class MainViewModelTests
         Assert.Equal(D(2026, 10, 2), vm.Day.Date);
     }
 
+    // ------------------------------------------------------------------
+    // 幅に合わせた詰め方
+    //
+    // 細い帯として使うので、入りきらないものは順に落とす
+    // ------------------------------------------------------------------
+
+    private static void Fit(MainViewModel vm, double width)
+    {
+        vm.Shell.LayoutWidth = width;
+        vm.FitTo(width);
+    }
+
+    [Fact]
+    public void 狭いと左から順にパネルを畳み広がれば戻す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        // まず左パネル
+        Fit(vm, 800);
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        // それでも足りなければ右パネル。中央のカレンダーは最後まで残す
+        Fit(vm, 560);
+        Assert.False(vm.IsDetailPaneOpen);
+        Assert.True(vm.IsMainViewOpen);
+
+        Fit(vm, 1200);
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+    }
+
+    [Fact]
+    public void 手で閉じたパネルは広げても勝手に開かない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+        vm.ToggleSidePanelCommand.Execute(null);
+
+        Fit(vm, 1400);
+
+        // 開け直すのは、幅が足りなくて自分で畳んだぶんだけ
+        Assert.False(vm.IsSidePanelOpen);
+    }
+
+    [Fact]
+    public void 狭いとツールバーの中身を順に落とす()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+        Assert.True(vm.ShowsWorkdayBadges);
+        Assert.True(vm.ShowsSyncStatus);
+        Assert.True(vm.ShowsSearchBox);
+        Assert.False(vm.UsesCompactSearch);
+        Assert.True(vm.ShowsViewSwitcher);
+        Assert.True(vm.ShowsTodayButton);
+
+        // 実働・残りのバッジがいちばん先。同じ数字は右ペインにも出ている
+        Fit(vm, 950);
+        Assert.False(vm.ShowsWorkdayBadges);
+        Assert.True(vm.ShowsSyncStatus);
+
+        Fit(vm, 850);
+        Assert.False(vm.ShowsSyncStatus);
+        Assert.False(vm.UsesCompactSearch);
+
+        // 検索は消さずに虫めがねへ畳む
+        Fit(vm, 780);
+        Assert.True(vm.UsesCompactSearch);
+        Assert.False(vm.ShowsSearchBox);
+
+        vm.OpenSearchCommand.Execute(null);
+        Assert.True(vm.ShowsSearchBox);
+        vm.ClearSearch();
+        Assert.False(vm.ShowsSearchBox);
+
+        Fit(vm, 660);
+        Assert.False(vm.ShowsViewSwitcher);
+        Assert.True(vm.ShowsTodayButton);
+
+        // いちばん細いところでは「今日」も置き場が無い
+        Fit(vm, 340);
+        Assert.False(vm.ShowsTodayButton);
+    }
+
     [Fact]
     public void 送ると右ペインの日付も付いてくる()
     {

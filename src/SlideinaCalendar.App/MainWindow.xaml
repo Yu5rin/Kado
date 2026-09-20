@@ -178,7 +178,7 @@
                 </Button>
 
                 <!-- 年は一段小さく薄く。月のほうを大きく出して視線を集める -->
-                <TextBlock DockPanel.Dock="Left" MinWidth="118" Margin="8,0,0,0"
+                <TextBlock DockPanel.Dock="Left" MinWidth="{Binding TitleRoom}" Margin="8,0,0,0"
                            VerticalAlignment="Center" FontSize="19" FontWeight="SemiBold"
                            Typography.NumeralAlignment="Tabular">
                     <Run Text="{Binding TitleYear, Mode=OneWay}" FontSize="14" FontWeight="Medium"
@@ -200,11 +200,12 @@
                 </Button>
 
                 <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0"
-                        Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}" />
+                        Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}"
+                        Visibility="{Binding ShowsTodayButton, Converter={StaticResource BoolToVisibility}}" />
 
                 <!-- ビュー切替（.seg）。区切り線は右側、最後だけ引かない -->
                 <Border DockPanel.Dock="Left" Margin="10,0,0,0" CornerRadius="5" ClipToBounds="True"
-                        Visibility="{Binding ShowsCalendarTools, Converter={StaticResource BoolToVisibility}}"
+                        Visibility="{Binding ShowsViewSwitcher, Converter={StaticResource BoolToVisibility}}"
                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                     <!--
                         粗いほうから細かいほうへ並べる。Ctrl＋ホイールはこの並びを
@@ -251,30 +252,33 @@
                     実働日バッジ（.wdchip）。左パネルを閉じても実働日が読めるようにここに置く。
 
                 -->
-                <Border DockPanel.Dock="Left" Margin="12,0,0,0" CornerRadius="5" Padding="10,3"
-                        VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
-                        Visibility="{Binding HasWorkingDayData, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
-                               Typography.NumeralAlignment="Tabular">
-                        <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
-                              FontSize="14" FontWeight="SemiBold"
-                              Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
-                    </TextBlock>
-                </Border>
-                <Border DockPanel.Dock="Left" Margin="6,0,0,0" CornerRadius="5" Padding="10,3"
-                        VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
-                        Visibility="{Binding HasRemainingWorkingDays, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
-                               Typography.NumeralAlignment="Tabular">
-                        <Run Text="残り " /><Run Text="{Binding RemainingWorkingDaysText, Mode=OneWay}"
-                              FontSize="14" FontWeight="SemiBold"
-                              Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
-                    </TextBlock>
-                </Border>
-                <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
-                           Text="実働日データ未登録" FontSize="11.5"
-                           Foreground="{DynamicResource Ink3Brush}"
-                           Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal"
+                            Visibility="{Binding ShowsWorkdayBadges, Converter={StaticResource BoolToVisibility}}">
+                    <Border Margin="12,0,0,0" CornerRadius="5" Padding="10,3"
+                            VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
+                            Visibility="{Binding HasWorkingDayData, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
+                                   Typography.NumeralAlignment="Tabular">
+                            <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
+                                  FontSize="14" FontWeight="SemiBold"
+                                  Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
+                        </TextBlock>
+                    </Border>
+                    <Border Margin="6,0,0,0" CornerRadius="5" Padding="10,3"
+                            VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
+                            Visibility="{Binding HasRemainingWorkingDays, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
+                                   Typography.NumeralAlignment="Tabular">
+                            <Run Text="残り " /><Run Text="{Binding RemainingWorkingDaysText, Mode=OneWay}"
+                                  FontSize="14" FontWeight="SemiBold"
+                                  Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
+                        </TextBlock>
+                    </Border>
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center"
+                               Text="実働日データ未登録" FontSize="11.5"
+                               Foreground="{DynamicResource Ink3Brush}"
+                               Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
+                </StackPanel>
 
                 </DockPanel>
 
@@ -418,6 +422,7 @@
                 <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,2"
                         Style="{StaticResource SyncStatusButtonStyle}"
                         Command="{Binding Sync.SyncNowCommand}"
+                        Visibility="{Binding ShowsSyncStatus, Converter={StaticResource BoolToVisibility}}"
                         ToolTip="押すと今すぐ同期します">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
@@ -431,7 +436,19 @@
                     検索。打つたびに探し、下に結果を垂らす。
                     Popup にすると本体の配置を動かさずに重ねられる
                 -->
-                <Grid DockPanel.Dock="Right" Margin="0,0,8,0">
+                <!-- 畳んでいるあいだの虫めがね。押すと入力欄が開く -->
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
+                        Margin="0,0,6,0" Command="{Binding OpenSearchCommand}"
+                        Click="OnCompactSearchClicked"
+                        ToolTip="予定とタスクを検索"
+                        Visibility="{Binding UsesCompactSearch, Converter={StaticResource BoolToVisibility}}">
+                    <Path Data="{StaticResource IconSearch}" Stretch="Uniform" Width="16" Height="16"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Button>
+
+                <Grid DockPanel.Dock="Right" Margin="0,0,8,0"
+                      Visibility="{Binding ShowsSearchBox, Converter={StaticResource BoolToVisibility}}">
                     <TextBox x:Name="SearchBox" Style="{StaticResource SearchBoxStyle}"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              KeyDown="OnSearchKeyDown" />
