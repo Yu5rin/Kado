@@ -364,7 +364,8 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isSidePanelOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsSidePanelOpen));
-            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
         }
     }
 
@@ -382,7 +383,8 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isMainViewOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsMainViewOpen));
-            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
             RaiseHeader();
         }
     }
@@ -396,7 +398,8 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isDetailPaneOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
-            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher));
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate));
         }
     }
 
@@ -408,6 +411,18 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool ShowsCalendarTools => _isMainViewOpen;
+
+    /// <summary>
+    /// 日送りを右ペインの日付欄に置くか。
+    /// <para>
+    /// 中央を畳んで右ペインだけで使っているとき、ツールバーの年月と「◀ ▶」は
+    /// 日付欄と同じことを二度言っている。送りは日付のすぐ隣にあるほうが近い。
+    /// </para>
+    /// </summary>
+    public bool ShowsDayNav => !_isMainViewOpen && _isDetailPaneOpen;
+
+    /// <summary>ツールバーに年月と「◀ ▶」を出すか。日付欄へ移したときは出さない。</summary>
+    public bool ShowsToolbarDate => !ShowsDayNav;
 
     // ------------------------------------------------------------------
     // 幅に合わせた詰め方
