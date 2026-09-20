@@ -93,18 +93,20 @@ public class WindowPlacementTests
     }
 
     [Fact]
-    public void 小さすぎる大きさは既定に戻す()
+    public void 小さすぎる大きさは下限まで戻す()
     {
         var store = Store(out var connection);
         using var _ = connection;
 
         // 下限を割った大きさで出すと、中身が重なって読めない
-        store.Save(new WindowPlacement(0, 0, 200, 100, IsMaximized: false));
+        store.Save(new WindowPlacement(0, 0, 100, 100, IsMaximized: false));
 
         var read = store.Load();
 
-        Assert.Equal(WindowPlacement.DefaultWidth, read.Width);
-        Assert.Equal(WindowPlacement.DefaultHeight, read.Height);
+        // 既定まで戻すと、細くして終えた次の起動でいきなり大きく開く。
+        // 下限に留めるほうが、そのまま使い続けられる
+        Assert.Equal(WindowPlacement.MinWidth, read.Width);
+        Assert.Equal(WindowPlacement.MinHeight, read.Height);
     }
 
     // ------------------------------------------------------------------
@@ -148,12 +150,16 @@ public class WindowPlacementTests
     [Fact]
     public void 画面が下限より狭くても下限は割らない()
     {
-        // 中身が重なって読めなくなるほうが困る。はみ出させる
         var placement = new WindowPlacement(0, 0, 1180, 760, false)
             .ClampTo(0, 0, 640, 400);
 
-        Assert.Equal(WindowPlacement.MinWidth, placement.Width);
+        // 幅は画面に収まる。下限（280）を上回っているので、そのまま
+        Assert.Equal(640, placement.Width);
+
+        // 高さは画面（400）より下限（520）のほうが大きい。中身が重なって
+        // 読めなくなるほうが困るので、はみ出させる
         Assert.Equal(WindowPlacement.MinHeight, placement.Height);
+
         Assert.Equal(0, placement.Left);
         Assert.Equal(0, placement.Top);
     }

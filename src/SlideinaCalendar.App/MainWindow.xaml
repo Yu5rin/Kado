@@ -15,7 +15,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:SlideinaCalendar.App.Views"
         xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
-        Title="SlideinaCalendar" Height="760" Width="1180" MinWidth="880" MinHeight="520"
+        Title="SlideinaCalendar" Height="760" Width="1180" MinWidth="280" MinHeight="520"
         Icon="/Assets/app.png"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         Background="{DynamicResource BackgroundBrush}"
@@ -149,7 +149,7 @@
         <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
     </Window.InputBindings>
 
-    <Grid PreviewMouseWheel="OnZoomWheel">
+    <Grid x:Name="Root" PreviewMouseWheel="OnZoomWheel">
     <DockPanel>
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
@@ -169,17 +169,9 @@
                 </Grid.ColumnDefinitions>
 
                 <!--
-                    左右とも ScrollViewer で包む。
-
-                    包まないと、中に並べたものの合計が「窓をこれ以上小さくできない
-                    幅」になる。ClipToBounds は描くときに切るだけで、大きさを測る
-                    ときには効かない。実機では 860px あたりで縮まらなくなり、帯に
-                    したいのに太いままだった。さらに、ピン留めで譲ってもらった幅より
-                    窓のほうが広くなるので、その差のぶん他のウィンドウと重なっていた。
-
-                    ScrollViewer は与えられた幅で満足するので、窓の下限を押し上げない。
-                    入りきらないぶんは切れるが、中身のほうも幅に合わせて順に畳むので、
-                    普通に使っているぶんには切れたところは見えない。
+                    左右とも ScrollViewer で包む。与えられた幅で満足するので、狭い
+                    ときに左の中身が右の列（ピン・設定）へはみ出さない。入りきらない
+                    ぶんは切れるが、中身のほうも幅に合わせて順に畳んでいく。
                 -->
                 <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Hidden"
                               VerticalScrollBarVisibility="Disabled" Focusable="False">

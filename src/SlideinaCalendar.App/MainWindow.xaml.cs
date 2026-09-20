@@ -47,22 +47,13 @@ public partial class MainWindow : Window
         _clock.Tick += (_, _) => ViewModel?.UpdateNow(DateTime.Now);
 
         // 窓ができた時点で入れる。出してから動かすと、一度出てから飛ぶのが見える
-        SourceInitialized += (_, _) =>
-        {
-            RestorePlacement();
-            AllowNarrowWindow();
-        };
+        SourceInitialized += (_, _) => RestorePlacement();
 
         LocationChanged += (_, _) => TrackPlacement();
         SizeChanged += (_, _) =>
         {
             TrackPlacement();
-
-            // 幅でレイアウトを切り替える。同じ UI を縮小して使い回さない（要件書 5.1）
-            if (ViewModel is not { } vm) return;
-
-            vm.Shell.LayoutWidth = ActualWidth;
-            vm.FitTo(ActualWidth);
+            PublishLayoutWidth();
         };
         StateChanged += (_, _) => TrackPlacement();
 
@@ -72,11 +63,7 @@ public partial class MainWindow : Window
             ViewModel?.UpdateNow(DateTime.Now);
             _clock.Start();
             RestorePaneWidths();
-
-            if (ViewModel is not { } vm) return;
-
-            vm.Shell.LayoutWidth = ActualWidth;
-            vm.FitTo(ActualWidth);
+            PublishLayoutWidth();
         };
 
         Closed += (_, _) =>
@@ -230,11 +217,8 @@ public partial class MainWindow : Window
 
         // 中身を隠すだけでは列が残る。「*」の列は、中が畳まれていても場所を取り続ける。
         // 実機で「中央を消しても中央のエリアが残る」となったのはこれ
-        // 中央の下げ止まり。窓が広いあいだは読みやすい幅を保ち、帯にするときは
-        // そこまで下げる。ここを 360 で固定していると、窓ごと縮まらなくなる
-        MainColumn.MinWidth = vm.IsMainViewOpen
-            ? Math.Min(360, Math.Max(MainViewModel.MinMainViewWidth, ActualWidth - 24))
-            : 0;
+        // 中央の下げ止まり。帯として使うときはここまで詰める
+        MainColumn.MinWidth = vm.IsMainViewOpen ? MainViewModel.MinMainViewWidth : 0;
         MainColumn.Width = vm.IsMainViewOpen ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
 
         // 左パネルだけ残したときも同じ。上限のまま置くと、右側が黒く余る
@@ -338,43 +322,22 @@ public partial class MainWindow : Window
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
     /// <summary>
-    /// 窓を細くできるようにする。
+    /// 中身がもらっている幅を渡す。詰め方はこれで決まる。
     /// <para>
-    /// WPF は中身が要る大きさをそのまま Windows に「これ以上小さくできない」と
-    /// 答える。ツールバーや3ペインの積み上げが効いて、実機では 860px あたりで
-    /// 止まっていた。帯として使うには細すぎる。<b>ここで下限を自分で答える。</b>
+    /// <b><c>Window.ActualWidth</c> を使わない。</b>あれは見えないリサイズ枠
+    /// （左右7〜8px）を含むうえ、<c>MinWidth</c> を下回らない。中身の根元の幅なら
+    /// どちらのずれも無い。
     /// </para>
     /// <para>
-    /// はみ出したぶんは切って捨てる。中身のほうも幅に合わせて畳んでいくので、
-    /// 普通に使っているぶんには切れたところは見えない。
+    /// 流すのはここ1か所だけにする。詰め方は ViewModel が <c>LayoutWidth</c> の
+    /// 変化を受けて決めるので、こちらから重ねて頼まない。
     /// </para>
     /// </summary>
-    private void AllowNarrowWindow()
+    private void PublishLayoutWidth()
     {
-        var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero) return;
+        if (ViewModel is not { } vm) return;
 
-        System.Windows.Interop.HwndSource.FromHwnd(handle)?.AddHook(OnWindowMessage);
-    }
-
-    private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (msg != Shell.NativeMethods.WM_GETMINMAXINFO) return IntPtr.Zero;
-
-        var info = System.Runtime.InteropServices.Marshal
-            .PtrToStructure<Shell.NativeMethods.MINMAXINFO>(lParam);
-
-        var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11
-            ?? 1.0;
-        var floor = (int)Math.Round(SlideinaCalendar.Presentation.Settings.DockPlacement.MinWidth * scale);
-
-        if (info.ptMinTrackSize.x <= floor) return IntPtr.Zero;
-
-        info.ptMinTrackSize.x = floor;
-        System.Runtime.InteropServices.Marshal.StructureToPtr(info, lParam, fDeleteOld: false);
-        handled = true;
-
-        return IntPtr.Zero;
+        vm.Shell.LayoutWidth = Root.ActualWidth > 0 ? Root.ActualWidth : ActualWidth;
     }
 
     /// <summary>検索の結果を押したら、その日へ移って開く。</summary>
@@ -396,7 +359,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>Esc で検索をやめる。</summary>
     /// <summary>
     /// 畳んであるときの虫めがね。
     /// <para>開いたら打ち始められるよう、入力欄に手を渡す。</para>
@@ -408,6 +370,7 @@ public partial class MainWindow : Window
             Keyboard.Focus(SearchBox);
         }, System.Windows.Threading.DispatcherPriority.Input);
 
+    /// <summary>Esc で検索をやめる。</summary>
     private void OnSearchKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
