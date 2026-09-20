@@ -295,8 +295,68 @@
                     </StackPanel>
                 </Button>
 
-                <TextBox DockPanel.Dock="Right" Style="{StaticResource SearchBoxStyle}" Margin="0,0,8,0"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                <!--
+                    検索。打つたびに探し、下に結果を垂らす。
+                    Popup にすると本体の配置を動かさずに重ねられる
+                -->
+                <Grid DockPanel.Dock="Right" Margin="0,0,8,0">
+                    <TextBox x:Name="SearchBox" Style="{StaticResource SearchBoxStyle}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             KeyDown="OnSearchKeyDown" />
+
+                    <Popup IsOpen="{Binding IsSearching, Mode=OneWay}" PlacementTarget="{Binding ElementName=SearchBox}"
+                           Placement="Bottom" AllowsTransparency="True" StaysOpen="True"
+                           HorizontalOffset="0" VerticalOffset="3">
+                        <Border MinWidth="320" MaxWidth="440" MaxHeight="420" CornerRadius="6"
+                                Background="{DynamicResource PanelBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding SearchMessage}"
+                                           Margin="12,10" FontSize="12"
+                                           Foreground="{DynamicResource Ink3Brush}"
+                                           Visibility="{Binding SearchMessage,
+                                                        Converter={StaticResource NullToVisibility}}" />
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding SearchResults}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="Row" Padding="12,7" Cursor="Hand"
+                                                        Background="Transparent"
+                                                        MouseLeftButtonDown="OnSearchResultClicked">
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding DateText}"
+                                                                   FontSize="10.5" Margin="10,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Typography.NumeralAlignment="Tabular"
+                                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Title}" FontSize="12.5"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource InkBrush}" />
+                                                            <TextBlock Text="{Binding Detail}" FontSize="10.5"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource Ink3Brush}"
+                                                                       Visibility="{Binding Detail,
+                                                                                    Converter={StaticResource NullToVisibility}}" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+
+                                                <DataTemplate.Triggers>
+                                                    <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Row" Property="Background"
+                                                                Value="{DynamicResource SunkenBrush}" />
+                                                    </Trigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
             </DockPanel>
         </Border>
 
