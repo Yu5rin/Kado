@@ -1,0 +1,204 @@
+<!--
+    一覧（アジェンダ）ビュー（要件書 5.1）。
+
+    予定とタスクを時系列で流す。予定のない日は連続分をまとめて1行に畳む。
+    一般的なカレンダーアプリのように消してしまうと、間がどれだけ空いているのか
+    分からなくなり、実働日の感覚が飛ぶ。畳んでも日付の連続性は保つ。
+-->
+<UserControl x:Class="SlideinaCalendar.App.Views.AgendaView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
+             Background="{DynamicResource BackgroundBrush}"
+             PreviewMouseWheel="OnWheel">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
+
+        <ContextMenu x:Key="AgendaEventMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditEventCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteEventCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="AgendaTaskMenu">
+            <MenuItem Header="編集"
+                      Command="{Binding PlacementTarget.Tag.EditTaskCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="削除"
+                      Command="{Binding PlacementTarget.Tag.DeleteTaskCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <!-- 予定1件。時刻を左に寄せて、縦に揃えて読めるようにする -->
+        <DataTemplate x:Key="AgendaEventTemplate">
+            <Border Background="Transparent" Padding="0,3" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AgendaEventMenu}"
+                    MouseLeftButtonDown="OnEventClicked">
+                <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="3" CornerRadius="2" Margin="0,1,9,1"
+                            Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
+
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding TimeText}" Width="48"
+                               FontSize="11.5" LineHeight="17"
+                               Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource Ink2Brush}" />
+
+                    <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="12.5" LineHeight="17"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource InkBrush}" />
+                        <TextBlock Text="{Binding SubText}" FontSize="11" LineHeight="15"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding SubText, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- タスク1件。予定と見分けがつくよう丸印を添える -->
+        <DataTemplate x:Key="AgendaTaskTemplate">
+            <Border Background="Transparent" Padding="0,3" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource AgendaTaskMenu}"
+                    MouseLeftButtonDown="OnTaskClicked">
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,9,0"
+                             VerticalAlignment="Center"
+                             Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
+
+                    <TextBlock DockPanel.Dock="Left" Text="期限" Width="48"
+                               FontSize="11.5" LineHeight="17"
+                               Foreground="{DynamicResource Ink3Brush}" />
+
+                    <StackPanel>
+                        <TextBlock x:Name="Title" Text="{Binding Title}" FontSize="12.5" LineHeight="17"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource InkBrush}" />
+                        <TextBlock Text="{Binding DueText}" FontSize="11" LineHeight="15"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}" />
+                        <TextBlock Text="{Binding DoneText}" FontSize="11" LineHeight="15"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding DoneText, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <!-- 済んだものは取り消し線。消さずに残すのは、いつ片付いたかを見るため -->
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
+                    <Setter TargetName="Title" Property="Foreground"
+                            Value="{DynamicResource Ink3Brush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- 1行。日付を左、中身を右に置く -->
+        <DataTemplate x:Key="AgendaRowTemplate">
+            <Border x:Name="Row" Padding="12,8" Margin="0,0,0,1"
+                    Background="{DynamicResource PanelBrush}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Left" Width="132" Margin="0,0,12,0">
+                        <TextBlock x:Name="DateText" Text="{Binding DateText}"
+                                   FontSize="12.5" FontWeight="Medium" LineHeight="18"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource InkBrush}" />
+
+                        <TextBlock Text="{Binding WorkingDayText}" FontSize="10.5" LineHeight="14"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding WorkingDayText, Converter={StaticResource NullToVisibility}}" />
+
+                        <TextBlock Text="{Binding HolidayName}" FontSize="10.5" LineHeight="14"
+                                   Foreground="{DynamicResource SundayBrush}"
+                                   Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+
+                    <StackPanel>
+                        <!-- 畳んだ行。消さずに残すのは、間がどれだけ空いているかを示すため -->
+                        <TextBlock Text="{Binding GapText}" FontSize="11" LineHeight="17"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding GapText, Converter={StaticResource NullToVisibility}}" />
+
+                        <ItemsControl ItemsSource="{Binding Events}"
+                                      ItemTemplate="{StaticResource AgendaEventTemplate}" />
+                        <ItemsControl ItemsSource="{Binding Tasks}"
+                                      ItemTemplate="{StaticResource AgendaTaskTemplate}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <!-- 畳んだ行は面を沈める。中身のある行との差で、飛ばして読める -->
+                <DataTrigger Binding="{Binding IsGap}" Value="True">
+                    <Setter TargetName="Row" Property="Background"
+                            Value="{DynamicResource SunkenBrush}" />
+                    <Setter TargetName="Row" Property="Padding" Value="12,5" />
+                    <Setter TargetName="DateText" Property="FontWeight" Value="Normal" />
+                    <Setter TargetName="DateText" Property="Foreground"
+                            Value="{DynamicResource Ink3Brush}" />
+                </DataTrigger>
+
+                <DataTrigger Binding="{Binding IsSaturday}" Value="True">
+                    <Setter TargetName="DateText" Property="Foreground"
+                            Value="{DynamicResource SaturdayBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
+                    <Setter TargetName="DateText" Property="Foreground"
+                            Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+
+                <DataTrigger Binding="{Binding IsToday}" Value="True">
+                    <Setter TargetName="Row" Property="BorderThickness" Value="3,0,0,0" />
+                    <Setter TargetName="Row" Property="BorderBrush"
+                            Value="{DynamicResource AccentBrush}" />
+                    <Setter TargetName="Row" Property="Padding" Value="9,8,12,8" />
+                    <Setter TargetName="DateText" Property="Foreground"
+                            Value="{DynamicResource AccentBrush}" />
+                    <Setter TargetName="DateText" Property="FontWeight" Value="Bold" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <TextBlock Text="{Binding HeaderText}" FontSize="13" FontWeight="SemiBold"
+                       Typography.NumeralAlignment="Tabular"
+                       Foreground="{DynamicResource InkBrush}" />
+        </Border>
+
+        <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource LineBrush}">
+                <ItemsControl ItemsSource="{Binding Rows}"
+                              ItemTemplate="{StaticResource AgendaRowTemplate}" />
+            </ScrollViewer>
+
+            <TextBlock Text="この期間に予定もタスクもありません" FontSize="12"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Ink3Brush}"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}"
+                       IsHitTestVisible="False" />
+        </Grid>
+    </DockPanel>
+</UserControl>

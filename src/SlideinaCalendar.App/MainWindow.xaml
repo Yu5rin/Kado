@@ -200,10 +200,15 @@
                         <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
                                      IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Day}" />
-                        <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     ToolTip="このあとのフェーズで実装します" />
-                        <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}" IsEnabled="False"
-                                     BorderThickness="0" ToolTip="このあとのフェーズで実装します" />
+                        <RadioButton Content="年" Style="{StaticResource SegmentButtonStyle}"
+                                     ToolTip="年度（4月〜翌3月）。Ctrl＋ホイールで年度を送ります"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Year}" />
+                        <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
+                                     BorderThickness="0"
+                                     ToolTip="予定とタスクを時系列で。予定のない日はまとめます"
+                                     IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                                 ConverterParameter=Agenda}" />
                     </StackPanel>
                 </Border>
 
@@ -564,6 +569,14 @@
                                    Visibility="{Binding DataContext.IsDayView,
                                                 RelativeSource={RelativeSource AncestorType=Window},
                                                 Converter={StaticResource BoolToVisibility}}" />
+                    <views:YearView DataContext="{Binding Year}"
+                                    Visibility="{Binding DataContext.IsYearView,
+                                                 RelativeSource={RelativeSource AncestorType=Window},
+                                                 Converter={StaticResource BoolToVisibility}}" />
+                    <views:AgendaView DataContext="{Binding Agenda}"
+                                      Visibility="{Binding DataContext.IsAgendaView,
+                                                   RelativeSource={RelativeSource AncestorType=Window},
+                                                   Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
             </DockPanel>
 
