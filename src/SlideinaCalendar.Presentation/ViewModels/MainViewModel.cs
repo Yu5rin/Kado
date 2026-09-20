@@ -150,6 +150,8 @@ public sealed class MainViewModel : ObservableObject
 
         QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
 
+        RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
+
         BackupCommand = new RelayCommand(Backup);
         RestoreCommand = new RelayCommand(Restore, () => RestoreBackup is not null);
 
@@ -697,6 +699,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>設定画面を開く。</summary>
     public RelayCommand OpenSettingsCommand { get; }
 
+    /// <summary>同じ内容の予定を1つにまとめる。</summary>
+    public RelayCommand RemoveDuplicatesCommand { get; }
+
     /// <summary>いまの内容をファイルに書き出す。</summary>
     public RelayCommand BackupCommand { get; }
 
@@ -992,6 +997,40 @@ public sealed class MainViewModel : ObservableObject
     /// いまの内容をファイルに書き出す。
     /// <para>予定・タスク・設定・実働日データが1つのファイルに入る。</para>
     /// </summary>
+    /// <summary>
+    /// 同じ内容の予定を1つにまとめる。
+    /// <para>
+    /// 消す前に件数を出して尋ねる。Google に繋いでいれば、次の同期で向こうからも消える。
+    /// </para>
+    /// </summary>
+    private void RemoveDuplicates()
+    {
+        var extra = _workspace.FindDuplicateEvents();
+        if (extra.Count == 0)
+        {
+            StatusMessage = "同じ内容の予定は見つかりませんでした";
+            return;
+        }
+
+        var sample = string.Join("\n", extra
+            .Take(5)
+            .Select(e => $"・{e.Date:M/d} {e.Title}"));
+
+        var more = extra.Count > 5 ? $"\n…ほか {extra.Count - 5} 件" : string.Empty;
+
+        if (!_files.Confirm(
+                $"同じ内容の予定が {extra.Count} 件あります",
+                $"次のものを消します。中身の多いほうを1件ずつ残します。\n\n{sample}{more}"
+                + "\n\nCtrl＋Z でまとめて戻せます。"
+                + "\nGoogle に繋いでいれば、次の同期で向こうからも消えます。"))
+        {
+            return;
+        }
+
+        var removed = _workspace.RemoveDuplicateEvents();
+        StatusMessage = $"重複していた予定 {removed} 件を消しました";
+    }
+
     private void Backup()
     {
         if (SaveBackup is null)

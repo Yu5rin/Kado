@@ -248,6 +248,11 @@
                                       ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
 
                             <Separator />
+                            <MenuItem Header="重複した予定を整理…"
+                                      Command="{Binding RemoveDuplicatesCommand}"
+                                      ToolTip="同じ日・同じ時刻・同じ名前の予定を1つにまとめます" />
+
+                            <Separator />
                             <MenuItem Header="バックアップを保存…"
                                       Command="{Binding BackupCommand}"
                                       ToolTip="予定・タスク・設定・実働日データを1つのファイルに書き出します" />
