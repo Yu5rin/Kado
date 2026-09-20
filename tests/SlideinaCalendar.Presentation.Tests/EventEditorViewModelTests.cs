@@ -202,6 +202,34 @@ public class EventEditorViewModelTests
     }
 
     [Fact]
+    public void 既にある予定でも開始を動かすと終了が付いてくる()
+    {
+        var vm = new EventEditorViewModel(new CalendarEvent
+        {
+            Id = "e1", Title = "課内会議", Date = new DateOnly(2026, 9, 14),
+            StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(10, 0),
+        }, null);
+
+        vm.StartTimeText = "13:00";
+
+        // 30分のまま後ろへずれる
+        Assert.Equal("13:30", vm.EndTimeText);
+    }
+
+    [Fact]
+    public void 候補から選んだ終了は時刻だけを残す()
+    {
+        var vm = New();
+        vm.Title = "会議";
+        vm.StartTimeText = "09:00";
+
+        // 一覧には「10:00（1時間）」と出るが、欄に残るのは時刻だけ
+        vm.EndTimeText = "10:00（1時間）";
+
+        Assert.Equal("10:00", vm.EndTimeText);
+    }
+
+    [Fact]
     public void 打ち方はゆるく受ける()
     {
         var vm = New();
