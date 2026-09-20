@@ -50,7 +50,13 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => RestorePlacement();
 
         LocationChanged += (_, _) => TrackPlacement();
-        SizeChanged += (_, _) => TrackPlacement();
+        SizeChanged += (_, _) =>
+        {
+            TrackPlacement();
+
+            // 幅でレイアウトを切り替える。同じ UI を縮小して使い回さない（要件書 5.1）
+            if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
+        };
         StateChanged += (_, _) => TrackPlacement();
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
@@ -59,6 +65,8 @@ public partial class MainWindow : Window
             ViewModel?.UpdateNow(DateTime.Now);
             _clock.Start();
             RestorePaneWidths();
+
+            if (ViewModel is { } vm) vm.Shell.LayoutWidth = ActualWidth;
         };
 
         Closed += (_, _) =>

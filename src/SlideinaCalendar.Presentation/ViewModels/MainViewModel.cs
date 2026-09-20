@@ -73,7 +73,8 @@ public sealed class MainViewModel : ObservableObject
         TimeProvider? clock = null,
         AppSettings? settings = null,
         IStartupRegistration? startup = null,
-        INotifier? notifier = null)
+        INotifier? notifier = null,
+        DockPlacement? shell = null)
     {
         _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
@@ -92,6 +93,7 @@ public sealed class MainViewModel : ObservableObject
         _notifier = notifier ?? NullNotifier.Instance;
         _weekStart = settings?.WeekStart ?? weekStart;
 
+        Shell = new ShellViewModel(shell ?? DockPlacement.Unknown);
         SourceLists = new SourceListsViewModel(workspace);
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         BuildViews(today, today);
@@ -248,6 +250,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>日ビュー。</summary>
     public DayViewModel Day { get; private set; }
+
+    /// <summary>
+    /// 画面での居かた（ウィンドウ／オーバーレイ／ドック）。
+    /// <para>実際に画面へ効かせるのはアプリ側。ここが持つのは「どうしたいか」だけ。</para>
+    /// </summary>
+    public ShellViewModel Shell { get; }
 
     /// <summary>年ビュー（ストリップ／カレンダー）。年度単位。</summary>
     public YearViewModel Year { get; private set; }
