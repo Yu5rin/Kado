@@ -299,4 +299,37 @@ public class SelectedDayViewModelTests
 
         Assert.Equal(["e2", "e1"], main.SelectedDay.Events.Select(e => e.Id));
     }
+
+    [Fact]
+    public void 済んだタスクは期限に間に合ったかを添える()
+    {
+        using var test = TestWorkspace.Create();
+        var due = new DateOnly(2026, 9, 24);
+
+        // 9/24 期限を 9/28（月）に済ませた
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "資料作成", Due = due, IsDone = true,
+            CompletedAt = new DateTimeOffset(2026, 9, 28, 17, 0, 0, TimeSpan.FromHours(9)),
+        });
+
+        var vm = new SelectedDayViewModel(test.Workspace, due, due);
+        var row = vm.Tasks.Single(t => t.Id == "t1");
+
+        Assert.Equal("2実働日 遅れて完了", row.DoneText);
+        Assert.True(row.IsLate);
+    }
+
+    [Fact]
+    public void 済んでいないタスクには結果を出さない()
+    {
+        using var test = TestWorkspace.Create();
+        var due = new DateOnly(2026, 9, 24);
+
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "資料作成", Due = due });
+
+        var vm = new SelectedDayViewModel(test.Workspace, due, due);
+
+        Assert.Null(vm.Tasks.Single(t => t.Id == "t1").DoneText);
+    }
 }
