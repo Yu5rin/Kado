@@ -260,6 +260,22 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// スライドから、カーソルが外れたら引っ込めるか。
+    /// <para>切ると、他のウィンドウを触るまで出したままにする。</para>
+    /// </summary>
+    public bool SlideOutOnLeave
+    {
+        get => _settings.SlideOutOnLeave;
+        set
+        {
+            if (_settings.SlideOutOnLeave == value) return;
+
+            _settings.SlideOutOnLeave = value;
+            Raise();
+        }
+    }
+
     /// <summary>知らせるときに音を鳴らすか。</summary>
     public bool NotifySound
     {

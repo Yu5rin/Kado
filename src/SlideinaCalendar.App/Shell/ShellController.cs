@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Presentation.ViewModels;
@@ -23,6 +24,18 @@ public sealed class ShellController : IDisposable
     /// </summary>
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// 滑り出る時間。
+    /// <para>
+    /// 速すぎると出たことに気づけず、遅いと待たされる。減速を効かせて、止まる
+    /// ところを柔らかくする。
+    /// </para>
+    /// </summary>
+    private static readonly Duration SlideInTime = new(TimeSpan.FromMilliseconds(220));
+
+    /// <summary>引っ込む時間。出るときより短くする。用が済んだものを見送らない。</summary>
+    private static readonly Duration SlideOutTime = new(TimeSpan.FromMilliseconds(160));
+
     private readonly Window _window;
     private readonly ShellViewModel _shell;
     private readonly DockPlacementStore _store;
@@ -44,6 +57,18 @@ public sealed class ShellController : IDisposable
     private Rect? _workBeforeDock;
 
     private bool _disposed;
+
+    /// <summary>いま引っ込んでいる最中。終わるまで重ねて呼ばない。</summary>
+    private bool _slidingOut;
+
+    /// <summary>
+    /// スライドから、カーソルが外れたら引っ込めるか。
+    /// <para>
+    /// 既定は引っ込める。用があるときだけ出てくるのがスライドの形で、出したまま
+    /// にしたければピンで留める。設定で切れる。
+    /// </para>
+    /// </summary>
+    public bool SlideOutOnLeave { get; set; } = true;
 
     public ShellController(Window window, ShellViewModel shell, DockPlacementStore store)
     {
@@ -78,6 +103,10 @@ public sealed class ShellController : IDisposable
 
         // 帯に留まったらスライドさせる
         _hotZone.Triggered += (_, _) => SlideIn();
+
+        // 窓から外れたら引っ込める。押そうとしたボタンが逃げないよう、外れてから
+        // 少し置いてから来る
+        _hotZone.Left += (_, _) => SlideOutIfIdle();
 
         // 他のアプリへ移ったら引っ込める。スライドは「用があるときだけ出る」もので、
         // 出しっぱなしにしたいならピンで留める
@@ -120,7 +149,17 @@ public sealed class ShellController : IDisposable
         if (_shell.Mode != ShellMode.Overlay) return;
 
         ApplyOverlayBounds();
+
+        var resting = _window.Left;
+
+        // 画面の外から滑り込ませる。位置を決めてから出す
+        _window.Left = OffScreenLeft();
         Show();
+
+        Animate(resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut });
+
+        // 出たあとは、外れるのを見張る番
+        if (SlideOutOnLeave) _hotZone.WatchLeaving(WindowRect());
     }
 
     /// <summary>
@@ -133,21 +172,94 @@ public sealed class ShellController : IDisposable
     {
         if (_shell.Mode != ShellMode.Overlay) return;
 
+        if (_slidingOut || !_window.IsVisible) return;
+
         // 自分が出した窓（編集画面など）に移っただけなら、引っ込めない。
         // 予定を書いている最中に本体が消えると、書き終わって戻る先が無くなる
         if (OwnsForeground()) return;
 
-        _window.Hide();
+        var resting = _window.Left;
+        _slidingOut = true;
+
+        Animate(OffScreenLeft(), SlideOutTime, new QuadraticEase { EasingMode = EasingMode.EaseIn },
+            () =>
+            {
+                _slidingOut = false;
+                _window.Hide();
+
+                // 次に出すときのために、居場所は戻しておく
+                _window.Left = resting;
+                _hotZone.WatchEdge();
+            });
     }
+
+    /// <summary>
+    /// 画面の外に置いたときの左端。
+    /// <para>寄せている辺の向こう側へ、まるごと1枚ぶん出す。</para>
+    /// </summary>
+    private double OffScreenLeft()
+    {
+        var scale = Scale();
+        var screen = ScreenOfWindow();
+        var width = _window.Width;
+
+        return _shell.Edge == DockEdge.Left
+            ? (screen.left / scale) - width
+            : screen.right / scale;
+    }
+
+    /// <summary>
+    /// 横に滑らせる。
+    /// <para>
+    /// <b>終わったらアニメーションを外す。</b>掛けたままだと、そのあと
+    /// <c>Left</c> に入れた値が効かなくなる（アニメーションが値を握り続ける）。
+    /// </para>
+    /// </summary>
+    private void Animate(double to, Duration time, IEasingFunction easing, Action? done = null)
+    {
+        var animation = new DoubleAnimation(to, time) { EasingFunction = easing };
+
+        animation.Completed += (_, _) =>
+        {
+            _window.BeginAnimation(Window.LeftProperty, null);
+            _window.Left = to;
+            done?.Invoke();
+        };
+
+        _window.BeginAnimation(Window.LeftProperty, animation);
+    }
+
+    /// <summary>滑りを止めて、位置を自分の手に戻す。</summary>
+    private void StopSliding()
+    {
+        _slidingOut = false;
+        _window.BeginAnimation(Window.LeftProperty, null);
+    }
+
+    /// <summary>いまの窓の矩形（物理ピクセル）。カーソルが外れたかを見るのに使う。</summary>
+    private NativeMethods.RECT WindowRect()
+    {
+        var scale = Scale();
+
+        return new NativeMethods.RECT
+        {
+            left = (int)Math.Round(_window.Left * scale),
+            top = (int)Math.Round(_window.Top * scale),
+            right = (int)Math.Round((_window.Left + _window.Width) * scale),
+            bottom = (int)Math.Round((_window.Top + _window.Height) * scale),
+        };
+    }
+
+    /// <summary>画面の倍率。Win32 はピクセル、WPF は倍率を割った値で話す。</summary>
+    private double Scale() =>
+        PresentationSource.FromVisual(_window)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
 
     /// <summary>いま窓が乗っているモニタ全体（物理ピクセル）。</summary>
     private NativeMethods.RECT ScreenOfWindow()
     {
         var handle = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
-        var scale = PresentationSource.FromVisual(_window)?.CompositionTarget?.TransformToDevice.M11
-            ?? 1.0;
 
-        return Screens.Of(handle, scale);
+        return Screens.Of(handle, Scale());
     }
 
     /// <summary>いま前にいるのが、自分の出した窓か。</summary>
@@ -222,6 +334,7 @@ public sealed class ShellController : IDisposable
     /// <summary>ふつうのウィンドウに戻す。端へ寄せる前の姿へ。</summary>
     private void ToWindow()
     {
+        StopSliding();
         _window.Topmost = false;
         _window.WindowStyle = WindowStyle.SingleBorderWindow;
         _window.ResizeMode = ResizeMode.CanResize;
@@ -250,6 +363,7 @@ public sealed class ShellController : IDisposable
     /// </summary>
     private void ToEdge()
     {
+        StopSliding();
         _windowed ??= new WindowPlacement(
             _window.Left, _window.Top, _window.Width, _window.Height, IsMaximized: false);
 
@@ -271,8 +385,7 @@ public sealed class ShellController : IDisposable
     {
         if (!_shell.IsPinned) return;
 
-        var scale = PresentationSource.FromVisual(_window)?.CompositionTarget?.TransformToDevice.M11
-            ?? 1.0;
+        var scale = Scale();
         var screen = ScreenOfWindow();
         var width = _shell.DockWidth;
 
@@ -289,6 +402,10 @@ public sealed class ShellController : IDisposable
     private void ApplyOverlayBounds()
     {
         if (!_shell.IsAtEdge || _shell.IsPinned) return;
+
+        // 滑りが残っていると、ここで入れた値が効かない。アニメーションは
+        // 掛けたあいだ値を握り続ける
+        StopSliding();
 
         // 留める前に控えた値があればそちらを使い、使ったら捨てる。次に出すときには
         // ワークエリアも戻っているので、そのときは素直に測ってよい
