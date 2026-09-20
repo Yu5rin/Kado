@@ -248,6 +248,14 @@
                                       ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
 
                             <Separator />
+                            <MenuItem Header="バックアップを保存…"
+                                      Command="{Binding BackupCommand}"
+                                      ToolTip="予定・タスク・設定・実働日データを1つのファイルに書き出します" />
+                            <MenuItem Header="バックアップから復元…"
+                                      Command="{Binding RestoreCommand}"
+                                      ToolTip="いまの内容はすべて置き換わります。復元後にアプリを立ち上げ直します" />
+
+                            <Separator />
                             <MenuItem Header="更新を確認…"
                                       Command="{Binding CheckForUpdateCommand}"
                                       ToolTip="新しい版があれば知らせます" />

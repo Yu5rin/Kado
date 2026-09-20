@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using SlideinaCalendar.Data.Models;
 using SlideinaCalendar.Google.Mapping;
@@ -142,6 +143,9 @@ public sealed class MainViewModel : ObservableObject
         AddTaskListCommand = new RelayCommand(() => AddSource(isTaskList: true));
         EditSourceCommand = new RelayCommand<SourceListItemViewModel?>(EditSource);
         DeleteSourceCommand = new RelayCommand<SourceListItemViewModel?>(DeleteSource, CanDeleteSource);
+
+        BackupCommand = new RelayCommand(Backup);
+        RestoreCommand = new RelayCommand(Restore, () => RestoreBackup is not null);
 
         ImportWorkingDaysCommand = new RelayCommand(ImportWorkingDays);
         ImportLegacyBackupCommand = new RelayCommand(ImportLegacyBackup);
@@ -504,6 +508,27 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>設定画面を開く。</summary>
     public RelayCommand OpenSettingsCommand { get; }
 
+    /// <summary>いまの内容をファイルに書き出す。</summary>
+    public RelayCommand BackupCommand { get; }
+
+    /// <summary>書き出したファイルで置き換える。</summary>
+    public RelayCommand RestoreCommand { get; }
+
+    /// <summary>
+    /// いまの内容をファイルに書き出す口。App 側が入れる。
+    /// <para>データベースそのものを扱うので、接続を持っている側でないと書けない。</para>
+    /// </summary>
+    public Action<string>? SaveBackup { get; set; }
+
+    /// <summary>
+    /// ファイルで置き換える口。App 側が入れる。
+    /// <para>
+    /// 置き換えは接続を閉じてから行い、そのあとアプリを立ち上げ直す。
+    /// 開いたまま差し替えると壊れる。
+    /// </para>
+    /// </summary>
+    public Action<string>? RestoreBackup { get; set; }
+
     /// <summary>カレンダーを作る。</summary>
     public RelayCommand AddCalendarCommand { get; }
 
@@ -774,6 +799,69 @@ public sealed class MainViewModel : ObservableObject
     /// 動かないままになる（要件書 4.1）。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// いまの内容をファイルに書き出す。
+    /// <para>予定・タスク・設定・実働日データが1つのファイルに入る。</para>
+    /// </summary>
+    private void Backup()
+    {
+        if (SaveBackup is null)
+        {
+            StatusMessage = "この画面からは書き出せません";
+            return;
+        }
+
+        var name = $"SlideinaCalendar-{DateTime.Now:yyyyMMdd-HHmm}.db";
+        if (_files.PickSaveFile("バックアップの保存先", BackupFilter, name) is not { } path) return;
+
+        try
+        {
+            SaveBackup(path);
+            StatusMessage = $"バックアップを書き出しました（{Path.GetFileName(path)}）";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"バックアップを書き出せませんでした（{ex.Message}）";
+        }
+    }
+
+    /// <summary>
+    /// 書き出したファイルで置き換える。
+    /// <para>
+    /// <b>いまの内容はすべて置き換わる。</b>元に戻せないので必ず尋ねる。
+    /// 置き換えたあとはアプリを立ち上げ直す。
+    /// </para>
+    /// </summary>
+    private void Restore()
+    {
+        if (RestoreBackup is null)
+        {
+            StatusMessage = "この画面からは復元できません";
+            return;
+        }
+
+        if (_files.PickOpenFile("復元するバックアップを選ぶ", BackupFilter) is not { } path) return;
+
+        if (!_files.Confirm(
+                "バックアップから復元します",
+                "いまの予定・タスク・設定・実働日データは、すべてファイルの内容に置き換わります。"
+                + "元に戻すことはできません。\n\n復元したあとアプリを立ち上げ直します。"))
+        {
+            return;
+        }
+
+        try
+        {
+            RestoreBackup(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        {
+            StatusMessage = $"復元できませんでした（{ex.Message}）";
+        }
+    }
+
+    private const string BackupFilter = "SlideinaCalendar のバックアップ (*.db)|*.db|すべてのファイル (*.*)|*.*";
+
     private void ImportWorkingDays()
     {
         if (_files.PickOpenFile("実働日ファイルを選ぶ", "Excel ブック (*.xlsx)|*.xlsx|すべてのファイル (*.*)|*.*")
