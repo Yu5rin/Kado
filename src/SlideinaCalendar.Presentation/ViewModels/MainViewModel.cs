@@ -50,6 +50,8 @@ public sealed class MainViewModel : ObservableObject
     private DateOnly _today;
     private string? _statusMessage;
     private string _searchText = string.Empty;
+    private IReadOnlyList<SearchResultViewModel> _searchResults = [];
+    private string? _searchMessage;
     private double _sidePanelWidth;
     private double _detailPaneWidth;
 
@@ -403,8 +405,97 @@ public sealed class MainViewModel : ObservableObject
     public string SearchText
     {
         get => _searchText;
-        set => Set(ref _searchText, value ?? string.Empty);
+        set
+        {
+            if (!Set(ref _searchText, value ?? string.Empty)) return;
+
+            RunSearch();
+        }
     }
+
+    /// <summary>検索で見つかったもの。多くても50件までにする。</summary>
+    public IReadOnlyList<SearchResultViewModel> SearchResults
+    {
+        get => _searchResults;
+        private set => Set(ref _searchResults, value);
+    }
+
+    /// <summary>検索の結果を出しているか。</summary>
+    public bool IsSearching => _searchText.Trim().Length > 0;
+
+    /// <summary>見つからなかったときなどの断り書き。見つかっていれば null。</summary>
+    public string? SearchMessage
+    {
+        get => _searchMessage;
+        private set => Set(ref _searchMessage, value);
+    }
+
+    /// <summary>探すのをやめる。欄を空にして結果も消す。</summary>
+    public void ClearSearch() => SearchText = string.Empty;
+
+    /// <summary>
+    /// 見つかったものを開く。その日へ移って、検索は閉じる。
+    /// </summary>
+    public void OpenSearchResult(SearchResultViewModel? found)
+    {
+        if (found is null) return;
+
+        SelectedDate = found.Date;
+        ClearSearch();
+
+        if (found.IsTask) EditTaskBy(found.Id);
+        else EditEventBy(found.Id);
+    }
+
+    /// <summary>
+    /// 題・場所・メモから探す。
+    /// <para>
+    /// 並びは<b>今日に近い順</b>。単純な日付順だと、件数を絞ったときに古いものだけが
+    /// 残る。出すときは日付の昇順に並べ直す（一覧として読みやすいため）。
+    /// </para>
+    /// </summary>
+    private void RunSearch()
+    {
+        Raise(nameof(IsSearching));
+
+        var text = _searchText.Trim();
+        if (text.Length == 0)
+        {
+            SearchResults = [];
+            SearchMessage = null;
+            return;
+        }
+
+        var events = _workspace.Events.All()
+            .Where(e => !CalendarWorkspace.IsMilestoneMark(e))
+            .Where(e => Hits(text, e.Title, e.Location, e.Note))
+            .Select(SearchResultViewModel.Of);
+
+        var tasks = _workspace.Tasks.All()
+            .Where(t => t.Due is not null && Hits(text, t.Title, null, t.Note))
+            .Select(t => SearchResultViewModel.Of(t, t.Due!.Value));
+
+        var found = events.Concat(tasks)
+            .OrderBy(r => Math.Abs(r.Date.DayNumber - _today.DayNumber))
+            .ThenBy(r => r.Date)
+            .Take(SearchLimit)
+            .OrderBy(r => r.Date)
+            .ThenBy(r => r.Title, StringComparer.Ordinal)
+            .ToArray();
+
+        SearchResults = found;
+        SearchMessage = found.Length == 0 ? "見つかりませんでした" : null;
+    }
+
+    /// <summary>題・場所・メモのどれかに含まれるか。大文字小文字は区別しない。</summary>
+    private static bool Hits(string text, string? title, string? location, string? note) =>
+        Contains(title, text) || Contains(location, text) || Contains(note, text);
+
+    private static bool Contains(string? value, string text) =>
+        value is { Length: > 0 } && value.Contains(text, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>出す件数の上限。これ以上出しても目で追えない。</summary>
+    private const int SearchLimit = 50;
 
     /// <summary>
     /// 同期の状態。

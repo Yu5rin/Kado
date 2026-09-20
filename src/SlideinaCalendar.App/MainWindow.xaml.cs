@@ -108,6 +108,24 @@ public partial class MainWindow : Window
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
+    /// <summary>検索の結果を押したら、その日へ移って開く。</summary>
+    private void OnSearchResultClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SearchResultViewModel found) return;
+
+        ViewModel?.OpenSearchResult(found);
+        e.Handled = true;
+    }
+
+    /// <summary>Esc で検索をやめる。</summary>
+    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+
+        ViewModel?.ClearSearch();
+        e.Handled = true;
+    }
+
     /// <summary>右ペインの予定。ダブルクリックで編集画面を開く。</summary>
     private void OnEventRowClicked(object sender, MouseButtonEventArgs e)
     {
