@@ -58,7 +58,7 @@ public sealed class SettingsViewModel : ObservableObject
             return;
         }
 
-        _notifier.Notify("試しの知らせ", "この形で予定の前にお知らせします");
+        _notifier.Notify("試しの知らせ", "この形で予定の前にお知らせします", _settings.NotifySound);
         Message = null;
     }
 
@@ -240,6 +240,19 @@ public sealed class SettingsViewModel : ObservableObject
             if (_settings.NotifyLeadMinutes == value) return;
 
             _settings.NotifyLeadMinutes = value;
+            Raise();
+        }
+    }
+
+    /// <summary>知らせるときに音を鳴らすか。</summary>
+    public bool NotifySound
+    {
+        get => _settings.NotifySound;
+        set
+        {
+            if (_settings.NotifySound == value) return;
+
+            _settings.NotifySound = value;
             Raise();
         }
     }

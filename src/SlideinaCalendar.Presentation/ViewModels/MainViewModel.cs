@@ -451,7 +451,13 @@ public sealed class MainViewModel : ObservableObject
     // 埋めるより速い。読めない言い回しは黙って一部だけ入れず、断って止める
     // ------------------------------------------------------------------
 
-    /// <summary>クイック入力の1行。</summary>
+    /// <summary>
+    /// クイック入力の1行。
+    /// <para>
+    /// 「明日」は<b>今日から見た明日</b>。選んでいる日は見ない。月を送って眺めている
+    /// 最中に打つと、思っていたのと違う日に入る。
+    /// </para>
+    /// </summary>
     public string QuickText
     {
         get => _quickText;
@@ -474,7 +480,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (_quickText.Trim().Length == 0) return null;
 
-            var entry = QuickParser.Parse(_quickText, SelectedDate);
+            var entry = QuickParser.Parse(_quickText, _today);
 
             if (entry.UnsupportedWord is { } word) return $"「{word}」はここでは読めません。予定の画面から入れてください";
             if (entry.HasDateError) return "その日は暦にありません";
@@ -493,14 +499,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>そのまま入れられるか。</summary>
-    public bool CanCommitQuick => QuickParser.Parse(_quickText, SelectedDate).CanCommit;
+    public bool CanCommitQuick => QuickParser.Parse(_quickText, _today).CanCommit;
 
     /// <summary>1行から予定を入れる。</summary>
     public RelayCommand QuickCommand { get; }
 
     private void CommitQuick()
     {
-        var entry = QuickParser.Parse(_quickText, SelectedDate);
+        var entry = QuickParser.Parse(_quickText, _today);
         if (!entry.CanCommit) return;
 
         _workspace.AddEvent(new CalendarEvent

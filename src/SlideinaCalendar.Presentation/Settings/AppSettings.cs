@@ -48,6 +48,7 @@ public sealed class AppSettings
     private const string NotifyLeadKey = "notify.lead_minutes";
     private const string SummaryKey = "notify.summary_enabled";
     private const string SummaryTimeKey = "notify.summary_time";
+    private const string NotifySoundKey = "notify.sound";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -77,6 +78,7 @@ public sealed class AppSettings
     private int _notifyLeadMinutes;
     private bool _summaryEnabled;
     private TimeOnly _summaryTime;
+    private bool _notifySound;
 
     public AppSettings(SettingsRepository store)
     {
@@ -92,6 +94,7 @@ public sealed class AppSettings
         _notifyEnabled = string.Equals(_store.Get(NotifyKey), "true", StringComparison.Ordinal);
         _notifyLeadMinutes = ReadNumber(NotifyLeadKey, DefaultLeadMinutes, 0, 24 * 60);
         _summaryEnabled = string.Equals(_store.Get(SummaryKey), "true", StringComparison.Ordinal);
+        _notifySound = !string.Equals(_store.Get(NotifySoundKey), "false", StringComparison.Ordinal);
         _summaryTime = TimeOnly.TryParseExact(
             _store.Get(SummaryTimeKey), "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
             ? at
@@ -286,6 +289,23 @@ public sealed class AppSettings
 
             _notifyLeadMinutes = clamped;
             _store.Set(NotifyLeadKey, clamped.ToString(CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 知らせるときに音を鳴らすか。既定は鳴らす。
+    /// <para>画面を見ていないときに黙って出しても気づけない。</para>
+    /// </summary>
+    public bool NotifySound
+    {
+        get => _notifySound;
+        set
+        {
+            if (_notifySound == value) return;
+
+            _notifySound = value;
+            _store.Set(NotifySoundKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
