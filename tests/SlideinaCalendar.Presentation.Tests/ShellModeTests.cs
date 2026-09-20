@@ -147,6 +147,31 @@ public class ShellModeTests
     }
 
     [Fact]
+    public void スライドと固定の幅は別に覚える()
+    {
+        var vm = Create(ShellMode.Overlay);
+
+        vm.DockWidth = 400;
+        Assert.Equal(400, vm.DockWidth);
+
+        // 留めたら、固定のときの幅に入れ替わる
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal(DockPlacement.DefaultWidth, vm.DockWidth);
+
+        vm.DockWidth = 640;
+        Assert.Equal(640, vm.DockWidth);
+
+        // 外せば、スライドのときの幅に戻る。ちょっと覗くためのスライドと、
+        // 画面を分け合う固定とで使いたい幅が違う
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal(400, vm.DockWidth);
+
+        var placement = vm.Placement();
+        Assert.Equal(400, placement.Width);
+        Assert.Equal(640, placement.DockedWidth);
+    }
+
+    [Fact]
     public void 狭いときだけ一列の形にする()
     {
         var vm = Create(ShellMode.Dock);
@@ -198,14 +223,33 @@ public class ShellModeTests
         var store = Store(out var connection);
         using var _ = connection;
 
-        store.Save(new DockPlacement(ShellMode.Dock, DockEdge.Left, 400, @"\\.\DISPLAY2"));
+        store.Save(new DockPlacement(ShellMode.Dock, DockEdge.Left, 400, @"\\.\DISPLAY2")
+        {
+            DockedWidth = 640,
+        });
 
         var read = store.Load();
 
         Assert.Equal(ShellMode.Dock, read.Mode);
         Assert.Equal(DockEdge.Left, read.Edge);
         Assert.Equal(400, read.Width);
+        Assert.Equal(640, read.DockedWidth);
         Assert.Equal(@"\\.\DISPLAY2", read.MonitorId);
+    }
+
+    [Fact]
+    public void 固定の幅を覚えていなければスライドの幅から始める()
+    {
+        var store = Store(out var connection);
+        using var _ = connection;
+
+        // 前の版から上げたとき。片方しか控えていない
+        new SettingsRepository(connection).Set("shell.width", "400");
+
+        var read = store.Load();
+
+        Assert.Equal(400, read.Width);
+        Assert.Equal(400, read.DockedWidth);
     }
 
     [Fact]
