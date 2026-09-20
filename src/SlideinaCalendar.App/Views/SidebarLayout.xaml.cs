@@ -11,7 +11,39 @@ namespace SlideinaCalendar.App.Views;
 /// </summary>
 public partial class SidebarLayout : UserControl
 {
-    public SidebarLayout() => InitializeComponent();
+    public SidebarLayout()
+    {
+        InitializeComponent();
+
+        DataContextChanged += (_, args) =>
+        {
+            if (args.OldValue is MainViewModel before) before.PropertyChanged -= OnMainChanged;
+            if (args.NewValue is MainViewModel after) after.PropertyChanged += OnMainChanged;
+
+            FitCalendarRow();
+        };
+    }
+
+    private void OnMainChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsMonthView)) FitCalendarRow();
+    }
+
+    /// <summary>
+    /// カレンダーに割く高さを決める。
+    /// <para>
+    /// 月だけは中身で決める。詰めた形ではマスを正方形にするので、高さを割り当てると
+    /// 下が空いたままになる。ほかのビューは時間軸や一覧を縦に流すので、広いほうがいい。
+    /// </para>
+    /// </summary>
+    private void FitCalendarRow()
+    {
+        if (DataContext is not MainViewModel main) return;
+
+        CalendarRow.Height = main.IsMonthView
+            ? GridLength.Auto
+            : new GridLength(3, GridUnitType.Star);
+    }
 
     private void OnEventClicked(object sender, MouseButtonEventArgs e) =>
         Open(sender, e, (main, item) => main.EditEventCommand.Execute(item));

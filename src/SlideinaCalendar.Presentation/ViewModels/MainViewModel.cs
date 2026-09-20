@@ -137,6 +137,13 @@ public sealed class MainViewModel : ObservableObject
             // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
             // 古いまま残る。幅が変わったことはここでも受けておく
             if (args.PropertyName == nameof(ShellViewModel.LayoutWidth)) FitTo(Shell.LayoutWidth);
+
+            // スリムパネルでは、月のマスに予定の名前を並べても読めない
+            if (args.PropertyName is nameof(ShellViewModel.LayoutWidth)
+                or nameof(ShellViewModel.UsesSidebarLayout))
+            {
+                Month.IsCompact = Shell.UsesSidebarLayout;
+            }
         };
 
         OpenSearchCommand = new RelayCommand(() =>

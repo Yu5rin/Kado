@@ -16,7 +16,24 @@ namespace SlideinaCalendar.App.Views;
 /// </summary>
 public partial class MonthView : UserControl
 {
-    public MonthView() => InitializeComponent();
+    public MonthView()
+    {
+        InitializeComponent();
+
+        // 詰めた形に切り替わったら、マスの高さを決め直す
+        DataContextChanged += (_, args) =>
+        {
+            if (args.OldValue is MonthViewModel before) before.PropertyChanged -= OnMonthChanged;
+            if (args.NewValue is MonthViewModel after) after.PropertyChanged += OnMonthChanged;
+
+            FitCells();
+        };
+    }
+
+    private void OnMonthChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MonthViewModel.IsCompact)) FitCells();
+    }
 
     /// <summary>
     /// マスの高さが変わったら、並べる件数を決め直す。
@@ -25,15 +42,36 @@ public partial class MonthView : UserControl
     /// 表示側にしか分からないので、ここで測って ViewModel へ渡す。
     /// </para>
     /// </summary>
-    private void OnCellsResized(object sender, SizeChangedEventArgs e)
+    private void OnCellsResized(object sender, SizeChangedEventArgs e) => FitCells();
+
+    /// <summary>
+    /// マスの大きさを決める。
+    /// <para>
+    /// ふつうの形では、高さから並べられる件数を割り出して ViewModel へ渡す。
+    /// 詰めた形（スリムパネル）では、<b>マスを正方形に近づける</b>。ひと月の
+    /// 並びを追うのがこの形での役目で、縦に伸ばしても読めるものは増えない。
+    /// </para>
+    /// </summary>
+    private void FitCells()
     {
-        if (!e.HeightChanged) return;
         if (DataContext is not MonthViewModel month || month.Cells.Count == 0) return;
 
         var rows = month.Cells.Count / 7;
         if (rows <= 0) return;
 
-        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(e.NewSize.Height / rows);
+        if (month.IsCompact)
+        {
+            CellsHost.VerticalAlignment = VerticalAlignment.Top;
+            CellsHost.Height = Math.Round(CellsHost.ActualWidth / 7) * rows;
+            return;
+        }
+
+        CellsHost.VerticalAlignment = VerticalAlignment.Stretch;
+        CellsHost.Height = double.NaN;
+
+        if (CellsHost.ActualHeight <= 0) return;
+
+        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(CellsHost.ActualHeight / rows);
     }
 
     // ------------------------------------------------------------------
