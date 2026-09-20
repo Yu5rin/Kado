@@ -268,6 +268,13 @@
                         <CheckBox Content="Windows にログオンしたときに起動する"
                                   IsChecked="{Binding RunAtLogon}" Cursor="Hand" />
                     </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="閉じるボタンでトレイに入れる（終了しない）"
+                                  IsChecked="{Binding CloseToTray}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切ると、閉じるボタンでそのまま終わります。裏で動いていないあいだは通知も出ません。&#10;トレイのアイコンからは、入れていてもいなくても終了できます。" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </ScrollViewer>

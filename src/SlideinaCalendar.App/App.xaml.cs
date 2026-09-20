@@ -42,6 +42,7 @@ public partial class App : Application
     private const string UpdateApiUrl =
         "https://api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest";
 
+    private AppSettings? _settings;
     private Shell.ShellController? _shellController;
     private Shell.TrayIcon? _tray;
     private Shell.GlobalHotKeys? _hotKeys;
@@ -118,7 +119,7 @@ public partial class App : Application
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない
-        var settings = new AppSettings(workspace.Settings);
+        var settings = _settings = new AppSettings(workspace.Settings);
         ThemeManager.Apply(settings.Theme);
         settings.Changed += (_, _) => ThemeManager.Apply(settings.Theme);
 
@@ -407,6 +408,7 @@ public partial class App : Application
         menu.Items.Add(new System.Windows.Controls.Separator());
 
         Add("いますぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
+        Add("ショートカット", () => main.ShowShortcutsCommand.Execute(null));
         Add("設定", () => main.OpenSettingsCommand.Execute(null));
         menu.Items.Add(new System.Windows.Controls.Separator());
 
@@ -431,6 +433,9 @@ public partial class App : Application
     private void OnMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_reallyExiting || _tray is null) return;
+
+        // 設定で切っていれば、そのまま終わる
+        if (_settings is { CloseToTray: false }) return;
 
         e.Cancel = true;
         MainWindow?.Hide();

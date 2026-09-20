@@ -127,6 +127,7 @@ public sealed class MainViewModel : ObservableObject
         NextCommand = new RelayCommand(GoToNext);
         TodayCommand = new RelayCommand(GoToToday);
         ToggleSidePanelCommand = new RelayCommand(() => IsSidePanelOpen = !IsSidePanelOpen);
+        ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
         UndoCommand = new RelayCommand(Undo, () => _workspace.Undo.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
@@ -769,6 +770,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>設定画面を開く。</summary>
     public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>ショートカットの一覧を開く。押せることを知らないと使われない。</summary>
+    public RelayCommand ShowShortcutsCommand { get; }
 
     /// <summary>新しい予定の入れ先にする。</summary>
     public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }

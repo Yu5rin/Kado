@@ -18,23 +18,35 @@ public class ShellModeTests
         new(DockPlacement.Unknown with { Mode = mode });
 
     [Fact]
-    public void ピンを押すとドックになりもう一度押すとオーバーレイに戻る()
+    public void ウィンドウからでもひと押しで留まりもう一度押すと戻る()
     {
-        var vm = Create(ShellMode.Overlay);
+        var vm = Create();
 
         var told = new List<ShellMode>();
         vm.ModeChanged += (_, mode) => told.Add(mode);
 
+        // 端へ寄せてから押す作りだと、Windows のスナップと取り合いになって
+        // 寄せたつもりでも留められないことがあった
         vm.TogglePinCommand.Execute(null);
         Assert.True(vm.IsPinned);
-        Assert.Equal(ShellMode.Dock, vm.Mode);
 
-        // ピンを外してもウィンドウには戻さない。端に居続ける（要件書 2.1）
+        // 外したら、留める前の居かたへ戻す
         vm.TogglePinCommand.Execute(null);
-        Assert.False(vm.IsPinned);
-        Assert.Equal(ShellMode.Overlay, vm.Mode);
+        Assert.Equal(ShellMode.Window, vm.Mode);
 
-        Assert.Equal([ShellMode.Dock, ShellMode.Overlay], told);
+        Assert.Equal([ShellMode.Dock, ShellMode.Window], told);
+    }
+
+    [Fact]
+    public void オーバーレイから留めたらオーバーレイに戻る()
+    {
+        var vm = Create(ShellMode.Overlay);
+
+        vm.TogglePinCommand.Execute(null);
+        Assert.True(vm.IsPinned);
+
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal(ShellMode.Overlay, vm.Mode);
     }
 
     [Fact]

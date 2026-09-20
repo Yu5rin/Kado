@@ -29,14 +29,18 @@ public partial class YearView : UserControl
 
     /// <summary>
     /// ホイールで年度を送る。
-    /// <para>縦に長いので、スクロールできるうちはスクロールを優先する。</para>
+    /// <para>
+    /// 月・週・日ビューと同じで、そのまま回せば前後へ動く。はじめは Ctrl を
+    /// 押させていたが、他のビューと違うので押す理由が伝わらなかった。
+    /// </para>
+    /// <para>
+    /// 12か月ぶんは画面に収まる作りなので、スクロールを譲る必要もない。収まらない
+    /// ときはスクロールバーで動かす。
+    /// </para>
     /// </summary>
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
         if (DataContext is not YearViewModel year) return;
-
-        // Ctrl を押しているときだけ年度を送る。ふつうに回せば中身が動く
-        if (Keyboard.Modifiers != ModifierKeys.Control) return;
 
         if (e.Delta > 0) year.GoToPreviousYear();
         else year.GoToNextYear();

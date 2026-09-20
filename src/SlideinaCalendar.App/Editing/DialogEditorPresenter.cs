@@ -32,6 +32,8 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
         Show(new WorkdayCalculatorWindow(calculator));
     }
 
+    public void ShowShortcuts() => Show(new ShortcutsWindow());
+
     public bool ConfirmDelete(string title) =>
         MessageBox.Show(
             ownerProvider() ?? Application.Current.MainWindow,
