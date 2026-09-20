@@ -6,6 +6,7 @@ using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Google;
 using SlideinaCalendar.App.Update;
 using SlideinaCalendar.App.Views;
+using SlideinaCalendar.App.Notifications;
 using SlideinaCalendar.App.Settings;
 using SlideinaCalendar.App.Themes;
 using SlideinaCalendar.Presentation.Settings;
@@ -124,7 +125,8 @@ public partial class App : Application
                 DataContext = new MainViewModel(
                     workspace, today, editors: editors, files: files,
                     googleClient: googleClient, google: _google,
-                    settings: settings, startup: new StartupRegistration()),
+                    settings: settings, startup: new StartupRegistration(),
+                    notifier: new ToastNotifier()),
             };
 
             MainWindow = window;

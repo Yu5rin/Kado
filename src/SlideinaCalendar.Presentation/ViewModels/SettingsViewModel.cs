@@ -170,6 +170,78 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>何分前に知らせるかの選択肢。</summary>
+    public IReadOnlyList<SettingChoice<int>> Leads { get; } =
+    [
+        new(0, "予定の時刻ちょうど"),
+        new(5, "5分前"),
+        new(10, "10分前"),
+        new(15, "15分前"),
+        new(30, "30分前"),
+        new(60, "1時間前"),
+    ];
+
+    /// <summary>まとめて知らせる時刻の選択肢。</summary>
+    public IReadOnlyList<SettingChoice<int>> SummaryHours { get; } =
+        Enumerable.Range(5, 14)
+            .Select(h => new SettingChoice<int>(h, $"{h.ToString(CultureInfo.InvariantCulture)}:00"))
+            .ToArray();
+
+    /// <summary>知らせられる環境か。出せないなら欄ごと隠す。</summary>
+    public bool CanNotify { get; } = true;
+
+    /// <summary>予定の前に知らせるか。</summary>
+    public bool NotifyEnabled
+    {
+        get => _settings.NotifyEnabled;
+        set
+        {
+            if (_settings.NotifyEnabled == value) return;
+
+            _settings.NotifyEnabled = value;
+            Raise();
+        }
+    }
+
+    /// <summary>何分前に知らせるか。</summary>
+    public int NotifyLeadMinutes
+    {
+        get => _settings.NotifyLeadMinutes;
+        set
+        {
+            if (_settings.NotifyLeadMinutes == value) return;
+
+            _settings.NotifyLeadMinutes = value;
+            Raise();
+        }
+    }
+
+    /// <summary>朝にその日の予定をまとめて知らせるか。</summary>
+    public bool SummaryEnabled
+    {
+        get => _settings.SummaryEnabled;
+        set
+        {
+            if (_settings.SummaryEnabled == value) return;
+
+            _settings.SummaryEnabled = value;
+            Raise();
+        }
+    }
+
+    /// <summary>まとめて知らせる時刻（時）。</summary>
+    public int SummaryHour
+    {
+        get => _settings.SummaryTime.Hour;
+        set
+        {
+            if (_settings.SummaryTime.Hour == value) return;
+
+            _settings.SummaryTime = new TimeOnly(Math.Clamp(value, 0, 23), 0);
+            Raise();
+        }
+    }
+
     /// <summary>実働日データの配信元（feed.json の URL）。</summary>
     public string FeedUrl
     {
