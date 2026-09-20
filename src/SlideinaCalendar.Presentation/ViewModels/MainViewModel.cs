@@ -979,6 +979,7 @@ public sealed class MainViewModel : ObservableObject
 
             case CalendarView.Year:
                 Year.GoToPreviousYear();
+                FollowInto(SameDayInFiscalYear());
                 RaiseHeader();
                 break;
 
@@ -1018,6 +1019,7 @@ public sealed class MainViewModel : ObservableObject
 
             case CalendarView.Year:
                 Year.GoToNextYear();
+                FollowInto(SameDayInFiscalYear());
                 RaiseHeader();
                 break;
 
@@ -1053,9 +1055,54 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void SyncHeaderTo(DateOnly anchor)
     {
+        // 送った先へ、選んでいる日も連れていく。置いていくと、中央は 9/18 を
+        // 出しているのに右ペインは 9/22 のまま、ということになる
+        FollowInto(anchor);
+
         Month.GoTo(anchor);
         MiniCalendar.GoTo(anchor);
         RaiseHeader();
+    }
+
+    /// <summary>
+    /// 送った先に、選んでいる日を置き直す。
+    /// <para>
+    /// 日にちや曜日はなるべく保つ。月を送って 9/18 から 10/18 へ、週を送って
+    /// 金曜から翌週の金曜へ、という動き方のほうが、行き先を見失わない。
+    /// </para>
+    /// </summary>
+    private void FollowInto(DateOnly anchor)
+    {
+        var selected = SelectedDate;
+
+        SelectedDate = _currentView switch
+        {
+            // 日ビューはその日そのもの
+            CalendarView.Day => anchor,
+
+            // 週は曜日を保つ。anchor は週の頭
+            CalendarView.Week => anchor.AddDays(
+                (((int)selected.DayOfWeek - (int)anchor.DayOfWeek) + 7) % 7),
+
+            // 年は呼ぶ側が日を決めてから渡す
+            CalendarView.Year => anchor,
+
+            // 月は日にちを保つ。月末が短ければそこで止める
+            _ => new DateOnly(anchor.Year, anchor.Month,
+                Math.Min(selected.Day, DateTime.DaysInMonth(anchor.Year, anchor.Month))),
+        };
+    }
+
+    /// <summary>送った先の年度で、同じ月日にあたる日。</summary>
+    private DateOnly SameDayInFiscalYear()
+    {
+        var selected = SelectedDate;
+
+        // 年度は4月始まり。1〜3月は翌の暦年にあたる
+        var year = selected.Month >= 4 ? Year.FiscalYear : Year.FiscalYear + 1;
+
+        return new DateOnly(year, selected.Month,
+            Math.Min(selected.Day, DateTime.DaysInMonth(year, selected.Month)));
     }
 
     // ------------------------------------------------------------------
