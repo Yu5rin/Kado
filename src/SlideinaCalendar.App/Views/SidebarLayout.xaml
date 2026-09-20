@@ -1,0 +1,201 @@
+<!--
+    サイドバーモードの中身（要件書 5.3）。幅およそ 352px。
+
+    上にカレンダー、下に予定／タスクのタブ。この幅で上下に分けて同時に出すと、
+    各ペインが3行しか入らず実用にならない。仕切りはドラッグで高さを変えられる。
+    実働日計算はフッターのボタンから開く。
+
+    同じ UI を縮小して使い回さない（要件書 5.1）。3ペインのほうとは別の形にしてある。
+-->
+<UserControl x:Class="SlideinaCalendar.App.Views.SidebarLayout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
+             xmlns:views="clr-namespace:SlideinaCalendar.App.Views"
+             Background="{DynamicResource BackgroundBrush}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:EventColorBrushConverter x:Key="EventColorBrush" />
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- フッター。実働日計算はここから下からせり出す -->
+        <Border DockPanel.Dock="Bottom" Padding="10,8"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <Button Content="実働日計算を開く" Style="{StaticResource CalcButtonStyle}"
+                    Command="{Binding OpenWorkingDayCalculatorCommand}" />
+        </Border>
+
+        <!-- ビュー切替。3ペインのときより狭いので、月・週・日・一覧に絞る -->
+        <Border DockPanel.Dock="Top" Padding="10,8"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <Border CornerRadius="5" ClipToBounds="True"
+                    BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                <UniformGrid Rows="1" Columns="4">
+                    <RadioButton Content="月" Style="{StaticResource SegmentButtonStyle}"
+                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Month}" />
+                    <RadioButton Content="週" Style="{StaticResource SegmentButtonStyle}"
+                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Week}" />
+                    <RadioButton Content="日" Style="{StaticResource SegmentButtonStyle}"
+                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Day}" />
+                    <RadioButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
+                                 BorderThickness="0"
+                                 IsChecked="{Binding CurrentView, Converter={StaticResource EnumToBool},
+                                             ConverterParameter=Agenda}" />
+                </UniformGrid>
+            </Border>
+        </Border>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- 上下の割り振りは手で変えられる。既定はカレンダーを広めに取る -->
+                <RowDefinition x:Name="CalendarRow" Height="3*" MinHeight="140" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2*" MinHeight="120" />
+            </Grid.RowDefinitions>
+
+            <!-- 上：カレンダー -->
+            <Grid Grid.Row="0">
+                <views:MonthView DataContext="{Binding Month}"
+                                 Visibility="{Binding DataContext.IsMonthView,
+                                              RelativeSource={RelativeSource AncestorType=UserControl},
+                                              Converter={StaticResource BoolToVisibility}}" />
+                <views:WeekView DataContext="{Binding Week}"
+                                Visibility="{Binding DataContext.IsWeekView,
+                                             RelativeSource={RelativeSource AncestorType=UserControl},
+                                             Converter={StaticResource BoolToVisibility}}" />
+                <views:DayView DataContext="{Binding Day}"
+                               Visibility="{Binding DataContext.IsDayView,
+                                            RelativeSource={RelativeSource AncestorType=UserControl},
+                                            Converter={StaticResource BoolToVisibility}}" />
+                <views:YearView DataContext="{Binding Year}"
+                                Visibility="{Binding DataContext.IsYearView,
+                                             RelativeSource={RelativeSource AncestorType=UserControl},
+                                             Converter={StaticResource BoolToVisibility}}" />
+                <views:AgendaView DataContext="{Binding Agenda}"
+                                  Visibility="{Binding DataContext.IsAgendaView,
+                                               RelativeSource={RelativeSource AncestorType=UserControl},
+                                               Converter={StaticResource BoolToVisibility}}" />
+            </Grid>
+
+            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource LineBrush}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
+                          Cursor="SizeNS" />
+
+            <!-- 下：予定／タスクのタブ -->
+            <DockPanel Grid.Row="2" Background="{DynamicResource PanelBrush}">
+                <Border DockPanel.Dock="Top" Padding="10,6"
+                        BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+                    <Border CornerRadius="5" ClipToBounds="True"
+                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                        <UniformGrid Rows="1" Columns="2">
+                            <RadioButton Content="予定" Style="{StaticResource SegmentButtonStyle}"
+                                         IsChecked="{Binding Shell.ShowsEvents, Mode=OneWay}"
+                                         Command="{Binding Shell.ShowEventsCommand}" />
+                            <RadioButton Content="タスク" Style="{StaticResource SegmentButtonStyle}"
+                                         BorderThickness="0"
+                                         IsChecked="{Binding Shell.ShowsTasks, Mode=OneWay}"
+                                         Command="{Binding Shell.ShowTasksCommand}" />
+                        </UniformGrid>
+                    </Border>
+                </Border>
+
+                <!-- 選択した日の見出し。どの日の予定を見ているのか分からなくなる -->
+                <Border DockPanel.Dock="Top" Padding="10,6,10,4"
+                        DataContext="{Binding SelectedDay}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding WorkingDayLabel}"
+                                   FontSize="10.5" VerticalAlignment="Center"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink3Brush}" />
+                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource InkBrush}" />
+                    </DockPanel>
+                </Border>
+
+                <Grid DataContext="{Binding SelectedDay}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
+                                  Visibility="{Binding DataContext.Shell.ShowsEvents,
+                                               RelativeSource={RelativeSource AncestorType=UserControl},
+                                               Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding Events}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent" Padding="0,4" Cursor="Hand"
+                                            MouseLeftButtonDown="OnEventClicked">
+                                        <DockPanel>
+                                            <Border DockPanel.Dock="Left" Width="3" CornerRadius="2"
+                                                    Margin="0,1,8,1"
+                                                    Background="{Binding Color,
+                                                                Converter={StaticResource EventColorBrush}}" />
+                                            <TextBlock DockPanel.Dock="Left" Text="{Binding TimeText}"
+                                                       Width="44" FontSize="11" LineHeight="16"
+                                                       Typography.NumeralAlignment="Tabular"
+                                                       Foreground="{DynamicResource Ink2Brush}" />
+                                            <TextBlock Text="{Binding Title}" FontSize="12" LineHeight="16"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Title}"
+                                                       Foreground="{DynamicResource InkBrush}" />
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
+                                  Visibility="{Binding DataContext.Shell.ShowsTasks,
+                                               RelativeSource={RelativeSource AncestorType=UserControl},
+                                               Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding Tasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent" Padding="0,4" Cursor="Hand"
+                                            MouseLeftButtonDown="OnTaskClicked">
+                                        <DockPanel>
+                                            <CheckBox DockPanel.Dock="Left" Margin="0,0,8,0"
+                                                      VerticalAlignment="Center"
+                                                      IsChecked="{Binding IsDone, Mode=OneWay}"
+                                                      Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                                                RelativeSource={RelativeSource
+                                                                AncestorType=UserControl}}"
+                                                      CommandParameter="{Binding}" />
+                                            <StackPanel>
+                                                <TextBlock x:Name="Title" Text="{Binding Title}"
+                                                           FontSize="12" LineHeight="16"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Title}"
+                                                           Foreground="{DynamicResource InkBrush}" />
+                                                <TextBlock Text="{Binding DueText}" FontSize="10.5"
+                                                           LineHeight="14"
+                                                           Foreground="{DynamicResource Ink3Brush}" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsDone}" Value="True">
+                                            <Setter TargetName="Title" Property="TextDecorations"
+                                                    Value="Strikethrough" />
+                                            <Setter TargetName="Title" Property="Foreground"
+                                                    Value="{DynamicResource Ink3Brush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

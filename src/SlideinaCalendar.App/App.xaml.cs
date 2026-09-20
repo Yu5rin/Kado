@@ -42,6 +42,14 @@ public partial class App : Application
     private const string UpdateApiUrl =
         "https://api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest";
 
+    private Shell.ShellController? _shellController;
+    private Shell.TrayIcon? _tray;
+    private Shell.GlobalHotKeys? _hotKeys;
+    private DockPlacementStore? _dockStore;
+
+    /// <summary>閉じるボタンで終わるのではなくトレイに入る（要件書 7.4）。</summary>
+    private bool _reallyExiting;
+
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
         System.IO.Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "crash.log");
@@ -64,13 +72,29 @@ public partial class App : Application
             return;
         }
 
-        // 拾わないと OS の「動作を停止しました」だけが出て、理由が何も残らない
+        // 拾わないと OS の「動作を停止しました」だけが出て、理由が何も残らない。
+        //
+        // あわせて AppBar を外す。外さずに落ちると、ワークエリアが削られたまま残り、
+        // 最大化したウィンドウが画面いっぱいにならなくなる。アプリを消しても
+        // 直らないので、ここで必ず戻す（要件書 2.3）
         DispatcherUnhandledException += (_, args) =>
         {
+            ReleaseShell();
             ReportFatal(args.Exception);
             args.Handled = true;
             Shutdown(1);
         };
+
+        // Dispatcher を通らないところ（バックグラウンドのスレッドなど）で落ちても外す
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            ReleaseShell();
+
+            if (args.ExceptionObject is Exception fatal) ReportFatal(fatal);
+        };
+
+        // 終了の合図（サインアウトやシャットダウン）でも外す
+        SessionEnding += (_, _) => ReleaseShell();
 
         // 配色を当てるのはウィンドウを作る前。あとから当てると一瞬ちらつく。
         // 設定を読むにはデータベースが要るので、ここでは Windows に合わせておく
@@ -120,6 +144,13 @@ public partial class App : Application
                     Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat")),
                 OpenInBrowser);
 
+            // 前回、ワークエリアを削ったまま落ちていたら元に戻す（要件書 2.3）。
+            // ウィンドウを作る前に済ませる。削られたままの画面を基準に位置を決めない
+            _dockStore = new DockPlacementStore(workspace.Settings);
+            Shell.WorkAreaGuard.RecoverIfNeeded(_dockStore);
+
+            var dock = _dockStore.Load();
+
             window = new MainWindow
             {
                 // 閉じたときの置き場所と大きさを覚え、次はそこで出す
@@ -128,11 +159,17 @@ public partial class App : Application
                     workspace, today, editors: editors, files: files,
                     googleClient: googleClient, google: _google,
                     settings: settings, startup: new StartupRegistration(),
-                    notifier: new ToastNotifier()),
+                    notifier: new ToastNotifier(), shell: dock),
             };
 
             MainWindow = window;
+
+            // 閉じるボタンではトレイに入るだけにする。終了はトレイのメニューから
+            window.Closing += OnMainWindowClosing;
+
             window.Show();
+
+            SetUpShell(window);
 
             // 2本目が起動されたら、こちらを前に出す
             _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
@@ -282,10 +319,111 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // いちばん先に外す。データベースを閉じたあとでは印を消せない
+        ReleaseShell();
+
+        _tray?.Dispose();
+        _hotKeys?.Dispose();
         _background?.Dispose();
         _google?.Dispose();
         _connection?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);
+    }
+
+    // ------------------------------------------------------------------
+    // シェル統合（要件書 2章・7章）
+    // ------------------------------------------------------------------
+
+    /// <summary>トレイ・ホットキー・居かたの制御を組み立てる。</summary>
+    private void SetUpShell(MainWindow window)
+    {
+        if (window.DataContext is not MainViewModel main || _dockStore is null) return;
+
+        _shellController = new Shell.ShellController(window, main.Shell, _dockStore);
+        _shellController.Restore();
+
+        _tray = new Shell.TrayIcon("SlideinaCalendar", BuildTrayMenu(main));
+        _tray.Activated += (_, _) => Dispatcher.Invoke(BringToFront);
+
+        // 他のアプリを使っているあいだでも効かせる。取られていれば黙って諦める
+        _hotKeys = Shell.GlobalHotKeys.Attach(window);
+        if (_hotKeys is not null) _hotKeys.Pressed += (_, kind) => Dispatcher.Invoke(() => OnHotKey(main, kind));
+
+        // 居かたが変わるたびに控える。終了時だけだと、落ちたときに戻せない
+        main.Shell.ModeChanged += (_, _) => _shellController?.Save();
+        main.Shell.EdgeChanged += (_, _) => _shellController?.Save();
+        main.Shell.DockWidthChanged += (_, _) => _shellController?.Save();
+    }
+
+    /// <summary>トレイのメニュー（要件書 7.4）。</summary>
+    private System.Windows.Controls.ContextMenu BuildTrayMenu(MainViewModel main)
+    {
+        var menu = new System.Windows.Controls.ContextMenu();
+
+        void Add(string header, Action action)
+        {
+            var item = new System.Windows.Controls.MenuItem { Header = header };
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+        }
+
+        Add("表示", BringToFront);
+        menu.Items.Add(new System.Windows.Controls.Separator());
+
+        Add("ウィンドウ", () => main.Shell.Mode = ShellMode.Window);
+        Add("画面端に寄せる", () => main.Shell.Mode = ShellMode.Overlay);
+        Add("ピン留め（画面を分割）", () => main.Shell.Mode = ShellMode.Dock);
+        Add("左右を入れ替える", () => main.Shell.ToggleEdgeCommand.Execute(null));
+        menu.Items.Add(new System.Windows.Controls.Separator());
+
+        Add("いますぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
+        Add("設定", () => main.OpenSettingsCommand.Execute(null));
+        menu.Items.Add(new System.Windows.Controls.Separator());
+
+        // ここでだけ本当に終わる。閉じるボタンはトレイに入るだけ
+        Add("終了", () => { _reallyExiting = true; Shutdown(); });
+
+        return menu;
+    }
+
+    private void OnHotKey(MainViewModel main, Shell.HotKeyKind kind)
+    {
+        BringToFront();
+
+        // クイック入力の欄へ飛ばす。呼び出してから手で探させない
+        if (kind == Shell.HotKeyKind.QuickEntry) MainWindow?.Focus();
+    }
+
+    /// <summary>
+    /// 閉じるボタンではトレイに入るだけにする（要件書 7.4）。
+    /// <para>終了はトレイのメニューから。更新のための終了はここを通らない。</para>
+    /// </summary>
+    private void OnMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_reallyExiting || _tray is null) return;
+
+        e.Cancel = true;
+        MainWindow?.Hide();
+    }
+
+    /// <summary>
+    /// ワークエリアを元に戻す。
+    /// <para>
+    /// <b>何度呼んでも安全。</b>落ち方がいくつもあるので、それぞれの口から呼べるように
+    /// してある。ここを通らずに落ちた場合は、次の起動で <c>WorkAreaGuard</c> が戻す。
+    /// </para>
+    /// </summary>
+    private void ReleaseShell()
+    {
+        try
+        {
+            _shellController?.Dispose();
+            _shellController = null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // ここで例外を出すと、元の落ちた理由が見えなくなる
+        }
     }
 }

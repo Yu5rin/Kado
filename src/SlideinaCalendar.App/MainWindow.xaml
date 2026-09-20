@@ -155,6 +155,21 @@
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
             <DockPanel LastChildFill="False" Margin="12,9">
 
+                <!--
+                    ピン。押すと画面を分割し、最大化した他のウィンドウと重ならなくなる
+                    （要件書 2.2）。オーバーレイのままでは重なりを避けられない
+                -->
+                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
+                              IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
+                              Command="{Binding Shell.TogglePinCommand}"
+                              ToolTip="{Binding Shell.PinLabel}"
+                              Visibility="{Binding Shell.IsAtEdge,
+                                           Converter={StaticResource BoolToVisibility}}">
+                    <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </ToggleButton>
+
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
                         Command="{Binding ToggleSidePanelCommand}" ToolTip="サイドパネルの表示切替">
                     <Path Data="{StaticResource IconMenu}" Stretch="Uniform" Width="16" Height="16"
@@ -382,8 +397,17 @@
             </DockPanel>
         </Border>
 
+        <!--
+            狭いときは1列の形（サイドバー）に切り替える。同じ UI を縮小して
+            使い回さない（要件書 5.1）
+        -->
+        <views:SidebarLayout x:Name="Sidebar"
+                             Visibility="{Binding Shell.UsesSidebarLayout,
+                                          Converter={StaticResource BoolToVisibility}}" />
+
         <!-- 3ペイン（.body） -->
-        <Grid>
+        <Grid x:Name="WindowLayout"
+              Visibility="{Binding Shell.UsesWindowLayout, Converter={StaticResource BoolToVisibility}}">
             <!--
                 両端は手で決めた幅のまま置き、ウィンドウを広げたぶんは中央が受け取る。
                 幅は境目をつまんで変えられる。実際の値はコードビハインドが入れる
