@@ -32,6 +32,14 @@
     <PathGeometry x:Key="IconLayout"
                   Figures="M4 5h16v14H4zM14 5v14" />
 
+    <!-- 年表示の出し方。ストリップは1行1か月なので、横に長い行を重ねた形 -->
+    <PathGeometry x:Key="IconRows"
+                  Figures="M3 5h18v14H3zM3 9.7h18M3 14.3h18" />
+
+    <!-- 年表示の出し方。カレンダーは12枚並ぶので、格子 -->
+    <PathGeometry x:Key="IconGrid"
+                  Figures="M3 5h18v14H3zM3 9.7h18M3 14.3h18M9 5v14M15 5v14" />
+
     <!-- 出すパネルの選び方。3つの区画 -->
     <PathGeometry x:Key="IconPanes"
                   Figures="M3 5h18v14H3zM9 5v14M15 5v14" />
