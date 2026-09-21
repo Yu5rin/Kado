@@ -318,28 +318,33 @@
                             点ではつかめないため
                         -->
                         <StackPanel x:Name="Compact" Visibility="Collapsed"
-                                    VerticalAlignment="Center">
-                            <ItemsControl ItemsSource="{Binding Milestones}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
-                                                ToolTip="{Binding Name}"
-                                                Background="{Binding Name,
-                                                            Converter={StaticResource MilestoneBrush}}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <!-- 選んだ日は丸で囲う。ミニ月暦と同じ出しかた -->
-                            <Border x:Name="CompactFace" CornerRadius="9" Height="18" MinWidth="18"
-                                    HorizontalAlignment="Center" Margin="0,1"
-                                    Background="Transparent">
-                                <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
-                                           FontSize="12" Margin="4,0"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Typography.NumeralAlignment="Tabular"
-                                           Foreground="{DynamicResource InkBrush}" />
+                                    VerticalAlignment="Top" Margin="0,2,0,0">
+                            <!--
+                                日付の上は、いつも帯2本ぶんの高さを取っておく。
+                                実働日カレンダー（inaCalendar）の印はその日に多くても
+                                2本なので、これで<b>どの日も日付の高さが揃う</b>。
+                                1本のときは下（日付側）に寄せる。入れた順に上から
+                                並ぶので、2本なら見た目もそのまま
+                            -->
+                            <Border Height="8" ClipToBounds="True">
+                                <ItemsControl ItemsSource="{Binding Milestones}"
+                                              VerticalAlignment="Bottom">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
+                                                    ToolTip="{Binding Name}"
+                                                    Background="{Binding Name,
+                                                                Converter={StaticResource MilestoneBrush}}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </Border>
+
+                            <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
+                                       FontSize="12" LineHeight="16" Margin="0,1"
+                                       HorizontalAlignment="Center"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource InkBrush}" />
 
                             <ItemsControl ItemsSource="{Binding Bands}">
                                 <ItemsControl.ItemTemplate>
@@ -368,35 +373,6 @@
                         </DataTrigger>
 
                         <!--
-                            詰めた形では、面の色だけだと選んだ日が分かりにくい。
-                            日付を丸で囲う。今日はふちどり、選んだ日は塗りつぶし
-                        -->
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Value="True"
-                                           Binding="{Binding DataContext.IsCompact,
-                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Condition Binding="{Binding IsToday}" Value="True" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter TargetName="CompactFace" Property="BorderThickness" Value="1.5" />
-                            <Setter TargetName="CompactFace" Property="BorderBrush"
-                                    Value="{DynamicResource AccentBrush}" />
-                        </MultiDataTrigger>
-
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Value="True"
-                                           Binding="{Binding DataContext.IsCompact,
-                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Condition Binding="{Binding IsSelected}" Value="True" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter TargetName="CompactFace" Property="Background"
-                                    Value="{DynamicResource AccentBrush}" />
-                            <Setter TargetName="CompactNumber" Property="Foreground" Value="White" />
-                            <Setter TargetName="CompactNumber" Property="FontWeight" Value="SemiBold" />
-                        </MultiDataTrigger>
-
-                        <!--
                             実働日データを持つ日は、稼働する日と休業する日で面を分ける。
                             データを持たない日はどちらでもないので、そのままにしておく。
                             色を足すのではなく面の明るさで示す（要件書 4.3）
@@ -421,6 +397,8 @@
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                             <Setter TargetName="DayNumber" Property="Foreground"
                                     Value="{DynamicResource SaturdayBrush}" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
+                                    Value="{DynamicResource SaturdayBrush}" />
                         </DataTrigger>
 
                         <!--
@@ -429,6 +407,8 @@
                         -->
                         <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
                             <Setter TargetName="DayNumber" Property="Foreground"
+                                    Value="{DynamicResource SundayBrush}" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
                                     Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
@@ -447,6 +427,9 @@
                             <Setter TargetName="DayNumber" Property="FontWeight" Value="Bold" />
                             <Setter TargetName="DayNumber" Property="Foreground"
                                     Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="CompactNumber" Property="FontWeight" Value="Bold" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
+                                    Value="{DynamicResource AccentBrush}" />
                         </DataTrigger>
 
                         <!-- 休業日の面と近いと紛れるので、はっきり青に寄せた色を使う -->
@@ -454,6 +437,21 @@
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource CellSelectedBrush}" />
                         </DataTrigger>
+
+                        <!--
+                            詰めた形では、今日のマスだけ内側の余白が変わると中身が
+                            ずれて、日付の高さが揃わなくなる。枠のぶんだけ余白を
+                            減らして、ほかの日と同じ位置に置く
+                        -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Value="True"
+                                           Binding="{Binding DataContext.IsCompact,
+                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Condition Binding="{Binding IsToday}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="Cell" Property="Padding" Value="0" />
+                        </MultiDataTrigger>
 
                         <!--
                             落とし先。いちばん最後に置いて、ホバーや選択より強く出す

@@ -437,6 +437,22 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void 前後の月を選ぶとスリムパネルもその月へ移る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Equal(9, vm.SlimMonth.Month.Month);
+
+        // 月ビューは前後の月のマスも出す。そこを押したのに9月のままでは、
+        // どこを選んだのか分からない
+        vm.SelectDateCommand.Execute(D(2026, 10, 1));
+
+        Assert.Equal(10, vm.SlimMonth.Month.Month);
+        Assert.Equal("10月", vm.SlimTitleMonth);
+    }
+
+    [Fact]
     public void 送ると右ペインの日付も付いてくる()
     {
         using var test = TestWorkspace.Create();

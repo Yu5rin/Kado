@@ -794,7 +794,16 @@ public sealed class MainViewModel : ObservableObject
             // ビューを切り替えたときにどこを見ていたのか分からなくなる
             Year.SelectedDate = value;
             Agenda.SelectedDate = value;
+
+            // 前後の月のマスを押したら、スリムパネルもその月へ移る。
+            // 選んだ日が見えない月を出したままでは、どこを選んだのか分からない
             SlimMonth.SelectedDate = value;
+
+            if (value.Year != SlimMonth.Month.Year || value.Month != SlimMonth.Month.Month)
+            {
+                SlimMonth.GoTo(value);
+                Raise(nameof(SlimTitleYear), nameof(SlimTitleMonth));
+            }
 
             // 中央を畳んでいるときは、見出しが選んだ日そのものになっている
             if (!_isMainViewOpen) RaiseHeader();

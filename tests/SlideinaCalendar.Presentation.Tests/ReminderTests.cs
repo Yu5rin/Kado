@@ -197,6 +197,33 @@ public class ReminderTests
     }
 
     [Fact]
+    public void 知らせない設定のカレンダーもまとめには入れる()
+    {
+        using var test = TestWorkspace.Create();
+
+        var quiet = test.Workspace.CreateCalendar("誕生日");
+        test.Workspace.SetCalendarNotify(quiet.Id, false);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "誰かの誕生日", Date = Today, CalendarId = quiet.Id,
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        // 「知らせない」は予定ごとの通知を止める指定。朝のまとめは
+        // その日に何があるかを並べるもので、役割が違う
+        var sent = notifier.Sent.Single();
+        Assert.Contains("誰かの誕生日", sent.Message);
+    }
+
+    [Fact]
     public void まとめは1日に1回だけ()
     {
         using var test = TestWorkspace.Create();
