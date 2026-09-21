@@ -318,15 +318,14 @@
                             点ではつかめないため
                         -->
                         <StackPanel x:Name="Compact" Visibility="Collapsed"
-                                    VerticalAlignment="Top" Margin="0,2,0,0">
+                                    VerticalAlignment="Top" Margin="0,1,0,0">
                             <!--
-                                日付の上は、いつも帯2本ぶんの高さを取っておく。
-                                実働日カレンダー（inaCalendar）の印はその日に多くても
-                                2本なので、これで<b>どの日も日付の高さが揃う</b>。
-                                1本のときは下（日付側）に寄せる。入れた順に上から
-                                並ぶので、2本なら見た目もそのまま
+                                日付の上は、いつも帯1本ぶんの高さを取っておく。これで
+                                <b>どの日も日付の高さが揃う</b>。2本ぶん取ると、その
+                                ぶん下の予定に回せる行が減る。上に出るのは実働日
+                                カレンダー（inaCalendar）の印で、日々の予定は下に並ぶ
                             -->
-                            <Border Height="8" ClipToBounds="True">
+                            <Border Height="4" ClipToBounds="True">
                                 <ItemsControl ItemsSource="{Binding Milestones}"
                                               VerticalAlignment="Bottom">
                                     <ItemsControl.ItemTemplate>
@@ -341,7 +340,7 @@
                             </Border>
 
                             <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
-                                       FontSize="12" LineHeight="16" Margin="0,1"
+                                       FontSize="12" LineHeight="15" Margin="0,0,0,1"
                                        HorizontalAlignment="Center"
                                        Typography.NumeralAlignment="Tabular"
                                        Foreground="{DynamicResource InkBrush}" />
