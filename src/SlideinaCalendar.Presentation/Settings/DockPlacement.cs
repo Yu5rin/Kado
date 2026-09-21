@@ -173,14 +173,24 @@ public sealed class DockPlacementStore(SettingsRepository store)
         return placement.WithUsableWidth();
     }
 
-    /// <summary>居場所を控える。</summary>
+    /// <summary>
+    /// 居場所を控える。
+    /// <para>
+    /// 5つのキーを<b>1トランザクションにまとめて</b>書く。別々の文で書くと、途中で
+    /// 落ちたときに「モード＝Dock なのに幅は前の値」のような食い違った組み合わせが
+    /// 残りうる。
+    /// </para>
+    /// </summary>
     public void Save(DockPlacement placement)
     {
-        _store.Set(ModeKey, placement.Mode.ToString());
-        _store.Set(EdgeKey, placement.Edge.ToString());
-        _store.Set(WidthKey, placement.Width.ToString("R", CultureInfo.InvariantCulture));
-        _store.Set(DockedWidthKey, placement.DockedWidth.ToString("R", CultureInfo.InvariantCulture));
-        _store.Set(MonitorKey, placement.MonitorId ?? string.Empty);
+        _store.SetMany(new Dictionary<string, string>
+        {
+            [ModeKey] = placement.Mode.ToString(),
+            [EdgeKey] = placement.Edge.ToString(),
+            [WidthKey] = placement.Width.ToString("R", CultureInfo.InvariantCulture),
+            [DockedWidthKey] = placement.DockedWidth.ToString("R", CultureInfo.InvariantCulture),
+            [MonitorKey] = placement.MonitorId ?? string.Empty,
+        });
     }
 
     /// <summary>

@@ -228,6 +228,27 @@
                             Style="{StaticResource GhostButtonStyle}"
                             Command="{Binding TestNotifyCommand}"
                             ToolTip="この形で予定の前にお知らせします" />
+
+                    <!--
+                        カレンダーごとの通知。左パネルのベルと同じ一覧なので、ここで
+                        切り替えると左パネルにもそのまま反映される。渡されていない
+                        （MainViewModel 側の配線待ち）ときは節ごと出さない
+                    -->
+                    <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,10,0,0"
+                                Visibility="{Binding HasCalendarNotifyList,
+                                             Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="カレンダーごとの通知" Style="{StaticResource FieldLabelStyle}" />
+                        <ItemsControl ItemsSource="{Binding NotifiableCalendars}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding Notifies}"
+                                              Cursor="Hand" Margin="0,3" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="ここでの指定は既定です。予定ごとの指定があれば、そちらが勝ちます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- 実働日データ -->
@@ -296,6 +317,26 @@
                                   IsChecked="{Binding SlideOutOnLeave}" Cursor="Hand" />
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
                                    Text="切ると、他のウィンドウを触るまで出したままになります。カーソルを外に出しながら見比べたいときに。&#10;出しっぱなしにしたいときは、ピンで留めてください（Ctrl＋Alt＋P）。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="起動したときに新しい版が無いか確かめる"
+                                  IsChecked="{Binding CheckForUpdateOnStartup}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切っても、⚙メニューの「更新を確認…」はいつでも使えます。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="エラーの記録" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="エラーの記録を開く" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding OpenCrashLogCommand}" />
+                            <Border Width="8" />
+                            <Button Content="エラーの記録を消す" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding ClearCrashLogCommand}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="予期しないエラーで終了したときの記録（crash.log）です。記録が無いときは押せません。" />
                     </StackPanel>
                 </StackPanel>
             </Grid>

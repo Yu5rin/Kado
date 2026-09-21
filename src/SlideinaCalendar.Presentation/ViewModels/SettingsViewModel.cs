@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using SlideinaCalendar.Presentation.Infrastructure;
 using SlideinaCalendar.Presentation.Notifications;
 using SlideinaCalendar.Presentation.Settings;
@@ -30,16 +32,41 @@ public sealed class SettingsViewModel : ObservableObject
 
     private readonly INotifier _notifier;
 
+    /// <summary>
+    /// カレンダーごとの通知オン・オフの一覧。
+    /// <para>
+    /// 左パネルの行のベルと同じ <see cref="SourceListItemViewModel"/> をそのまま渡す。
+    /// 同じインスタンスなので、ここで切り替えれば左パネルにもそのまま反映される。
+    /// </para>
+    /// <para>
+    /// <b>既定は null。</b>呼び出し側（<c>MainViewModel</c>）がカレンダー一覧への経路を
+    /// まだ持っていないため、既定値付きの任意引数にしてある。渡されなければ、
+    /// 設定画面の通知タブにこの節は出さない。
+    /// </para>
+    /// </summary>
     public SettingsViewModel(
-        AppSettings settings, IStartupRegistration? startup = null, INotifier? notifier = null)
+        AppSettings settings, IStartupRegistration? startup = null, INotifier? notifier = null,
+        IReadOnlyList<SourceListItemViewModel>? calendars = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startup = startup ?? NullStartupRegistration.Instance;
         _notifier = notifier ?? NullNotifier.Instance;
         _runAtLogon = _startup.IsSupported && _startup.IsEnabled;
 
+        // ベルを持つのはカレンダーだけ（タスクリストは通知の対象にしていない）
+        NotifiableCalendars = calendars?.Where(c => c.HasNotifyToggle).ToArray()
+            ?? Array.Empty<SourceListItemViewModel>();
+
         TestNotifyCommand = new Infrastructure.RelayCommand(TestNotify);
+        OpenCrashLogCommand = new Infrastructure.RelayCommand(OpenCrashLog, () => HasCrashLog);
+        ClearCrashLogCommand = new Infrastructure.RelayCommand(ClearCrashLog, () => HasCrashLog);
     }
+
+    /// <summary>カレンダーごとの通知オン・オフの一覧。渡されていなければ空。</summary>
+    public IReadOnlyList<SourceListItemViewModel> NotifiableCalendars { get; }
+
+    /// <summary>通知タブに、カレンダーごとの一覧の節を出すか。</summary>
+    public bool HasCalendarNotifyList => NotifiableCalendars.Count > 0;
 
     /// <summary>
     /// 試しに1つ出してみる。
@@ -405,6 +432,24 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 起動のたびに新しい版が無いか確かめるか。
+    /// <para>
+    /// 切っても、⚙メニューからの手動の確認（「更新を確認…」）はこの設定に関わらず動く。
+    /// </para>
+    /// </summary>
+    public bool CheckForUpdateOnStartup
+    {
+        get => _settings.CheckForUpdateOnStartup;
+        set
+        {
+            if (_settings.CheckForUpdateOnStartup == value) return;
+
+            _settings.CheckForUpdateOnStartup = value;
+            Raise();
+        }
+    }
+
     /// <summary>自動起動を出せるか。扱えない環境では欄ごと隠す。</summary>
     public bool CanRunAtLogon => _startup.IsSupported;
 
@@ -435,6 +480,65 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _message;
         private set => Set(ref _message, value);
+    }
+
+    // ------------------------------------------------------------------
+    // エラーの記録（crash.log）
+    //
+    // App.xaml.cs が書く先と同じ場所を、こちらでも計算する。データベースと
+    // 同じフォルダに置く決まりなので、CalendarDatabase.DefaultPath から求まる
+    // ------------------------------------------------------------------
+
+    /// <summary>異常終了の記録先。<c>App.xaml.cs</c> の書き出し先と同じ場所。</summary>
+    private static string CrashLogPath => Path.Combine(
+        Path.GetDirectoryName(SlideinaCalendar.Data.CalendarDatabase.DefaultPath)!, "crash.log");
+
+    /// <summary>1つ前の世代（1MB を超えたときに繰った分）。</summary>
+    private static string PreviousCrashLogPath => CrashLogPath + ".1";
+
+    /// <summary>記録が残っているか。無ければ開く・消すボタンを押せなくする。</summary>
+    public bool HasCrashLog => File.Exists(CrashLogPath) || File.Exists(PreviousCrashLogPath);
+
+    /// <summary>エラーの記録を開く。</summary>
+    public Infrastructure.RelayCommand OpenCrashLogCommand { get; }
+
+    /// <summary>エラーの記録を消す。</summary>
+    public Infrastructure.RelayCommand ClearCrashLogCommand { get; }
+
+    private void OpenCrashLog()
+    {
+        try
+        {
+            // 既定のアプリ（ふつうはメモ帳）で開く。中身をここで読んで見せると、
+            // 大きくなっていたときに画面が固まる
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(CrashLogPath) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or IOException or PlatformNotSupportedException)
+        {
+            Message = $"エラーの記録を開けませんでした（{ex.Message}）";
+            Raise(nameof(Message));
+        }
+    }
+
+    private void ClearCrashLog()
+    {
+        try
+        {
+            if (File.Exists(CrashLogPath)) File.Delete(CrashLogPath);
+            if (File.Exists(PreviousCrashLogPath)) File.Delete(PreviousCrashLogPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Message = $"エラーの記録を消せませんでした（{ex.Message}）";
+            Raise(nameof(Message));
+            return;
+        }
+
+        Message = null;
+        Raise(nameof(Message), nameof(HasCrashLog));
+        OpenCrashLogCommand.RaiseCanExecuteChanged();
+        ClearCrashLogCommand.RaiseCanExecuteChanged();
     }
 
     private static SettingChoice<int>[] Hours(int from, int to) =>

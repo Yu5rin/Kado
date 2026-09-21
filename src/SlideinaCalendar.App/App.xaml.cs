@@ -28,6 +28,21 @@ namespace SlideinaCalendar.App;
 public partial class App : Application
 {
     private SqliteConnection? _connection;
+
+    /// <summary>
+    /// Google 同期専用の接続。
+    /// <para>
+    /// <see cref="GoogleSyncService"/> は <c>ConfigureAwait(false)</c> で書かれているので、
+    /// 最初の通信のあとはスレッドプール上のスレッドでリポジトリを叩く。<see cref="_connection"/>
+    /// を UI スレッドと同時に使うと、どちらかが張っているトランザクションともう片方の
+    /// トランザクション無しのコマンドがかち合い、<see cref="InvalidOperationException"/> で
+    /// 落ちることがある。SQLite は WAL なので接続を分ければ読み書きを並行できる
+    /// （書き込みどうしがかち合ったときは <c>busy_timeout</c> で待たせる。
+    /// <see cref="CalendarDatabase.Connect"/> 側で設定済み）。
+    /// </para>
+    /// </summary>
+    private SqliteConnection? _syncConnection;
+
     private GoogleConnection? _google;
     private SingleInstance? _instance;
     private BackgroundSync? _background;
@@ -149,11 +164,26 @@ public partial class App : Application
 
             // トークンは DPAPI で守る。守るべきはこちら。クライアント設定のほうは
             // デスクトップアプリ型である以上どのみち手元に置かれ、秘密として扱えない
+            //
+            // Google 同期には UI と別の接続・別の CalendarWorkspace を渡す（_syncConnection
+            // のコメント参照）。同じファイルを見ているので、書き込んだ内容は同期が
+            // 終わった時点で UI 側の接続からも読める。EnsureSources・実働日の組み直しは
+            // Sync.Synced を受けた側（MainViewModel）が UI 側の workspace で読み直している
+            _syncConnection = CalendarDatabase.OpenDefault().ConnectAndMigrate();
+            var syncWorkspace = new CalendarWorkspace(_syncConnection);
+
+            var tokenStore = new DpapiTokenStore(Path.Combine(
+                Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"));
+
+            // ここで一度読んでおく。GoogleConnection が読むタイミングでは
+            // 「復号に失敗したか」を伝える先が無いため、先に確かめておく
+            // （DpapiTokenStore.DecryptionFailed を見るのは、ここと下の起動時通知の2か所だけ）
+            tokenStore.Load();
+
             _google = new GoogleConnection(
-                workspace,
+                syncWorkspace,
                 googleClient,
-                new DpapiTokenStore(Path.Combine(
-                    Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat")),
+                tokenStore,
                 OpenInBrowser);
 
             // 前回、ワークエリアを削ったまま落ちていたら元に戻す（要件書 2.3）。
@@ -183,6 +213,18 @@ public partial class App : Application
             window.Closing += OnMainWindowClosing;
 
             window.Show();
+
+            // 保存されていたトークンが復号できなかったときだけ、理由を一度伝える。
+            // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
+            // プロファイル移行のあとに理由が分からなくなる。ファイルはこの時点で
+            // もう消えている（DpapiTokenStore.Load）ので、次回の起動では出ない
+            if (tokenStore.DecryptionFailed)
+            {
+                MessageBox.Show(
+                    window,
+                    "保存されていた接続情報を読めなくなりました。Google に接続し直してください。",
+                    "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
 
             SetUpShell(window);
 
@@ -215,8 +257,13 @@ public partial class App : Application
                 _background.Start();
             }
 
-            // 起動したときに一度だけ確かめる。最新なら何も出さない
-            _ = CheckForUpdateAsync(showWhenLatest: false);
+            // 起動したときに一度だけ確かめる。最新なら何も出さない。
+            // 設定で切れる（⚙メニューからの手動確認はこの設定に関わらず動く。
+            // main.CheckForUpdate 経由で呼ぶほうなので、ここでは分岐しない）
+            if (settings.CheckForUpdateOnStartup)
+            {
+                _ = CheckForUpdateAsync(showWhenLatest: false);
+            }
 
             WatchForResume(window);
         }
@@ -367,8 +414,12 @@ public partial class App : Application
     {
         _background?.Dispose();
         _background = null;
+        _google?.Dispose();
+        _google = null;
         _connection?.Dispose();
         _connection = null;
+        _syncConnection?.Dispose();
+        _syncConnection = null;
 
         DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
 
@@ -521,6 +572,7 @@ public partial class App : Application
         _background?.Dispose();
         _google?.Dispose();
         _connection?.Dispose();
+        _syncConnection?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);
     }
@@ -647,7 +699,7 @@ public partial class App : Application
         Add("右端から出す", () => main.Shell.EdgeRightCommand.Execute(null));
         menu.Items.Add(new System.Windows.Controls.Separator());
 
-        Add("いますぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
+        Add("今すぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
         Add("ショートカット", () => main.ShowShortcutsCommand.Execute(null));
         Add("設定", () => main.OpenSettingsCommand.Execute(null));
         menu.Items.Add(new System.Windows.Controls.Separator());
@@ -676,7 +728,7 @@ public partial class App : Application
         BringToFront();
 
         // クイック入力の欄へ飛ばす。呼び出してから手で探させない
-        if (kind == Shell.HotKeyKind.QuickEntry) MainWindow?.Focus();
+        if (kind == Shell.HotKeyKind.QuickEntry) (MainWindow as MainWindow)?.FocusQuickInput();
     }
 
     /// <summary>

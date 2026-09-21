@@ -130,12 +130,28 @@ public class OAuthTests
     {
         using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, TokenResponse)));
 
-        // こちらが始めた認可ではない応答
-        var flow = new LoopbackOAuthFlow(Options(), http, url => _ = Visit(url, "code-1", state: "よその state"));
+        // こちらが始めた認可ではない応答。404 を返して待ち続けるだけなので、
+        // それ以上何も来なければ最後は上限（ここでは短く設定）で諦める
+        var flow = new LoopbackOAuthFlow(
+            Options(), http, url => _ = Visit(url, "code-1", state: "よその state"),
+            authorizationTimeout: TimeSpan.FromMilliseconds(200));
 
         var error = await Assert.ThrowsAsync<OAuthException>(() => flow.AuthorizeAsync());
 
-        Assert.Contains("一致しませんでした", error.Message);
+        Assert.Contains("もう一度お試しください", error.Message);
+    }
+
+    [Fact]
+    public async Task 無関係なリクエストには404を返して待ち続ける()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, TokenResponse)));
+
+        var flow = new LoopbackOAuthFlow(Options(), http, url => _ = VisitUnrelatedThenCode(url));
+        var tokens = await flow.AuthorizeAsync();
+
+        // favicon.ico のような無関係なリクエストと state 違いの応答が先に来ても、
+        // あとから届いた本来の認可コードでちゃんと交換できる
+        Assert.Equal("at-1", tokens.AccessToken);
     }
 
     [Fact]
@@ -208,6 +224,44 @@ public class OAuthTests
     // ------------------------------------------------------------------
     // 補助
     // ------------------------------------------------------------------
+
+    /// <summary>
+    /// ブラウザの favicon.ico 事前取得と、無関係な state を持つリクエストを模したあとで、
+    /// 本来の認可コードを送る。
+    /// <para>どちらも 404 で弾かれ、待ちを終わらせないことを確かめる。</para>
+    /// </summary>
+    private static async Task VisitUnrelatedThenCode(string authorizationUrl)
+    {
+        var query = HttpUtility.ParseQueryString(new Uri(authorizationUrl).Query);
+        var redirect = query["redirect_uri"]!;
+
+        using var client = new HttpClient();
+
+        // path が違う（favicon.ico）
+        try
+        {
+            using var favicon = await client.GetAsync($"{redirect}favicon.ico").ConfigureAwait(false);
+            Assert.Equal(HttpStatusCode.NotFound, favicon.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+            // 受け側のタイミング次第では切れることもある。本題は次のアサートで見る
+        }
+
+        // path は合っているが state が違う
+        try
+        {
+            using var wrongState = await client
+                .GetAsync($"{redirect}?state=よその state&code=横取り").ConfigureAwait(false);
+            Assert.Equal(HttpStatusCode.NotFound, wrongState.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+        }
+
+        // 本来の応答。これでようやく待ちが終わる
+        await Visit(authorizationUrl, withCode: "code-1").ConfigureAwait(false);
+    }
 
     /// <summary>ブラウザの代わりに戻り先を叩く。</summary>
     private static async Task Visit(string authorizationUrl, string? withCode = null, string? error = null,

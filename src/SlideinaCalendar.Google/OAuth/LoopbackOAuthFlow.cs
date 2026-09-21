@@ -158,48 +158,84 @@ public sealed class LoopbackOAuthFlow(
     /// <c>Register</c> で <c>Stop()</c> を呼んで待ちを解く。どちらが理由で解けたのかは
     /// <paramref name="callerToken"/> だけを見て判断する（こちらは上限では動かない）。
     /// </para>
+    /// <para>
+    /// <b>関係ないリクエストは 404 を返して待ち続ける。</b>ブラウザが認可画面を開く前に
+    /// <c>/favicon.ico</c> を先取りしにいくことがあり、path や state が合わない最初の
+    /// リクエストをそのまま受け取って終わらせると、あとから届く本来の認可コードを
+    /// 逃してしまう。待ち続ける時間そのものは <paramref name="waitToken"/> の5分上限で
+    /// 変わらない。
+    /// </para>
     /// </summary>
     private static async Task<string> WaitForCodeAsync(
         HttpListener listener, string expectedState, CancellationToken waitToken, CancellationToken callerToken)
     {
         using var registration = waitToken.Register(listener.Stop);
 
-        HttpListenerContext context;
-        try
+        while (true)
         {
-            context = await listener.GetContextAsync().ConfigureAwait(false);
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (waitToken.IsCancellationRequested &&
+                                        ex is HttpListenerException or ObjectDisposedException)
+            {
+                // 呼び出し側が止めたのか、5分待って諦めたのかで、出す文言を変える
+                if (callerToken.IsCancellationRequested) throw new OperationCanceledException(callerToken);
+
+                throw new OAuthException("ブラウザで許可されませんでした。もう一度お試しください。");
+            }
+
+            var query = HttpUtility.ParseQueryString(context.Request.Url?.Query ?? string.Empty);
+            var error = query["error"];
+            var code = query["code"];
+            var state = query["state"];
+
+            if (!IsExpectedCallback(context.Request, expectedState, error, code, state))
+            {
+                await RespondNotFoundAsync(context).ConfigureAwait(false);
+                continue;
+            }
+
+            var message = error is not null
+                ? "連携を中止しました。このウィンドウは閉じてかまいません。"
+                : "連携が完了しました。このウィンドウは閉じてかまいません。";
+
+            await RespondAsync(context, message).ConfigureAwait(false);
+
+            if (error is not null) throw new OAuthException($"認可されませんでした（{error}）。", error);
+            if (string.IsNullOrEmpty(code)) throw new OAuthException("認可コードを受け取れませんでした。");
+
+            return code;
         }
-        catch (Exception ex) when (waitToken.IsCancellationRequested &&
-                                    ex is HttpListenerException or ObjectDisposedException)
-        {
-            // 呼び出し側が止めたのか、5分待って諦めたのかで、出す文言を変える
-            if (callerToken.IsCancellationRequested) throw new OperationCanceledException(callerToken);
+    }
 
-            throw new OAuthException("ブラウザで許可されませんでした。もう一度お試しください。");
-        }
+    /// <summary>
+    /// 待っている認可コードの応答か。
+    /// <para>
+    /// path が登録したリダイレクト先（<c>/</c>）でない、または <c>state</c> が
+    /// こちらが送ったものと違うなら、無関係なリクエストとして扱う。
+    /// </para>
+    /// </summary>
+    private static bool IsExpectedCallback(
+        HttpListenerRequest request, string expectedState, string? error, string? code, string? state)
+    {
+        if (request.Url is null || request.Url.AbsolutePath != "/") return false;
 
-        var query = HttpUtility.ParseQueryString(context.Request.Url?.Query ?? string.Empty);
-        var error = query["error"];
-        var code = query["code"];
-        var state = query["state"];
+        // error も code も無いなら、認可の応答そのものではない
+        if (error is null && code is null) return false;
 
-        var message = error is not null
-            ? "連携を中止しました。このウィンドウは閉じてかまいません。"
-            : "連携が完了しました。このウィンドウは閉じてかまいません。";
+        return string.Equals(state, expectedState, StringComparison.Ordinal);
+    }
 
-        await RespondAsync(context, message).ConfigureAwait(false);
+    /// <summary>無関係なリクエストには 404 だけ返して切る。認可の待ちは続ける。</summary>
+    private static async Task RespondNotFoundAsync(HttpListenerContext context)
+    {
+        context.Response.StatusCode = (int)HttpStatusCode.NotFound;
 
-        if (error is not null) throw new OAuthException($"認可されませんでした（{error}）。", error);
-
-        // state が違うなら、こちらが始めた認可ではない
-        if (!string.Equals(state, expectedState, StringComparison.Ordinal))
-        {
-            throw new OAuthException("認可の応答が一致しませんでした。もう一度お試しください。");
-        }
-
-        if (string.IsNullOrEmpty(code)) throw new OAuthException("認可コードを受け取れませんでした。");
-
-        return code;
+        await context.Response.OutputStream.FlushAsync().ConfigureAwait(false);
+        context.Response.Close();
     }
 
     /// <summary>ブラウザに出す短い案内。</summary>
