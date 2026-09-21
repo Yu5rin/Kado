@@ -39,6 +39,17 @@
 
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
 
+        <!--
+            日付ヘッダの右クリックメニュー。ダブルクリックは予定の追加に譲ったので、
+            日ビューへの移動はこちらへ移した（要件書のねらいと違う動きをしていたのを直す）。
+        -->
+        <ContextMenu x:Key="DayHeaderMenu">
+            <MenuItem Header="日ビューへ移動"
+                      Command="{Binding PlacementTarget.Tag.ShowDayOfCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
 
         <!--
             終日レーンの右クリックメニュー。ContextMenu は画面の木から外れて出るので、
@@ -65,6 +76,25 @@
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
+            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
+            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskChipDoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="完了にする" />
+                        <Style.Triggers>
+                            <DataTrigger Value="True"
+                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
+                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <Setter Property="Header" Value="完了を取り消す" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <Separator />
             <MenuItem Header="削除"
                       Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -85,7 +115,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
-                    <TextBlock Text="{Binding Title}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
                                Foreground="{DynamicResource InkBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
@@ -99,7 +129,7 @@
                     MouseLeftButtonDown="OnAllDayEventClicked"
                     MouseMove="OnAllDayDragging"
                     Background="{DynamicResource AccentSoftBrush}">
-                <TextBlock Text="{Binding Label}" FontSize="10.5"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Tooltip}" />
             </Border>
@@ -110,19 +140,20 @@
             <!-- 見出しを押すと、その日を選ぶ。右ペインがその日に入れ替わる -->
             <Border x:Name="Head" Padding="0,5,0,6" Cursor="Hand"
                     Background="Transparent"
-                    ToolTip="押すとその日を選びます"
+                    ToolTip="クリックで選択 ・ ダブルクリックで予定を追加 ・ 右クリックで日ビューへ"
                     MouseLeftButtonDown="OnDayHeaderClicked"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource DayHeaderMenu}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
                     <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
-                    <TextBlock x:Name="DayName" Text="{Binding DayName}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="DayName" Text="{Binding DayName}"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <Border x:Name="NumberFace" CornerRadius="13" Width="26" Height="26"
                             Background="Transparent" HorizontalAlignment="Center">
-                        <TextBlock x:Name="DayNumber" Text="{Binding DayNumber}"
-                                   FontSize="16" FontWeight="Medium"
+                        <TextBlock Style="{StaticResource SubheadingTextStyle}" x:Name="DayNumber" Text="{Binding DayNumber}" FontWeight="Medium"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular" />
                     </Border>
@@ -131,7 +162,7 @@
                         祝日名。予定としてではなく、日付の添え書きとして出す。
                         Google の「日本の祝日」カレンダーを引くと予定の並びに混ざる
                     -->
-                    <TextBlock Text="{Binding HolidayName}" FontSize="9.5"
+                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding HolidayName}"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SundayBrush}"
                                Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
@@ -153,7 +184,7 @@
                                         MouseLeftButtonDown="OnMilestoneClicked"
                                         Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                     ConverterParameter=Face}">
-                                    <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
+                                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="{Binding Name,
                                                            Converter={StaticResource MilestoneBrush}}" />
@@ -243,7 +274,7 @@
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineStrongBrush}">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Left" Width="46" Text="終日" FontSize="9.5"
+                <TextBlock Style="{StaticResource MicroTextStyle}" DockPanel.Dock="Left" Width="46" Text="終日"
                            TextAlignment="Right" Padding="0,4,5,0"
                            Foreground="{DynamicResource Ink3Brush}" />
                 <Border DockPanel.Dock="Right"
@@ -272,8 +303,7 @@
                                     見出しと罫線が食い違っていく（24時間ぶんで2時間ずれる）
                                 -->
                                 <Border Height="{Binding DataContext.HourHeight, ElementName=Root}">
-                                    <TextBlock Text="{Binding}" VerticalAlignment="Top"
-                                               FontSize="10"
+                                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding}" VerticalAlignment="Top"
                                                TextAlignment="Right" Padding="0,0,6,0" Margin="0,-5,0,0"
                                                Foreground="{DynamicResource Ink3Brush}"
                                                Typography.NumeralAlignment="Tabular" />

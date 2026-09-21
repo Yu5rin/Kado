@@ -34,15 +34,33 @@ public partial class WeekView : UserControl
 
     /// <summary>
     /// 列の見出しを押すと、その日を選ぶ。
-    /// <para>2回押したら、その日のビューへ移る（月ビューのマスと同じ）。</para>
+    /// <para>
+    /// 2回押したら、その日に予定を足す（月・年ビューのマスと揃える）。日ビューへの
+    /// 移動は右クリックメニューへ移した（<see cref="OnGoToDayClicked"/>）。
+    /// </para>
+    /// <para>
+    /// 実働日計算パネルが開いているあいだは、1回押しをその「から」「まで」にも流す
+    /// （月ビューのマスと同じ）。
+    /// </para>
     /// </summary>
     private void OnDayHeaderClicked(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not WeekDayColumnViewModel day) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
-        if (e.ClickCount == 2) main.ShowDayOfCommand.Execute(day.Date);
-        else main.SelectDateCommand.Execute(day.Date);
+        if (e.ClickCount == 2)
+        {
+            main.AddEventOnCommand.Execute(day.Date);
+        }
+        else
+        {
+            main.SelectDateCommand.Execute(day.Date);
+
+            if (main.IsWorkdayCalculatorOpen)
+            {
+                main.FeedWorkdayCalculator(day.Date, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            }
+        }
 
         e.Handled = true;
     }

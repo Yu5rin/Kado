@@ -153,14 +153,32 @@ public partial class MonthView : UserControl
         }
     }
 
-    /// <summary>1回押しでその日を選び、2回でその日に予定を足す。</summary>
+    /// <summary>
+    /// 1回押しでその日を選び、2回でその日に予定を足す。
+    /// <para>
+    /// 実働日計算パネルが開いているあいだは、1回押しをその「から」「まで」にも
+    /// 流す（要件書 4.5）。Shift を押していれば「まで」、押していなければ「から」。
+    /// 日を選ぶ今までどおりの動きは変えない。
+    /// </para>
+    /// </summary>
     private void OnCellClicked(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not DayCellViewModel cell) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
-        if (e.ClickCount == 2) main.AddEventOnCommand.Execute(cell.Date);
-        else main.SelectDateCommand.Execute(cell.Date);
+        if (e.ClickCount == 2)
+        {
+            main.AddEventOnCommand.Execute(cell.Date);
+        }
+        else
+        {
+            main.SelectDateCommand.Execute(cell.Date);
+
+            if (main.IsWorkdayCalculatorOpen)
+            {
+                main.FeedWorkdayCalculator(cell.Date, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            }
+        }
 
         e.Handled = true;
     }

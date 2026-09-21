@@ -31,7 +31,7 @@
 
         <!-- 曜日ヘッダ（.dow）。日曜は赤、土曜は青。週の開始曜日は設定で変わるので位置では決めない -->
         <DataTemplate x:Key="WeekDayHeaderTemplate">
-            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="11" Padding="0,5"
+            <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="Label" Text="{Binding Name}" Padding="0,5"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource Ink3Brush}" />
             <DataTemplate.Triggers>
@@ -70,6 +70,25 @@
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
+            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
+            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskChipDoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="完了にする" />
+                        <Style.Triggers>
+                            <DataTrigger Value="True"
+                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
+                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <Setter Property="Header" Value="完了を取り消す" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <Separator />
             <MenuItem Header="削除"
                       Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -101,7 +120,7 @@
                     ContextMenu="{StaticResource EventChipMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
-                <TextBlock Text="{Binding Label}" FontSize="11" LineHeight="16"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
                            Typography.NumeralAlignment="Tabular"
@@ -126,7 +145,7 @@
                     ContextMenu="{StaticResource EventChipMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
-                <TextBlock Text="{Binding Text}" FontSize="11" LineHeight="16"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Text}" LineHeight="16"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
                            Typography.NumeralAlignment="Tabular"
@@ -191,7 +210,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
-                    <TextBlock Text="{Binding Title}" FontSize="11" LineHeight="16"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}" LineHeight="16"
                                Foreground="{DynamicResource Ink2Brush}"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
                 </StackPanel>
@@ -228,7 +247,7 @@
                     MouseMove="OnChipDragging"
                     Cursor="Hand"
                     ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー&#10;ドラッグで別の日へ移動">
-                <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" LineHeight="15"
+                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
         </DataTemplate>
@@ -280,9 +299,8 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock x:Name="DayNumber" Grid.Column="0"
-                                           Text="{Binding DayNumber}"
-                                           FontSize="12" FontWeight="Medium" LineHeight="16"
+                                <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DayNumber" Grid.Column="0"
+                                           Text="{Binding DayNumber}" FontWeight="Medium" LineHeight="16"
                                            Typography.NumeralAlignment="Tabular"
                                            Foreground="{DynamicResource InkBrush}" />
 
@@ -292,7 +310,7 @@
                             </Grid>
 
                             <!-- 祝日名。休みの理由が読めると予定を立てやすい -->
-                            <TextBlock Text="{Binding HolidayName}" FontSize="10" LineHeight="13"
+                            <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding HolidayName}" LineHeight="13"
                                        Foreground="{DynamicResource SundayBrush}"
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
@@ -305,7 +323,7 @@
                                           ItemTemplate="{StaticResource TaskChipTemplate}" />
 
                             <!-- 入りきらなかった件数。隠れたまま気づけないのを防ぐ -->
-                            <TextBlock Text="{Binding OverflowLabel}" FontSize="10" Margin="3,1,0,0"
+                            <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding OverflowLabel}" Margin="3,1,0,0"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding OverflowLabel, Converter={StaticResource NullToVisibility}}" />
                         </StackPanel>
@@ -339,8 +357,7 @@
                                 </ItemsControl>
                             </Border>
 
-                            <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
-                                       FontSize="12" LineHeight="15" Margin="0,0,0,1"
+                            <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="CompactNumber" Text="{Binding DayNumber}" LineHeight="15" Margin="0,0,0,1"
                                        HorizontalAlignment="Center"
                                        Typography.NumeralAlignment="Tabular"
                                        Foreground="{DynamicResource InkBrush}" />

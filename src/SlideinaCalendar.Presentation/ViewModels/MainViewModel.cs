@@ -192,6 +192,7 @@ public sealed class MainViewModel : ObservableObject
         DeleteChipCommand = new RelayCommand<EventChipViewModel?>(chip => DeleteEventBy(chip?.Id));
         EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
         DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
+        ToggleTaskChipDoneCommand = new RelayCommand<TaskItem?>(ToggleTaskChipDone);
         EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(EditBlock);
         EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
         DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
@@ -606,10 +607,17 @@ public sealed class MainViewModel : ObservableObject
 
     public bool ShowsViewSwitcher => ShowsCalendarTools && (RoomUnknown || Room >= ViewSwitcherFloor);
 
-    public bool ShowsTodayButton => RoomUnknown || Room >= TodayButtonFloor;
+    /// <summary>
+    /// 「今日」をアイコンだけに畳むか。
+    /// <para>
+    /// 帯として細く使う場面ほど「今日へ戻る」が要るので、幅が無くても消さない
+    /// （項目10）。消す代わりに、380px を切ったらアイコンだけの姿にする。
+    /// </para>
+    /// </summary>
+    public bool UsesCompactTodayButton => !RoomUnknown && Room < TodayButtonFloor;
 
     /// <summary>年月の見出しに取っておく幅。細いときは詰める。</summary>
-    public double TitleRoom => ShowsTodayButton ? 118 : 44;
+    public double TitleRoom => UsesCompactTodayButton ? 44 : 118;
 
     /// <summary>
     /// 幅に合わせてツールバーの中身を詰める。
@@ -622,7 +630,7 @@ public sealed class MainViewModel : ObservableObject
     public void FitTo(double width)
     {
         Raise(nameof(ShowsWorkdayBadges), nameof(ShowsSyncStatus), nameof(UsesCompactSearch),
-            nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(ShowsTodayButton),
+            nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(UsesCompactTodayButton),
             nameof(TitleRoom));
     }
 
@@ -833,12 +841,25 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>直近の操作の結果。元に戻したときなどに出す。</summary>
+    /// <summary>
+    /// 直近の操作の結果。元に戻したときなどに出す。
+    /// <para>
+    /// 出しっぱなしにはしない。画面側（<c>MainWindow</c>）が数秒後に
+    /// <see cref="ClearStatusMessage"/> を呼んで消す。ここ自身はタイマーを持たない
+    /// （WPF に依存しない作りを保つため。<c>DispatcherTimer</c> は App 側の役目）。
+    /// </para>
+    /// </summary>
     public string? StatusMessage
     {
         get => _statusMessage;
         private set => Set(ref _statusMessage, value);
     }
+
+    /// <summary>
+    /// 出しているステータスを消す。
+    /// <para>画面側が一定時間後に呼ぶ。すでに次の内容に差し替わっていれば、何もしない。</para>
+    /// </summary>
+    public void ClearStatusMessage() => StatusMessage = null;
 
     // ------------------------------------------------------------------
     // ツールバーの表示
@@ -906,8 +927,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// クイック入力の1行。
     /// <para>
-    /// 「明日」は<b>今日から見た明日</b>。選んでいる日は見ない。月を送って眺めている
-    /// 最中に打つと、思っていたのと違う日に入る。
+    /// 日付を書かなければ<b>選んでいる日（<see cref="SelectedDate"/>）</b>に入る。
+    /// ただし「明日」「来週の火曜」「3日後」のような相対語は<b>今日から見た日</b>のまま
+    /// で、選んでいる日は見ない。月を送って眺めている最中に「明日」と打って、思っていた
+    /// のと違う日に入るのを防ぐため。
     /// </para>
     /// </summary>
     public string QuickText
@@ -932,7 +955,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (_quickText.Trim().Length == 0) return null;
 
-            var entry = QuickParser.Parse(_quickText, _today);
+            var entry = QuickParser.Parse(_quickText, _today, SelectedDate);
 
             if (entry.UnsupportedWord is { } word) return $"「{word}」はここでは読めません。予定の画面から入れてください";
             if (entry.HasDateError) return "その日は暦にありません";
@@ -951,14 +974,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>そのまま入れられるか。</summary>
-    public bool CanCommitQuick => QuickParser.Parse(_quickText, _today).CanCommit;
+    public bool CanCommitQuick => QuickParser.Parse(_quickText, _today, SelectedDate).CanCommit;
 
     /// <summary>1行から予定を入れる。</summary>
     public RelayCommand QuickCommand { get; }
 
     private void CommitQuick()
     {
-        var entry = QuickParser.Parse(_quickText, _today);
+        var entry = QuickParser.Parse(_quickText, _today, SelectedDate);
         if (!entry.CanCommit) return;
 
         _workspace.AddEvent(new CalendarEvent
@@ -1174,6 +1197,16 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
     public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
+
+    /// <summary>
+    /// 月・週・日ビューのタスクチップの完了を切り替える。
+    /// <para>
+    /// これらのチップは <see cref="TaskItem"/>（保存されている生の形）を直に持つので、
+    /// 右ペイン・スリムパネル用の <see cref="ToggleTaskDoneCommand"/>
+    /// （<see cref="TaskListItemViewModel"/> 用）とは型が違う。
+    /// </para>
+    /// </summary>
+    public RelayCommand<TaskItem?> ToggleTaskChipDoneCommand { get; }
 
     /// <summary>日付の行のラベルを開く。実働日データから起こした予定も直せる。</summary>
     public RelayCommand<MilestoneViewModel?> EditMilestoneCommand { get; }
@@ -1634,7 +1667,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (!_files.Confirm(
                 $"同じ内容の予定が {extra.Count} 件あります",
-                $"次のものを消します。中身の多いほうを1件ずつ残します。\n\n{sample}{more}"
+                $"次のものを削除します。中身の多いほうを1件ずつ残します。\n\n{sample}{more}"
                 + "\n\nCtrl＋Z でまとめて戻せます。"
                 + "\nGoogle に繋いでいれば、次の同期で向こうからも消えます。"))
         {
@@ -1642,7 +1675,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var removed = _workspace.RemoveDuplicateEvents();
-        StatusMessage = $"重複していた予定 {removed} 件を消しました";
+        StatusMessage = $"重複していた予定 {removed} 件を削除しました";
     }
 
     /// <summary>
@@ -2102,16 +2135,28 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var editor = new EventEditorViewModel(stored, CalendarNames);
-        if (!_editors.ShowEventEditor(editor)) return;
+        if (!_editors.ShowEventEditor(editor))
+        {
+            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
+            if (editor.Deleted) DeleteEventBy(id);
+            return;
+        }
 
         StatusMessage = _workspace.UpdateEvent(editor.ToModel())
             ? "予定を変更しました"
             : "予定が見つかりませんでした";
     }
 
+    /// <summary>
+    /// 予定を削除する。
+    /// <para>
+    /// 確認ダイアログは出さない。Undo（Ctrl＋Z、ステータス行の「元に戻す」）で
+    /// 戻せるので、1クリックごとに尋ねるのは二重の手間になる。
+    /// </para>
+    /// </summary>
     private void DeleteEvent(DayEventViewModel? target)
     {
-        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+        if (target is null) return;
 
         StatusMessage = _workspace.DeleteEvent(target.Id)
             ? "予定を削除しました"
@@ -2121,8 +2166,7 @@ public sealed class MainViewModel : ObservableObject
     /// <inheritdoc cref="EditEventBy"/>
     private void DeleteEventBy(string? id)
     {
-        if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } stored) return;
-        if (!_editors.ConfirmDelete(stored.Title)) return;
+        if (id is not { Length: > 0 }) return;
 
         StatusMessage = _workspace.DeleteEvent(id)
             ? "予定を削除しました"
@@ -2150,7 +2194,12 @@ public sealed class MainViewModel : ObservableObject
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
 
         var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
-        if (!_editors.ShowTaskEditor(editor)) return;
+        if (!_editors.ShowTaskEditor(editor))
+        {
+            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
+            if (editor.Deleted) DeleteTaskBy(id);
+            return;
+        }
 
         StatusMessage = _workspace.UpdateTask(editor.ToModel())
             ? "タスクを変更しました"
@@ -2160,8 +2209,7 @@ public sealed class MainViewModel : ObservableObject
     /// <inheritdoc cref="EditEventBy"/>
     private void DeleteTaskBy(string? id)
     {
-        if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
-        if (!_editors.ConfirmDelete(stored.Title)) return;
+        if (id is not { Length: > 0 }) return;
 
         StatusMessage = _workspace.DeleteTask(id)
             ? "タスクを削除しました"
@@ -2184,7 +2232,12 @@ public sealed class MainViewModel : ObservableObject
         if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
 
         var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
-        if (!_editors.ShowTaskEditor(editor)) return;
+        if (!_editors.ShowTaskEditor(editor))
+        {
+            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
+            if (editor.Deleted) DeleteTask(target);
+            return;
+        }
 
         StatusMessage = _workspace.UpdateTask(editor.ToModel())
             ? "タスクを変更しました"
@@ -2193,7 +2246,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void DeleteTask(TaskListItemViewModel? target)
     {
-        if (target is null || !_editors.ConfirmDelete(target.Title)) return;
+        if (target is null) return;
 
         StatusMessage = _workspace.DeleteTask(target.Id)
             ? "タスクを削除しました"
@@ -2202,6 +2255,17 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>チェックの入り切り。画面を開かずに切り替えられる。</summary>
     private void ToggleTaskDone(TaskListItemViewModel? target)
+    {
+        if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
+
+        StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
+    }
+
+    /// <summary>
+    /// 月・週・日ビューのタスクチップの右クリックメニューから、完了を切り替える。
+    /// <para><see cref="ToggleTaskDone"/> と同じ動きを、<see cref="TaskItem"/> を持つ側にも提供する。</para>
+    /// </summary>
+    private void ToggleTaskChipDone(TaskItem? target)
     {
         if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
 
@@ -2338,16 +2402,62 @@ public sealed class MainViewModel : ObservableObject
     /// 開いてすぐ日付を入れ直さずに済む。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// いま開いている実働日計算パネル。閉じていれば null。
+    /// <para>
+    /// モードレスで出すようになったので、開いているあいだはカレンダー上のクリックを
+    /// ここへ流す（<see cref="FeedWorkdayCalculator"/>）。
+    /// </para>
+    /// </summary>
+    private WorkdayCalculatorViewModel? _openCalculator;
+
+    /// <summary>
+    /// 実働日計算パネルが開いているか。
+    /// <para>カレンダー側が、日付クリックの流し先をこれで判断する。</para>
+    /// </summary>
+    public bool IsWorkdayCalculatorOpen => _openCalculator is not null;
+
     private void ShowWorkdayCalculator()
     {
-        var calculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today)
+        // すでに開いていれば、開いたままの内容を使う（作り直すと入力中のものが消える）
+        if (_openCalculator is null)
         {
-            RangeFrom = SelectedDate,
-            RangeTo = SelectedDate,
-            BaseDate = SelectedDate,
-        };
+            _openCalculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today)
+            {
+                RangeFrom = SelectedDate,
+                RangeTo = SelectedDate,
+                BaseDate = SelectedDate,
+            };
+            _openCalculator.Closed += OnCalculatorClosed;
+        }
 
-        _editors.ShowWorkdayCalculator(calculator);
+        _editors.ShowWorkdayCalculator(_openCalculator);
+    }
+
+    private void OnCalculatorClosed(object? sender, EventArgs e)
+    {
+        if (sender is WorkdayCalculatorViewModel calculator) calculator.Closed -= OnCalculatorClosed;
+
+        _openCalculator = null;
+        Raise(nameof(IsWorkdayCalculatorOpen));
+    }
+
+    /// <summary>
+    /// カレンダー上でクリックした日を、開いている実働日計算パネルへ流す。
+    /// <para>
+    /// 開いていなければ何もしない。閉じているときの日付選択の動きは変えない
+    /// （呼び出し側は、いつもどおりの日付選択と一緒にこれを呼んでよい）。
+    /// </para>
+    /// </summary>
+    /// <param name="date">クリックした日。</param>
+    /// <param name="isEnd">Shift を押していたら true。「まで」に入る。</param>
+    public void FeedWorkdayCalculator(DateOnly date, bool isEnd)
+    {
+        if (_openCalculator is not { } calculator) return;
+
+        calculator.SetRange(
+            isEnd ? calculator.RangeFrom : date,
+            isEnd ? date : calculator.RangeTo);
     }
 
     /// <summary>年ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>

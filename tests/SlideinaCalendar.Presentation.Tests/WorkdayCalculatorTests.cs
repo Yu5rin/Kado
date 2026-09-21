@@ -187,4 +187,22 @@ public class WorkdayCalculatorTests
 
         Assert.Equal(2, vm.RangeCount);
     }
+
+    /// <summary>
+    /// 項目7: モードレス化に伴い、窓が閉じられたことを ViewModel 側へ伝えられるようにした。
+    /// <para><c>DialogEditorPresenter</c> が窓の <c>Closed</c> から呼ぶ。</para>
+    /// </summary>
+    [Fact]
+    public void NotifyClosedでClosedイベントが上がる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        var raised = false;
+        vm.Closed += (_, _) => raised = true;
+
+        vm.NotifyClosed();
+
+        Assert.True(raised);
+    }
 }

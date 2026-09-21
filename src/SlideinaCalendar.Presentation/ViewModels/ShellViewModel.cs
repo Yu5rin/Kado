@@ -69,7 +69,7 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref _mode, value)) return;
 
             Raise(nameof(IsWindowMode), nameof(IsOverlayMode), nameof(IsPinned),
-                nameof(IsAtEdge), nameof(PinLabel), nameof(ModeLabel), nameof(DockWidth));
+                nameof(IsAtEdge), nameof(PinLabel), nameof(ModeLabel), nameof(ModeToggleLabel), nameof(DockWidth));
             ModeChanged?.Invoke(this, value);
         }
     }
@@ -81,7 +81,7 @@ public sealed class ShellViewModel : ObservableObject
         {
             if (!Set(ref _edge, value)) return;
 
-            Raise(nameof(IsAtLeft), nameof(IsAtRight), nameof(ModeLabel));
+            Raise(nameof(IsAtLeft), nameof(IsAtRight), nameof(ModeLabel), nameof(ModeToggleLabel));
             EdgeChanged?.Invoke(this, value);
         }
     }
@@ -225,6 +225,16 @@ public sealed class ShellViewModel : ObservableObject
         ShellMode.Dock => _edge == DockEdge.Left ? "固定（左）" : "固定（右）",
         _ => "ウィンドウ",
     };
+
+    /// <summary>
+    /// ▥ ボタンのツールチップ。
+    /// <para>
+    /// <see cref="PinLabel"/> と粒度を揃える。いまの状態名だけでは、左クリックと
+    /// 右クリックで別の動きをすることが伝わらない（項目14）。
+    /// </para>
+    /// </summary>
+    public string ModeToggleLabel =>
+        $"{ModeLabel}（左クリックでウィンドウ⇔スライドを切替 ・ 右クリックで端の選択とパネルの出し入れ）";
 
     /// <summary>いまの居場所。終了時に控える。</summary>
     public DockPlacement Placement(string? monitorId = null) =>

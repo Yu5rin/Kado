@@ -357,10 +357,11 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock DockPanel.Dock="Left" Text="{Binding HeaderText}" FontSize="13"
+                <!-- 「ビュー見出し」の寸法を一覧・日ビューと揃える（項目20） -->
+                <TextBlock DockPanel.Dock="Left" Text="{Binding HeaderText}"
+                           Style="{StaticResource SubheadingTextStyle}"
                            FontWeight="SemiBold" VerticalAlignment="Center"
-                           Typography.NumeralAlignment="Tabular"
-                           Foreground="{DynamicResource InkBrush}" />
+                           Typography.NumeralAlignment="Tabular" />
 
                 <TextBlock Text="{Binding WorkingDayTotalText}" FontSize="11.5" Margin="14,0,0,0"
                            VerticalAlignment="Center"

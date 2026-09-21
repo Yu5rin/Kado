@@ -18,15 +18,24 @@ public static class QuickParser
 {
     /// <summary>1行を読み取る。</summary>
     /// <param name="text">打ち込まれた1行。</param>
-    /// <param name="baseDate">日付が書かれていないときの基準日。ふつうは今日か選択中の日。</param>
-    public static QuickEntry Parse(string? text, DateOnly baseDate)
+    /// <param name="baseDate">
+    /// 「明日」「来週の火曜」「3日後」のような<b>相対語</b>の基準日。ふつうは今日。
+    /// 相対語は選択中の日ではなく、常にこの日から数える（選んでいる日の翌日が
+    /// 「明日」になるのは直感に反するため）。
+    /// </param>
+    /// <param name="explicitBase">
+    /// 日付をまったく書いていないときや、「15日」のように月を省いた書き方をしたときの
+    /// 基準日。省略すると <paramref name="baseDate"/> と同じになる。呼び出し側が
+    /// 選択中の日を渡せば、「打合せ 15時」のように日付なしで打った1行はその日に入る。
+    /// </param>
+    public static QuickEntry Parse(string? text, DateOnly baseDate, DateOnly? explicitBase = null)
     {
         var rest = " " + (text ?? string.Empty).Trim() + " ";
 
         // 読めない言い回しは、下の解釈が食い荒らす前に見つけておく
         var unsupported = Unsupported(rest);
 
-        var (date, dateError) = ReadDate(ref rest, baseDate);
+        var (date, dateError) = ReadDate(ref rest, baseDate, explicitBase ?? baseDate);
         var (start, end, timeError) = ReadTime(ref rest);
         var location = ReadLocation(ref rest);
 
@@ -39,9 +48,9 @@ public static class QuickParser
     // 日付
     // ------------------------------------------------------------------
 
-    private static (DateOnly Date, bool Error) ReadDate(ref string rest, DateOnly baseDate)
+    private static (DateOnly Date, bool Error) ReadDate(ref string rest, DateOnly baseDate, DateOnly explicitBase)
     {
-        // 1. 「明日」「あさって」など
+        // 1. 「明日」「あさって」など（相対語なので今日基準のまま）
         foreach (var (word, offset) in RelativeDays)
         {
             if (!rest.Contains(word, StringComparison.Ordinal)) continue;
@@ -50,14 +59,15 @@ public static class QuickParser
             return (baseDate.AddDays(offset), false);
         }
 
-        // 2. 「来週の火曜」「木曜」
+        // 2. 「来週の火曜」「木曜」（相対語なので今日基準のまま）
         if (ReadWeekday(ref rest, baseDate) is { } weekday) return (weekday, false);
 
-        // 3. 「来月15日」「来月」
+        // 3. 「来月15日」「来月」（相対語なので今日基準のまま）
         if (ReadNextMonth(ref rest, baseDate) is { } nextMonth) return nextMonth;
 
-        // 4. 年つき、月日、M/D、N日後、N日
-        return ReadExplicitDate(ref rest, baseDate);
+        // 4. 年つき、月日、M/D、N日後、N日（日付を書いていない・月を省いたときは
+        //    explicitBase＝選んでいる日を基準にする）
+        return ReadExplicitDate(ref rest, baseDate, explicitBase);
     }
 
     private static DateOnly? ReadWeekday(ref string rest, DateOnly baseDate)
@@ -108,7 +118,7 @@ public static class QuickParser
         return (baseDate.AddMonths(1), false);
     }
 
-    private static (DateOnly Date, bool Error) ReadExplicitDate(ref string rest, DateOnly baseDate)
+    private static (DateOnly Date, bool Error) ReadExplicitDate(ref string rest, DateOnly baseDate, DateOnly explicitBase)
     {
         // 年つきは曖昧さが無い。先に見ないと「26/12」が M/D に当たる
         var full = FullDatePattern.Match(rest);
@@ -145,17 +155,19 @@ public static class QuickParser
                 : (baseDate, true);
         }
 
-        // 「N日間」は期間なので日付として取らない
+        // 「N日間」は期間なので日付として取らない。月を書いていないので、
+        // 選んでいる日（explicitBase）の月を使う
         var dayOnly = DayOfMonthPattern.Match(rest);
         if (dayOnly.Success)
         {
             rest = Replace(rest, dayOnly.Value);
             return TryDigits(dayOnly.Groups[1].Value, out var dayOfMonth)
-                ? Build(baseDate.Year, baseDate.Month, dayOfMonth, baseDate)
-                : (baseDate, true);
+                ? Build(explicitBase.Year, explicitBase.Month, dayOfMonth, explicitBase)
+                : (explicitBase, true);
         }
 
-        return (baseDate, false);
+        // 日付をまったく書いていないときは、選んでいる日に入れる
+        return (explicitBase, false);
     }
 
     /// <summary>暦にある日かどうかを確かめて組み立てる。</summary>
