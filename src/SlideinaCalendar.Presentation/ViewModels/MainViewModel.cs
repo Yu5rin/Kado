@@ -21,10 +21,10 @@ public enum CalendarView
     Week,
     Day,
 
-    /// <summary>年（ストリップ）。Phase 6 で実装する。</summary>
+    /// <summary>年（ストリップ／カレンダー）。年度単位（4月〜翌3月）。</summary>
     Year,
 
-    /// <summary>一覧（アジェンダ）。Phase 6 で実装する。</summary>
+    /// <summary>一覧（アジェンダ）。予定のない日は畳んで流す。</summary>
     Agenda,
 }
 
@@ -56,6 +56,8 @@ public sealed class MainViewModel : ObservableObject
     private CalendarView _currentView = CalendarView.Month;
     private DayOfWeek _weekStart;
     private bool _isSidePanelOpen = true;
+    private bool _isMainViewOpen = true;
+    private bool _isDetailPaneOpen = true;
     private readonly TimeProvider _clock;
     private DateOnly _today;
     private string? _statusMessage;
@@ -73,7 +75,8 @@ public sealed class MainViewModel : ObservableObject
         TimeProvider? clock = null,
         AppSettings? settings = null,
         IStartupRegistration? startup = null,
-        INotifier? notifier = null)
+        INotifier? notifier = null,
+        DockPlacement? shell = null)
     {
         _clock = clock ?? TimeProvider.System;
         _googleClient = googleClient;
@@ -92,6 +95,7 @@ public sealed class MainViewModel : ObservableObject
         _notifier = notifier ?? NullNotifier.Instance;
         _weekStart = settings?.WeekStart ?? weekStart;
 
+        Shell = new ShellViewModel(shell ?? DockPlacement.Unknown);
         SourceLists = new SourceListsViewModel(workspace);
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         BuildViews(today, today);
@@ -125,10 +129,52 @@ public sealed class MainViewModel : ObservableObject
         NextCommand = new RelayCommand(GoToNext);
         TodayCommand = new RelayCommand(GoToToday);
         ToggleSidePanelCommand = new RelayCommand(() => IsSidePanelOpen = !IsSidePanelOpen);
+        ToggleMainViewCommand = new RelayCommand(() => IsMainViewOpen = !IsMainViewOpen);
+        ToggleDetailPaneCommand = new RelayCommand(() => IsDetailPaneOpen = !IsDetailPaneOpen);
+        ToggleSlimPanelCommand = new RelayCommand(() => IsSlimPanelOpen = !IsSlimPanelOpen);
+        SlimPreviousCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(-1)));
+        SlimNextCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(1)));
+        ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
+        Shell.PropertyChanged += (_, args) =>
+        {
+            // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
+            // 古いまま残る。幅が変わったことはここでも受けておく
+            if (args.PropertyName == nameof(ShellViewModel.LayoutWidth)) FitTo(Shell.LayoutWidth);
+        };
+
+        // 居かたが変わったら、そのときに出していたパネルの組へ入れ替える
+        Shell.ModeChanged += (_, mode) =>
+        {
+            var atEdge = mode != ShellMode.Window;
+
+            if (atEdge == _atEdge) return;
+
+            SavePanes();
+            _atEdge = atEdge;
+            LoadPanes();
+        };
+
+        _atEdge = Shell.Mode != ShellMode.Window;
+        LoadPanes();
+
+        OpenSearchCommand = new RelayCommand(() =>
+        {
+            _searchOpen = true;
+            Raise(nameof(ShowsSearchBox), nameof(UsesCompactSearch));
+        });
         UndoCommand = new RelayCommand(Undo, () => _workspace.Undo.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _workspace.Undo.CanRedo);
         SelectDateCommand = new RelayCommand<DateOnly?>(date => { if (date is { } d) SelectedDate = d; });
-        SwitchViewCommand = new RelayCommand<CalendarView?>(view => { if (view is { } v) CurrentView = v; });
+        SwitchViewCommand = new RelayCommand<object?>(view =>
+        {
+            // XAML からは名前（文字列）で渡ってくる
+            if (view is CalendarView chosen) CurrentView = chosen;
+            else if (view is string name && Enum.TryParse<CalendarView>(name, out var parsed)) CurrentView = parsed;
+        });
+        ShowMonthOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Month));
+        ShowDayOfCommand = new RelayCommand<DateOnly?>(date => ShowOn(date, CalendarView.Day));
+        ZoomInCommand = new RelayCommand(() => Zoom(1));
+        ZoomOutCommand = new RelayCommand(() => Zoom(-1));
 
         MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
         MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
@@ -157,7 +203,7 @@ public sealed class MainViewModel : ObservableObject
         ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
 
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
-        OpenWorkingDayCalculatorCommand = new RelayCommand(() => { }, () => false);
+        OpenWorkingDayCalculatorCommand = new RelayCommand(ShowWorkdayCalculator);
 
         // 設定を持たない組み立て方（テストなど）では開けない
         OpenSettingsCommand = new RelayCommand(
@@ -240,6 +286,20 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>月ビュー。</summary>
     public MonthViewModel Month { get; private set; }
 
+    /// <summary>
+    /// スリムパネルのひと月。
+    /// <para>中央とは別に持つ。中央が週や日を出していても、こちらは月のまま。</para>
+    /// </summary>
+    public MonthViewModel SlimMonth { get; private set; }
+
+    /// <summary>スリムパネルの見出し。「2026」。</summary>
+    public string SlimTitleYear =>
+        SlimMonth.Month.ToString("yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>スリムパネルの見出し。「9月」。</summary>
+    public string SlimTitleMonth =>
+        SlimMonth.Month.ToString("M月", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
 
@@ -248,6 +308,18 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>日ビュー。</summary>
     public DayViewModel Day { get; private set; }
+
+    /// <summary>
+    /// 画面での居かた（ウィンドウ／オーバーレイ／ドック）。
+    /// <para>実際に画面へ効かせるのはアプリ側。ここが持つのは「どうしたいか」だけ。</para>
+    /// </summary>
+    public ShellViewModel Shell { get; }
+
+    /// <summary>年ビュー（ストリップ／カレンダー）。年度単位。</summary>
+    public YearViewModel Year { get; private set; }
+
+    /// <summary>一覧ビュー。予定のない日は畳んで流す。</summary>
+    public AgendaViewModel Agenda { get; private set; }
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; private set; }
@@ -285,11 +357,16 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!Set(ref _currentView, value)) return;
 
-            // 切り替えた先が別の日を見ていると、どこを見ているのか分からなくなる
-            Week.GoTo(SelectedDate);
-            Day.Date = SelectedDate;
+            // 先に日を合わせる。年ビューは年度が変われば自分で組み直すので、
+            // 順序を逆にすると同じ組み立てを2回やることになる
+            FocusOn(SelectedDate);
 
-            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView));
+            // 出す番になった。まだ溜まっていれば、ここで済ませる
+            RefreshHeavyIfShown();
+
+            Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
+                nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
+            RaiseHeader();
         }
     }
 
@@ -300,11 +377,343 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsDayView => _currentView == CalendarView.Day;
 
+    public bool IsYearView => _currentView == CalendarView.Year;
+
+    public bool IsAgendaView => _currentView == CalendarView.Agenda;
+
+    /// <summary>
+    /// ツールバーの「◀ ▶」で年月を送るビューか。
+    /// <para>一覧は期間を流すので、見出しの年月と食い違わないよう別に扱う。</para>
+    /// </summary>
+    public bool ShowsMonthHeader => _currentView is not CalendarView.Year;
+
     /// <summary>左サイドパネルを開いているか。終了時に保存して次回復元する。</summary>
     public bool IsSidePanelOpen
     {
         get => _isSidePanelOpen;
-        set => Set(ref _isSidePanelOpen, value);
+        set
+        {
+            if (!Set(ref _isSidePanelOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsSidePanelOpen));
+            SavePanes();
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
+        }
+    }
+
+    /// <summary>
+    /// スリムパネルを出しているか。
+    /// <para>
+    /// ひと月の並びと、選んだ日の予定・タスクだけを細く置く4つ目のパネル。
+    /// <b>幅では切り替えない。</b>出すかどうかは、ほかのパネルと同じく手で選ぶ。
+    /// 狭いからといって別の形へ化けると、同じ操作を探し直すことになる。
+    /// </para>
+    /// </summary>
+    public bool IsSlimPanelOpen
+    {
+        get => _isSlimPanelOpen;
+        set
+        {
+            if (!Set(ref _isSlimPanelOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsSlimPanelOpen));
+            SavePanes();
+            Raise(nameof(ShowsSlimToday), nameof(ShowsToolbarNav));
+        }
+    }
+
+    /// <summary>
+    /// スリムパネルに「今日」を出すか。
+    /// <para>
+    /// ほかのパネルが出ていればツールバーに「今日」がある。スリムパネルだけの
+    /// ときは、そこが唯一の戻り口になる。
+    /// </para>
+    /// </summary>
+    public bool ShowsSlimToday =>
+        _isSlimPanelOpen && !_isSidePanelOpen && !_isMainViewOpen && !_isDetailPaneOpen;
+
+    private bool _isSlimPanelOpen;
+
+    public RelayCommand ToggleSlimPanelCommand { get; private set; } = null!;
+
+    /// <summary>スリムパネルの月を前へ。中央とは別に送る。</summary>
+    public RelayCommand SlimPreviousCommand { get; private set; } = null!;
+
+    /// <summary>スリムパネルの月を次へ。</summary>
+    public RelayCommand SlimNextCommand { get; private set; } = null!;
+
+    private void SlimGoTo(DateOnly month)
+    {
+        SlimMonth.GoTo(month);
+        Raise(nameof(SlimTitleYear), nameof(SlimTitleMonth));
+    }
+
+    /// <summary>
+    /// 中央のカレンダーを出しているか。
+    /// <para>
+    /// 画面端に細く留めているときは、カレンダー本体を畳んで予定だけを見たいことがある。
+    /// </para>
+    /// </summary>
+    public bool IsMainViewOpen
+    {
+        get => _isMainViewOpen;
+        set
+        {
+            if (!Set(ref _isMainViewOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsMainViewOpen));
+            SavePanes();
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
+            RaiseHeader();
+        }
+    }
+
+    /// <summary>右の選択日パネルを出しているか。</summary>
+    public bool IsDetailPaneOpen
+    {
+        get => _isDetailPaneOpen;
+        set
+        {
+            if (!Set(ref _isDetailPaneOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsDetailPaneOpen));
+            SavePanes();
+            Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
+        }
+    }
+
+    /// <summary>
+    /// ツールバーにカレンダーの操作を出すか。
+    /// <para>
+    /// 中央を畳んでいるとき、ビューの切り替えや「◀ ▶」は効かせどころが無い。
+    /// 出したままだと、押しても何も起きないボタンが並ぶ。
+    /// </para>
+    /// </summary>
+    public bool ShowsCalendarTools => _isMainViewOpen;
+
+    /// <summary>
+    /// ツールバーに年月の見出しを出すか。
+    /// <para>
+    /// <b>決めるのは中央を出しているかどうか。</b>中央を畳んでいるなら、見ているのは
+    /// 選んだ1日で、年月の見出しは右ペインの日付欄やミニ月暦と同じことを二度言う。
+    /// </para>
+    /// </summary>
+    public bool ShowsToolbarDate => _isMainViewOpen;
+
+    /// <summary>
+    /// 日送りを右ペインの日付欄に置くか。
+    /// <para>
+    /// 送りは日付のすぐ隣にあるほうが近い。ただし置けるのは日付欄があるとき、
+    /// つまり右ペインを出しているときだけ。
+    /// </para>
+    /// </summary>
+    public bool ShowsDayNav => !_isMainViewOpen && _isDetailPaneOpen;
+
+    /// <summary>
+    /// ツールバーに「◀ ▶」を置くか。
+    /// <para>
+    /// 日付欄へ移したときは置かない。スリムパネルだけのときも、そちらの見出しに
+    /// 月の送りがあるので置かない。同じものが2か所にあると、どちらが効くのか迷う。
+    /// </para>
+    /// </summary>
+    public bool ShowsToolbarNav => !ShowsDayNav && !ShowsSlimToday;
+
+    // ------------------------------------------------------------------
+    // 幅に合わせた詰め方
+    //
+    // 細い帯として使うので、入りきらないものは順に落とす。何を残すかは
+    // 使う人に決めてもらった。残すのは、年月の見出し・「◀ ▶」・今日・
+    // 検索（虫めがねに畳む）・≡、そして戻り口になるピンと▥と設定。
+    // ------------------------------------------------------------------
+
+    /// <summary>実働・残りのバッジを出す下限。同じ数字は右ペインの日付欄にも出る。</summary>
+    public const double WorkdayBadgeFloor = 1000;
+
+    /// <summary>同期の状態（●同期済み）を出す下限。</summary>
+    public const double SyncStatusFloor = 880;
+
+    /// <summary>検索の入力欄をそのまま出す下限。これを切ると虫めがねのボタンに畳む。</summary>
+    public const double SearchBoxFloor = 820;
+
+    /// <summary>ビュー切り替え（一覧・年・月・週・日）を出す下限。</summary>
+    public const double ViewSwitcherFloor = 700;
+
+    /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
+    public const double TodayButtonFloor = 380;
+
+    /// <summary>
+    /// スリムパネルで、カレンダーに割く高さの割合。
+    /// <para>仕切りをつまんで変えたぶんを覚える。</para>
+    /// </summary>
+    public double SlimCalendarShare
+    {
+        get => _settings?.SlimCalendarShare ?? AppSettings.DefaultSlimShare;
+        set
+        {
+            if (_settings is not { } settings) return;
+
+            settings.SlimCalendarShare = value;
+        }
+    }
+
+    /// <summary>スリムパネルの既定の幅。</summary>
+    public const double DefaultSlimPanelWidth = 264;
+
+    /// <summary>スリムパネルの下げ止まり。マスが正方形で読める幅。</summary>
+    public const double MinSlimPanelWidth = 200;
+
+    /// <summary>スリムパネルの上げ止まり。これ以上広げるなら、ふつうのパネルを使う。</summary>
+    public const double MaxSlimPanelWidth = 420;
+
+    /// <summary>
+    /// 中央のカレンダーの下げ止まり。
+    /// <para>帯として使うときはここまで詰める。月ビューの7列がぎりぎり読める幅。</para>
+    /// </summary>
+    public const double MinMainViewWidth = 260;
+
+    /// <summary>ツールバーの詰め方を決める幅。ウィンドウの見た目の幅。</summary>
+    private double Room => Shell.LayoutWidth;
+
+    /// <summary>まだ幅が分からない（起動直後など）。そのときは出したままにする。</summary>
+    private bool RoomUnknown => double.IsNaN(Room) || Room <= 0;
+
+    public bool ShowsWorkdayBadges => RoomUnknown || Room >= WorkdayBadgeFloor;
+
+    public bool ShowsSyncStatus => RoomUnknown || Room >= SyncStatusFloor;
+
+    /// <summary>検索を虫めがねのボタンに畳むか。押すと入力欄が開く。</summary>
+    public bool UsesCompactSearch => !RoomUnknown && Room < SearchBoxFloor;
+
+    /// <summary>
+    /// 検索の入力欄を出すか。
+    /// <para>
+    /// 畳んでいるあいだは虫めがねのボタンだけを置き、押されたら入力欄を開く。
+    /// 細い帯では他のものを押しのけて出るが、探しているあいだだけのこと。
+    /// </para>
+    /// </summary>
+    public bool ShowsSearchBox => !UsesCompactSearch || _searchOpen;
+
+    private bool _searchOpen;
+
+    /// <summary>虫めがねを押したとき。入力欄を開く。</summary>
+    public RelayCommand OpenSearchCommand { get; private set; } = null!;
+
+    public bool ShowsViewSwitcher => ShowsCalendarTools && (RoomUnknown || Room >= ViewSwitcherFloor);
+
+    public bool ShowsTodayButton => RoomUnknown || Room >= TodayButtonFloor;
+
+    /// <summary>年月の見出しに取っておく幅。細いときは詰める。</summary>
+    public double TitleRoom => ShowsTodayButton ? 118 : 44;
+
+    /// <summary>
+    /// 幅に合わせてツールバーの中身を詰める。
+    /// <para>
+    /// <b>パネルは勝手に畳まない。</b>狭いからと消していたが、出しておきたくて
+    /// 出しているものが幅の都合で消えるのは筋が悪い。入りきらないぶんは切れる
+    /// だけにして、何を出すかは手で決めてもらう。
+    /// </para>
+    /// </summary>
+    public void FitTo(double width)
+    {
+        Raise(nameof(ShowsWorkdayBadges), nameof(ShowsSyncStatus), nameof(UsesCompactSearch),
+            nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(ShowsTodayButton),
+            nameof(TitleRoom));
+    }
+
+    // ------------------------------------------------------------------
+    // 出しているパネルの組み合わせ
+    //
+    // ウィンドウのときと、画面端に寄せているときとで別に覚える。広い
+    // ウィンドウでは3つとも出し、細い帯では予定だけ、という使い分けが
+    // ふつうなので、行き来のたびに直すのは手間になる
+    // ------------------------------------------------------------------
+
+    /// <summary>どのパネルを出しているか。</summary>
+    private readonly record struct PaneSet(bool Side, bool Main, bool Detail, bool Slim)
+    {
+        /// <summary>ウィンドウのときの既定。3ペインを開く。</summary>
+        public static PaneSet Windowed { get; } = new(true, true, true, false);
+
+        /// <summary>画面端に寄せたときの既定。細いので、選んだ日の予定だけ。</summary>
+        public static PaneSet AtEdge { get; } = new(false, false, true, false);
+
+        public override string ToString() => $"{Bit(Side)}{Bit(Main)}{Bit(Detail)}{Bit(Slim)}";
+
+        private static char Bit(bool on) => on ? '1' : '0';
+
+        public static PaneSet Parse(string? text, PaneSet fallback) =>
+            text is { Length: 4 }
+                ? new(text[0] == '1', text[1] == '1', text[2] == '1', text[3] == '1')
+                : fallback;
+    }
+
+    /// <summary>いま画面端に寄せている（スライド・固定）か。組の切り替えに使う。</summary>
+    private bool _atEdge;
+
+    /// <summary>組を読み書きしている最中。そのあいだは控え直さない。</summary>
+    private bool _swappingPanes;
+
+    private PaneSet CurrentPanes() =>
+        new(_isSidePanelOpen, _isMainViewOpen, _isDetailPaneOpen, _isSlimPanelOpen);
+
+    /// <summary>いまの組を控える。</summary>
+    private void SavePanes()
+    {
+        if (_settings is not { } settings || _swappingPanes) return;
+
+        var text = CurrentPanes().ToString();
+
+        if (_atEdge) settings.EdgePanes = text;
+        else settings.WindowPanes = text;
+    }
+
+    /// <summary>控えてある組に戻す。</summary>
+    private void LoadPanes()
+    {
+        var set = _atEdge
+            ? PaneSet.Parse(_settings?.EdgePanes, PaneSet.AtEdge)
+            : PaneSet.Parse(_settings?.WindowPanes, PaneSet.Windowed);
+
+        _swappingPanes = true;
+
+        try
+        {
+            IsSidePanelOpen = set.Side;
+            IsMainViewOpen = set.Main;
+            IsDetailPaneOpen = set.Detail;
+            IsSlimPanelOpen = set.Slim;
+        }
+        finally
+        {
+            _swappingPanes = false;
+        }
+
+        // 読み込んだ組が空っぽだったときだけ、ここで1つ戻す
+        EnsureSomethingShows(nameof(IsMainViewOpen));
+    }
+
+    /// <summary>
+    /// 3つとも畳もうとしたら、最後の1つは残す。
+    /// <para>全部消すと、窓だけがそこにあって何もできなくなる。</para>
+    /// </summary>
+    private void EnsureSomethingShows(string justChanged)
+    {
+        // 組を入れ替えている最中は見ない。閉じてから開くので、途中で
+        // 「3つとも畳んだ」状態を通る。そこで中央を戻すと、読み込んだ組に
+        // 余計なパネルが混ざる（スリムだけにしたのに中央が出てくる）
+        if (_swappingPanes) return;
+
+        if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen || _isSlimPanelOpen) return;
+
+        // いま閉じたものではなく、中央を戻す。何を見る画面なのかが分かる
+        if (justChanged == nameof(IsMainViewOpen)) Set(ref _isDetailPaneOpen, true, nameof(IsDetailPaneOpen));
+        else Set(ref _isMainViewOpen, true, nameof(IsMainViewOpen));
     }
 
     // ------------------------------------------------------------------
@@ -399,7 +808,27 @@ public sealed class MainViewModel : ObservableObject
             SelectedDay.Date = value;
             MiniCalendar.SelectedDate = value;
             Week.GoTo(value);
+            Week.SelectedDate = value;
             Day.Date = value;
+
+            // 年と一覧にも伝える。押した日がそこでも光っていないと、
+            // ビューを切り替えたときにどこを見ていたのか分からなくなる
+            Year.SelectedDate = value;
+            Agenda.SelectedDate = value;
+
+            // 前後の月のマスを押したら、スリムパネルもその月へ移る。
+            // 選んだ日が見えない月を出したままでは、どこを選んだのか分からない
+            SlimMonth.SelectedDate = value;
+
+            if (value.Year != SlimMonth.Month.Year || value.Month != SlimMonth.Month.Month)
+            {
+                SlimMonth.GoTo(value);
+                Raise(nameof(SlimTitleYear), nameof(SlimTitleMonth));
+            }
+
+            // 中央を畳んでいるときは、見出しが選んだ日そのものになっている
+            if (!_isMainViewOpen) RaiseHeader();
+
             Raise();
         }
     }
@@ -418,11 +847,25 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>「2026年9月」。</summary>
     public string Title => Month.Title;
 
-    /// <summary>ツールバーの年。月より一段小さく、薄く出す。</summary>
-    public string TitleYear => Month.Month.Year.ToString(CultureInfo.InvariantCulture);
+    /// <summary>
+    /// ツールバーの年。月より一段小さく、薄く出す。
+    /// <para>年ビューでは年度を出す。「◀ ▶」が年度を送るのに、見出しが月のままだと食い違う。</para>
+    /// </summary>
+    public string TitleYear => this switch
+    {
+        // 中央を畳んでいるときは、出ている日そのものを見出しにする
+        { _isMainViewOpen: false } => SelectedDate.Year.ToString(CultureInfo.InvariantCulture),
+        { _currentView: CalendarView.Year } => Year.FiscalYear.ToString(CultureInfo.InvariantCulture),
+        _ => Month.Month.Year.ToString(CultureInfo.InvariantCulture),
+    };
 
-    /// <summary>ツールバーの月。「9月」。</summary>
-    public string TitleMonth => Month.Month.ToString("M月", CultureInfo.InvariantCulture);
+    /// <summary>ツールバーの月。「9月」。年ビューでは「年度」。中央を畳んでいれば「9月21日」。</summary>
+    public string TitleMonth => this switch
+    {
+        { _isMainViewOpen: false } => SelectedDate.ToString("M月d日", CultureInfo.InvariantCulture),
+        { _currentView: CalendarView.Year } => "年度",
+        _ => Month.Month.ToString("M月", CultureInfo.InvariantCulture),
+    };
 
     /// <summary>実働日バッジを出せるか。データが無い月では数字を出さない。</summary>
     public bool HasWorkingDayData => Month.HasFullWorkingDayData;
@@ -566,7 +1009,16 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>探すのをやめる。欄を空にして結果も消す。</summary>
-    public void ClearSearch() => SearchText = string.Empty;
+    public void ClearSearch()
+    {
+        SearchText = string.Empty;
+
+        // 虫めがねに畳んでいたぶんは、探し終えたら元の1つのボタンに戻す
+        if (!_searchOpen) return;
+
+        _searchOpen = false;
+        Raise(nameof(ShowsSearchBox), nameof(UsesCompactSearch));
+    }
 
     /// <summary>
     /// 見つかったものを開く。その日へ移って、検索は閉じる。
@@ -692,7 +1144,16 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand UndoCommand { get; }
     public RelayCommand RedoCommand { get; }
     public RelayCommand<DateOnly?> SelectDateCommand { get; }
-    public RelayCommand<CalendarView?> SwitchViewCommand { get; }
+    /// <summary>
+    /// ビューを切り替える。
+    /// <para>
+    /// 名前（文字列）でも受ける。ツールバーのボタンは <c>IsChecked</c> の双方向
+    /// バインドをやめてこのコマンドで切り替えている。RadioButton は仲間が選ばれた
+    /// ときに <c>IsChecked</c> を直に書き換えるので、<b>そこで双方向のバインドが
+    /// 外れてしまい、以後どれだけ切り替えてもボタンが光らなくなる</b>（WPF の癖）。
+    /// </para>
+    /// </summary>
+    public RelayCommand<object?> SwitchViewCommand { get; }
     public RelayCommand MiniPreviousCommand { get; }
     public RelayCommand MiniNextCommand { get; }
     public RelayCommand AddEventCommand { get; }
@@ -729,10 +1190,32 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
+    /// <summary>その日を選んで月ビューへ。</summary>
+    public RelayCommand<DateOnly?> ShowMonthOfCommand { get; }
+
+    /// <summary>その日を選んで日ビューへ。</summary>
+    public RelayCommand<DateOnly?> ShowDayOfCommand { get; }
+
+    /// <summary>ひとつ細かいビューへ（一覧 → 年 → 月 → 週 → 日）。</summary>
+    public RelayCommand ZoomInCommand { get; }
+
+    /// <summary>ひとつ粗いビューへ。</summary>
+    public RelayCommand ZoomOutCommand { get; }
+
+    /// <summary>実働日計算パネルを開く。常設はしない（要件書 4.5）。</summary>
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
     /// <summary>設定画面を開く。</summary>
     public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>ショートカットの一覧を開く。押せることを知らないと使われない。</summary>
+    public RelayCommand ShowShortcutsCommand { get; }
+
+    /// <summary>中央のカレンダーを出す・畳む。</summary>
+    public RelayCommand ToggleMainViewCommand { get; }
+
+    /// <summary>右の選択日パネルを出す・畳む。</summary>
+    public RelayCommand ToggleDetailPaneCommand { get; }
 
     /// <summary>新しい予定の入れ先にする。</summary>
     public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }
@@ -800,6 +1283,14 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void GoToPrevious()
     {
+        // 中央を畳んでいると、出ているのは選んだ日の予定だけ。月を送っても
+        // 手応えが無いので、日を送る
+        if (!_isMainViewOpen)
+        {
+            SelectedDate = SelectedDate.AddDays(-1);
+            return;
+        }
+
         switch (_currentView)
         {
             case CalendarView.Week:
@@ -812,6 +1303,19 @@ public sealed class MainViewModel : ObservableObject
                 SyncHeaderTo(Day.Date);
                 break;
 
+            case CalendarView.Year:
+                Year.GoToPreviousYear();
+                FollowInto(SameDayInFiscalYear());
+                RaiseHeader();
+                break;
+
+            // 一覧は全部出しているので、送るのは選んでいる日のほう。
+            // そこまで画面が動く
+            case CalendarView.Agenda:
+                SelectedDate = SelectedDate.AddMonths(-1);
+                Agenda.GoTo(SelectedDate);
+                break;
+
             default:
                 Month.GoToPreviousMonth();
                 SyncHeaderTo(Month.Month);
@@ -821,6 +1325,12 @@ public sealed class MainViewModel : ObservableObject
 
     private void GoToNext()
     {
+        if (!_isMainViewOpen)
+        {
+            SelectedDate = SelectedDate.AddDays(1);
+            return;
+        }
+
         switch (_currentView)
         {
             case CalendarView.Week:
@@ -831,6 +1341,17 @@ public sealed class MainViewModel : ObservableObject
             case CalendarView.Day:
                 Day.GoToNextDay();
                 SyncHeaderTo(Day.Date);
+                break;
+
+            case CalendarView.Year:
+                Year.GoToNextYear();
+                FollowInto(SameDayInFiscalYear());
+                RaiseHeader();
+                break;
+
+            case CalendarView.Agenda:
+                SelectedDate = SelectedDate.AddMonths(1);
+                Agenda.GoTo(SelectedDate);
                 break;
 
             default:
@@ -846,10 +1367,14 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Date = _today;
         Week.GoToToday();
         Day.GoToToday();
+        Year.GoToToday();
+        Agenda.GoToToday();
         MiniCalendar.GoTo(_today);
         MiniCalendar.SelectedDate = _today;
+        SlimMonth.GoTo(_today);
+        SlimMonth.SelectedDate = _today;
         RaiseHeader();
-        Raise(nameof(SelectedDate));
+        Raise(nameof(SelectedDate), nameof(SlimTitleYear), nameof(SlimTitleMonth));
     }
 
     /// <summary>
@@ -858,9 +1383,54 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void SyncHeaderTo(DateOnly anchor)
     {
+        // 送った先へ、選んでいる日も連れていく。置いていくと、中央は 9/18 を
+        // 出しているのに右ペインは 9/22 のまま、ということになる
+        FollowInto(anchor);
+
         Month.GoTo(anchor);
         MiniCalendar.GoTo(anchor);
         RaiseHeader();
+    }
+
+    /// <summary>
+    /// 送った先に、選んでいる日を置き直す。
+    /// <para>
+    /// 日にちや曜日はなるべく保つ。月を送って 9/18 から 10/18 へ、週を送って
+    /// 金曜から翌週の金曜へ、という動き方のほうが、行き先を見失わない。
+    /// </para>
+    /// </summary>
+    private void FollowInto(DateOnly anchor)
+    {
+        var selected = SelectedDate;
+
+        SelectedDate = _currentView switch
+        {
+            // 日ビューはその日そのもの
+            CalendarView.Day => anchor,
+
+            // 週は曜日を保つ。anchor は週の頭
+            CalendarView.Week => anchor.AddDays(
+                (((int)selected.DayOfWeek - (int)anchor.DayOfWeek) + 7) % 7),
+
+            // 年は呼ぶ側が日を決めてから渡す
+            CalendarView.Year => anchor,
+
+            // 月は日にちを保つ。月末が短ければそこで止める
+            _ => new DateOnly(anchor.Year, anchor.Month,
+                Math.Min(selected.Day, DateTime.DaysInMonth(anchor.Year, anchor.Month))),
+        };
+    }
+
+    /// <summary>送った先の年度で、同じ月日にあたる日。</summary>
+    private DateOnly SameDayInFiscalYear()
+    {
+        var selected = SelectedDate;
+
+        // 年度は4月始まり。1〜3月は翌の暦年にあたる
+        var year = selected.Month >= 4 ? Year.FiscalYear : Year.FiscalYear + 1;
+
+        return new DateOnly(year, selected.Month,
+            Math.Min(selected.Day, DateTime.DaysInMonth(year, selected.Month)));
     }
 
     // ------------------------------------------------------------------
@@ -1690,6 +2260,13 @@ public sealed class MainViewModel : ObservableObject
         Week.Refresh();
         Day.Refresh();
         MiniCalendar.Refresh();
+
+        // 年と一覧は重い。年は12か月ぶん、一覧は数年ぶんの予定を組み立てる。
+        // 出していないあいだに組み直しても誰も見ないので、出すときまで待つ
+        _yearStale = true;
+        _agendaStale = true;
+        RefreshHeavyIfShown();
+
         RaiseHeader();
     }
 
@@ -1700,7 +2277,8 @@ public sealed class MainViewModel : ObservableObject
     /// 設定が変わったときは組み直す。
     /// </para>
     /// </summary>
-    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day))]
+    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
+        nameof(Year), nameof(Agenda), nameof(SlimMonth))]
     private void BuildViews(DateOnly month, DateOnly selected)
     {
         var start = _settings?.DayStart;
@@ -1719,6 +2297,28 @@ public sealed class MainViewModel : ObservableObject
         Week = new WeekViewModel(
             _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
         Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
+
+        Year = new YearViewModel(
+            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists)
+        {
+            SelectedDate = selected,
+        };
+        Year.GoTo(selected);
+
+        // 出し方は年ビューの中のボタンで切り替える。年ビューを見ているときにしか
+        // 関係しない選び方なので、設定画面には出さない（要件書 5.1）
+        if (_settings is { } settings) Year.LayoutChanged += (_, layout) => settings.YearLayout = layout;
+
+        Agenda = new AgendaViewModel(_workspace, _today, SourceLists);
+        Agenda.GoTo(selected);
+
+        // スリムパネルは自前の月暦を持つ。中央が週や日を出していても、
+        // こちらはひと月の並びを見せ続ける
+        SlimMonth = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+        {
+            SelectedDate = selected,
+            IsCompact = true,
+        };
     }
 
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
@@ -1726,8 +2326,130 @@ public sealed class MainViewModel : ObservableObject
     {
         BuildViews(Month.Month, SelectedDate);
 
-        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
+            nameof(Year), nameof(Agenda));
         RefreshViews();
+    }
+
+    /// <summary>
+    /// 実働日計算パネルを開く。
+    /// <para>
+    /// 選んでいる日を両方の欄の初期値にする。たいてい「今見ている日から数えたい」ので、
+    /// 開いてすぐ日付を入れ直さずに済む。
+    /// </para>
+    /// </summary>
+    private void ShowWorkdayCalculator()
+    {
+        var calculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today)
+        {
+            RangeFrom = SelectedDate,
+            RangeTo = SelectedDate,
+            BaseDate = SelectedDate,
+        };
+
+        _editors.ShowWorkdayCalculator(calculator);
+    }
+
+    /// <summary>年ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>
+    private bool _yearStale;
+
+    /// <inheritdoc cref="_yearStale"/>
+    private bool _agendaStale;
+
+    /// <summary>
+    /// いま出しているほうだけ組み直す。
+    /// <para>
+    /// 年と一覧は重い。予定を1件足すたびに両方を組み直していたので、全体の動きが
+    /// もたついていた。
+    /// </para>
+    /// </summary>
+    private void RefreshHeavyIfShown()
+    {
+        if (_yearStale && _currentView == CalendarView.Year)
+        {
+            _yearStale = false;
+            Year.Refresh();
+        }
+
+        if (_agendaStale && _currentView == CalendarView.Agenda)
+        {
+            _agendaStale = false;
+            Agenda.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// 粗いほうから細かいほうへの並び。
+    /// <para>
+    /// 一覧（全期間）・年・月・週・日。左へ行くほど広く、右へ行くほど狭い。
+    /// Ctrl＋ホイールはこの並びを1つずつ動く。
+    /// </para>
+    /// </summary>
+    private static readonly CalendarView[] ZoomOrder =
+    [
+        CalendarView.Agenda,
+        CalendarView.Year,
+        CalendarView.Month,
+        CalendarView.Week,
+        CalendarView.Day,
+    ];
+
+    /// <summary>
+    /// 並びを <paramref name="step"/> だけ動く。
+    /// <para>端では止まる。回し続けて一覧と日を行き来されると、どこに居るか見失う。</para>
+    /// </summary>
+    private void Zoom(int step)
+    {
+        var at = Array.IndexOf(ZoomOrder, _currentView);
+        if (at < 0) return;
+
+        var next = Math.Clamp(at + step, 0, ZoomOrder.Length - 1);
+        if (next == at) return;
+
+        CurrentView = ZoomOrder[next];
+    }
+
+    /// <summary>
+    /// その日を選んでから、そのビューへ移る。
+    /// <para>
+    /// すでにそのビューを出しているときは <see cref="CurrentView"/> が動かないので、
+    /// 日付を合わせるほうは自分で呼ぶ。
+    /// </para>
+    /// </summary>
+    private void ShowOn(DateOnly? date, CalendarView view)
+    {
+        if (date is not { } day) return;
+
+        SelectedDate = day;
+        CurrentView = view;
+        FocusOn(day);
+    }
+
+    /// <summary>
+    /// どのビューへ移ってもその日が出ているようにする。
+    /// <para>
+    /// 年から日へ飛んでも、日から年へ戻っても、見ているものが変わらない。
+    /// 「今日」ボタンも、どのビューでも同じように効く。
+    /// </para>
+    /// </summary>
+    private void FocusOn(DateOnly date)
+    {
+        Month.GoTo(date);
+        MiniCalendar.GoTo(date);
+        Week.GoTo(date);
+        Week.SelectedDate = date;
+        Day.Date = date;
+
+        // 年度が変われば、ここで組み直される。溜めてある印を下ろしておかないと、
+        // このあと同じ組み立てをもう一度やることになる
+        var fiscal = Year.FiscalYear;
+        Year.SelectedDate = date;
+        if (Year.FiscalYear != fiscal) _yearStale = false;
+
+        Agenda.SelectedDate = date;
+        Agenda.GoTo(date);
+
+        RaiseHeader();
     }
 
     private void RaiseHeader() => Raise(

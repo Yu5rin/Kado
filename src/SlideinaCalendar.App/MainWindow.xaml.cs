@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -40,6 +41,29 @@ public partial class MainWindow : Window
     /// <summary>置き場所の出し入れ。渡されなければ覚えない。</summary>
     public WindowPlacementStore? Placements { get; init; }
 
+    /// <summary>
+    /// いちばん細くできる幅を設定から受ける。
+    /// <para>
+    /// <b>ここが窓の下限をそのまま決める。</b>WPF は <c>MinWidth</c> を Windows へ
+    /// 「これ以上小さくできない」として答えるので、他に仕掛けは要らない。
+    /// </para>
+    /// </summary>
+    public AppSettings? Settings
+    {
+        get => _settings;
+        init
+        {
+            _settings = value;
+
+            if (value is null) return;
+
+            MinWidth = value.MinWidth;
+            value.Changed += (_, _) => MinWidth = value.MinWidth;
+        }
+    }
+
+    private readonly AppSettings? _settings;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -50,7 +74,15 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => RestorePlacement();
 
         LocationChanged += (_, _) => TrackPlacement();
-        SizeChanged += (_, _) => TrackPlacement();
+        // 幅を伝えるとツールバーの詰め方が決まり、レイアウトが走る。ドラッグの
+        // あいだ毎回やると重いので、手が止まってから1回だけにする
+        _settle = new Views.Settle(() =>
+        {
+            TrackPlacement();
+            PublishLayoutWidth();
+        });
+
+        SizeChanged += (_, _) => _settle.Poke();
         StateChanged += (_, _) => TrackPlacement();
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
@@ -59,6 +91,7 @@ public partial class MainWindow : Window
             ViewModel?.UpdateNow(DateTime.Now);
             _clock.Start();
             RestorePaneWidths();
+            _settle.Now();
         };
 
         Closed += (_, _) =>
@@ -137,40 +170,104 @@ public partial class MainWindow : Window
         _widthsRestored = true;
 
         _sideWidth = vm.SidePanelWidth;
-        DetailColumn.Width = new GridLength(vm.DetailPaneWidth);
-        ApplySidePanel(vm.IsSidePanelOpen);
+        _detailWidth = vm.DetailPaneWidth;
+
+        ApplyPanes(vm);
 
         vm.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(MainViewModel.IsSidePanelOpen))
+            if (args.PropertyName is nameof(MainViewModel.IsSidePanelOpen)
+                or nameof(MainViewModel.IsMainViewOpen)
+                or nameof(MainViewModel.IsDetailPaneOpen)
+                or nameof(MainViewModel.IsSlimPanelOpen))
             {
-                ApplySidePanel(vm.IsSidePanelOpen);
+                ApplyPanes(vm);
             }
         };
     }
 
+    /// <summary>残りの幅を受け取るのは、どのパネルか。</summary>
+    private enum Filler
+    {
+        Main,
+        Detail,
+        Side,
+        Slim,
+    }
+
     /// <summary>
-    /// 左パネルの開け閉め。
+    /// パネルの出し分けと幅。
     /// <para>
-    /// 閉じるときは列ごと畳む。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
-    /// 開くときは畳む前の幅に戻す。
+    /// <b>残りを受け取るのは1つだけ。</b>中央 → 右 → 左 → スリム の順で決める。
+    /// どれも「*」でないと、窓を広げたぶんが誰にも行き渡らず、黒いまま余る。
+    /// パネルごとに別々の条件で決めていたら、スリムパネルだけを出したときに
+    /// 受け取り手がいなくなっていた。
+    /// </para>
+    /// <para>
+    /// 畳むときは列ごと 0 にする。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
     /// </para>
     /// </summary>
-    private void ApplySidePanel(bool isOpen)
+    private void ApplyPanes(MainViewModel vm)
     {
-        if (isOpen)
-        {
-            SideColumn.MinWidth = MainViewModel.MinSidePanelWidth;
-            SideColumn.Width = new GridLength(_sideWidth);
-            return;
-        }
+        // 手で決めた幅を控える。畳んで開き直したとき、そこへ戻す
+        if (vm.IsSlimPanelOpen && SlimColumn.ActualWidth > 0) _slimWidth = SlimColumn.ActualWidth;
+        if (vm.IsSidePanelOpen && SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
+        if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
 
-        if (SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
+        var filler =
+            vm.IsMainViewOpen ? Filler.Main
+            : vm.IsDetailPaneOpen ? Filler.Detail
+            : vm.IsSidePanelOpen ? Filler.Side
+            : Filler.Slim;
 
-        // 下限を外さないと 0 まで畳めない
-        SideColumn.MinWidth = 0;
-        SideColumn.Width = new GridLength(0);
+        Fit(SlimColumn, vm.IsSlimPanelOpen, filler == Filler.Slim, _slimWidth,
+            MainViewModel.MinSlimPanelWidth, MainViewModel.MaxSlimPanelWidth);
+
+        Fit(SideColumn, vm.IsSidePanelOpen, filler == Filler.Side, _sideWidth,
+            MainViewModel.MinSidePanelWidth, MainViewModel.MaxSidePanelWidth);
+
+        Fit(MainColumn, vm.IsMainViewOpen, filler == Filler.Main, MainViewModel.MinMainViewWidth,
+            MainViewModel.MinMainViewWidth, double.PositiveInfinity);
+
+        Fit(DetailColumn, vm.IsDetailPaneOpen, filler == Filler.Detail, _detailWidth,
+            MainViewModel.MinDetailPaneWidth, MainViewModel.MaxDetailPaneWidth);
+
+        // 掴みしろは、つまんで動かす相手がいるときだけ出す
+        SlimSplitter.Visibility = Between(
+            vm.IsSlimPanelOpen, vm.IsSidePanelOpen || vm.IsMainViewOpen || vm.IsDetailPaneOpen);
+        SideSplitter.Visibility = Between(
+            vm.IsSidePanelOpen, vm.IsMainViewOpen || vm.IsDetailPaneOpen);
+        DetailSplitter.Visibility = Between(vm.IsDetailPaneOpen, vm.IsMainViewOpen);
     }
+
+    /// <summary>列を、開いているか・残りを受け取るかに合わせて整える。</summary>
+    private static void Fit(
+        ColumnDefinition column, bool open, bool fills, double width, double min, double max)
+    {
+        column.MinWidth = open ? min : 0;
+
+        // 受け取り手のときは上限を外す。付けたままだと、そこで止まって先が余る
+        column.MaxWidth = open && !fills ? max : double.PositiveInfinity;
+
+        column.Width = (open, fills) switch
+        {
+            (false, _) => new GridLength(0),
+            (true, true) => new GridLength(1, GridUnitType.Star),
+            _ => new GridLength(width),
+        };
+    }
+
+    private static Visibility Between(bool left, bool right) =>
+        left && right ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
+    private double _detailWidth = MainViewModel.DefaultDetailPaneWidth;
+
+    /// <summary>スリムパネルを畳むあいだ、戻す幅をここに控える。</summary>
+    private double _slimWidth = MainViewModel.DefaultSlimPanelWidth;
+
+    /// <summary>大きさが落ち着いてから、幅を伝える。</summary>
+    private readonly Views.Settle _settle;
 
     /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
     private void SavePaneWidths()
@@ -178,10 +275,124 @@ public partial class MainWindow : Window
         if (ViewModel is not { } vm) return;
 
         vm.SidePanelWidth = SideColumn.ActualWidth > 0 ? SideColumn.ActualWidth : _sideWidth;
-        vm.DetailPaneWidth = DetailColumn.ActualWidth;
+        vm.DetailPaneWidth = vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0
+            ? DetailColumn.ActualWidth
+            : _detailWidth;
+    }
+
+    // ------------------------------------------------------------------
+    // ドック幅のグリップ（要件書 7.2）
+    //
+    // 端に寄せているあいだは枠を消しているので、OS の掴みしろが無い。
+    // 画面の内側にあたる辺に自前の掴みしろを置き、ここで幅を変える。
+    // ------------------------------------------------------------------
+
+    /// <summary>掴んだときの画面上の位置。ウィンドウ内の座標だと、動かすたびにずれる。</summary>
+    private Point? _gripFrom;
+
+    /// <summary>掴んだときの幅。</summary>
+    private double _gripWidth;
+
+    private void OnGripPressed(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+
+        _gripFrom = PointToScreen(e.GetPosition(this));
+        _gripWidth = vm.Shell.DockWidth;
+
+        // つまんでいるあいだはスライドを引っ込めない。狭める向きに引くと、
+        // つまんでいる手そのものが窓の外へ出る
+        vm.Shell.IsResizing = true;
+
+        ((UIElement)sender).CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnGripDragging(object sender, MouseEventArgs e)
+    {
+        if (_gripFrom is not { } from || ViewModel is not { } vm) return;
+
+        var moved = PointToScreen(e.GetPosition(this)).X - from.X;
+
+        // 右に寄せていれば、左へ引くほど広くなる。左に寄せていれば逆
+        vm.Shell.DockWidth = vm.Shell.IsAtLeft ? _gripWidth + moved : _gripWidth - moved;
+    }
+
+    /// <summary>
+    /// 掴みしろの上でホイールを回したら、日を送る。
+    /// <para>
+    /// 細い帯では、ここが指を置きやすい場所になる。何も起きないと、送り方が
+    /// 無いように見える。
+    /// </para>
+    /// </summary>
+    private void OnGripWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0 || ViewModel is not { } vm) return;
+
+        var command = e.Delta > 0 ? vm.PreviousCommand : vm.NextCommand;
+
+        if (!command.CanExecute(null)) return;
+
+        command.Execute(null);
+        e.Handled = true;
+    }
+
+    private void OnGripReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (_gripFrom is null) return;
+
+        _gripFrom = null;
+
+        if (ViewModel is { } vm) vm.Shell.IsResizing = false;
+
+        ((UIElement)sender).ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Ctrl＋ホイールでビューを切り替える。
+    /// <para>
+    /// 一覧 → 年 → 月 → 週 → 日 の並びを1つずつ動く。回すたびに見ている範囲が
+    /// 狭まる（または広がる）。選んでいる日はそのまま持っていくので、切り替えた
+    /// 先でも同じ日を見ている。
+    /// </para>
+    /// <para>
+    /// どのビューの上でも効かせたいので、いちばん外で受ける。中のビューは Ctrl を
+    /// 押しているあいだホイールを受けない作りにしてある。
+    /// </para>
+    /// </summary>
+    private void OnZoomWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+        if (ViewModel is not { } vm) return;
+
+        // 手前に回すと細かく、奥に回すと粗く。地図と同じ向き
+        if (e.Delta < 0) vm.ZoomOutCommand.Execute(null);
+        else vm.ZoomInCommand.Execute(null);
+
+        e.Handled = true;
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
+
+    /// <summary>
+    /// 中身がもらっている幅を渡す。詰め方はこれで決まる。
+    /// <para>
+    /// <b><c>Window.ActualWidth</c> を使わない。</b>あれは見えないリサイズ枠
+    /// （左右7〜8px）を含むうえ、<c>MinWidth</c> を下回らない。中身の根元の幅なら
+    /// どちらのずれも無い。
+    /// </para>
+    /// <para>
+    /// 流すのはここ1か所だけにする。詰め方は ViewModel が <c>LayoutWidth</c> の
+    /// 変化を受けて決めるので、こちらから重ねて頼まない。
+    /// </para>
+    /// </summary>
+    private void PublishLayoutWidth()
+    {
+        if (ViewModel is not { } vm) return;
+
+        vm.Shell.LayoutWidth = Root.ActualWidth > 0 ? Root.ActualWidth : ActualWidth;
+    }
 
     /// <summary>検索の結果を押したら、その日へ移って開く。</summary>
     private void OnSearchResultClicked(object sender, MouseButtonEventArgs e)
@@ -201,6 +412,17 @@ public partial class MainWindow : Window
         vm.QuickCommand.Execute(null);
         e.Handled = true;
     }
+
+    /// <summary>
+    /// 畳んであるときの虫めがね。
+    /// <para>開いたら打ち始められるよう、入力欄に手を渡す。</para>
+    /// </summary>
+    private void OnCompactSearchClicked(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(() =>
+        {
+            SearchBox.Focus();
+            Keyboard.Focus(SearchBox);
+        }, System.Windows.Threading.DispatcherPriority.Input);
 
     /// <summary>Esc で検索をやめる。</summary>
     private void OnSearchKeyDown(object sender, KeyEventArgs e)

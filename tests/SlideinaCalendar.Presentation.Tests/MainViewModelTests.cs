@@ -301,10 +301,188 @@ public class MainViewModelTests
         vm.NextCommand.Execute(null);
         Assert.Equal(D(2026, 9, 27), vm.Week.WeekStart);
 
-        // 日ビューでは日単位
+        // 日ビューでは日単位。週を送ったぶん、選んでいる日も曜日を保って
+        // 10/1（木）へ移っているので、そこから1日進む
+        vm.SwitchViewCommand.Execute(CalendarView.Day);
+        Assert.Equal(D(2026, 10, 1), vm.Day.Date);
+
+        vm.NextCommand.Execute(null);
+        Assert.Equal(D(2026, 10, 2), vm.Day.Date);
+    }
+
+    // ------------------------------------------------------------------
+    // 幅に合わせた詰め方
+    //
+    // 細い帯として使うので、入りきらないものは順に落とす
+    // ------------------------------------------------------------------
+
+    private static void Fit(MainViewModel vm, double width)
+    {
+        vm.Shell.LayoutWidth = width;
+        vm.FitTo(width);
+    }
+
+    [Fact]
+    public void パネルの組は居かたごとに覚える()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings);
+
+        // ウィンドウでは3ペイン
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        vm.ToggleSidePanelCommand.Execute(null);
+
+        // 画面端へ寄せると、そちらの組に入れ替わる
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        vm.ToggleSlimPanelCommand.Execute(null);
+
+        // ウィンドウへ戻すと、さっきの組が戻る
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.False(vm.IsSlimPanelOpen);
+
+        // もう一度寄せれば、帯のほうの組
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.True(vm.IsSlimPanelOpen);
+    }
+
+    [Fact]
+    public void 狭くしてもパネルは勝手に畳まない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        // 出しておきたくて出しているものが、幅の都合で消えるのは筋が悪い。
+        // 入りきらないぶんは切れるだけにして、何を出すかは手で決めてもらう
+        Fit(vm, 320);
+
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+    }
+
+    [Fact]
+    public void 狭いとツールバーの中身を順に落とす()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 1200);
+        Assert.True(vm.ShowsWorkdayBadges);
+        Assert.True(vm.ShowsSyncStatus);
+        Assert.True(vm.ShowsSearchBox);
+        Assert.False(vm.UsesCompactSearch);
+        Assert.True(vm.ShowsViewSwitcher);
+        Assert.True(vm.ShowsTodayButton);
+
+        // 実働・残りのバッジがいちばん先。同じ数字は右ペインにも出ている
+        Fit(vm, 950);
+        Assert.False(vm.ShowsWorkdayBadges);
+        Assert.True(vm.ShowsSyncStatus);
+
+        Fit(vm, 850);
+        Assert.False(vm.ShowsSyncStatus);
+        Assert.False(vm.UsesCompactSearch);
+
+        // 検索は消さずに虫めがねへ畳む
+        Fit(vm, 780);
+        Assert.True(vm.UsesCompactSearch);
+        Assert.False(vm.ShowsSearchBox);
+
+        vm.OpenSearchCommand.Execute(null);
+        Assert.True(vm.ShowsSearchBox);
+        vm.ClearSearch();
+        Assert.False(vm.ShowsSearchBox);
+
+        Fit(vm, 660);
+        Assert.False(vm.ShowsViewSwitcher);
+        Assert.True(vm.ShowsTodayButton);
+
+        // いちばん細いところでは「今日」も置き場が無い
+        Fit(vm, 340);
+        Assert.False(vm.ShowsTodayButton);
+    }
+
+    [Fact]
+    public void 週ビューでも選んだ日に印が付く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        vm.SelectDateCommand.Execute(D(2026, 9, 22));
+
+        // 右ペインとの対応が分かるよう、列の見出しにも印を出す
+        Assert.Equal(D(2026, 9, 22), vm.SelectedDay.Date);
+        Assert.Single(vm.Week.Days, d => d.IsSelected);
+        Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 22)).IsSelected);
+
+        // 週を送っても、印は選んでいる日に付いたまま
+        vm.NextCommand.Execute(null);
+        Assert.Single(vm.Week.Days, d => d.IsSelected);
+        Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 29)).IsSelected);
+    }
+
+    [Fact]
+    public void 前後の月を選ぶとスリムパネルもその月へ移る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.Equal(9, vm.SlimMonth.Month.Month);
+
+        // 月ビューは前後の月のマスも出す。そこを押したのに9月のままでは、
+        // どこを選んだのか分からない
+        vm.SelectDateCommand.Execute(D(2026, 10, 1));
+
+        Assert.Equal(10, vm.SlimMonth.Month.Month);
+        Assert.Equal("10月", vm.SlimTitleMonth);
+    }
+
+    [Fact]
+    public void 送ると右ペインの日付も付いてくる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 置いていくと、中央は 9/18 を出しているのに右ペインは 9/22 のまま、
+        // ということになる
         vm.SwitchViewCommand.Execute(CalendarView.Day);
         vm.NextCommand.Execute(null);
-        Assert.Equal(D(2026, 9, 25), vm.Day.Date);
+        Assert.Equal(vm.Day.Date, vm.SelectedDay.Date);
+
+        // 月は日にちを保って翌月へ
+        vm.SwitchViewCommand.Execute(CalendarView.Month);
+        var before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.AddMonths(1), vm.SelectedDay.Date);
+
+        // 週は曜日を保って翌週へ
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.AddDays(7), vm.SelectedDay.Date);
+
+        // 年は同じ月日の翌年度へ
+        vm.SwitchViewCommand.Execute(CalendarView.Year);
+        before = vm.SelectedDate;
+        vm.NextCommand.Execute(null);
+        Assert.Equal(before.Month, vm.SelectedDay.Date.Month);
+        Assert.Equal(before.Day, vm.SelectedDay.Date.Day);
+        Assert.Equal(before.Year + 1, vm.SelectedDay.Date.Year);
     }
 
     [Fact]

@@ -16,7 +16,36 @@ namespace SlideinaCalendar.App.Views;
 /// </summary>
 public partial class MonthView : UserControl
 {
-    public MonthView() => InitializeComponent();
+    /// <summary>
+    /// 手が止まってから組み直す。
+    /// <para>
+    /// マスの数を決め直すと 42 マスを作り直すことになる。ドラッグのあいだ毎回
+    /// やると掴んだ瞬間に固まる。週と日が軽いのは、大きさに合わせて組み直す
+    /// ものを持たないから。
+    /// </para>
+    /// </summary>
+    private readonly Settle _settle;
+
+    public MonthView()
+    {
+        InitializeComponent();
+
+        _settle = new Settle(FitCells);
+
+        // 詰めた形に切り替わったら、マスの高さを決め直す
+        DataContextChanged += (_, args) =>
+        {
+            if (args.OldValue is MonthViewModel before) before.PropertyChanged -= OnMonthChanged;
+            if (args.NewValue is MonthViewModel after) after.PropertyChanged += OnMonthChanged;
+
+            _settle.Now();
+        };
+    }
+
+    private void OnMonthChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MonthViewModel.IsCompact)) _settle.Now();
+    }
 
     /// <summary>
     /// マスの高さが変わったら、並べる件数を決め直す。
@@ -25,15 +54,36 @@ public partial class MonthView : UserControl
     /// 表示側にしか分からないので、ここで測って ViewModel へ渡す。
     /// </para>
     /// </summary>
-    private void OnCellsResized(object sender, SizeChangedEventArgs e)
+    private void OnCellsResized(object sender, SizeChangedEventArgs e) => _settle.Poke();
+
+    /// <summary>
+    /// マスの大きさを決める。
+    /// <para>
+    /// ふつうの形では、高さから並べられる件数を割り出して ViewModel へ渡す。
+    /// 詰めた形（スリムパネル）では、<b>マスを正方形に近づける</b>。ひと月の
+    /// 並びを追うのがこの形での役目で、縦に伸ばしても読めるものは増えない。
+    /// </para>
+    /// </summary>
+    private void FitCells()
     {
-        if (!e.HeightChanged) return;
         if (DataContext is not MonthViewModel month || month.Cells.Count == 0) return;
 
         var rows = month.Cells.Count / 7;
         if (rows <= 0) return;
 
-        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(e.NewSize.Height / rows);
+        if (month.IsCompact)
+        {
+            // 正方形は「これ以上は潰さない」の線。高さに余裕があれば伸びる。
+            // 決め打ちにしていたら、仕切りを下げてもカレンダーが伸びなかった
+            CellsHost.MinHeight = Math.Round(CellsHost.ActualWidth / 7) * rows;
+            return;
+        }
+
+        CellsHost.MinHeight = 0;
+
+        if (CellsHost.ActualHeight <= 0) return;
+
+        month.MaxChipsPerCell = DayCellViewModel.CapacityFor(CellsHost.ActualHeight / rows);
     }
 
     // ------------------------------------------------------------------
@@ -179,6 +229,10 @@ public partial class MonthView : UserControl
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
         if (e.Delta == 0) return;
+
+        // Ctrl はビューの切り替えに使う。いちばん外が受けるので、ここでは何もしない
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
         var command = e.Delta > 0 ? main.PreviousCommand : main.NextCommand;

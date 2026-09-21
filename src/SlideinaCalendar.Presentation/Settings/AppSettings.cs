@@ -50,6 +50,13 @@ public sealed class AppSettings
     private const string SummaryTimeKey = "notify.summary_time";
     private const string NotifySoundKey = "notify.sound";
     private const string DefaultCalendarKey = "ui.default_calendar";
+    private const string YearLayoutKey = "ui.year_layout";
+    private const string CloseToTrayKey = "ui.close_to_tray";
+    private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
+    private const string MinWidthKey = "shell.min_width";
+    private const string SlimShareKey = "ui.slim_calendar_share";
+    private const string WindowPanesKey = "ui.panes.window";
+    private const string EdgePanesKey = "ui.panes.edge";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -68,6 +75,10 @@ public sealed class AppSettings
 
     private ThemeChoice _theme;
     private DayOfWeek _weekStart;
+    private YearLayout _yearLayout;
+    private bool _closeToTray = true;
+    private bool _slideOutOnLeave = true;
+    private int _minWidth = DefaultMinWidth;
     private int _dayStartHour;
     private int _dayEndHour;
     private CalendarView _startupView;
@@ -88,6 +99,15 @@ public sealed class AppSettings
         _theme = Read(ThemeKey, ThemeChoice.Auto);
         _weekStart = Read(WeekStartKey, DayOfWeek.Sunday);
         _startupView = Read(StartupViewKey, CalendarView.Month);
+        _yearLayout = Read(YearLayoutKey, YearLayout.Grid);
+        _closeToTray = !string.Equals(_store.Get(CloseToTrayKey), "false", StringComparison.Ordinal);
+        _slideOutOnLeave =
+            !string.Equals(_store.Get(SlideOutOnLeaveKey), "false", StringComparison.Ordinal);
+        _minWidth = ReadNumber(MinWidthKey, DefaultMinWidth, LowestMinWidth, HighestMinWidth);
+        _slimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var share)
+            ? Math.Clamp(share, 0.2, 0.8)
+            : DefaultSlimShare;
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -295,6 +315,87 @@ public sealed class AppSettings
     }
 
     /// <summary>
+    /// ウィンドウのときに出していたパネル。
+    /// <para>
+    /// 画面端に寄せたときとは別に覚える。広いウィンドウでは3つとも出し、細い帯では
+    /// 予定だけ、という使い分けがふつうなので、行き来のたびに直すのは手間になる。
+    /// </para>
+    /// </summary>
+    public string WindowPanes
+    {
+        get => _store.Get(WindowPanesKey) ?? string.Empty;
+        set => _store.Set(WindowPanesKey, value);
+    }
+
+    /// <summary>画面端に寄せている（スライド・固定）ときに出していたパネル。</summary>
+    public string EdgePanes
+    {
+        get => _store.Get(EdgePanesKey) ?? string.Empty;
+        set => _store.Set(EdgePanesKey, value);
+    }
+
+    /// <summary>
+    /// スリムパネルで、カレンダーに割く高さの割合。
+    /// <para>
+    /// 仕切りをつまんで変えたぶんを覚える。カレンダーを広く見たい人と、予定の一覧を
+    /// 長く出したい人がいる。0.2〜0.8 の範囲に収める。
+    /// </para>
+    /// </summary>
+    public double SlimCalendarShare
+    {
+        get => _slimShare;
+        set
+        {
+            var share = Math.Clamp(value, 0.2, 0.8);
+
+            if (Math.Abs(_slimShare - share) < 0.005) return;
+
+            _slimShare = share;
+            _store.Set(SlimShareKey, share.ToString("R", CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private double _slimShare = DefaultSlimShare;
+
+    /// <summary>カレンダーを広めに取る。日付を引き当てるのが主な使い道。</summary>
+    public const double DefaultSlimShare = 0.6;
+
+    /// <summary>
+    /// いちばん細くできる幅の既定。
+    /// <para>実機で詰めてみて、月のマスと予定の行がどちらも読める下限がこのあたり。</para>
+    /// </summary>
+    public const int DefaultMinWidth = 220;
+
+    /// <summary>そこまで下げられる下限。これ以下は日付も読めない。</summary>
+    public const int LowestMinWidth = 160;
+
+    /// <summary>そこまで上げられる上限。</summary>
+    public const int HighestMinWidth = 640;
+
+    /// <summary>
+    /// 窓をいちばん細くできる幅。
+    /// <para>
+    /// 帯としてどこまで詰めたいかは使う人によるので、決め打ちにしない。細くすれば
+    /// 場所を取らないが、中身は順に切れていく。
+    /// </para>
+    /// </summary>
+    public int MinWidth
+    {
+        get => _minWidth;
+        set
+        {
+            var width = Math.Clamp(value, LowestMinWidth, HighestMinWidth);
+
+            if (_minWidth == width) return;
+
+            _minWidth = width;
+            _store.Set(MinWidthKey, width.ToString(CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
     /// 知らせるときに音を鳴らすか。既定は鳴らす。
     /// <para>画面を見ていないときに黙って出しても気づけない。</para>
     /// </summary>
@@ -353,6 +454,65 @@ public sealed class AppSettings
             if (string.Equals(DefaultCalendarId, value, StringComparison.Ordinal)) return;
 
             _store.Set(DefaultCalendarKey, value ?? string.Empty);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 年ビューの出し方。
+    /// <para>
+    /// <b>設定画面には出さない。</b>年ビューを見ているときにしか関係しない選び方なので、
+    /// 切り替えは年ビューの中のボタンで行う（要件書 5.1）。ここに置くのは、
+    /// 次の起動でも同じ形で出すため。
+    /// </para>
+    /// </summary>
+    public YearLayout YearLayout
+    {
+        get => _yearLayout;
+        set => Write(ref _yearLayout, value, YearLayoutKey);
+    }
+
+    /// <summary>
+    /// 閉じるボタンでトレイに入れるか。
+    /// <para>
+    /// 既定は入れる（要件書 7.4）。裏で通知を出し続けるため、閉じても終わらせない。
+    /// ただし「閉じたら終わってほしい」という人もいるので選べるようにする。
+    /// </para>
+    /// <para>切ったときは、閉じるボタンでそのまま終わる。トレイのアイコンは出したまま。</para>
+    /// </summary>
+    public bool CloseToTray
+    {
+        get => _closeToTray;
+        set
+        {
+            if (_closeToTray == value) return;
+
+            _closeToTray = value;
+            _store.Set(CloseToTrayKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// スライドから、カーソルが外れたら引っ込めるか。
+    /// <para>
+    /// 既定は引っ込める。用があるときだけ出てくるのがスライドの形で、出したまま
+    /// にしたければピンで留める。
+    /// </para>
+    /// <para>
+    /// 切ったときは、他のウィンドウを触るまで出したままにする。カーソルを外に
+    /// 出しながら見比べたい、という使い方のため。
+    /// </para>
+    /// </summary>
+    public bool SlideOutOnLeave
+    {
+        get => _slideOutOnLeave;
+        set
+        {
+            if (_slideOutOnLeave == value) return;
+
+            _slideOutOnLeave = value;
+            _store.Set(SlideOutOnLeaveKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

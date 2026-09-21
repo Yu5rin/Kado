@@ -78,6 +78,16 @@
         </ContextMenu>
 
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
+        <!--
+            詰めた形（スリムパネル）の印。名前は出さず、予定が入っていることだけを
+            色で示す。中身は下の一覧で読む
+        -->
+        <DataTemplate x:Key="CompactMarkTemplate">
+            <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
+                    ToolTip="{Binding Tooltip}"
+                    Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
+        </DataTemplate>
+
         <DataTemplate x:Key="EventChipTemplate">
             <!--
                 ダブルクリックでその予定を開く。マス側の受け手が先に取ると
@@ -261,7 +271,8 @@
                             ミニ月暦からしか日を選べない。InputBinding からは
                             RelativeSource の祖先をたどれないので、コードビハインドで受ける
                         -->
-                        <StackPanel>
+                        <Grid>
+                        <StackPanel x:Name="Full">
                             <!-- 日付とマイルストーン。日付は左に固定 -->
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -298,9 +309,75 @@
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding OverflowLabel, Converter={StaticResource NullToVisibility}}" />
                         </StackPanel>
+
+                        <!-- 詰めた形。日付を真ん中に置き、予定は色の点だけ -->
+                        <!--
+                            詰めた形。年表示のカレンダーと同じ並びにする。実働日
+                            カレンダー（inaCalendar）の印は日付の上、それ以外は下。
+                            点ではなく帯にするのは、色は分かっても何件あるかが
+                            点ではつかめないため
+                        -->
+                        <StackPanel x:Name="Compact" Visibility="Collapsed"
+                                    VerticalAlignment="Top" Margin="0,1,0,0">
+                            <!--
+                                日付の上は、いつも帯1本ぶんの高さを取っておく。これで
+                                <b>どの日も日付の高さが揃う</b>。2本ぶん取ると、その
+                                ぶん下の予定に回せる行が減る。上に出るのは実働日
+                                カレンダー（inaCalendar）の印で、日々の予定は下に並ぶ
+                            -->
+                            <Border Height="4" ClipToBounds="True">
+                                <ItemsControl ItemsSource="{Binding Milestones}"
+                                              VerticalAlignment="Bottom">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
+                                                    ToolTip="{Binding Name}"
+                                                    Background="{Binding Name,
+                                                                Converter={StaticResource MilestoneBrush}}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                            <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
+                                       FontSize="12" LineHeight="15" Margin="0,0,0,1"
+                                       HorizontalAlignment="Center"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource InkBrush}" />
+
+                            <ItemsControl ItemsSource="{Binding Bands}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
+                                                Background="{Binding Chip.Color,
+                                                            Converter={StaticResource EventColorBrush}}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding Events}"
+                                          ItemTemplate="{StaticResource CompactMarkTemplate}" />
+                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <DataTemplate.Triggers>
+                        <!-- スリムパネルでは、マスに予定の名前を並べても読めない -->
+                        <DataTrigger Value="True"
+                                     Binding="{Binding DataContext.IsCompact,
+                                               RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Setter TargetName="Full" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Compact" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Cell" Property="Padding" Value="2" />
+
+                            <!--
+                                操作の説明は出さない。マスが小さいので、載せるたびに
+                                3行の吹き出しが開いて隣の日が隠れる。同じ説明は
+                                ふつうの月ビューで読める
+                            -->
+                            <Setter TargetName="Cell" Property="ToolTip" Value="{x:Null}" />
+                        </DataTrigger>
+
                         <!--
                             実働日データを持つ日は、稼働する日と休業する日で面を分ける。
                             データを持たない日はどちらでもないので、そのままにしておく。
@@ -326,6 +403,8 @@
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                             <Setter TargetName="DayNumber" Property="Foreground"
                                     Value="{DynamicResource SaturdayBrush}" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
+                                    Value="{DynamicResource SaturdayBrush}" />
                         </DataTrigger>
 
                         <!--
@@ -334,6 +413,8 @@
                         -->
                         <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
                             <Setter TargetName="DayNumber" Property="Foreground"
+                                    Value="{DynamicResource SundayBrush}" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
                                     Value="{DynamicResource SundayBrush}" />
                         </DataTrigger>
 
@@ -352,6 +433,9 @@
                             <Setter TargetName="DayNumber" Property="FontWeight" Value="Bold" />
                             <Setter TargetName="DayNumber" Property="Foreground"
                                     Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="CompactNumber" Property="FontWeight" Value="Bold" />
+                            <Setter TargetName="CompactNumber" Property="Foreground"
+                                    Value="{DynamicResource AccentBrush}" />
                         </DataTrigger>
 
                         <!-- 休業日の面と近いと紛れるので、はっきり青に寄せた色を使う -->
@@ -359,6 +443,21 @@
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource CellSelectedBrush}" />
                         </DataTrigger>
+
+                        <!--
+                            詰めた形では、今日のマスだけ内側の余白が変わると中身が
+                            ずれて、日付の高さが揃わなくなる。枠のぶんだけ余白を
+                            減らして、ほかの日と同じ位置に置く
+                        -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Value="True"
+                                           Binding="{Binding DataContext.IsCompact,
+                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Condition Binding="{Binding IsToday}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="Cell" Property="Padding" Value="0" />
+                        </MultiDataTrigger>
 
                         <!--
                             落とし先。いちばん最後に置いて、ホバーや選択より強く出す

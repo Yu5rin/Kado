@@ -107,6 +107,22 @@ public sealed class MonthViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 詰めた形で出すか（スリムパネル）。
+    /// <para>
+    /// 細い帯では、マスに予定の名前を並べても読めない。日付と、予定が入っている
+    /// ことを示す色だけにして、マスを正方形に近づける。ひと月の並びを追うのが
+    /// この形での役目で、中身は下の一覧で読む。
+    /// </para>
+    /// </summary>
+    public bool IsCompact
+    {
+        get => _isCompact;
+        set => Set(ref _isCompact, value);
+    }
+
+    private bool _isCompact;
+
     public IReadOnlyList<DayCellViewModel> Cells
     {
         get => _cells;

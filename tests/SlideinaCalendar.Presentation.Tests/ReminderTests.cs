@@ -140,6 +140,90 @@ public class ReminderTests
     }
 
     [Fact]
+    public void まとめに同じ予定を二度出さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 同じ予定を2つのカレンダーに持っていると、そのぶん二度出ていた
+        var other = test.Workspace.CreateCalendar("共有");
+
+        AddEvent(test, "e1", new TimeOnly(23, 0), "MAD5");
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "MAD5", Date = Today,
+            StartTime = new TimeOnly(23, 0), EndTime = new TimeOnly(23, 55),
+            CalendarId = other.Id,
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        var sent = notifier.Sent.Single();
+        Assert.Contains("1件", sent.Title);
+        Assert.Equal("23:00 MAD5", sent.Message);
+    }
+
+    [Fact]
+    public void 出していないカレンダーはまとめに入れない()
+    {
+        using var test = TestWorkspace.Create();
+
+        var hidden = test.Workspace.CreateCalendar("下書き");
+        test.Workspace.Sources.SetCalendarVisible(hidden.Id, false);
+
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e2", Title = "見せない予定", Date = Today,
+            StartTime = new TimeOnly(14, 0), CalendarId = hidden.Id,
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        var sent = notifier.Sent.Single();
+        Assert.Contains("1件", sent.Title);
+        Assert.DoesNotContain("見せない予定", sent.Message);
+    }
+
+    [Fact]
+    public void 知らせない設定のカレンダーもまとめには入れる()
+    {
+        using var test = TestWorkspace.Create();
+
+        var quiet = test.Workspace.CreateCalendar("誕生日");
+        test.Workspace.SetCalendarNotify(quiet.Id, false);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "誰かの誕生日", Date = Today, CalendarId = quiet.Id,
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        // 「知らせない」は予定ごとの通知を止める指定。朝のまとめは
+        // その日に何があるかを並べるもので、役割が違う
+        var sent = notifier.Sent.Single();
+        Assert.Contains("誰かの誕生日", sent.Message);
+    }
+
+    [Fact]
     public void まとめは1日に1回だけ()
     {
         using var test = TestWorkspace.Create();

@@ -361,6 +361,19 @@ public class SettingsTests
     }
 
     [Fact]
+    public void スライドの引っ込め方は既定で入っていて切れる()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 用があるときだけ出てくるのがスライドの形。出したままにしたければピンで留める
+        Assert.True(new AppSettings(test.Workspace.Settings).SlideOutOnLeave);
+
+        new AppSettings(test.Workspace.Settings) { SlideOutOnLeave = false };
+
+        Assert.False(new AppSettings(test.Workspace.Settings).SlideOutOnLeave);
+    }
+
+    [Fact]
     public void 配信元が空なら取りに行けない()
     {
         using var test = TestWorkspace.Create();

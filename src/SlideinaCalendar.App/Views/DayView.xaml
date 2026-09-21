@@ -131,7 +131,7 @@
                            TextAlignment="Right" Padding="0,4,5,0"
                            Foreground="{DynamicResource Ink3Brush}" />
                 <Border DockPanel.Dock="Right"
-                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+                        Width="{DynamicResource ScrollBarThickness}" />
 
                 <Border x:Name="AllDay" Padding="3" MinHeight="30" Background="Transparent"
                         BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"

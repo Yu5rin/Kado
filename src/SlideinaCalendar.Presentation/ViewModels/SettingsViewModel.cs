@@ -244,6 +244,54 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 閉じるボタンでトレイに入れるか。
+    /// <para>切ると、閉じるボタンでそのまま終わる。</para>
+    /// </summary>
+    public bool CloseToTray
+    {
+        get => _settings.CloseToTray;
+        set
+        {
+            if (_settings.CloseToTray == value) return;
+
+            _settings.CloseToTray = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// スライドから、カーソルが外れたら引っ込めるか。
+    /// <para>切ると、他のウィンドウを触るまで出したままにする。</para>
+    /// </summary>
+    public bool SlideOutOnLeave
+    {
+        get => _settings.SlideOutOnLeave;
+        set
+        {
+            if (_settings.SlideOutOnLeave == value) return;
+
+            _settings.SlideOutOnLeave = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// 窓をいちばん細くできる幅。
+    /// <para>帯としてどこまで詰めたいかは使う人による。</para>
+    /// </summary>
+    public int MinWidth
+    {
+        get => _settings.MinWidth;
+        set
+        {
+            if (_settings.MinWidth == value) return;
+
+            _settings.MinWidth = value;
+            Raise();
+        }
+    }
+
     /// <summary>知らせるときに音を鳴らすか。</summary>
     public bool NotifySound
     {

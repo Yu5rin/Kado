@@ -107,7 +107,11 @@
 
         <!-- 日付ヘッダ1つ分 -->
         <DataTemplate x:Key="DayHeaderTemplate">
-            <Border x:Name="Head" Padding="0,5,0,6"
+            <!-- 見出しを押すと、その日を選ぶ。右ペインがその日に入れ替わる -->
+            <Border x:Name="Head" Padding="0,5,0,6" Cursor="Hand"
+                    Background="Transparent"
+                    ToolTip="押すとその日を選びます"
+                    MouseLeftButtonDown="OnDayHeaderClicked"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
                     <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
@@ -167,6 +171,12 @@
                 <DataTrigger Binding="{Binding IsDimmed}" Value="True">
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
+
+                <!-- 選んでいる日。実働日の塗りより後に置いてこちらを勝たせる -->
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Head" Property="Background"
+                            Value="{DynamicResource CellSelectedBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
                     <Setter TargetName="DayName" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
@@ -220,7 +230,7 @@
                 <Border DockPanel.Dock="Left" Width="46" />
                 <!-- 下のスクロールバーぶん。空けないと列が横にずれる -->
                 <Border DockPanel.Dock="Right"
-                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+                        Width="{DynamicResource ScrollBarThickness}" />
                 <ItemsControl ItemsSource="{Binding Days}" ItemTemplate="{StaticResource DayHeaderTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><UniformGrid Rows="1" Columns="7" /></ItemsPanelTemplate>
@@ -237,7 +247,7 @@
                            TextAlignment="Right" Padding="0,4,5,0"
                            Foreground="{DynamicResource Ink3Brush}" />
                 <Border DockPanel.Dock="Right"
-                        Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+                        Width="{DynamicResource ScrollBarThickness}" />
                 <ItemsControl ItemsSource="{Binding Days}" ItemTemplate="{StaticResource AllDayCellTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><UniformGrid Rows="1" Columns="7" /></ItemsPanelTemplate>
