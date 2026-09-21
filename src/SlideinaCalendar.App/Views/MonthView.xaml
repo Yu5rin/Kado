@@ -83,7 +83,7 @@
             色で示す。中身は下の一覧で読む
         -->
         <DataTemplate x:Key="CompactMarkTemplate">
-            <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+            <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
                     ToolTip="{Binding Tooltip}"
                     Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
         </DataTemplate>
@@ -311,20 +311,18 @@
                         </StackPanel>
 
                         <!-- 詰めた形。日付を真ん中に置き、予定は色の点だけ -->
+                        <!--
+                            詰めた形。年表示のカレンダーと同じ並びにする。実働日
+                            カレンダー（inaCalendar）の印は日付の上、それ以外は下。
+                            点ではなく帯にするのは、色は分かっても何件あるかが
+                            点ではつかめないため
+                        -->
                         <StackPanel x:Name="Compact" Visibility="Collapsed"
-                                    VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <!--
-                                実働日カレンダー（inaCalendar）の印は日付の上。
-                                仕様期限や1次GOが、ひと月の並びの中で拾える
-                            -->
-                            <ItemsControl ItemsSource="{Binding Milestones}"
-                                          HorizontalAlignment="Center">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
+                                    VerticalAlignment="Center">
+                            <ItemsControl ItemsSource="{Binding Milestones}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+                                        <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
                                                 ToolTip="{Binding Name}"
                                                 Background="{Binding Name,
                                                             Converter={StaticResource MilestoneBrush}}" />
@@ -332,31 +330,29 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
-                                       FontSize="12.5" LineHeight="17"
-                                       HorizontalAlignment="Center"
-                                       Typography.NumeralAlignment="Tabular"
-                                       Foreground="{DynamicResource InkBrush}" />
+                            <!-- 選んだ日は丸で囲う。ミニ月暦と同じ出しかた -->
+                            <Border x:Name="CompactFace" CornerRadius="9" Height="18" MinWidth="18"
+                                    HorizontalAlignment="Center" Margin="0,1"
+                                    Background="Transparent">
+                                <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
+                                           FontSize="12" Margin="4,0"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="{DynamicResource InkBrush}" />
+                            </Border>
 
-                            <ItemsControl ItemsSource="{Binding Bands}" HorizontalAlignment="Center">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
+                            <ItemsControl ItemsSource="{Binding Bands}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+                                        <Border Height="2.5" CornerRadius="1.25" Margin="1,0.75"
                                                 Background="{Binding Chip.Color,
                                                             Converter={StaticResource EventColorBrush}}" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <ItemsControl ItemsSource="{Binding Events}" HorizontalAlignment="Center"
-                                          ItemTemplate="{StaticResource CompactMarkTemplate}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding Events}"
+                                          ItemTemplate="{StaticResource CompactMarkTemplate}" />
                         </StackPanel>
                         </Grid>
                     </Border>
@@ -370,6 +366,35 @@
                             <Setter TargetName="Compact" Property="Visibility" Value="Visible" />
                             <Setter TargetName="Cell" Property="Padding" Value="2" />
                         </DataTrigger>
+
+                        <!--
+                            詰めた形では、面の色だけだと選んだ日が分かりにくい。
+                            日付を丸で囲う。今日はふちどり、選んだ日は塗りつぶし
+                        -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Value="True"
+                                           Binding="{Binding DataContext.IsCompact,
+                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Condition Binding="{Binding IsToday}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="CompactFace" Property="BorderThickness" Value="1.5" />
+                            <Setter TargetName="CompactFace" Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
+                        </MultiDataTrigger>
+
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Value="True"
+                                           Binding="{Binding DataContext.IsCompact,
+                                                     RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Condition Binding="{Binding IsSelected}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="CompactFace" Property="Background"
+                                    Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="CompactNumber" Property="Foreground" Value="White" />
+                            <Setter TargetName="CompactNumber" Property="FontWeight" Value="SemiBold" />
+                        </MultiDataTrigger>
 
                         <!--
                             実働日データを持つ日は、稼働する日と休業する日で面を分ける。

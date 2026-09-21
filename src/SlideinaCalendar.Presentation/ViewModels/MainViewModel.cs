@@ -398,7 +398,8 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsSidePanelOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
         }
     }
 
@@ -419,8 +420,19 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsSlimPanelOpen));
             SavePanes();
+            Raise(nameof(ShowsSlimToday));
         }
     }
+
+    /// <summary>
+    /// スリムパネルに「今日」を出すか。
+    /// <para>
+    /// ほかのパネルが出ていればツールバーに「今日」がある。スリムパネルだけの
+    /// ときは、そこが唯一の戻り口になる。
+    /// </para>
+    /// </summary>
+    public bool ShowsSlimToday =>
+        _isSlimPanelOpen && !_isSidePanelOpen && !_isMainViewOpen && !_isDetailPaneOpen;
 
     private bool _isSlimPanelOpen;
 
@@ -454,7 +466,8 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsMainViewOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
             RaiseHeader();
         }
     }
@@ -470,7 +483,8 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsSlimToday));
         }
     }
 
@@ -1327,8 +1341,10 @@ public sealed class MainViewModel : ObservableObject
         Agenda.GoToToday();
         MiniCalendar.GoTo(_today);
         MiniCalendar.SelectedDate = _today;
+        SlimMonth.GoTo(_today);
+        SlimMonth.SelectedDate = _today;
         RaiseHeader();
-        Raise(nameof(SelectedDate));
+        Raise(nameof(SelectedDate), nameof(SlimTitleYear), nameof(SlimTitleMonth));
     }
 
     /// <summary>
