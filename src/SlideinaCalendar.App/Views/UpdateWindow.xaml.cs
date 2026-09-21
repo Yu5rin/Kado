@@ -114,6 +114,14 @@ public partial class UpdateWindow : Window
     {
         if (_info.ReleaseUrl is not { Length: > 0 } url) return;
 
+        // 応答の html_url を無検証で開かない。応答を差し替えられる立場なら、
+        // ここに file: などを渡して ShellExecute させることもできてしまう
+        if (!ReleaseFeed.IsAllowedDownloadUrl(url))
+        {
+            Say("リリースのページの行き先が正しくないため、開けませんでした。");
+            return;
+        }
+
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
