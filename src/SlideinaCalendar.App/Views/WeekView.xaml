@@ -22,20 +22,8 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
 
-        <!-- 日付の行のラベルの右クリックメニュー。Tag 経由で MainViewModel を引く -->
-        <ContextMenu x:Key="MilestoneMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
+        <!-- 日付の行のラベルの右クリックメニューは Themes/Controls.xaml の
+             共有 MilestoneMenu を使う（項目13） -->
 
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
 

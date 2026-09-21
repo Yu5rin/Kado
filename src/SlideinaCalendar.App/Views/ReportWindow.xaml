@@ -9,13 +9,15 @@
         Width="560" Height="420" MinWidth="360" MinHeight="240"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"
         Foreground="{DynamicResource InkBrush}">
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="16,13,16,11"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-            <TextBlock x:Name="Heading" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock x:Name="Heading" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" />
         </Border>
 
         <Border DockPanel.Dock="Bottom" Padding="16,11"

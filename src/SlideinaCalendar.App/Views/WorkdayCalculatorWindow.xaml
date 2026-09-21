@@ -16,6 +16,8 @@
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"
         Foreground="{DynamicResource InkBrush}">
 
@@ -29,10 +31,10 @@
         <Border DockPanel.Dock="Top" Padding="16,13,16,11"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
             <StackPanel>
-                <TextBlock Text="実働日計算" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock Text="実働日計算" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" />
 
                 <!-- どこまでのデータを持っているかが分からないと、範囲外の答えに戸惑う -->
-                <TextBlock FontSize="11" Margin="0,3,0,0"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="0,3,0,0"
                            Foreground="{DynamicResource Ink3Brush}"
                            Visibility="{Binding CoverageText, Converter={StaticResource NullToVisibility}}">
                     <Run Text="取り込み済み " /><Run Text="{Binding CoverageText, Mode=OneWay}" />
@@ -51,13 +53,13 @@
             <Border CornerRadius="5" Padding="12,10" Margin="0,0,0,14"
                     Background="{DynamicResource AccentSoftBrush}"
                     Visibility="{Binding HasData, Converter={StaticResource InverseBoolToVisibility}}">
-                <TextBlock TextWrapping="Wrap" FontSize="11.5"
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextStyle}"
                            Foreground="{DynamicResource Ink2Brush}"
                            Text="実働日データがまだありません。⚙ から Excel を取り込むか、配信元を設定してください。" />
             </Border>
 
             <!-- 期間 → 実働日数 -->
-            <TextBlock Text="期間の実働日数" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock Text="期間の実働日数" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" Margin="0,0,0,8" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <StackPanel Margin="0,0,10,0">
@@ -76,17 +78,17 @@
             <Border CornerRadius="5" Padding="12,10" Margin="0,0,0,18"
                     Background="{DynamicResource SunkenBrush}">
                 <StackPanel>
-                    <TextBlock Text="{Binding RangeResultText}" FontSize="17" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding RangeResultText}" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource AccentBrush}" />
-                    <TextBlock Text="{Binding RangeDetailText}" FontSize="11.5" Margin="0,3,0,0"
+                    <TextBlock Text="{Binding RangeDetailText}" Style="{StaticResource CaptionTextStyle}" Margin="0,3,0,0"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource Ink3Brush}" />
                 </StackPanel>
             </Border>
 
             <!-- 基準日 ＋ N 実働日 → 到達日 -->
-            <TextBlock Text="N 実働日後の日付" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock Text="N 実働日後の日付" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" Margin="0,0,0,8" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <StackPanel Margin="0,0,10,0">
@@ -107,10 +109,10 @@
             <Border CornerRadius="5" Padding="12,10"
                     Background="{DynamicResource SunkenBrush}">
                 <StackPanel>
-                    <TextBlock Text="{Binding ArrivalResultText}" FontSize="17" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding ArrivalResultText}" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource AccentBrush}" />
-                    <TextBlock Text="{Binding ArrivalDetailText}" FontSize="11.5" Margin="0,3,0,0"
+                    <TextBlock Text="{Binding ArrivalDetailText}" Style="{StaticResource CaptionTextStyle}" Margin="0,3,0,0"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource Ink3Brush}"
                                Visibility="{Binding ArrivalDetailText, Converter={StaticResource NullToVisibility}}" />

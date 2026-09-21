@@ -195,10 +195,18 @@
                     <Setter TargetName="DateText" Property="FontWeight" Value="Bold" />
                 </DataTrigger>
 
-                <!-- 選んでいる行。いちばん最後に置いて、今日より強く出す -->
+                <!--
+                    選んでいる行。いちばん最後に置いて、今日より強く出す。
+                    枠はマス系のビュー（月・年）と同じ2pxのアクセント枠に揃える（項目2）。
+                    Padding は枠の厚み(2px)ぶんだけ元の値（12,8）から詰める
+                -->
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter TargetName="Row" Property="Background"
                             Value="{DynamicResource CellSelectedBrush}" />
+                    <Setter TargetName="Row" Property="BorderThickness" Value="2" />
+                    <Setter TargetName="Row" Property="BorderBrush"
+                            Value="{DynamicResource AccentBrush}" />
+                    <Setter TargetName="Row" Property="Padding" Value="10,6,10,6" />
                 </DataTrigger>
 
                 <Trigger SourceName="Row" Property="IsMouseOver" Value="True">

@@ -14,6 +14,8 @@
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"
         Foreground="{DynamicResource InkBrush}">
 
@@ -26,7 +28,7 @@
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="16,13,16,11"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-            <TextBlock Text="{Binding HeaderText}" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding HeaderText}" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" />
         </Border>
 
         <Border DockPanel.Dock="Bottom" Padding="16,11"
@@ -46,7 +48,7 @@
                         Command="{Binding DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                         Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                <TextBlock Text="{Binding ValidationMessage}" FontSize="11" VerticalAlignment="Center"
+                <TextBlock Text="{Binding ValidationMessage}" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0"
                            Foreground="{DynamicResource SundayBrush}"
                            Visibility="{Binding ValidationMessage, Converter={StaticResource NullToVisibility}}" />

@@ -11,35 +11,46 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
         FontFamily="{DynamicResource UiFontFamily}"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Focusable="False" ShowActivated="False">
 
-    <Border CornerRadius="10" Padding="20,16" Margin="12"
-            Background="{DynamicResource PanelBrush}"
-            BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"
-            Cursor="Hand" MouseLeftButtonDown="OnClicked">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="20" ShadowDepth="3" Opacity="0.45" Color="#000000" />
-        </Border.Effect>
+    <!--
+        影と文字を同じ Border に載せると文字が滲む（docs/README.md・項目7と同じ落とし穴）。
+        後ろに影だけを落とす Border、前に中身を載せる Effect 無しの Border を重ねる
+    -->
+    <Grid Margin="12">
+        <Border CornerRadius="10"
+                Background="{DynamicResource PanelBrush}">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="3" Opacity="0.45" Color="#000000" />
+            </Border.Effect>
+        </Border>
 
-        <DockPanel>
-            <!-- 閉じる。読み終わるのを待たずに消せるように -->
-            <Button DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0"
-                    Style="{DynamicResource SmallIconButtonStyle}"
-                    ToolTip="閉じる" Click="OnCloseClicked">
-                <Path Data="{DynamicResource IconClose}" Stretch="Uniform" Width="9" Height="9"
-                      StrokeThickness="1.6" StrokeStartLineCap="Round"
-                      Stroke="{DynamicResource Ink3Brush}" />
-            </Button>
+        <Border CornerRadius="10" Padding="20,16"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"
+                Cursor="Hand" MouseLeftButtonDown="OnClicked">
+            <DockPanel>
+                <!-- 閉じる。読み終わるのを待たずに消せるように -->
+                <Button DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0"
+                        Style="{DynamicResource SmallIconButtonStyle}"
+                        ToolTip="閉じる" Click="OnCloseClicked">
+                    <Path Data="{DynamicResource IconClose}" Stretch="Uniform" Width="12" Height="12"
+                          StrokeThickness="1.5" StrokeStartLineCap="Round"
+                          Stroke="{DynamicResource Ink3Brush}" />
+                </Button>
 
-            <StackPanel>
-                <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{DynamicResource InkBrush}" />
-                <TextBlock x:Name="MessageText" FontSize="13" LineHeight="19" Margin="0,5,0,0"
-                           TextWrapping="Wrap"
-                           Typography.NumeralAlignment="Tabular"
-                           Foreground="{DynamicResource Ink2Brush}" />
-            </StackPanel>
-        </DockPanel>
-    </Border>
+                <StackPanel>
+                    <TextBlock x:Name="TitleText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource InkBrush}" />
+                    <TextBlock x:Name="MessageText" Style="{StaticResource BodyTextStyle}" LineHeight="19" Margin="0,5,0,0"
+                               TextWrapping="Wrap"
+                               Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource Ink2Brush}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>
