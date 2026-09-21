@@ -21,14 +21,16 @@
 
     <!--
         文字（主／副／補助）。
-        以前は3色の明度がほぼ揃っていて（L 75/73/69）、見出し・本文・補助ラベルの
-        階層が付かなかった。Dark.xaml の段差（Ink→Ink2 で約1.8倍、Ink2→Ink3 で
-        約2.0倍のコントラスト比）に寄せつつ、Ink3 は背景（Panel）に対して
-        3:1 を下回らない値に留めている（詳細は報告のコントラスト計算を参照）
+        3:1 は 18.66px 太字以上の大きい文字の基準で、Ink3 が付いているのは
+        CaptionTextStyle（11px）・MicroTextStyle（10px）なので 4.5:1 が要る。
+        Ink3 を Panel 上 4.20:1（#8A939E→#A0A9B4）まで上げた。Night は他テーマより
+        落とす設計なので、4.5 は超えずここで止める。
+        Ink2 は #A2ABB3 のままだと Ink3 との差が 1.02 まで縮んで段が消えるため、
+        Ink3 を上げた分だけ Ink2 も #AEB6BE（Panel 上 4.87:1）へ引き上げて段を残す
     -->
     <Color x:Key="InkColor">#B8BFC6</Color>
-    <Color x:Key="Ink2Color">#A2ABB3</Color>
-    <Color x:Key="Ink3Color">#8A939E</Color>
+    <Color x:Key="Ink2Color">#AEB6BE</Color>
+    <Color x:Key="Ink3Color">#A0A9B4</Color>
 
     <Color x:Key="AccentColor">#6DC1E7</Color>
     <!--
@@ -54,26 +56,32 @@
     <Color x:Key="SundayColor">#E07B6E</Color>
     <Color x:Key="SaturdayColor">#7FB3D5</Color>
 
-    <Color x:Key="WorkingDayColor">#3D4247</Color>
+    <!-- 稼働日は塗らない（Panel と同値） -->
+    <Color x:Key="WorkingDayColor">#3E4348</Color>
     <!--
-        休業日。以前は SunkenColor と同じ値で、前後の月のマスと見分けが付かなかった。
-        SunkenColor よりはっきり暗くし、休業日のほうが沈んで見えるようにする
+        休業日。以前は SunkenColor とほぼ同じ値で、前後の月のマスと見分けが付かなかった。
+        SunkenColor よりはっきり暗くし、Panel 比 1.67:1・Sunken 比 1.22:1 まで離す
     -->
-    <Color x:Key="OffDayColor">#222426</Color>
+    <Color x:Key="OffDayColor">#1C1E20</Color>
 
     <!--
         マスを押したときと、マウスを載せたときの面。
-        以前は CellHover が Panel とほぼ同色（明度差2.1）で乗せても分からず、
-        CellSelected は Sunken/OffDay に近く選択中かどうか読めなかった。
-        Panel から明度をはっきり離し、選択はアクセントに寄せてホバーより一段明るくする
+        以前は CellHover が Panel とほぼ同色（明度差2.1）で乗せても分からなかった。
+        Panel から明度をはっきり離す。
+
+        選択は「内側に引く2pxのアクセント枠」で示すので、面はもう強く塗らない。
+        以前の #437CA3 は面としては強すぎ、その上の日曜色 #E07B6E が 1.55:1 まで
+        沈んで読めなくなっていた。Ink 上 5.64:1・日曜色上 3.61:1 を保てる
+        濃い面（枠の内側に敷く程度の濃さ）まで落とす
     -->
     <Color x:Key="CellHoverColor">#4B6171</Color>
-    <Color x:Key="CellSelectedColor">#437CA3</Color>
+    <Color x:Key="CellSelectedColor">#274257</Color>
 
     <Color x:Key="CategoryGreenColor">#8FDAD2</Color>
     <Color x:Key="CategoryAmberColor">#D9A24A</Color>
 
-    <Color x:Key="DoneColor">#7C838B</Color>
+    <!-- 完了したタスクの文字色 -->
+    <Color x:Key="DoneColor">#8E969E</Color>
 
     <Color x:Key="MilestoneSpecFaceColor">#4A4530</Color>
     <Color x:Key="MilestoneSpecTextColor">#E5CE8E</Color>

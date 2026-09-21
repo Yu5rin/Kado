@@ -16,10 +16,16 @@
     <Color x:Key="LineColor">#E2E4EA</Color>
     <Color x:Key="LineStrongColor">#C8CCD6</Color>
 
-    <!-- 文字（主／副／補助） -->
+    <!--
+        文字（主／副／補助）。
+        Ink3 は白パネル上で 4.57:1、一段沈めた面（Sunken）上で 4.08:1。
+        付いているのは CaptionTextStyle（11px）・MicroTextStyle（10px）が中心で、
+        いずれも小さい文字なので WCAG の 4.5:1 を満たす値まで上げてある
+        （旧 #8F96A4 は白上 2.97:1・選択マス上 2.12:1 だった）
+    -->
     <Color x:Key="InkColor">#1C2029</Color>
     <Color x:Key="Ink2Color">#585F6E</Color>
-    <Color x:Key="Ink3Color">#8F96A4</Color>
+    <Color x:Key="Ink3Color">#6E7686</Color>
 
     <!-- アクセント（藍） -->
     <Color x:Key="AccentColor">#27528F</Color>
@@ -45,28 +51,36 @@
     <Color x:Key="SaturdayColor">#3B6EA8</Color>
 
     <!--
-        実働日データを持つ日の面。稼働する日と休業する日で分ける。
-        どちらも色を足すのではなく面の明るさで示す（要件書 4.3）。
-        データを持たない日は PanelColor のまま。ここを見れば「登録済みかどうか」も分かる
+        実働日データを持つ日の面。
+        稼働日は塗らない（WorkingDayColor は PanelColor と同値）。以前の
+        #FBFCFE は白パネルと 1.03:1 しか無く、実機ではただの白だった。休業日
+        （OffDayColor）だけを塗ることで「灰色の面＝休業日」の一対一にする。
+        Sunken（前後の月）とも見分くよう Panel 比 1.31:1・Sunken 比 1.17:1 まで離す
     -->
-    <Color x:Key="WorkingDayColor">#FBFCFE</Color>
-    <Color x:Key="OffDayColor">#E3E7EE</Color>
+    <Color x:Key="WorkingDayColor">#FFFFFF</Color>
+    <Color x:Key="OffDayColor">#DDE1E8</Color>
 
     <!--
         マスを押したときと、マウスを載せたときの面。
         前後の月（SunkenColor）と同じにすると、載せているのか月の外なのか読めない。
-        選択は休業日（OffDayColor）と近いと紛れるので、はっきり青に寄せる。
-        4つ（前後の月・休業日・ホバー・選択）が互いに見分けられることが要る
+
+        選択は「マスの内側に引く2pxのアクセント枠」で示すので、ここは枠の内側に
+        敷く薄い面（枠が無くても紛れない程度の色）でよい。ホバーと同じ薄い水色を使う
     -->
     <Color x:Key="CellHoverColor">#E6EFFA</Color>
-    <Color x:Key="CellSelectedColor">#C7DCF7</Color>
+    <Color x:Key="CellSelectedColor">#E6EFFA</Color>
 
-    <!-- 予定のカテゴリ色。モックの ok / amber の変数に対応する -->
+    <!--
+        予定のカテゴリ色。モックの ok / amber の変数に対応する。
+        琥珀は白上 3.55:1 しか無く、同期の丸（8px）や文字に使うには足りないため
+        4.74:1 まで濃くした
+    -->
     <Color x:Key="CategoryGreenColor">#2F7D5B</Color>
-    <Color x:Key="CategoryAmberColor">#C2762B</Color>
+    <Color x:Key="CategoryAmberColor">#A8621C</Color>
 
-    <!-- 完了したタスクの文字色 -->
-    <Color x:Key="DoneColor">#A3A9B5</Color>
+    <!-- 完了したタスクの文字色。取り消し線があるので控えめでよいが、白上 2.36:1 は
+         いつ片付いたかを読み取るには薄すぎたので 3.09:1 まで上げる -->
+    <Color x:Key="DoneColor">#8C93A0</Color>
 
     <!-- マイルストーン（要件書 4.2）。面と文字は対にして使う -->
     <Color x:Key="MilestoneSpecFaceColor">#FAEDC4</Color>

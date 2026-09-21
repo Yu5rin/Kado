@@ -10,11 +10,15 @@
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource BackgroundBrush}"
         Foreground="{DynamicResource InkBrush}">
 
     <StackPanel Margin="18">
-        <TextBlock x:Name="VersionText" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"
+        <!-- この窓には別立ての見出し帯が無いので、本文中でいちばんの見出し役を担う。
+             SubheadingTextStyle（他ダイアログの見出しと同格）を当てる -->
+        <TextBlock x:Name="VersionText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" Margin="0,0,0,10"
                    TextWrapping="Wrap" />
 
         <Border CornerRadius="5" Padding="10" MaxHeight="220"

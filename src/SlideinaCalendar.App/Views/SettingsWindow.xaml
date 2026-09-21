@@ -18,6 +18,8 @@
         Icon="/Assets/app.png"
         WindowStartupLocation="CenterOwner"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource BackgroundBrush}"
         Foreground="{DynamicResource InkBrush}">
 
@@ -78,9 +80,10 @@
             <Setter Property="Margin" Value="0,2,0,10" />
         </Style>
 
-        <!-- 項目の説明。何が変わるのかを一行で添える -->
+        <!-- 項目の説明。何が変わるのかを一行で添える。10.5px は Ink3 の 4.5:1 基準を
+             割るため 11px（CaptionTextStyle 相当）に上げる -->
         <Style x:Key="FieldNoteStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontSize" Value="11" />
             <Setter Property="Margin" Value="0,3,0,0" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
@@ -392,7 +395,7 @@
                         上のほうに並べず控えめに出す
                     -->
                     <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,8,0,0">
-                        <TextBlock Text="詳細" FontSize="10.5" Foreground="{DynamicResource Ink3Brush}"
+                        <TextBlock Text="詳細" Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink3Brush}"
                                    Margin="0,0,0,6" />
                         <Button Content="自分のクライアント設定を使う…（JSON）" HorizontalAlignment="Left"
                                 Style="{StaticResource GhostButtonStyle}" FontSize="11"
@@ -470,7 +473,7 @@
                     <TextBlock Text="バージョン情報" Style="{StaticResource PageHeadStyle}" />
 
                     <StackPanel Style="{StaticResource FieldGroupStyle}">
-                        <TextBlock Text="{Binding AppName}" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AppName}" Style="{StaticResource HeadingTextStyle}" />
                         <TextBlock FontSize="12.5" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}">
                             <Run Text="バージョン " /><Run Text="{Binding AppVersion, Mode=OneWay}" />
                         </TextBlock>

@@ -40,20 +40,8 @@
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
         </ContextMenu>
 
-        <!-- 日付の行のラベル（マイルストーン）の右クリックメニュー。右ペイン・月ビューと同じ -->
-        <ContextMenu x:Key="MilestoneMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
+        <!-- 日付の行のラベル（マイルストーン）の右クリックメニューは
+             Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
     </UserControl.Resources>
 
     <DockPanel>
@@ -135,7 +123,7 @@
                     </Button>
                 </StackPanel>
 
-                <TextBlock Style="{StaticResource EmphasisTextStyle}" VerticalAlignment="Center" FontWeight="SemiBold"
+                <TextBlock Style="{StaticResource BodyTextStyle}" FontSize="14" VerticalAlignment="Center" FontWeight="SemiBold"
                            Typography.NumeralAlignment="Tabular"
                            Foreground="{DynamicResource InkBrush}">
                     <Run Text="{Binding SlimTitleYear, Mode=OneWay}" FontSize="11" FontWeight="Medium"
@@ -232,9 +220,12 @@
                         <ItemsControl ItemsSource="{Binding Events}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- 右ペイン・月ビューと同じく、右クリックで編集・削除。ホバーでゴミ箱も出す -->
+                                    <!--
+                                        右ペイン・月ビューと同じく、右クリックで編集・削除。ホバーでゴミ箱も出す。
+                                        操作説明のツールチップは外した（項目12）。切れた題の全文は
+                                        下のタイトルの ToolTip="{Binding Title}" で読める
+                                    -->
                                     <Border x:Name="Row" Background="Transparent" Padding="0,4" Cursor="Hand"
-                                            ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
                                             Tag="{Binding DataContext,
                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                             ContextMenu="{StaticResource EventRowMenu}"

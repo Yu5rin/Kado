@@ -218,26 +218,8 @@
         </DataTemplate>
 
 
-        <!--
-            日付の行のラベルの右クリックメニュー。
-            ContextMenu は画面の木から外れて出るので、Tag に MainViewModel を入れて
-            PlacementTarget 経由で引く。
-        -->
-        <ContextMenu x:Key="MilestoneMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <!-- マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2） -->
+        <!-- マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2）。
+             ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
         <DataTemplate x:Key="MilestoneTagTemplate">
             <Border CornerRadius="3" Padding="5,0" HorizontalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
@@ -299,10 +281,20 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DayNumber" Grid.Column="0"
-                                           Text="{Binding DayNumber}" FontWeight="Medium" LineHeight="16"
-                                           Typography.NumeralAlignment="Tabular"
-                                           Foreground="{DynamicResource InkBrush}" />
+                                <!--
+                                    今日は日付の数字を丸く塗って示す（項目2）。週ビューの
+                                    NumberFace と同じ構造にする。選択は Cell 側の枠で示すので、
+                                    このマル自体は既定では透明
+                                -->
+                                <Border x:Name="DayNumberFace" Grid.Column="0" CornerRadius="9"
+                                        Width="18" Height="18" Background="Transparent"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DayNumber"
+                                               Text="{Binding DayNumber}" FontWeight="Medium"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Typography.NumeralAlignment="Tabular"
+                                               Foreground="{DynamicResource InkBrush}" />
+                                </Border>
 
                                 <ItemsControl Grid.Column="1" Margin="4,0,0,0"
                                               ItemsSource="{Binding Milestones}"
@@ -409,11 +401,13 @@
                                     Value="{DynamicResource OffDayBrush}" />
                         </DataTrigger>
 
-                        <!-- 前後の月は面を一段沈め、日付だけを薄くする。
-                             セル全体を薄くすると予定まで読めなくなる -->
+                        <!--
+                            前後の月は面を沈めず、日付の Opacity 0.4 だけで示す（項目3）。
+                            休業日の面（OffDayBrush）と前後の月が同じ調子の灰色だと見分けが
+                            付かなかったため、面を分けるのをやめて「灰色の面＝休業日」の
+                            一対一にする。セル全体を薄くすると予定まで読めなくなる
+                        -->
                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                            <Setter TargetName="Cell" Property="Background"
-                                    Value="{DynamicResource SunkenBrush}" />
                             <Setter TargetName="DayNumber" Property="Opacity" Value="0.4" />
                         </DataTrigger>
 
@@ -441,39 +435,50 @@
                                     Value="{DynamicResource CellHoverBrush}" />
                         </Trigger>
 
-                        <!-- 今日は枠で囲む。内側に引くのでマスの大きさは変わらない -->
+                        <!--
+                            今日は日付の数字を丸く塗って示す（項目2）。Cell 自体には
+                            もう触れない。詰めた形の数字（CompactNumber）は丸めるだけの
+                            余地が無いので、従来どおり太字とアクセント色で示す
+                        -->
                         <DataTrigger Binding="{Binding IsToday}" Value="True">
-                            <Setter TargetName="Cell" Property="BorderThickness" Value="2" />
-                            <Setter TargetName="Cell" Property="BorderBrush"
+                            <Setter TargetName="DayNumberFace" Property="Background"
                                     Value="{DynamicResource AccentBrush}" />
-                            <Setter TargetName="Cell" Property="Padding" Value="3,1,3,2" />
                             <Setter TargetName="DayNumber" Property="FontWeight" Value="Bold" />
                             <Setter TargetName="DayNumber" Property="Foreground"
-                                    Value="{DynamicResource AccentBrush}" />
+                                    Value="{DynamicResource OnAccentBrush}" />
                             <Setter TargetName="CompactNumber" Property="FontWeight" Value="Bold" />
                             <Setter TargetName="CompactNumber" Property="Foreground"
                                     Value="{DynamicResource AccentBrush}" />
                         </DataTrigger>
 
-                        <!-- 休業日の面と近いと紛れるので、はっきり青に寄せた色を使う -->
+                        <!--
+                            選択はマスの内側に2pxのアクセント枠（項目2）。CellSelectedColor
+                            は枠の内側に敷く薄い面として、休業日（OffDayBrush）と近いと
+                            紛れるので水色に寄せてある
+                        -->
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                             <Setter TargetName="Cell" Property="Background"
                                     Value="{DynamicResource CellSelectedBrush}" />
+                            <Setter TargetName="Cell" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="Cell" Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Cell" Property="Padding" Value="3,1,3,2" />
                         </DataTrigger>
 
                         <!--
-                            詰めた形では、今日のマスだけ内側の余白が変わると中身が
-                            ずれて、日付の高さが揃わなくなる。枠のぶんだけ余白を
-                            減らして、ほかの日と同じ位置に置く
+                            詰めた形では、選択したマスだけ内側の余白や枠が変わると中身が
+                            ずれて、日付の高さが揃わなくなる。選択の枠は通常表示だけに使い、
+                            詰めた形では従来どおり面の色だけで示す
                         -->
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Value="True"
                                            Binding="{Binding DataContext.IsCompact,
                                                      RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Condition Binding="{Binding IsToday}" Value="True" />
+                                <Condition Binding="{Binding IsSelected}" Value="True" />
                             </MultiDataTrigger.Conditions>
-                            <Setter TargetName="Cell" Property="Padding" Value="0" />
+                            <Setter TargetName="Cell" Property="Padding" Value="2" />
+                            <Setter TargetName="Cell" Property="BorderThickness" Value="0" />
                         </MultiDataTrigger>
 
                         <!--

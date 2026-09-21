@@ -17,7 +17,9 @@
         xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
         Title="SlideinaCalendar" Height="760" Width="1180" MinWidth="280" MinHeight="520"
         Icon="/Assets/app.png"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource BackgroundBrush}"
         Foreground="{DynamicResource InkBrush}"
         PreviewKeyDown="OnPreviewKeyDown">
@@ -31,6 +33,7 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:SyncStateBrushConverter x:Key="SyncStateBrush" />
+        <conv:SyncStateIsAlertConverter x:Key="SyncStateIsAlert" />
 
         <!--
             カレンダー／タスクリストの行を右クリックしたときのメニュー。
@@ -102,34 +105,17 @@
                           ContextMenu="{StaticResource SourceRowMenu}" />
         </DataTemplate>
 
-        <!-- 「このアプリ」「Google」の小見出し（.subsec） -->
+        <!-- 「このアプリ」「Google」の小見出し（.subsec）。10px は Ink3 の 4.5:1 基準を
+             割るため 11px（CaptionTextStyle 相当）に上げる -->
         <Style x:Key="SourceGroupHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontSize" Value="11" />
             <Setter Property="Margin" Value="0,0,0,3" />
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
 
-        <!--
-            日付の行のラベルの右クリックメニュー。
-            ContextMenu は画面の木から外れて出るので、Tag に MainViewModel を入れて
-            PlacementTarget 経由で引く。
-        -->
-        <ContextMenu x:Key="MilestoneMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す -->
+        <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す。
+             ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
@@ -284,8 +270,8 @@
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
                         Command="{Binding TodayCommand}" ToolTip="今日へ戻る（T）"
                         Visibility="{Binding UsesCompactTodayButton, Converter={StaticResource BoolToVisibility}}">
-                    <!-- カレンダーの形。専用のアイコンリソースは無いので、ここに直に描く -->
-                    <Path Data="M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" Stretch="Uniform" Width="15" Height="15"
+                    <!-- カレンダーの形。Icons.xaml の IconToday に集約した（項目6） -->
+                    <Path Data="{StaticResource IconToday}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
@@ -502,8 +488,19 @@
                         </Style>
                     </Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
-                                 Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
+                        <!--
+                            同期の丸（項目10）。6px は Light の琥珀（警告）が 3.55:1 しか
+                            無く小さすぎて読み取りにくかったため 8px に上げ、色も濃くした
+                            （Themes/Light.xaml の CategoryAmberColor）。警告・失敗のときは
+                            丸の中に「！」も出し、色だけに頼らせない
+                        -->
+                        <Grid Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center">
+                            <Ellipse Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
+                            <Path Data="{StaticResource IconWarning}" Stretch="Uniform"
+                                  Width="4" Height="4" Stroke="White" StrokeThickness="1.8"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Visibility="{Binding Sync.State, Converter={StaticResource SyncStateIsAlert}}" />
+                        </Grid>
                         <!--
                             同期失敗の文言は長くなりうる。切らないと左（年月・送り・
                             ビュー切替）を押し出す。全文はツールチップに回す
@@ -540,7 +537,18 @@
                            Placement="Bottom" AllowsTransparency="True" StaysOpen="True"
                            HorizontalOffset="0" VerticalOffset="3">
                         <!-- 最小幅は検索欄そのものに連動させる。固定値だと帯（160〜220px）より広くなり、本体からはみ出す -->
-                        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxWidth="440" MaxHeight="420" CornerRadius="6"
+                        <!--
+                            影は文字を載せる Border とは別に掛ける（項目7・docs/README.md）。
+                            後ろに影だけの Border、前に中身を載せる Effect 無しの Border を重ねる
+                        -->
+                        <Grid MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxWidth="440" Margin="0,6,0,6">
+                            <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
+                                                      Direction="270" Color="#000000" />
+                                </Border.Effect>
+                            </Border>
+                        <Border MaxHeight="420" CornerRadius="8"
                                 Background="{DynamicResource PanelBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                             <DockPanel>
@@ -587,6 +595,7 @@
                                 </ScrollViewer>
                             </DockPanel>
                         </Border>
+                        </Grid>
                     </Popup>
                 </Grid>
                 </DockPanel>
@@ -681,7 +690,7 @@
                                                           RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="次の月">
                                             <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
-                                                  Width="12" Height="12" StrokeThickness="1.7"
+                                                  Width="12" Height="12" StrokeThickness="1.5"
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
@@ -690,7 +699,7 @@
                                                           RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="前の月">
                                             <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
-                                                  Width="12" Height="12" StrokeThickness="1.7"
+                                                  Width="12" Height="12" StrokeThickness="1.5"
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
@@ -739,10 +748,10 @@
                                                 Command="{Binding AddCalendarCommand}"
                                                 ToolTip="カレンダーを追加">
                                             <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
-                                                  Width="11" Height="11"
+                                                  Width="12" Height="12"
                                                   Stroke="{Binding Foreground,
                                                            RelativeSource={RelativeSource AncestorType=Button}}"
-                                                  StrokeThickness="2"
+                                                  StrokeThickness="1.5"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
                                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="カレンダー" VerticalAlignment="Center"
@@ -780,10 +789,10 @@
                                                 Command="{Binding AddTaskListCommand}"
                                                 ToolTip="タスクリストを追加">
                                             <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
-                                                  Width="11" Height="11"
+                                                  Width="12" Height="12"
                                                   Stroke="{Binding Foreground,
                                                            RelativeSource={RelativeSource AncestorType=Button}}"
-                                                  StrokeThickness="2"
+                                                  StrokeThickness="1.5"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
                                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクリスト" VerticalAlignment="Center"
@@ -959,8 +968,10 @@
                             <ItemsControl ItemsSource="{Binding Events}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
+                                        <!-- 操作説明のツールチップは外した（項目12）。切れた題の全文は下の
+                                             タイトルが TextWrapping="Wrap" で全部見えるので、データの
+                                             ツールチップも不要 -->
                                         <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
-                                                ToolTip="ダブルクリックで編集"
                                                 MouseLeftButtonDown="OnEventRowClicked">
                                             <DockPanel>
                                                 <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Width="38" Margin="0,2,9,0"
@@ -977,13 +988,13 @@
                                                         Command="{Binding DataContext.DeleteEventCommand,
                                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding}">
-                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="13" Height="13"
-                                                          StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
+                                                          StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                                 </Button>
 
                                                 <StackPanel>
-                                                    <TextBlock Style="{StaticResource EmphasisTextStyle}" Text="{Binding Title}" LineHeight="18"
+                                                    <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18"
                                                                TextWrapping="Wrap"
                                                                Foreground="{DynamicResource InkBrush}" />
                                                     <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" Margin="0,1,0,0"
@@ -1039,13 +1050,13 @@
                                                         Command="{Binding DataContext.DeleteTaskCommand,
                                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding}">
-                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="13" Height="13"
-                                                          StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
+                                                          StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                                 </Button>
 
                                                 <StackPanel>
-                                                    <TextBlock Style="{StaticResource EmphasisTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" LineHeight="18" TextWrapping="Wrap"
+                                                    <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource InkBrush}" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
                                                                 Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}">
@@ -1130,8 +1141,8 @@
                                     Command="{Binding DataContext.AddEventCommand,
                                               RelativeSource={RelativeSource AncestorType=Window}}">
                                 <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="13" Height="13"
-                                          Margin="0,0,6,0" StrokeThickness="1.9" StrokeStartLineCap="Round"
+                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
+                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     <TextBlock Text="予定" VerticalAlignment="Center" />
                                 </StackPanel>
@@ -1140,8 +1151,8 @@
                                     Command="{Binding DataContext.AddTaskCommand,
                                               RelativeSource={RelativeSource AncestorType=Window}}">
                                 <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="13" Height="13"
-                                          Margin="0,0,6,0" StrokeThickness="1.9" StrokeStartLineCap="Round"
+                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
+                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     <TextBlock Text="タスク" VerticalAlignment="Center" />
                                 </StackPanel>

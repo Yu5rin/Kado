@@ -12,9 +12,13 @@
     <Color x:Key="LineColor">#2C313B</Color>
     <Color x:Key="LineStrongColor">#3A4150</Color>
 
+    <!--
+        Ink3 は Panel 上で 5.02:1。以前の #727A89 は 3.60:1 で、付いている
+        CaptionTextStyle（11px）・MicroTextStyle（10px）には 4.5:1 が要る
+    -->
     <Color x:Key="InkColor">#E6E9EF</Color>
     <Color x:Key="Ink2Color">#A8B0BE</Color>
-    <Color x:Key="Ink3Color">#727A89</Color>
+    <Color x:Key="Ink3Color">#8A93A3</Color>
 
     <Color x:Key="AccentColor">#7AA5DF</Color>
     <Color x:Key="AccentSoftColor">#233247</Color>
@@ -32,17 +36,24 @@
     <Color x:Key="SundayColor">#E0827C</Color>
     <Color x:Key="SaturdayColor">#7AA5DF</Color>
 
-    <Color x:Key="WorkingDayColor">#242A34</Color>
-    <Color x:Key="OffDayColor">#12151A</Color>
+    <!--
+        稼働日は塗らない（Panel と同値）。休業日だけを塗り、Panel 比 1.24:1・
+        Sunken 比 1.42:1 まで離す（以前の #12151A は Sunken 比 1.08:1 で紛れていた）
+    -->
+    <Color x:Key="WorkingDayColor">#20242C</Color>
+    <Color x:Key="OffDayColor">#303439</Color>
 
-    <!-- マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること -->
+    <!--
+        マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること。
+        選択は「内側に引く2pxのアクセント枠」で示すので、面はホバーと同じ薄い青でよい
+    -->
     <Color x:Key="CellHoverColor">#2B3444</Color>
-    <Color x:Key="CellSelectedColor">#31486B</Color>
+    <Color x:Key="CellSelectedColor">#2B3444</Color>
 
     <Color x:Key="CategoryGreenColor">#5FB08A</Color>
     <Color x:Key="CategoryAmberColor">#D59A55</Color>
 
-    <Color x:Key="DoneColor">#5D6472</Color>
+    <Color x:Key="DoneColor">#6E7686</Color>
 
     <Color x:Key="MilestoneSpecFaceColor">#4A3A14</Color>
     <Color x:Key="MilestoneSpecTextColor">#E8CD7E</Color>

@@ -7,25 +7,29 @@
 
     <FontFamily x:Key="UiFontFamily">Yu Gothic UI, Segoe UI, Meiryo UI</FontFamily>
 
-    <!-- 等幅数字。日付・時刻・日数はすべてこれを当てる -->
+    <!--
+        等幅数字。日付・時刻・日数はすべてこれを当てる。
+        TextFormattingMode は既定の Ideal のまま残さない。10〜12.5px の小さい
+        UI 文字は Display のほうが締まって滲みにくい（項目9）。Window の根で
+        TextOptions.TextFormattingMode="Display" を当てるので、ここでの
+        Ideal 指定は打ち消し合うだけになり外す
+    -->
     <Style x:Key="TabularTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}" />
-        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
         <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
     </Style>
 
     <!--
         文字サイズの段階。
-        Views では 8〜19px の16種類が直書きされている（FontSize="..." の直値）。
-        ここでは実際に使われている値を汲んで6段階に絞り、それぞれ何に使うものかを
-        コメントで示す。Views 側の置き換えは別担当の仕事なので、ここでは定義だけ行う。
+        Views では 9〜19px の14種類が直書きされていた（FontSize="..." の直値）。
+        5段階に絞り、それぞれ何に使うものかをコメントで示す。
 
         直書きサイズとの対応（近い段階に丸める。カッコ内は実際の出現箇所の例）:
-          8, 9, 9.5, 10        → MicroTextStyle   （祝日名・終日ラベル・実働日の通し番号など最小の添え書き）
+          9, 9.5, 10           → MicroTextStyle   （祝日名・終日ラベル・実働日の通し番号など最小の添え書き）
           10.5, 11, 11.5       → CaptionTextStyle （曜日・補助ラベル・ツールチップ本文相当）
-          12, 12.5             → BodyTextStyle    （通常の本文・入力欄・一覧の行）
-          13, 14               → EmphasisTextStyle（強調した本文・パネルの小見出し）
-          15, 16, 17           → SubheadingTextStyle（日付ヘッダの数字などの準見出し）
+          12, 12.5, 13         → BodyTextStyle    （通常の本文・入力欄・一覧の行。強調は SemiBold で足りるため
+                                                     旧 EmphasisTextStyle（13, 14）はここへ統合した）
+          14, 15, 16, 17       → SubheadingTextStyle（ダイアログ見出し・ビュー見出し・日付ヘッダの数字などの準見出し）
           18, 19               → HeadingTextStyle （月の見出しなど画面の主見出し）
     -->
 
@@ -48,14 +52,13 @@
         <Setter Property="FontSize" Value="10" />
     </Style>
 
-    <!-- 強調した本文。パネルの小見出しや、一覧の中で目立たせたい行に使う -->
-    <Style x:Key="EmphasisTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
-        <Setter Property="FontSize" Value="14" />
-    </Style>
-
-    <!-- 準見出し。週・日ビューの日付の数字など、本文より大きいが画面の主見出しほどではないもの -->
+    <!--
+        準見出し。週・日ビューの日付の数字、ダイアログの見出し、一覧・年・日ビューの
+        見出しなど、本文より大きいが画面の主見出しほどではないもの。
+        以前は16pxだったが15pxへ下げ、ダイアログ見出し（旧15px直値）もここに乗るようにした
+    -->
     <Style x:Key="SubheadingTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
-        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontSize" Value="15" />
     </Style>
 
     <!-- 見出し。ツールバーの月の見出しなど、画面でいちばん大きく扱う文字 -->

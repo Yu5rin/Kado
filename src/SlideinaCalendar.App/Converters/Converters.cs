@@ -323,6 +323,19 @@ public sealed class SyncStateBrushConverter : IValueConverter
 }
 
 /// <summary>
+/// 同期の丸が「警告・失敗」を示しているかどうか。
+/// 色だけに頼らせないよう、丸の中に「！」を出すかどうかをここで決める（項目10）。
+/// </summary>
+public sealed class SyncStateIsAlertConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value as SyncState? is SyncState.Warned or SyncState.Failed ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
 /// すべて true のときだけ出す。
 /// <para>
 /// 条件が2つ以上ある出し分けに使う。Style の中の条件で書くと、名前で指した要素が

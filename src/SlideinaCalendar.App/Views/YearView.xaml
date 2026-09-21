@@ -90,7 +90,7 @@
                     MouseLeftButtonDown="OnDayClicked">
                 <StackPanel VerticalAlignment="Center">
                     <!-- 帯の最小幅（160〜220px）では常にマスが最小になるため、下限でも読める大きさにする -->
-                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="9.5"
+                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="10"
                                HorizontalAlignment="Center" LineHeight="11"
                                Foreground="{DynamicResource Ink3Brush}" />
 
@@ -144,16 +144,26 @@
                             Value="{DynamicResource SundayBrush}" />
                 </DataTrigger>
 
+                <!--
+                    選択は枠で示す（項目2）。以前は今日が枠・選択が面で、アプリの他の
+                    ビューと今日／選択が入れ替わっていた。内側に引くのでマスの大きさは
+                    変わらない
+                -->
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter TargetName="Cell" Property="Background"
-                            Value="{DynamicResource CellSelectedBrush}" />
-                </DataTrigger>
-
-                <!-- 今日は枠で囲む。内側に引くのでマスの大きさは変わらない -->
-                <DataTrigger Binding="{Binding IsToday}" Value="True">
                     <Setter TargetName="Cell" Property="BorderThickness" Value="1.5" />
                     <Setter TargetName="Cell" Property="BorderBrush"
                             Value="{DynamicResource AccentBrush}" />
+                </DataTrigger>
+
+                <!--
+                    今日は面をやわらかく塗って示す（項目2）。マスが幅15pxまで縮むので
+                    月ビューのような日付の数字だけを丸く塗る形は取れず、マス全体を
+                    薄いアクセントで塗る。休業日と重なっても Number/Mark の Opacity
+                    低下で休みだと分かるようにしてある
+                -->
+                <DataTrigger Binding="{Binding IsToday}" Value="True">
+                    <Setter TargetName="Cell" Property="Background"
+                            Value="{DynamicResource AccentSoftBrush}" />
                     <Setter TargetName="Number" Property="FontWeight" Value="Bold" />
                     <Setter TargetName="Number" Property="Foreground"
                             Value="{DynamicResource AccentBrush}" />
@@ -294,9 +304,13 @@
                                         <Setter TargetName="Number" Property="Foreground"
                                                 Value="{DynamicResource SundayBrush}" />
                                     </DataTrigger>
+                                    <!-- 選択はマスの内側に2pxのアクセント枠（項目2） -->
                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                         <Setter TargetName="Cell" Property="Background"
                                                 Value="{DynamicResource CellSelectedBrush}" />
+                                        <Setter TargetName="Cell" Property="BorderThickness" Value="2" />
+                                        <Setter TargetName="Cell" Property="BorderBrush"
+                                                Value="{DynamicResource AccentBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsToday}" Value="True">
                                         <Setter TargetName="Cell" Property="Background"
@@ -391,7 +405,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Label}" FontSize="9"
+                                <TextBlock Text="{Binding Label}" FontSize="10"
                                            Margin="0,0,1,0"
                                            Width="{Binding DataContext.DayWidth,
                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
