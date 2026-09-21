@@ -33,7 +33,8 @@ public sealed class OAuthException(string message, string? error = null) : Excep
 /// </para>
 /// </summary>
 public sealed class LoopbackOAuthFlow(
-    GoogleOAuthOptions options, HttpClient http, Action<string> openBrowser, TimeProvider? time = null)
+    GoogleOAuthOptions options, HttpClient http, Action<string> openBrowser,
+    TimeProvider? time = null, TimeSpan? authorizationTimeout = null)
 {
     private readonly GoogleOAuthOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly HttpClient _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -41,6 +42,12 @@ public sealed class LoopbackOAuthFlow(
 
     /// <summary>失効時刻の起点。トークンを配る側と同じ時計でないと食い違う。</summary>
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+
+    /// <summary>
+    /// ブラウザでの許可待ちの上限。
+    /// <para>タブを閉じたまま放置されると <c>GetContextAsync</c> が無期限に待つので、ここで諦める。</para>
+    /// </summary>
+    private readonly TimeSpan _authorizationTimeout = authorizationTimeout ?? TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// 認可を受けてトークンを取る。
@@ -56,7 +63,11 @@ public sealed class LoopbackOAuthFlow(
 
         _openBrowser(BuildAuthorizationUrl(redirectUri, pkce.Challenge, state));
 
-        var code = await WaitForCodeAsync(listener, state, cancellationToken).ConfigureAwait(false);
+        // 呼び出し側の取り消しと、こちらの上限とをまとめて1本の待ちにする
+        using var timeoutSource = new CancellationTokenSource(_authorizationTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+
+        var code = await WaitForCodeAsync(listener, state, linked.Token, cancellationToken).ConfigureAwait(false);
 
         return await ExchangeAsync(
             new Dictionary<string, string>
@@ -139,24 +150,32 @@ public sealed class LoopbackOAuthFlow(
         return port;
     }
 
-    /// <summary>ブラウザが戻ってくるのを待つ。</summary>
+    /// <summary>
+    /// ブラウザが戻ってくるのを待つ。
+    /// <para>
+    /// <paramref name="waitToken"/> は「呼び出し側の取り消し」と「こちらの上限（5分）」を
+    /// まとめたもの。<c>HttpListener</c> は <see cref="CancellationToken"/> を直接受けないので、
+    /// <c>Register</c> で <c>Stop()</c> を呼んで待ちを解く。どちらが理由で解けたのかは
+    /// <paramref name="callerToken"/> だけを見て判断する（こちらは上限では動かない）。
+    /// </para>
+    /// </summary>
     private static async Task<string> WaitForCodeAsync(
-        HttpListener listener, string expectedState, CancellationToken cancellationToken)
+        HttpListener listener, string expectedState, CancellationToken waitToken, CancellationToken callerToken)
     {
-        using var registration = cancellationToken.Register(listener.Stop);
+        using var registration = waitToken.Register(listener.Stop);
 
         HttpListenerContext context;
         try
         {
             context = await listener.GetContextAsync().ConfigureAwait(false);
         }
-        catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (waitToken.IsCancellationRequested &&
+                                    ex is HttpListenerException or ObjectDisposedException)
         {
-            throw new OperationCanceledException(cancellationToken);
-        }
-        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw new OperationCanceledException(cancellationToken);
+            // 呼び出し側が止めたのか、5分待って諦めたのかで、出す文言を変える
+            if (callerToken.IsCancellationRequested) throw new OperationCanceledException(callerToken);
+
+            throw new OAuthException("ブラウザで許可されませんでした。もう一度お試しください。");
         }
 
         var query = HttpUtility.ParseQueryString(context.Request.Url?.Query ?? string.Empty);

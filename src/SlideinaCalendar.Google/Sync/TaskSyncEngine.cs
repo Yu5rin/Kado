@@ -268,6 +268,16 @@ public sealed class TaskSyncEngine(
             {
                 warnings.Add($"送れませんでした（{value.Title}）: {ex.Reason}");
             }
+            catch (GoogleApiException ex)
+            {
+                // 1件が受け付けられないだけで、そのリストの同期全体を止めない
+                // （EventSyncEngine と同じ理由。実機で、送れないタスクが1件あるだけで
+                // 他のタスクまで一切動かなくなった）。どのタスクが、なぜ断られたのかを
+                // 残して次へ進む
+                warnings.Add(ex.Description is { Length: > 0 } detail
+                    ? $"送れませんでした（{value.Title}）: {ex.Reason} — {detail}"
+                    : $"送れませんでした（{value.Title}）: {ex.Reason}");
+            }
         }
 
         return new SyncReport

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Google.Sync;
 using SlideinaCalendar.Presentation.Infrastructure;
@@ -175,6 +176,25 @@ public sealed class SyncViewModel : ObservableObject
         {
             Fail("ネットワークに繋がりません");
         }
+        catch (OperationCanceledException)
+        {
+            // ブラウザでの認可待ちがタイムアウトした、あるいは打ち切られた
+            Fail("時間内に応答がありませんでした");
+        }
+        catch (JsonException)
+        {
+            Fail("応答を読み取れませんでした（ネットワークの接続先を確認してください）");
+        }
+        catch (Exception)
+        {
+            // 想定していない転び方をしても、繋がっていない扱いのまま止める
+            Fail("接続できませんでした");
+        }
+        finally
+        {
+            // catch で拾い切れない抜け方をしても、Running のまま残さない
+            if (State == SyncState.Running) State = SyncState.Idle;
+        }
     }
 
     /// <summary>切る。</summary>
@@ -242,6 +262,27 @@ public sealed class SyncViewModel : ObservableObject
         catch (HttpRequestException)
         {
             Fail("ネットワークに繋がりません");
+        }
+        catch (OperationCanceledException)
+        {
+            // HttpClient の既定タイムアウト超過などで TaskCanceledException が来る場面を含む
+            Fail("時間内に応答がありませんでした");
+        }
+        catch (JsonException)
+        {
+            // キャプティブポータルなどが HTML を 200 で返し、応答を JSON として読めない場面
+            Fail("応答を読み取れませんでした（ネットワークの接続先を確認してください）");
+        }
+        catch (Exception)
+        {
+            // 想定していない転び方をしても、「同期中…」のまま固まらせない
+            Fail("同期できませんでした");
+        }
+        finally
+        {
+            // catch で拾い切れない抜け方をしても、Running のまま残さない。
+            // ここが無いと、以後の同期も IsBusy に阻まれて二度と走らなくなる
+            if (State == SyncState.Running) State = SyncState.Idle;
         }
     }
 

@@ -283,4 +283,29 @@ public class TaskSyncEngineTests : IDisposable
         Assert.Equal(0, report.CreatedRemote);
         Assert.NotEmpty(report.Warnings);
     }
+
+    [Fact]
+    public async Task 一般の失敗で断られても同じリストの残りは送る()
+    {
+        // 実機で、送れないタスクが1件あるだけで同じリストの他のタスクまで
+        // 一切動かなくなった（EventSyncEngine と同じ不具合）。400 のような
+        // IsMissing でも IsTransient でもない失敗で確かめる
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "断られる", Due = D(2026, 9, 24), TaskListId = "local:mytasks",
+        });
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t2", Title = "送れる", Due = D(2026, 9, 25), TaskListId = "local:mytasks",
+        });
+
+        // 1回だけ投げるので、先に処理されたほうだけが断られる
+        _remote.ThrowOnWrite = new GoogleApiException(HttpStatusCode.BadRequest, "invalid");
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        // 断られなかったほうは、続けて送られている
+        Assert.Equal(1, report.CreatedRemote);
+        Assert.Single(_remote.Items);
+        Assert.Single(report.Warnings);
+    }
 }
