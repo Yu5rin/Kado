@@ -321,20 +321,39 @@
                 <Border DockPanel.Dock="Right" CornerRadius="5" ClipToBounds="True"
                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                     <StackPanel Orientation="Horizontal">
-                        <ToggleButton Content="ストリップ" Style="{StaticResource SegmentButtonStyle}"
-                                     ToolTip="1行1か月。休みの並びと繁閑が縦に揃って読めます"
+                        <!--
+                            出し方はアイコンだけにする。年度の見出しと実働日の数と
+                            並ぶので、名前まで置くと帯の幅では入りきらない
+                        -->
+                        <ToggleButton Style="{StaticResource SegmentButtonStyle}" Padding="9,4"
+                                     ToolTip="ストリップ：1行1か月。休みの並びと繁閑が縦に揃って読めます"
                                      IsChecked="{Binding Layout, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Strip}"
                                      Command="{Binding SetLayoutCommand}"
-                                     CommandParameter="Strip" />
-                        <ToggleButton Content="カレンダー" Style="{StaticResource SegmentButtonStyle}"
-                                     BorderThickness="0" ToolTip="ミニカレンダー12枚。日付を引き当てる用途"
+                                     CommandParameter="Strip">
+                            <Path Data="{StaticResource IconRows}" Stretch="Uniform"
+                                  Width="15" Height="15"
+                                  Stroke="{Binding Foreground,
+                                           RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </ToggleButton>
+                        <ToggleButton Style="{StaticResource SegmentButtonStyle}" Padding="9,4"
+                                     BorderThickness="0"
+                                     ToolTip="カレンダー：ミニカレンダー12枚。日付を引き当てる用途"
                                      IsChecked="{Binding Layout, Mode=OneWay,
                                                  Converter={StaticResource EnumToBool},
                                                  ConverterParameter=Grid}"
                                      Command="{Binding SetLayoutCommand}"
-                                     CommandParameter="Grid" />
+                                     CommandParameter="Grid">
+                            <Path Data="{StaticResource IconGrid}" Stretch="Uniform"
+                                  Width="15" Height="15"
+                                  Stroke="{Binding Foreground,
+                                           RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </ToggleButton>
                     </StackPanel>
                 </Border>
 
