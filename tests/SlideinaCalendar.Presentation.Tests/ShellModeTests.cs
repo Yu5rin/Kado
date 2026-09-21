@@ -147,28 +147,26 @@ public class ShellModeTests
     }
 
     [Fact]
-    public void スライドと固定の幅は別に覚える()
+    public void スライドとピン留めは同じ幅を使う()
     {
         var vm = Create(ShellMode.Overlay);
 
         vm.DockWidth = 400;
         Assert.Equal(400, vm.DockWidth);
 
-        // 留めたら、固定のときの幅に入れ替わる
-        vm.TogglePinCommand.Execute(null);
-        Assert.Equal(DockPlacement.DefaultWidth, vm.DockWidth);
-
-        vm.DockWidth = 640;
-        Assert.Equal(640, vm.DockWidth);
-
-        // 外せば、スライドのときの幅に戻る。ちょっと覗くためのスライドと、
-        // 画面を分け合う固定とで使いたい幅が違う
+        // 留めても幅は変わらない。スライドとピン留めは表示内容・幅を揃え、
+        // 違うのは出しかた（消えるか・居座るか）だけ
         vm.TogglePinCommand.Execute(null);
         Assert.Equal(400, vm.DockWidth);
 
-        var placement = vm.Placement();
-        Assert.Equal(400, placement.Width);
-        Assert.Equal(640, placement.DockedWidth);
+        // ピン留め中に幅を変えても、外せば（スライドに戻っても）そのまま
+        vm.DockWidth = 640;
+        Assert.Equal(640, vm.DockWidth);
+
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal(640, vm.DockWidth);
+
+        Assert.Equal(640, vm.Placement().Width);
     }
 
     [Fact]
@@ -223,33 +221,60 @@ public class ShellModeTests
         var store = Store(out var connection);
         using var _ = connection;
 
-        store.Save(new DockPlacement(ShellMode.Dock, DockEdge.Left, 400, @"\\.\DISPLAY2")
-        {
-            DockedWidth = 640,
-        });
+        store.Save(new DockPlacement(ShellMode.Dock, DockEdge.Left, 400, @"\\.\DISPLAY2"));
 
         var read = store.Load();
 
         Assert.Equal(ShellMode.Dock, read.Mode);
         Assert.Equal(DockEdge.Left, read.Edge);
         Assert.Equal(400, read.Width);
-        Assert.Equal(640, read.DockedWidth);
         Assert.Equal(@"\\.\DISPLAY2", read.MonitorId);
     }
 
+    /// <summary>
+    /// 旧バージョン（スライドとピン留めの幅を別々に控えていた版）からの移行。
+    /// <para>
+    /// 「ピン留めの幅を引き継ぐ」方針。利用者が最後に画面を分けて使っていた形に
+    /// 近いため。既定値に戻す（＝古い値を捨てる）のは筋が悪い。
+    /// </para>
+    /// </summary>
     [Fact]
-    public void 固定の幅を覚えていなければスライドの幅から始める()
+    public void 旧キーの固定幅が残っていれば新しい1つの幅として引き継ぐ()
     {
         var store = Store(out var connection);
         using var _ = connection;
 
-        // 前の版から上げたとき。片方しか控えていない
+        var settings = new SettingsRepository(connection);
+        settings.Set("shell.width", "400");
+        settings.Set("shell.docked_width", "640");
+
+        var read = store.Load();
+
+        // 捨てて既定値に戻すのではなく、固定（ピン留め）で使っていた幅を採る
+        Assert.Equal(640, read.Width);
+
+        // 引き継いだら、古いキーはもう残らない
+        Assert.Null(settings.Get("shell.docked_width"));
+
+        // 新しいキーにも書き戻され、次回からは移行を挟まず読める
+        Assert.Equal("640", settings.Get("shell.width"));
+
+        // 読み直しても同じ値が返る（一度きりの移行であることの確認）
+        Assert.Equal(640, store.Load().Width);
+    }
+
+    [Fact]
+    public void 旧キーが無ければ通常どおり読む()
+    {
+        var store = Store(out var connection);
+        using var _ = connection;
+
+        // 前の版から上げたときで、旧キー自体が無いケース（新規インストールなど）
         new SettingsRepository(connection).Set("shell.width", "400");
 
         var read = store.Load();
 
         Assert.Equal(400, read.Width);
-        Assert.Equal(400, read.DockedWidth);
     }
 
     [Fact]

@@ -42,7 +42,14 @@ public enum DockEdge
 /// </summary>
 /// <param name="Mode">ウィンドウ／オーバーレイ／ドック。</param>
 /// <param name="Edge">どちらの辺に寄せるか。</param>
-/// <param name="Width">ドックの幅。</param>
+/// <param name="Width">
+/// 端寄せ（スライド・ピン留め）で使う幅。
+/// <para>
+/// スライドとピン留めは表示内容も幅も同じ、出しかた（消えるか・居座るか）だけが違う
+/// ものとして扱う。<b>この2つで別々の幅は持たない。</b>ウィンドウの大きさは
+/// <see cref="WindowPlacement"/> 側で別に控える。
+/// </para>
+/// </param>
 /// <param name="MonitorId">
 /// どのモニタへ寄せるか。<c>\\.\DISPLAY1</c> のような識別子。
 /// <para>覚えていなければ null（主モニタへ寄せる）。</para>
@@ -74,18 +81,6 @@ public readonly record struct DockPlacement(
     public static DockPlacement Unknown { get; } =
         new(ShellMode.Window, DockEdge.Left, DefaultWidth, null);
 
-    /// <summary>
-    /// 固定（ピン留め）のときの幅。
-    /// <para>
-    /// スライドとは別に覚える。ちょっと覗くためのスライドと、画面を分け合う固定とで
-    /// 使いたい幅が違う。片方を変えたらもう片方まで変わる、では毎回直すことになる。
-    /// </para>
-    /// </summary>
-    public double DockedWidth { get; init; } = DefaultWidth;
-
-    /// <summary>その出しかたで使う幅。</summary>
-    public double WidthFor(ShellMode mode) => mode == ShellMode.Dock ? DockedWidth : Width;
-
     /// <summary>ワークエリアを削っている状態か。</summary>
     public bool ReservesWorkArea => Mode == ShellMode.Dock;
 
@@ -93,11 +88,7 @@ public readonly record struct DockPlacement(
     public bool IsAtEdge => Mode is ShellMode.Overlay or ShellMode.Dock;
 
     /// <summary>幅を使える範囲に収める。</summary>
-    public DockPlacement WithUsableWidth() => this with
-    {
-        Width = Usable(Width),
-        DockedWidth = Usable(DockedWidth),
-    };
+    public DockPlacement WithUsableWidth() => this with { Width = Usable(Width) };
 
     /// <summary>使える範囲に収めた幅。</summary>
     public static double Usable(double width) =>
@@ -119,11 +110,7 @@ public readonly record struct DockPlacement(
 
         // 半分より狭くできないほど画面が小さいなら、下限を優先する。
         // 中身が読めないほど細い帯を置いても仕方がない
-        return placement with
-        {
-            Width = Math.Max(MinWidth, Math.Min(placement.Width, half)),
-            DockedWidth = Math.Max(MinWidth, Math.Min(placement.DockedWidth, half)),
-        };
+        return placement with { Width = Math.Max(MinWidth, Math.Min(placement.Width, half)) };
     }
 }
 
@@ -140,8 +127,17 @@ public sealed class DockPlacementStore(SettingsRepository store)
     private const string ModeKey = "shell.mode";
     private const string EdgeKey = "shell.edge";
     private const string WidthKey = "shell.width";
-    private const string DockedWidthKey = "shell.docked_width";
     private const string MonitorKey = "shell.monitor";
+
+    /// <summary>
+    /// 旧バージョンにあった、固定（ピン留め）だけの幅。
+    /// <para>
+    /// いまはスライドとピン留めで幅を1つに畳んだので書かなくなったが、以前の版で
+    /// 控えたぶんが端末に残っていることがある。読み込み時だけ見て、残っていれば
+    /// <see cref="WidthKey"/> へ引き継ぐ（<see cref="Load"/>）。
+    /// </para>
+    /// </summary>
+    private const string LegacyDockedWidthKey = "shell.docked_width";
 
     /// <summary>ワークエリアを削っている最中か。きれいに終われば false に戻る。</summary>
     private const string ReservedKey = "shell.work_area_reserved";
@@ -151,24 +147,33 @@ public sealed class DockPlacementStore(SettingsRepository store)
     /// <summary>前回の居場所。</summary>
     public DockPlacement Load()
     {
+        // 移行：スライドと固定の幅を分けて持っていた版からの引き継ぎ。
+        // 固定の幅のほうを残す。利用者が最後に画面を分けて使っていた形に近いため。
+        // 捨てて既定値に戻すと、使っていた幅が消えてしまう
+        var legacyDocked = _store.Get(LegacyDockedWidthKey);
+
+        var width =
+            double.TryParse(legacyDocked, NumberStyles.Float, CultureInfo.InvariantCulture, out var docked)
+                ? docked
+                : double.TryParse(_store.Get(WidthKey), NumberStyles.Float, CultureInfo.InvariantCulture,
+                    out var stored)
+                    ? stored
+                    : DockPlacement.DefaultWidth;
+
+        if (legacyDocked is { Length: > 0 })
+        {
+            // 引き継いだので、古いキーはもう要らない
+            _store.Set(WidthKey, width.ToString("R", CultureInfo.InvariantCulture));
+            _store.Remove(LegacyDockedWidthKey);
+        }
+
         var placement = new DockPlacement(
             Enum.TryParse<ShellMode>(_store.Get(ModeKey), ignoreCase: true, out var mode)
                 && Enum.IsDefined(mode) ? mode : ShellMode.Window,
             Enum.TryParse<DockEdge>(_store.Get(EdgeKey), ignoreCase: true, out var edge)
                 && Enum.IsDefined(edge) ? edge : DockEdge.Left,
-            double.TryParse(_store.Get(WidthKey), NumberStyles.Float, CultureInfo.InvariantCulture,
-                out var width) ? width : DockPlacement.DefaultWidth,
-            _store.Get(MonitorKey) is { Length: > 0 } monitor ? monitor : null)
-        {
-            // 覚えていなければ、スライドと同じ幅から始める
-            DockedWidth = double.TryParse(_store.Get(DockedWidthKey), NumberStyles.Float,
-                CultureInfo.InvariantCulture, out var docked)
-                ? docked
-                : double.TryParse(_store.Get(WidthKey), NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out var fallback)
-                    ? fallback
-                    : DockPlacement.DefaultWidth,
-        };
+            width,
+            _store.Get(MonitorKey) is { Length: > 0 } monitor ? monitor : null);
 
         return placement.WithUsableWidth();
     }
@@ -176,7 +181,7 @@ public sealed class DockPlacementStore(SettingsRepository store)
     /// <summary>
     /// 居場所を控える。
     /// <para>
-    /// 5つのキーを<b>1トランザクションにまとめて</b>書く。別々の文で書くと、途中で
+    /// 4つのキーを<b>1トランザクションにまとめて</b>書く。別々の文で書くと、途中で
     /// 落ちたときに「モード＝Dock なのに幅は前の値」のような食い違った組み合わせが
     /// 残りうる。
     /// </para>
@@ -188,7 +193,6 @@ public sealed class DockPlacementStore(SettingsRepository store)
             [ModeKey] = placement.Mode.ToString(),
             [EdgeKey] = placement.Edge.ToString(),
             [WidthKey] = placement.Width.ToString("R", CultureInfo.InvariantCulture),
-            [DockedWidthKey] = placement.DockedWidth.ToString("R", CultureInfo.InvariantCulture),
             [MonitorKey] = placement.MonitorId ?? string.Empty,
         });
     }

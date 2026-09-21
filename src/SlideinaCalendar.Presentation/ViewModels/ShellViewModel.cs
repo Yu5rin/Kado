@@ -22,8 +22,7 @@ public sealed class ShellViewModel : ObservableObject
 {
     private ShellMode _mode;
     private DockEdge _edge;
-    private double _overlayWidth;
-    private double _dockedWidth;
+    private double _width;
     private SidebarTab _tab = SidebarTab.Events;
     private double _layoutWidth = double.NaN;
 
@@ -36,8 +35,7 @@ public sealed class ShellViewModel : ObservableObject
 
         _mode = usable.Mode;
         _edge = usable.Edge;
-        _overlayWidth = usable.Width;
-        _dockedWidth = usable.DockedWidth;
+        _width = usable.Width;
 
         TogglePinCommand = new RelayCommand(TogglePin);
         ToWindowCommand = new RelayCommand(() => Mode = ShellMode.Window);
@@ -106,31 +104,24 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     /// <summary>
-    /// いまの出しかたでの幅。範囲に収めてから入る。
+    /// 端寄せ（スライド・ピン留め）のときの幅。範囲に収めてから入る。
     /// <para>
-    /// <b>スライドと固定は別に覚える。</b>ちょっと覗くためのスライドと、画面を
-    /// 分け合う固定とで使いたい幅が違う。片方を変えたらもう片方まで変わる、では
-    /// 毎回直すことになる。ウィンドウの大きさはまた別に控えてある
-    /// （<see cref="WindowPlacement"/>）。
+    /// <b>スライドとピン留めは同じ幅を使う。</b>表示内容も幅も揃え、違うのは
+    /// 出しかた（消えるか・居座るか）だけにした。切り替えても幅が変わらないので、
+    /// ピンを外してスライドにしても、逆にしても同じ幅のまま出る。ウィンドウの
+    /// 大きさはまた別に控えてある（<see cref="WindowPlacement"/>）。
     /// </para>
     /// </summary>
     public double DockWidth
     {
-        get => _mode == ShellMode.Dock ? _dockedWidth : _overlayWidth;
+        get => _width;
         set
         {
             var width = double.IsNaN(value) || double.IsInfinity(value)
                 ? DockPlacement.DefaultWidth
                 : Math.Clamp(value, _minWidth, DockPlacement.MaxWidth);
 
-            if (_mode == ShellMode.Dock)
-            {
-                if (!Set(ref _dockedWidth, width, nameof(DockWidth))) return;
-            }
-            else if (!Set(ref _overlayWidth, width, nameof(DockWidth)))
-            {
-                return;
-            }
+            if (!Set(ref _width, width, nameof(DockWidth))) return;
 
             DockWidthChanged?.Invoke(this, width);
         }
@@ -256,8 +247,7 @@ public sealed class ShellViewModel : ObservableObject
         $"{ModeLabel}（左クリックでウィンドウ⇔スライドを切替 ・ 右クリックで端の選択とパネルの出し入れ）";
 
     /// <summary>いまの居場所。終了時に控える。</summary>
-    public DockPlacement Placement(string? monitorId = null) =>
-        new(_mode, _edge, _overlayWidth, monitorId) { DockedWidth = _dockedWidth };
+    public DockPlacement Placement(string? monitorId = null) => new(_mode, _edge, _width, monitorId);
 
     /// <summary>
     /// ピンを切り替える。
