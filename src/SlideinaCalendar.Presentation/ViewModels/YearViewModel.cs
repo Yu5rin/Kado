@@ -130,7 +130,8 @@ public sealed class YearDayViewModel : ObservableObject
 /// 年ストリップの1行（1か月）。
 /// <para>
 /// <b>月末より後ろには枠を作らない。</b>2月なら28日で打ち切る。空の枠を置くと、
-/// 月によって右端がぶれて縦の並びが読みにくくなる（要件書 5.1）。
+/// 月によって右端がぶれて縦の並びが読みにくくなる（要件書 5.1）。ストリップは
+/// 曜日で列を揃えないので、<see cref="Days"/> はこのままでよい。
 /// </para>
 /// </summary>
 public sealed class MonthStripViewModel
@@ -138,11 +139,14 @@ public sealed class MonthStripViewModel
     /// <summary>曜日の頭文字。日曜から。</summary>
     internal static readonly string[] DayMarks = ["日", "月", "火", "水", "木", "金", "土"];
 
-    internal MonthStripViewModel(int year, int month, IReadOnlyList<YearDayViewModel> days, int? workingDays)
+    internal MonthStripViewModel(
+        int year, int month, IReadOnlyList<YearDayViewModel> days,
+        IReadOnlyList<YearDayViewModel?> gridDays, int? workingDays)
     {
         Year = year;
         Month = month;
         Days = days;
+        GridDays = gridDays;
         WorkingDayCount = workingDays;
     }
 
@@ -153,8 +157,19 @@ public sealed class MonthStripViewModel
     /// <summary>「4月」。年度をまたぐので、年は行には出さない（左のまとまりで示す）。</summary>
     public string Label => $"{Month}月";
 
-    /// <summary>1日から月末まで。</summary>
+    /// <summary>1日から月末まで。ストリップ表示用（曜日は揃えない）。</summary>
     public IReadOnlyList<YearDayViewModel> Days { get; }
+
+    /// <summary>
+    /// カレンダー表示（グリッド）用。
+    /// <para>
+    /// 月初を曜日の位置に置くための空きマス（<see langword="null"/>）を先頭に、
+    /// 月末のあとは末尾に詰めて、<b>常に6行×7列＝42マス</b>にする。行数を月ごとに
+    /// 変えると、12枚のカードで1マスの高さがまちまちになり縦の並びが崩れて見える
+    /// ため、いちばん行数が多い月（6行）に揃えている。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<YearDayViewModel?> GridDays { get; }
 
     /// <summary>右端に出す実働日数。データが揃っていない月は null。</summary>
     public int? WorkingDayCount { get; }
@@ -210,9 +225,22 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>日付の上下それぞれに重ねる印の上限。増やすと日付が埋まる。</summary>
     private const int MaxMarksPerSide = 2;
 
+    /// <summary>
+    /// カレンダー表示（グリッド）の1か月あたりの行数。
+    /// <para>
+    /// 31日まである月が日曜始まりで土曜から始まると6行要る。行数を月ごとに
+    /// 変えず、いちばん多い6行に揃えて全月の高さを合わせる。
+    /// </para>
+    /// </summary>
+    public const int MonthGridRows = 6;
+
+    /// <summary>曜日名。<see cref="DayOfWeek"/> の値をそのまま添字に使う。</summary>
+    private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];
+
     private readonly CalendarWorkspace _workspace;
     private readonly ICalendarSources? _sources;
     private readonly DateOnly _today;
+    private readonly DayOfWeek _weekStart;
 
     private int _fiscalYear;
     /// <summary>出し方の既定はカレンダー。会社で配るものと同じ形のほうが通りがいい。</summary>
@@ -224,14 +252,21 @@ public sealed class YearViewModel : ObservableObject
 
     public YearViewModel(
         CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Grid,
-        ICalendarSources? sources = null)
+        ICalendarSources? sources = null, DayOfWeek weekStart = DayOfWeek.Sunday)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _sources = sources;
         _today = today;
         _selectedDate = today;
         _layout = layout;
+        _weekStart = weekStart;
         _fiscalYear = FiscalYearOf(today);
+
+        // 見出しは週の開始曜日から順に回す。月ビューと同じ設定を見る（要件書 5.5）
+        WeekDayHeaders = Enumerable.Range(0, 7)
+            .Select(i => (DayOfWeek)(((int)weekStart + i) % 7))
+            .Select(d => new WeekDayHeader(JapaneseDayNames[(int)d], d))
+            .ToArray();
 
         SetLayoutCommand = new RelayCommand<object?>(value =>
         {
@@ -241,6 +276,9 @@ public sealed class YearViewModel : ObservableObject
 
         Refresh();
     }
+
+    /// <summary>カレンダー表示の曜日見出し。週の開始曜日に合わせて回す。</summary>
+    public IReadOnlyList<WeekDayHeader> WeekDayHeaders { get; }
 
     /// <summary>その日が属する年度。1〜3月は前の年の年度。</summary>
     public static int FiscalYearOf(DateOnly date) =>
@@ -562,12 +600,25 @@ public sealed class YearViewModel : ObservableObject
                 MarksOn(date, eventsByDate, workingDayCalendars, inside: false)));
         }
 
+        // カレンダー表示（グリッド）用。月初を週の開始曜日の位置に置くため、
+        // 先頭に空きマス（null）を挟む。週の始まりは設定に従う（要件書 5.5）
+        var firstOfMonth = new DateOnly(year, month, 1);
+        var leading = ((int)firstOfMonth.DayOfWeek - (int)_weekStart + 7) % 7;
+
+        var gridDays = new List<YearDayViewModel?>(MonthGridRows * 7);
+        gridDays.AddRange(Enumerable.Repeat((YearDayViewModel?)null, leading));
+        gridDays.AddRange(days);
+
+        // 末尾も6行×7列に揃うまで空きマスで埋める。前後の月の日は出さない
+        // （曜日は分かるが、月をまたいだ予定と混ざって見えるのを避けるため）
+        while (gridDays.Count < MonthGridRows * 7) gridDays.Add(null);
+
         // 揃っていない月に数を出すと、本当より少ない数を正しい数として読んでしまう
         var count = workingDays.IsMonthFullyCovered(year, month)
             ? workingDays.CountInMonth(year, month)
             : (int?)null;
 
-        return new MonthStripViewModel(year, month, days, count);
+        return new MonthStripViewModel(year, month, days, gridDays, count);
     }
 
     /// <summary>

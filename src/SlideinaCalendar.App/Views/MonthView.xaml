@@ -218,8 +218,13 @@
         </DataTemplate>
 
 
-        <!-- マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2）。
-             ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
+        <!--
+            マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2）。
+            ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13）。
+
+            操作説明のツールチップは外した（項目12）。バッジの文字がそのまま
+            マイルストーン名なので、切れて読めなくなる題も無い
+        -->
         <DataTemplate x:Key="MilestoneTagTemplate">
             <Border CornerRadius="3" Padding="5,0" HorizontalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
@@ -227,8 +232,7 @@
                     ContextMenu="{StaticResource MilestoneMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
                     MouseMove="OnChipDragging"
-                    Cursor="Hand"
-                    ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー&#10;ドラッグで別の日へ移動">
+                    Cursor="Hand">
                 <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
@@ -259,10 +263,13 @@
 
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
+                    <!--
+                        操作説明のツールチップは外した（項目12）。予定・タスク・
+                        マイルストーンはそれぞれ自分のツールチップを持っている
+                    -->
                     <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                             Background="{DynamicResource PanelBrush}"
                             ClipToBounds="True" Cursor="Hand"
-                            ToolTip="クリックで選択 ・ ダブルクリックで予定を追加&#10;予定やタスクは、ダブルクリックで編集・右クリックでメニュー&#10;ドラッグで別の日へ移動 ・ Ctrl＋ドラッグで複製"
                             MouseLeftButtonDown="OnCellClicked"
                             AllowDrop="True"
                             DragOver="OnCellDragOver" DragLeave="OnCellDragLeft"

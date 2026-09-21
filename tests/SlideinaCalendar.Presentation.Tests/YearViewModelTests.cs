@@ -13,9 +13,10 @@ public class YearViewModelTests
 {
     private static DateOnly D(int y, int m, int d) => new(y, m, d);
 
-    private static YearViewModel Create(TestWorkspace test, DateOnly? today = null) =>
+    private static YearViewModel Create(
+        TestWorkspace test, DateOnly? today = null, DayOfWeek weekStart = DayOfWeek.Sunday) =>
         new(test.Workspace, today ?? D(2026, 9, 24),
-            sources: new SourceListsViewModel(test.Workspace));
+            sources: new SourceListsViewModel(test.Workspace), weekStart: weekStart);
 
     private static YearDayViewModel Day(YearViewModel vm, DateOnly date) =>
         vm.Months.Single(m => m.Year == date.Year && m.Month == date.Month)
@@ -351,5 +352,98 @@ public class YearViewModelTests
         using var test = TestWorkspace.Create();
 
         Assert.Equal("2026年度（2026年4月〜2027年3月）", Create(test).HeaderText);
+    }
+
+    // ------------------------------------------------------------------
+    // カレンダー表示のマス揃え（曜日が分かること）
+    // ------------------------------------------------------------------
+
+    /// <summary>指定した月の GridDays を取り出す。</summary>
+    private static IReadOnlyList<YearDayViewModel?> GridDaysOf(YearViewModel vm, int year, int month) =>
+        vm.Months.Single(m => m.Year == year && m.Month == month).GridDays;
+
+    [Fact]
+    public void カレンダー表示は常に六行七列になる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 行数を月ごとに変えると、12枚のカードで1マスの高さがまちまちになる
+        Assert.All(vm.Months, m => Assert.Equal(YearViewModel.MonthGridRows * 7, m.GridDays.Count));
+    }
+
+    [Fact]
+    public void 一日が日曜の月は空きマスが要らない()
+    {
+        using var test = TestWorkspace.Create();
+        // 2026年11月1日は日曜
+        var vm = Create(test);
+
+        var grid = GridDaysOf(vm, 2026, 11);
+
+        // 日曜始まり（既定）なら、月初がそのまま先頭に来る
+        Assert.NotNull(grid[0]);
+        Assert.Equal(1, grid[0]!.DayNumber);
+
+        // 30日ぶん並んだあとは空きマス
+        Assert.Equal(30, grid.Take(30).Count(d => d is not null));
+        Assert.All(grid.Skip(30), d => Assert.Null(d));
+    }
+
+    [Fact]
+    public void 月曜始まりに変えると空きマスの数も変わる()
+    {
+        using var test = TestWorkspace.Create();
+        // 2026年11月1日は日曜。月曜始まりなら、日曜ぶんの空きマスが6つ要る
+        var vm = Create(test, weekStart: DayOfWeek.Monday);
+
+        var grid = GridDaysOf(vm, 2026, 11);
+
+        Assert.Equal(6, grid.Take(6).Count(d => d is null));
+        Assert.Equal(1, grid[6]!.DayNumber);
+    }
+
+    [Fact]
+    public void 三十一日まである月が六行になる場合()
+    {
+        using var test = TestWorkspace.Create();
+        // 2026年8月1日は土曜。日曜始まりだと空きマスが6つ要り、31日を足すと
+        // 37マス。7列に割ると6行目まで使う
+        var vm = Create(test);
+
+        var grid = GridDaysOf(vm, 2026, 8);
+
+        Assert.Equal(6, grid.Take(6).Count(d => d is null));
+        Assert.Equal(1, grid[6]!.DayNumber);
+        Assert.Equal(31, grid[36]!.DayNumber);
+
+        // 37マスから先、6行×7列＝42マスまでは空きマス
+        Assert.All(grid.Skip(37), d => Assert.Null(d));
+    }
+
+    [Fact]
+    public void うるう年の二月も日付がずれない()
+    {
+        using var test = TestWorkspace.Create();
+        // 2028年2月1日は火曜、うるう年で29日まである。2027年度に含まれる
+        var vm = Create(test, D(2028, 2, 10));
+
+        Assert.Equal(2027, vm.FiscalYear);
+
+        var grid = GridDaysOf(vm, 2028, 2);
+
+        Assert.Equal(2, grid.Take(2).Count(d => d is null));
+        Assert.Equal(1, grid[2]!.DayNumber);
+        Assert.Equal(29, grid[30]!.DayNumber);
+        Assert.All(grid.Skip(31), d => Assert.Null(d));
+    }
+
+    [Fact]
+    public void 曜日見出しは週の始まりに合わせて回る()
+    {
+        using var test = TestWorkspace.Create();
+
+        Assert.Equal("日", Create(test).WeekDayHeaders[0].Name);
+        Assert.Equal("月", Create(test, weekStart: DayOfWeek.Monday).WeekDayHeaders[0].Name);
     }
 }

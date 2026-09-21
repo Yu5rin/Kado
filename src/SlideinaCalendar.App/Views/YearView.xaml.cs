@@ -26,8 +26,14 @@ public partial class YearView : UserControl
     /// </summary>
     private const double GridCardWidth = 160;
 
-    /// <summary>カレンダー1枚を、これより低くはしない。下回るぶんはスクロールさせる。</summary>
-    private const double GridCardMinHeight = 150;
+    /// <summary>
+    /// カレンダー1枚を、これより低くはしない。下回るぶんはスクロールさせる。
+    /// <para>
+    /// 曜日見出しの行と、月初の曜日を揃えるための空きマスぶんで6行に固定した
+    /// (<see cref="YearViewModel.MonthGridRows"/>)。5行だった頃より高さが要る。
+    /// </para>
+    /// </summary>
+    private const double GridCardMinHeight = 190;
 
     /// <summary>ScrollViewer の Padding="12,10" のうち、上下ぶん。</summary>
     private const double ScrollPadding = 20;
