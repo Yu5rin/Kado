@@ -32,7 +32,7 @@
             分かっても「何件あるか」がつかめない
         -->
         <DataTemplate x:Key="GridMarkTemplate">
-            <Border Height="2.5" CornerRadius="1.25" Margin="1.5,0.5"
+            <Border Height="2.5" CornerRadius="1.25" Margin="1.5,0.75"
                     Background="{Binding Converter={StaticResource DayMarkBrush}}" />
         </DataTemplate>
 
@@ -251,24 +251,19 @@
                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
-                                    <DockPanel Margin="1,2,1,2">
-                                        <!--
-                                            ストリップと同じ並び。実働日カレンダー
-                                            （inaCalendar）の予定は日付の上、それ以外は
-                                            日付の下。仕様期限や1次GOが日付の上に出て、
-                                            自分の予定が下に付く。
+                                    <!--
+                                        ストリップと同じ並び。実働日カレンダー
+                                        （inaCalendar）の予定は日付の上、それ以外は
+                                        日付の下。仕様期限や1次GOが日付の上に出て、
+                                        自分の予定が下に付く。
 
-                                            下の帯が次の週の日付とくっついて見えたので、
-                                            マスは線で区切ってある
-                                        -->
-                                        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding TopMarks}"
-                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                        </ItemsControl>
-
-                                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding BottomMarks}"
+                                        <b>帯は日付に寄せ、余白はマスの上下に逃がす。</b>
+                                        上下の端に貼り付けていたら、下の帯が次の週の
+                                        日付とくっついて見えた。ひとまとまりにすれば、
+                                        どの日のものかが離れて見て分かる
+                                    -->
+                                    <StackPanel VerticalAlignment="Center" Margin="1,3,1,3">
+                                        <ItemsControl ItemsSource="{Binding TopMarks}"
                                                       ItemTemplate="{StaticResource GridMarkTemplate}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
@@ -276,10 +271,17 @@
                                         </ItemsControl>
 
                                         <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center" LineHeight="14"
                                                    Typography.NumeralAlignment="Tabular"
                                                    Foreground="{DynamicResource InkBrush}" />
-                                    </DockPanel>
+
+                                        <ItemsControl ItemsSource="{Binding BottomMarks}"
+                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </Border>
 
                                 <DataTemplate.Triggers>
