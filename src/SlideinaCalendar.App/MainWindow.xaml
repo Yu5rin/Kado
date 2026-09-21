@@ -394,6 +394,10 @@
                                       IsCheckable="True"
                                       ToolTip="画面の右端にマウスを留めると出てきます" />
                             <Separator />
+                            <MenuItem Header="スリムパネル（ひと月と、その日の予定）"
+                                      Command="{Binding ToggleSlimPanelCommand}"
+                                      IsChecked="{Binding IsSlimPanelOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
                             <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
                                       Command="{Binding ToggleSidePanelCommand}"
                                       IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
@@ -529,23 +533,21 @@
             </Grid>
         </Border>
 
-        <!--
-            狭いときは1列の形（サイドバー）に切り替える。同じ UI を縮小して
-            使い回さない（要件書 5.1）
-        -->
-        <views:SidebarLayout x:Name="Sidebar"
-                             Visibility="{Binding Shell.UsesSidebarLayout,
-                                          Converter={StaticResource BoolToVisibility}}" />
-
-        <!-- 3ペイン（.body） -->
-        <Grid x:Name="WindowLayout"
-              Visibility="{Binding Shell.UsesWindowLayout, Converter={StaticResource BoolToVisibility}}">
+        <!-- 本体（.body） -->
+        <Grid x:Name="WindowLayout">
             <!--
+                4つのパネルを横に並べる。スリム・左・中央・右。
+
+                <b>幅では切り替えない。</b>狭いときに別の形へ化ける作りにしていたが、
+                同じ操作を探し直すことになる。出すかどうかは手で選ぶ。
+
                 両端は手で決めた幅のまま置き、ウィンドウを広げたぶんは中央が受け取る。
                 幅は境目をつまんで変えられる。実際の値はコードビハインドが入れる
-                （左パネルを閉じているあいだは 0 にするため）。
+                （閉じているあいだは 0 にするため）。
             -->
             <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SlimColumn" Width="264" MinWidth="200" MaxWidth="420" />
+                <ColumnDefinition x:Name="SlimSplitColumn" Width="Auto" />
                 <ColumnDefinition x:Name="SideColumn" Width="216" MinWidth="160" MaxWidth="480" />
                 <ColumnDefinition x:Name="SideSplitColumn" Width="Auto" />
                 <ColumnDefinition x:Name="MainColumn" Width="*" MinWidth="360" />
@@ -553,8 +555,16 @@
                 <ColumnDefinition x:Name="DetailColumn" Width="296" MinWidth="200" MaxWidth="640" />
             </Grid.ColumnDefinitions>
 
+            <!-- スリムパネル。ひと月の並びと、選んだ日の予定・タスクだけ -->
+            <views:SidebarLayout x:Name="Sidebar" Grid.Column="0"
+                                 Visibility="{Binding IsSlimPanelOpen,
+                                              Converter={StaticResource BoolToVisibility}}" />
+
+            <GridSplitter Grid.Column="1" x:Name="SlimSplitter"
+                          Style="{StaticResource PaneSplitterStyle}" />
+
             <!-- 左パネル（.side 216px） -->
-            <Border Grid.Column="0" Background="{DynamicResource PanelBrush}"
+            <Border Grid.Column="2" Background="{DynamicResource PanelBrush}"
                     BorderThickness="0,0,1,0" BorderBrush="{DynamicResource LineBrush}"
                     Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}">
                 <DockPanel>
@@ -706,11 +716,11 @@
             </Border>
 
             <!-- 左パネルと中央の境目。閉じているあいだは出さない -->
-            <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitterStyle}"
+            <GridSplitter Grid.Column="3" Style="{StaticResource PaneSplitterStyle}"
                           Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}" />
 
             <!-- 中央（.main） -->
-            <DockPanel Grid.Column="2" x:Name="MainPane"
+            <DockPanel Grid.Column="4" x:Name="MainPane"
                        Background="{DynamicResource BackgroundBrush}"
                        Visibility="{Binding IsMainViewOpen, Converter={StaticResource BoolToVisibility}}">
                 <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
@@ -739,7 +749,7 @@
             </DockPanel>
 
             <!-- 中央と右ペインの境目 -->
-            <GridSplitter Grid.Column="3" x:Name="DetailSplitter"
+            <GridSplitter Grid.Column="5" x:Name="DetailSplitter"
                           Style="{StaticResource PaneSplitterStyle}" />
             <!--
                 どちらかを畳んだら境目も消す。掴みしろだけ残っても、つまんで動かす
@@ -747,7 +757,7 @@
             -->
 
             <!-- 右ペイン（.detail 296px） -->
-            <Border Grid.Column="4" x:Name="DetailPane"
+            <Border Grid.Column="6" x:Name="DetailPane"
                     Visibility="{Binding IsDetailPaneOpen, Converter={StaticResource BoolToVisibility}}"
                     Background="{DynamicResource PanelBrush}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
@@ -1048,6 +1058,7 @@
                 MouseLeftButtonDown="OnGripPressed"
                 MouseMove="OnGripDragging"
                 MouseLeftButtonUp="OnGripReleased"
+                MouseWheel="OnGripWheel"
                 Visibility="{Binding Shell.IsAtEdge, Converter={StaticResource BoolToVisibility}}">
             <!--
                 寄せかたと色は、どちらも Style から与える。

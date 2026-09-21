@@ -47,7 +47,24 @@ public partial class YearView : UserControl
     /// <summary>縦のスクロールバーが出たぶん。出てから測ると幅が揺れる</summary>
     private const double ScrollRoom = 14;
 
-    public YearView() => InitializeComponent();
+    /// <summary>
+    /// 手が止まってから組み直す。
+    /// <para>
+    /// 12か月ぶん、372 個のマスが幅に合わせて動く。ドラッグのあいだ毎回やると
+    /// 画面が固まる。止まってから1回だけにする。
+    /// </para>
+    /// </summary>
+    private readonly Settle _settle;
+
+    /// <summary>落ち着いたときに測る大きさ。</summary>
+    private Size _room;
+
+    public YearView()
+    {
+        InitializeComponent();
+
+        _settle = new Settle(Fit);
+    }
 
     /// <summary>日を押したら選択を合わせる。ダブルクリックでその日に予定を足す。</summary>
     private void OnDayClicked(object sender, MouseButtonEventArgs e)
@@ -93,27 +110,38 @@ public partial class YearView : UserControl
     /// </summary>
     private void OnResized(object sender, SizeChangedEventArgs e)
     {
-        if (DataContext is not YearViewModel year) return;
+        _room = e.NewSize;
+        _settle.Poke();
+    }
 
-        var room = e.NewSize.Width - SideRoom - ScrollRoom;
+    /// <summary>落ち着いた大きさに合わせる。</summary>
+    private void Fit()
+    {
+        if (DataContext is not YearViewModel year || _room.Width <= 0) return;
 
-        // マスとマスのあいだに 1px 空けてある
-        year.DayWidth = room > 0 ? (room / 31) - 1 : YearViewModel.DefaultDayWidth;
+        var room = _room.Width - SideRoom - ScrollRoom;
+
+        // マスとマスのあいだに 1px 空けてある。
+        // 1px 単位に丸めるのは、端数のままだと動かすたびに 372 個の幅が
+        // すべて引き直されるため。目で見て違いは出ない
+        year.DayWidth = room > 0
+            ? Math.Round((room / 31) - 1)
+            : YearViewModel.DefaultDayWidth;
 
         // 12枚を何列で並べるか。4列に収まらなければ減らす
-        var fits = (int)(e.NewSize.Width / GridCardWidth);
+        var fits = (int)(_room.Width / GridCardWidth);
         year.GridColumns = Math.Clamp(fits, 1, 4);
 
         // 高さを渡さないと、12枚が上に寄ったまま下が余る。ScrollViewer は
         // 中身に高さを聞くので、ここで見えている高さを教えてやる必要がある。
         // 低すぎるときだけ、はみ出したぶんをスクロールさせる
-        var height = e.NewSize.Height - ScrollPadding;
+        var height = _room.Height - ScrollPadding;
         GridHost.Height = Math.Max(year.GridRows * GridCardMinHeight, height);
 
         // ストリップも同じ。12行しか無いので、余ったぶんは行の高さに配る
         var rows = height - StripChrome;
         year.DayHeight = rows > 0
-            ? (rows / StripRows) - StripRowGap
+            ? Math.Round((rows / StripRows) - StripRowGap)
             : YearViewModel.MinDayHeight;
     }
 }

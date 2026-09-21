@@ -15,34 +15,16 @@ public partial class SidebarLayout : UserControl
     {
         InitializeComponent();
 
-        DataContextChanged += (_, args) =>
-        {
-            if (args.OldValue is MainViewModel before) before.PropertyChanged -= OnMainChanged;
-            if (args.NewValue is MainViewModel after) after.PropertyChanged += OnMainChanged;
-
-            FitCalendarRow();
-        };
     }
 
-    private void OnMainChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    /// <summary>クイック入力は Enter で入れる。</summary>
+    private void OnQuickKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.IsMonthView)) FitCalendarRow();
-    }
+        if (e.Key != Key.Enter) return;
+        if (DataContext is not MainViewModel vm || !vm.QuickCommand.CanExecute(null)) return;
 
-    /// <summary>
-    /// カレンダーに割く高さを決める。
-    /// <para>
-    /// 月だけは中身で決める。詰めた形ではマスを正方形にするので、高さを割り当てると
-    /// 下が空いたままになる。ほかのビューは時間軸や一覧を縦に流すので、広いほうがいい。
-    /// </para>
-    /// </summary>
-    private void FitCalendarRow()
-    {
-        if (DataContext is not MainViewModel main) return;
-
-        CalendarRow.Height = main.IsMonthView
-            ? GridLength.Auto
-            : new GridLength(3, GridUnitType.Star);
+        vm.QuickCommand.Execute(null);
+        e.Handled = true;
     }
 
     private void OnEventClicked(object sender, MouseButtonEventArgs e) =>

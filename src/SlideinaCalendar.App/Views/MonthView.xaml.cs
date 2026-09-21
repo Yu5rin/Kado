@@ -16,9 +16,21 @@ namespace SlideinaCalendar.App.Views;
 /// </summary>
 public partial class MonthView : UserControl
 {
+    /// <summary>
+    /// 手が止まってから組み直す。
+    /// <para>
+    /// マスの数を決め直すと 42 マスを作り直すことになる。ドラッグのあいだ毎回
+    /// やると掴んだ瞬間に固まる。週と日が軽いのは、大きさに合わせて組み直す
+    /// ものを持たないから。
+    /// </para>
+    /// </summary>
+    private readonly Settle _settle;
+
     public MonthView()
     {
         InitializeComponent();
+
+        _settle = new Settle(FitCells);
 
         // 詰めた形に切り替わったら、マスの高さを決め直す
         DataContextChanged += (_, args) =>
@@ -26,13 +38,13 @@ public partial class MonthView : UserControl
             if (args.OldValue is MonthViewModel before) before.PropertyChanged -= OnMonthChanged;
             if (args.NewValue is MonthViewModel after) after.PropertyChanged += OnMonthChanged;
 
-            FitCells();
+            _settle.Now();
         };
     }
 
     private void OnMonthChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MonthViewModel.IsCompact)) FitCells();
+        if (e.PropertyName == nameof(MonthViewModel.IsCompact)) _settle.Now();
     }
 
     /// <summary>
@@ -42,7 +54,7 @@ public partial class MonthView : UserControl
     /// 表示側にしか分からないので、ここで測って ViewModel へ渡す。
     /// </para>
     /// </summary>
-    private void OnCellsResized(object sender, SizeChangedEventArgs e) => FitCells();
+    private void OnCellsResized(object sender, SizeChangedEventArgs e) => _settle.Poke();
 
     /// <summary>
     /// マスの大きさを決める。
@@ -61,13 +73,13 @@ public partial class MonthView : UserControl
 
         if (month.IsCompact)
         {
-            CellsHost.VerticalAlignment = VerticalAlignment.Top;
-            CellsHost.Height = Math.Round(CellsHost.ActualWidth / 7) * rows;
+            // 正方形は「これ以上は潰さない」の線。高さに余裕があれば伸びる。
+            // 決め打ちにしていたら、仕切りを下げてもカレンダーが伸びなかった
+            CellsHost.MinHeight = Math.Round(CellsHost.ActualWidth / 7) * rows;
             return;
         }
 
-        CellsHost.VerticalAlignment = VerticalAlignment.Stretch;
-        CellsHost.Height = double.NaN;
+        CellsHost.MinHeight = 0;
 
         if (CellsHost.ActualHeight <= 0) return;
 

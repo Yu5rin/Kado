@@ -40,6 +40,29 @@ public partial class MainWindow : Window
     /// <summary>置き場所の出し入れ。渡されなければ覚えない。</summary>
     public WindowPlacementStore? Placements { get; init; }
 
+    /// <summary>
+    /// いちばん細くできる幅を設定から受ける。
+    /// <para>
+    /// <b>ここが窓の下限をそのまま決める。</b>WPF は <c>MinWidth</c> を Windows へ
+    /// 「これ以上小さくできない」として答えるので、他に仕掛けは要らない。
+    /// </para>
+    /// </summary>
+    public AppSettings? Settings
+    {
+        get => _settings;
+        init
+        {
+            _settings = value;
+
+            if (value is null) return;
+
+            MinWidth = value.MinWidth;
+            value.Changed += (_, _) => MinWidth = value.MinWidth;
+        }
+    }
+
+    private readonly AppSettings? _settings;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -50,11 +73,15 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => RestorePlacement();
 
         LocationChanged += (_, _) => TrackPlacement();
-        SizeChanged += (_, _) =>
+        // 幅を伝えるとツールバーの詰め方が決まり、レイアウトが走る。ドラッグの
+        // あいだ毎回やると重いので、手が止まってから1回だけにする
+        _settle = new Views.Settle(() =>
         {
             TrackPlacement();
             PublishLayoutWidth();
-        };
+        });
+
+        SizeChanged += (_, _) => _settle.Poke();
         StateChanged += (_, _) => TrackPlacement();
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
@@ -63,7 +90,7 @@ public partial class MainWindow : Window
             ViewModel?.UpdateNow(DateTime.Now);
             _clock.Start();
             RestorePaneWidths();
-            PublishLayoutWidth();
+            _settle.Now();
         };
 
         Closed += (_, _) =>
@@ -158,7 +185,8 @@ public partial class MainWindow : Window
                 ApplyPanes(vm);
             }
             else if (args.PropertyName is nameof(MainViewModel.IsMainViewOpen)
-                     or nameof(MainViewModel.IsDetailPaneOpen))
+                     or nameof(MainViewModel.IsDetailPaneOpen)
+                     or nameof(MainViewModel.IsSlimPanelOpen))
             {
                 ApplyPanes(vm);
             }
@@ -198,6 +226,16 @@ public partial class MainWindow : Window
     private void ApplyPanes(MainViewModel vm)
     {
         if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
+        if (vm.IsSlimPanelOpen && SlimColumn.ActualWidth > 0) _slimWidth = SlimColumn.ActualWidth;
+
+        // スリムパネル。畳むときは列ごと 0 にする
+        SlimColumn.MinWidth = vm.IsSlimPanelOpen ? MainViewModel.MinSlimPanelWidth : 0;
+        SlimColumn.Width = vm.IsSlimPanelOpen ? new GridLength(_slimWidth) : new GridLength(0);
+        SlimSplitter.Visibility = vm.IsSlimPanelOpen
+            && (vm.IsSidePanelOpen || vm.IsMainViewOpen || vm.IsDetailPaneOpen)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
 
         // 中央を畳んだら、右ペインが「*」になって残りを埋める。
         // ピクセルのままだと、窓を広げたぶんが誰にも行き渡らない
@@ -240,6 +278,12 @@ public partial class MainWindow : Window
 
     /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
     private double _detailWidth = MainViewModel.DefaultDetailPaneWidth;
+
+    /// <summary>スリムパネルを畳むあいだ、戻す幅をここに控える。</summary>
+    private double _slimWidth = MainViewModel.DefaultSlimPanelWidth;
+
+    /// <summary>大きさが落ち着いてから、幅を伝える。</summary>
+    private readonly Views.Settle _settle;
 
     /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
     private void SavePaneWidths()
@@ -288,6 +332,25 @@ public partial class MainWindow : Window
 
         // 右に寄せていれば、左へ引くほど広くなる。左に寄せていれば逆
         vm.Shell.DockWidth = vm.Shell.IsAtLeft ? _gripWidth + moved : _gripWidth - moved;
+    }
+
+    /// <summary>
+    /// 掴みしろの上でホイールを回したら、日を送る。
+    /// <para>
+    /// 細い帯では、ここが指を置きやすい場所になる。何も起きないと、送り方が
+    /// 無いように見える。
+    /// </para>
+    /// </summary>
+    private void OnGripWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0 || ViewModel is not { } vm) return;
+
+        var command = e.Delta > 0 ? vm.PreviousCommand : vm.NextCommand;
+
+        if (!command.CanExecute(null)) return;
+
+        command.Execute(null);
+        e.Handled = true;
     }
 
     private void OnGripReleased(object sender, MouseButtonEventArgs e)

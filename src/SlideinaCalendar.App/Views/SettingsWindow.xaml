@@ -277,6 +277,21 @@
                     </StackPanel>
 
                     <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                   Text="いちばん細くできる幅" />
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                                       Margin="8,0,0,0" Text="px"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                            <TextBox Width="80" HorizontalAlignment="Left"
+                                     Style="{StaticResource FieldTextBoxStyle}"
+                                     Text="{Binding MinWidth, UpdateSourceTrigger=LostFocus}" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="帯として使うときに、どこまで詰められるようにするか。160〜640px。&#10;細くすると場所を取りませんが、ツールバーの中身は順に切れていきます。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
                         <CheckBox Content="スライドは、カーソルが外れたら引っ込める"
                                   IsChecked="{Binding SlideOutOnLeave}" Cursor="Hand" />
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
