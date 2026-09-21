@@ -166,6 +166,14 @@ public sealed class ShellController : IDisposable
     /// <summary>
     /// スライドさせて出す。
     /// <para>位置を決めてから出す。出してから動かすと、一度別の場所に見えて飛ぶ。</para>
+    /// <para>
+    /// <b>アニメーションの開始は、出したのと同じフレームではしない。</b>
+    /// <see cref="Show"/>／<see cref="Window.Activate"/> の直後に始めると、
+    /// 窓が現れる処理と競合して開始値が拾われず、いきなり最終位置に出てしまう
+    /// （実機で確認済み。引っ込み側 <see cref="SlideOutIfIdle"/> はこの競合が無く、
+    /// 完璧に動いている）。窓が出きったあとのフレーム（<see cref="DispatcherPriority.Loaded"/>）
+    /// まで待ってから始める。
+    /// </para>
     /// </summary>
     private void SlideIn()
     {
@@ -180,12 +188,27 @@ public sealed class ShellController : IDisposable
         // 画面外の矩形を見張ることになり、カーソルがどこにあっても「外れている」
         // と判定されて、出たそばから引っ込む
         var shown = WindowRectAt(resting);
+        var offScreen = OffScreenLeft();
 
         // 画面の外から滑り込ませる。位置を決めてから出す
-        _window.Left = OffScreenLeft();
+        _window.Left = offScreen;
         Show();
 
-        Animate(resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut });
+        // Show() の直後、同じフレームでアニメーションを始めない。窓が出る処理と
+        // 競合して開始値が拾われないことがあるため、出きった次のフレームまで待つ
+        _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            // 待っているあいだに引っ込め始めた・出しかたが変わったなら、もう動かさない
+            if (_shell.Mode != ShellMode.Overlay || !_window.IsVisible || _slidingOut) return;
+
+            // Show() のあとで Left が画面外からずれていないか確かめ、ずれていたら
+            // 戻す。ここで戻さないと「一瞬だけ最終位置に見えてから飛ぶ」、あるいは
+            // 動かないまま最終位置に出る、という形で症状が出る
+            if (Math.Abs(_window.Left - offScreen) > 0.5) _window.Left = offScreen;
+
+            // 開始値は現在値まかせにせず、画面外の位置を明示して渡す
+            Animate(offScreen, resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut });
+        }));
 
         // 出たあとは、外れるのを見張る番
         if (SlideOutOnLeave) _hotZone.WatchLeaving(shown);
@@ -213,7 +236,9 @@ public sealed class ShellController : IDisposable
         var resting = _window.Left;
         _slidingOut = true;
 
-        Animate(OffScreenLeft(), SlideOutTime, new QuadraticEase { EasingMode = EasingMode.EaseIn },
+        // 開始値は現在値まかせ（From を渡さない）のまま。引っ込みは元からこの形で
+        // 完璧に動いているので、挙動を変えない
+        Animate(null, OffScreenLeft(), SlideOutTime, new QuadraticEase { EasingMode = EasingMode.EaseIn },
             () =>
             {
                 _slidingOut = false;
@@ -246,10 +271,17 @@ public sealed class ShellController : IDisposable
     /// <b>終わったらアニメーションを外す。</b>掛けたままだと、そのあと
     /// <c>Left</c> に入れた値が効かなくなる（アニメーションが値を握り続ける）。
     /// </para>
+    /// <para>
+    /// <paramref name="from"/> を渡さなければ、これまでどおり呼んだ時点の現在値を
+    /// 開始値にする（引っ込み側はこちら）。渡せば、その値を開始値として明示する
+    /// （滑り出し側はこちら。現在値まかせだと、窓が出る処理と競合して拾えないことがある）。
+    /// </para>
     /// </summary>
-    private void Animate(double to, Duration time, IEasingFunction easing, Action? done = null)
+    private void Animate(double? from, double to, Duration time, IEasingFunction easing, Action? done = null)
     {
-        var animation = new DoubleAnimation(to, time) { EasingFunction = easing };
+        var animation = from.HasValue
+            ? new DoubleAnimation(from.Value, to, time) { EasingFunction = easing }
+            : new DoubleAnimation(to, time) { EasingFunction = easing };
 
         animation.Completed += (_, _) =>
         {
