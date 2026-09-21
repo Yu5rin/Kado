@@ -107,6 +107,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _clock.Stop();
+            _statusClear.Dispose();
             SavePaneWidths();
             Placements?.Save(_placement);
         };
@@ -278,6 +279,20 @@ public partial class MainWindow : Window
 
     /// <summary>大きさが落ち着いてから、幅を伝える。</summary>
     private readonly Views.Settle _settle;
+
+    /// <summary>ステータス行（項目1）を数秒後に消すためのタイマー。</summary>
+    private readonly Views.Settle _statusClear;
+
+    /// <summary>StatusMessage が変わるたびに、消すまでの時間を仕切り直す。</summary>
+    private void OnStatusMessageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.StatusMessage)) return;
+
+        // 空になった（もう消えている）ときは、あらためて仕切り直さない
+        if (ViewModel?.StatusMessage is null) return;
+
+        _statusClear.Poke();
+    }
 
     /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
     private void SavePaneWidths()
@@ -463,8 +478,19 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            SearchBox.Focus();
-            Keyboard.Focus(SearchBox);
+            // 畳んでいる（虫めがねだけの）ときは、先に入力欄を開かないと
+            // Visibility="Collapsed" のままでフォーカスが乗らない
+            if (ViewModel is { UsesCompactSearch: true } vm && vm.OpenSearchCommand.CanExecute(null))
+            {
+                vm.OpenSearchCommand.Execute(null);
+            }
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                SearchBox.Focus();
+                Keyboard.Focus(SearchBox);
+            }, DispatcherPriority.Input);
+
             e.Handled = true;
             return;
         }
