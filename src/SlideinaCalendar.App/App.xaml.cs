@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Data.Sqlite;
 using SlideinaCalendar.App.Editing;
 using SlideinaCalendar.App.Google;
@@ -110,17 +111,18 @@ public partial class App : Application
         // 設定を読むにはデータベースが要るので、ここでは Windows に合わせておく
         ThemeManager.Apply(ThemeChoice.Auto);
 
+        // データベースを開く前に、DB を介さない印だけで前回の異常終了を確かめて戻す。
+        // 壊れて開けなくなっていた場合、DB 版の印（下の RecoverIfNeeded(_dockStore)）は
+        // 読めないので、ここが最後の砦になる（要件書 2.3）
+        Shell.WorkAreaGuard.RecoverIfNeeded();
+
         try
         {
             _connection = CalendarDatabase.OpenDefault().ConnectAndMigrate();
         }
         catch (Exception ex) when (ex is SqliteException or InvalidOperationException or IOException)
         {
-            // データベースを開けないと何もできない。黙って落ちるより理由を見せる
-            MessageBox.Show(
-                $"データを開けませんでした。\n\n{ex.Message}\n\n保存先: {CalendarDatabase.DefaultPath}",
-                "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Error);
-            Shutdown(1);
+            HandleDatabaseOpenFailure(ex);
             return;
         }
 
@@ -196,6 +198,16 @@ public partial class App : Application
             {
                 main.CheckForUpdate = () => CheckForUpdateAsync(showWhenLatest: true);
 
+                // バックアップの書き出し・復元の口を結ぶ。ここを結ばないと、⚙メニューの
+                // 「バックアップ」は常に「この画面からは書き出せません」を返し、
+                // 「復元」は CanExecute が false のまま押せない
+                main.SaveBackup = backupPath => DatabaseBackup.SaveTo(_connection!, backupPath);
+                main.RestoreBackup = RestoreAndRestart;
+
+                // RelayCommand は CommandManager に乗っていない。RestoreBackup を
+                // あとから入れても、これを呼ばないと「復元」ボタンが無効のまま戻らない
+                main.RestoreCommand.RaiseCanExecuteChanged();
+
                 _background = new BackgroundSync(
                     token => Dispatcher.InvokeAsync(
                         () => main.Sync.SyncQuietlyAsync(token)).Task.Unwrap());
@@ -216,12 +228,16 @@ public partial class App : Application
         }
     }
 
+    /// <summary>これを超えたら世代を1つずらす。無制限に育てない。</summary>
+    private const long CrashLogMaxBytes = 1_000_000;
+
     /// <summary>異常終了を記録して見せる。ログに残さないと再現待ちになる。</summary>
     private static void ReportFatal(Exception ex)
     {
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CrashLogPath)!);
+            RotateCrashLogIfTooBig();
             File.AppendAllText(CrashLogPath, $"{DateTimeOffset.Now:O}\n{ex}\n\n");
         }
         catch (Exception logFailure) when (logFailure is IOException or UnauthorizedAccessException)
@@ -235,44 +251,87 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// crash.log が無制限に育たないようにする。
+    /// <para>
+    /// 上限を超えていたら <c>crash.log.1</c> へ退避して、新しく書き始める。世代は
+    /// 1つだけ持てば十分――何世代も残しても、古いものまで読みに戻ることは無い。
+    /// </para>
+    /// </summary>
+    private static void RotateCrashLogIfTooBig()
+    {
+        if (!File.Exists(CrashLogPath)) return;
+        if (new FileInfo(CrashLogPath).Length < CrashLogMaxBytes) return;
+
+        var previous = CrashLogPath + ".1";
+        if (File.Exists(previous)) File.Delete(previous);
+        File.Move(CrashLogPath, previous);
+    }
+
+    /// <summary>
     /// 新しい版があるか確かめ、あれば案内する。
     /// <para>
-    /// <paramref name="showWhenLatest"/> が false なら、最新のときは何も出さない。
-    /// 起動のたびに「最新です」と言われても邪魔なだけ。
+    /// <paramref name="showWhenLatest"/> が false なら、最新のとき・確認中で始められ
+    /// なかったときは何も出さない。起動のたびに「最新です」と言われても邪魔なだけ。
+    /// </para>
+    /// <para>
+    /// 起動直後の裏の確認と、押しての確認が重なることがある。以前は2本目が
+    /// <c>null</c> を受け取って「最新です」と誤って言っていたので、4状態
+    /// （<see cref="UpdateCheckStatus"/>）を区別して扱う。
     /// </para>
     /// </summary>
     private async Task CheckForUpdateAsync(bool showWhenLatest)
     {
         if (_updater is null) return;
 
+        // 押して確かめたときは、待っていることが分かるようにする
+        if (showWhenLatest) Mouse.OverrideCursor = Cursors.Wait;
+
         try
         {
-            var info = await _updater.CheckAsync().ConfigureAwait(true);
+            var result = await _updater.CheckAsync().ConfigureAwait(true);
 
-            if (info is null)
+            switch (result.Status)
             {
-                if (showWhenLatest)
-                {
-                    MessageBox.Show(
-                        MainWindow,
-                        $"お使いの {UpdateService.CurrentVersion} が最新です。",
-                        "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                case UpdateCheckStatus.AlreadyChecking:
+                    if (showWhenLatest)
+                    {
+                        MessageBox.Show(
+                            MainWindow,
+                            "いま確認しています。少し待ってからもう一度お試しください。",
+                            "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
 
-                return;
+                    return;
+
+                case UpdateCheckStatus.Failed:
+                    if (showWhenLatest)
+                    {
+                        MessageBox.Show(
+                            MainWindow, "更新を確かめられませんでした。ネットワークをご確認ください。",
+                            "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+
+                    return;
+
+                case UpdateCheckStatus.UpToDate:
+                    if (showWhenLatest)
+                    {
+                        MessageBox.Show(
+                            MainWindow,
+                            $"お使いの {UpdateService.CurrentVersion} が最新です。",
+                            "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+
+                    return;
+
+                case UpdateCheckStatus.UpdateAvailable:
+                    new UpdateWindow(_updater, result.Info!, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+                    return;
             }
-
-            new UpdateWindow(_updater, info, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        finally
         {
-            // 更新を確かめられなくても、アプリは使える
-            if (showWhenLatest)
-            {
-                MessageBox.Show(
-                    MainWindow, "更新を確かめられませんでした。ネットワークをご確認ください。",
-                    "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            if (showWhenLatest) Mouse.OverrideCursor = null;
         }
     }
 
@@ -313,6 +372,20 @@ public partial class App : Application
 
         DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
 
+        RestartProcess();
+    }
+
+    private static void OpenInBrowser(string url)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+        {
+            UseShellExecute = true,
+        });
+    }
+
+    /// <summary>いまの exe をもう一度起動して、自分は終わる。</summary>
+    private void RestartProcess()
+    {
         if (Environment.ProcessPath is { Length: > 0 } exe)
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
@@ -324,12 +397,118 @@ public partial class App : Application
         Shutdown();
     }
 
-    private static void OpenInBrowser(string url)
+    // ------------------------------------------------------------------
+    // データベースを開けなかったとき（要件書 3章・安全装置）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// データベースを開けなかったときの案内。
+    /// <para>
+    /// 黙って落とすと、利用者には何もできない。新しい版で作ったデータを古い版で
+    /// 開いた場合や、ファイルが壊れている場合に起こる。せめて「壊れたものをどけて
+    /// 新しく始める」「バックアップから戻す」を選べるようにする。
+    /// </para>
+    /// </summary>
+    private void HandleDatabaseOpenFailure(Exception ex)
     {
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+        var choice = MessageBox.Show(
+            "データを開けませんでした。新しい版で作ったデータを古い版で開いた場合や、"
+            + "ファイルが壊れている場合に起こります。\n\n"
+            + "「はい」: 壊れたデータをどけて、新しく始めます（今までの予定・タスクは"
+            + "戻せなくなりますが、ファイル自体は残るので後から取り出せます）。\n"
+            + "「いいえ」: バックアップファイルから復元します。\n"
+            + "「キャンセル」: 何もせず終了します。\n\n"
+            + $"詳細: {ex.Message}\n保存先: {CalendarDatabase.DefaultPath}",
+            "SlideinaCalendar", MessageBoxButton.YesNoCancel, MessageBoxImage.Error);
+
+        switch (choice)
         {
-            UseShellExecute = true,
-        });
+            case MessageBoxResult.Yes:
+                SetAsideBrokenDatabaseAndRestart();
+                return;
+
+            case MessageBoxResult.No:
+                RestoreFromPickedBackupAndRestart();
+                return;
+
+            default:
+                Shutdown(1);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// 壊れたデータベースをどけて、立ち上げ直す。
+    /// <para>
+    /// 消すのではなく <c>.broken-日時</c> へ改名する。中身を諦めるのはこちらの判断
+    /// だけでは決められないので、あとから利用者が手で取り出せるように残しておく。
+    /// </para>
+    /// </summary>
+    private void SetAsideBrokenDatabaseAndRestart()
+    {
+        try
+        {
+            // 接続を使い終わってもプールに残る。どけようとしているファイルを
+            // 掴んだままだと、改名も失敗する
+            SqliteConnection.ClearAllPools();
+
+            var target = CalendarDatabase.DefaultPath;
+
+            if (File.Exists(target))
+            {
+                var broken = $"{target}.broken-{DateTimeOffset.Now:yyyyMMdd-HHmmss}";
+                File.Move(target, broken);
+            }
+
+            // 古い WAL が残っていると、次に作る新しいデータベースと食い違う
+            foreach (var suffix in (string[])["-wal", "-shm"])
+            {
+                var side = target + suffix;
+                if (File.Exists(side)) File.Delete(side);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"壊れたデータをどけられませんでした。\n\n{ex.Message}",
+                "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
+        RestartProcess();
+    }
+
+    /// <summary>選んだバックアップファイルで置き換えて、立ち上げ直す。</summary>
+    private void RestoreFromPickedBackupAndRestart()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "復元するバックアップを選ぶ",
+            Filter = "SlideinaCalendar のバックアップ (*.db)|*.db|すべてのファイル (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            Shutdown(1);
+            return;
+        }
+
+        try
+        {
+            DatabaseBackup.RestoreFrom(dialog.FileName, CalendarDatabase.DefaultPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        {
+            MessageBox.Show(
+                $"復元できませんでした。\n\n{ex.Message}",
+                "SlideinaCalendar", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
+        RestartProcess();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -392,6 +571,10 @@ public partial class App : Application
 
         _shellController.Restore();
 
+        // DB 版の印だけでなく、DB を介さない印も合わせておく。Restore() は直接
+        // Apply() を呼ぶので ModeChanged は上がらず、ここで一度明示的に合わせる
+        Shell.WorkAreaGuard.MarkReserved(main.Shell.Mode == ShellMode.Dock);
+
         _tray = new Shell.TrayIcon("SlideinaCalendar", BuildTrayMenu(main));
         _tray.Activated += (_, _) => Dispatcher.Invoke(BringToFront);
 
@@ -403,6 +586,12 @@ public partial class App : Application
         main.Shell.ModeChanged += (_, _) => _shellController?.Save();
         main.Shell.EdgeChanged += (_, _) => _shellController?.Save();
         main.Shell.DockWidthChanged += (_, _) => _shellController?.Save();
+
+        // ワークエリアを削っている／いないの、DB を介さない印も同じタイミングで
+        // 合わせる。データベースが壊れて開けなくなったときの最後の砦になる
+        // （WorkAreaGuard.RecoverIfNeeded()、App.OnStartup 側）
+        main.Shell.ModeChanged += (_, _) =>
+            Shell.WorkAreaGuard.MarkReserved(main.Shell.Mode == ShellMode.Dock);
     }
 
     /// <summary>
