@@ -717,6 +717,19 @@ public sealed class CalendarWorkspace
             ?.NotifyDefault ?? true;
     }
 
+    /// <summary>
+    /// この予定を画面に出すか。
+    /// <para>カレンダー一覧で表示を切ってあるものは、数にも入れない。</para>
+    /// </summary>
+    public bool ShowsEvent(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return Sources.Calendars()
+            .FirstOrDefault(c => string.Equals(c.Id, value.CalendarId, StringComparison.Ordinal))
+            ?.IsVisible ?? true;
+    }
+
     /// <summary>カレンダーの予定を既定で知らせるかどうかを切り替える。</summary>
     /// <returns>切り替えたら true。</returns>
     public bool SetCalendarNotify(string id, bool notify)

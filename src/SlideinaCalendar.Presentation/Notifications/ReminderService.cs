@@ -49,8 +49,13 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         _summarySentOn = today;
 
+        // 画面に出していないカレンダーと、知らせないと決めたカレンダーは数に入れない。
+        // 同じ予定を2つのカレンダーに持っていると、まとめにも二度出る
         var items = _workspace.Schedule.EventsInRange(today, today)
             .Where(e => !CalendarWorkspace.IsMilestoneMark(e.Source))
+            .Where(e => _workspace.ShowsEvent(e.Source))
+            .Where(e => _workspace.NotifiesFor(e.Source))
+            .DistinctBy(e => (e.Source.StartTime, e.Source.Title))
             .OrderBy(e => e.Source.StartTime ?? TimeOnly.MinValue)
             .ThenBy(e => e.Source.Title, StringComparer.Ordinal)
             .ToArray();
