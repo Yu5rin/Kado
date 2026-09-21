@@ -357,12 +357,17 @@ public partial class App : Application
 
         _shellController = new Shell.ShellController(window, main.Shell, _dockStore);
 
-        // スライドの引っ込め方は設定から。変えたらその場で効かせる
+        // スライドの引っ込め方と、いちばん細くできる幅は設定から。
+        // 変えたらその場で効かせる
         if (_settings is { } settings)
         {
             _shellController.SlideOutOnLeave = settings.SlideOutOnLeave;
+            main.Shell.MinWidth = settings.MinWidth;
+
             settings.Changed += (_, _) =>
             {
+                main.Shell.MinWidth = settings.MinWidth;
+
                 if (_shellController is { } controller)
                 {
                     controller.SlideOutOnLeave = settings.SlideOutOnLeave;

@@ -716,7 +716,8 @@
             </Border>
 
             <!-- 左パネルと中央の境目。閉じているあいだは出さない -->
-            <GridSplitter Grid.Column="3" Style="{StaticResource PaneSplitterStyle}"
+            <GridSplitter Grid.Column="3" x:Name="SideSplitter"
+                          Style="{StaticResource PaneSplitterStyle}"
                           Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}" />
 
             <!-- 中央（.main） -->

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -170,111 +171,94 @@ public partial class MainWindow : Window
 
         _sideWidth = vm.SidePanelWidth;
         _detailWidth = vm.DetailPaneWidth;
-        DetailColumn.Width = new GridLength(vm.DetailPaneWidth);
-        ApplySidePanel(vm.IsSidePanelOpen);
 
         ApplyPanes(vm);
 
         vm.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(MainViewModel.IsSidePanelOpen))
-            {
-                ApplySidePanel(vm.IsSidePanelOpen);
-
-                // 誰が残りを受け取るかが変わる。開けたあとに呼ぶ
-                ApplyPanes(vm);
-            }
-            else if (args.PropertyName is nameof(MainViewModel.IsMainViewOpen)
-                     or nameof(MainViewModel.IsDetailPaneOpen)
-                     or nameof(MainViewModel.IsSlimPanelOpen))
+            if (args.PropertyName is nameof(MainViewModel.IsSidePanelOpen)
+                or nameof(MainViewModel.IsMainViewOpen)
+                or nameof(MainViewModel.IsDetailPaneOpen)
+                or nameof(MainViewModel.IsSlimPanelOpen))
             {
                 ApplyPanes(vm);
             }
         };
     }
 
-    /// <summary>
-    /// 左パネルの開け閉め。
-    /// <para>
-    /// 閉じるときは列ごと畳む。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
-    /// 開くときは畳む前の幅に戻す。
-    /// </para>
-    /// </summary>
-    private void ApplySidePanel(bool isOpen)
+    /// <summary>残りの幅を受け取るのは、どのパネルか。</summary>
+    private enum Filler
     {
-        if (isOpen)
-        {
-            SideColumn.MinWidth = MainViewModel.MinSidePanelWidth;
-            SideColumn.Width = new GridLength(_sideWidth);
-            return;
-        }
-
-        if (SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
-
-        // 下限を外さないと 0 まで畳めない
-        SideColumn.MinWidth = 0;
-        SideColumn.Width = new GridLength(0);
+        Main,
+        Detail,
+        Side,
+        Slim,
     }
 
     /// <summary>
-    /// 中央と右ペインの出し分け。
+    /// パネルの出し分けと幅。
+    /// <para>
+    /// <b>残りを受け取るのは1つだけ。</b>中央 → 右 → 左 → スリム の順で決める。
+    /// どれも「*」でないと、窓を広げたぶんが誰にも行き渡らず、黒いまま余る。
+    /// パネルごとに別々の条件で決めていたら、スリムパネルだけを出したときに
+    /// 受け取り手がいなくなっていた。
+    /// </para>
     /// <para>
     /// 畳むときは列ごと 0 にする。中身を隠すだけでは、手で決めた幅ぶんの余白が残る。
-    /// 中央を畳んだときは、右ペインが伸びて残りを受け取る。
     /// </para>
     /// </summary>
     private void ApplyPanes(MainViewModel vm)
     {
-        if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
+        // 手で決めた幅を控える。畳んで開き直したとき、そこへ戻す
         if (vm.IsSlimPanelOpen && SlimColumn.ActualWidth > 0) _slimWidth = SlimColumn.ActualWidth;
+        if (vm.IsSidePanelOpen && SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
+        if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
 
-        // スリムパネル。畳むときは列ごと 0 にする
-        SlimColumn.MinWidth = vm.IsSlimPanelOpen ? MainViewModel.MinSlimPanelWidth : 0;
-        SlimColumn.Width = vm.IsSlimPanelOpen ? new GridLength(_slimWidth) : new GridLength(0);
-        SlimSplitter.Visibility = vm.IsSlimPanelOpen
-            && (vm.IsSidePanelOpen || vm.IsMainViewOpen || vm.IsDetailPaneOpen)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        var filler =
+            vm.IsMainViewOpen ? Filler.Main
+            : vm.IsDetailPaneOpen ? Filler.Detail
+            : vm.IsSidePanelOpen ? Filler.Side
+            : Filler.Slim;
 
+        Fit(SlimColumn, vm.IsSlimPanelOpen, filler == Filler.Slim, _slimWidth,
+            MainViewModel.MinSlimPanelWidth, MainViewModel.MaxSlimPanelWidth);
 
-        // 中央を畳んだら、右ペインが「*」になって残りを埋める。
-        // ピクセルのままだと、窓を広げたぶんが誰にも行き渡らない
-        DetailColumn.Width = vm switch
-        {
-            { IsDetailPaneOpen: false } => new GridLength(0),
-            { IsMainViewOpen: false } => new GridLength(1, GridUnitType.Star),
-            _ => new GridLength(_detailWidth),
-        };
+        Fit(SideColumn, vm.IsSidePanelOpen, filler == Filler.Side, _sideWidth,
+            MainViewModel.MinSidePanelWidth, MainViewModel.MaxSidePanelWidth);
 
-        DetailColumn.MinWidth = vm.IsDetailPaneOpen ? MainViewModel.MinDetailPaneWidth : 0;
+        Fit(MainColumn, vm.IsMainViewOpen, filler == Filler.Main, MainViewModel.MinMainViewWidth,
+            MainViewModel.MinMainViewWidth, double.PositiveInfinity);
 
-        // 上限も外す。「*」にしても上限（既定 640px）で止まるので、中央を畳んだのに
-        // 右ペインがそこまでしか伸びず、その先が黒いまま余った
-        DetailColumn.MaxWidth = vm.IsMainViewOpen ? MainViewModel.MaxDetailPaneWidth
-            : double.PositiveInfinity;
+        Fit(DetailColumn, vm.IsDetailPaneOpen, filler == Filler.Detail, _detailWidth,
+            MainViewModel.MinDetailPaneWidth, MainViewModel.MaxDetailPaneWidth);
 
-        // 中身を隠すだけでは列が残る。「*」の列は、中が畳まれていても場所を取り続ける。
-        // 実機で「中央を消しても中央のエリアが残る」となったのはこれ
-        // 中央の下げ止まり。帯として使うときはここまで詰める
-        MainColumn.MinWidth = vm.IsMainViewOpen ? MainViewModel.MinMainViewWidth : 0;
-        MainColumn.Width = vm.IsMainViewOpen ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
-
-        // 左パネルだけ残したときも同じ。上限のまま置くと、右側が黒く余る
-        if (vm.IsSidePanelOpen)
-        {
-            var sideOnly = vm is { IsMainViewOpen: false, IsDetailPaneOpen: false };
-
-            SideColumn.MaxWidth = sideOnly ? double.PositiveInfinity
-                : MainViewModel.MaxSidePanelWidth;
-            SideColumn.Width = sideOnly ? new GridLength(1, GridUnitType.Star)
-                : new GridLength(_sideWidth);
-        }
-
-        // 掴みしろだけ残っても、つまんで動かす相手がいない
-        DetailSplitter.Visibility = vm is { IsMainViewOpen: true, IsDetailPaneOpen: true }
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        // 掴みしろは、つまんで動かす相手がいるときだけ出す
+        SlimSplitter.Visibility = Between(
+            vm.IsSlimPanelOpen, vm.IsSidePanelOpen || vm.IsMainViewOpen || vm.IsDetailPaneOpen);
+        SideSplitter.Visibility = Between(
+            vm.IsSidePanelOpen, vm.IsMainViewOpen || vm.IsDetailPaneOpen);
+        DetailSplitter.Visibility = Between(vm.IsDetailPaneOpen, vm.IsMainViewOpen);
     }
+
+    /// <summary>列を、開いているか・残りを受け取るかに合わせて整える。</summary>
+    private static void Fit(
+        ColumnDefinition column, bool open, bool fills, double width, double min, double max)
+    {
+        column.MinWidth = open ? min : 0;
+
+        // 受け取り手のときは上限を外す。付けたままだと、そこで止まって先が余る
+        column.MaxWidth = open && !fills ? max : double.PositiveInfinity;
+
+        column.Width = (open, fills) switch
+        {
+            (false, _) => new GridLength(0),
+            (true, true) => new GridLength(1, GridUnitType.Star),
+            _ => new GridLength(width),
+        };
+    }
+
+    private static Visibility Between(bool left, bool right) =>
+        left && right ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
     private double _detailWidth = MainViewModel.DefaultDetailPaneWidth;
