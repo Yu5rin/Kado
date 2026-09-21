@@ -12,6 +12,51 @@ public class QuickParserTests
 
     private static QuickEntry Parse(string text) => QuickParser.Parse(text, Base);
 
+    // ------------------------------------------------------------------
+    // explicitBase（選んでいる日）。今日と選んでいる日を分けて渡せるか
+    // ------------------------------------------------------------------
+
+    /// <summary>選んでいる日。Base の6日後。</summary>
+    private static readonly DateOnly Selected = new(2026, 9, 30);
+
+    [Fact]
+    public void explicitBaseを渡さなければ今までどおり基準日を使う()
+    {
+        var entry = QuickParser.Parse("打合せ 15時", Base);
+
+        Assert.Equal(Base, entry.Date);
+    }
+
+    [Fact]
+    public void 日付を書かなければexplicitBaseに入る()
+    {
+        var entry = QuickParser.Parse("打合せ 15時", Base, Selected);
+
+        Assert.Equal(Selected, entry.Date);
+    }
+
+    [Fact]
+    public void 相対語はexplicitBaseを渡してもBase基準のまま()
+    {
+        Assert.Equal(Base.AddDays(1), QuickParser.Parse("明日 打合せ", Base, Selected).Date);
+        Assert.Equal(Base.AddDays(3), QuickParser.Parse("3日後 確認", Base, Selected).Date);
+        Assert.Equal(new DateOnly(2026, 10, 15), QuickParser.Parse("来月15日 締切", Base, Selected).Date);
+    }
+
+    [Fact]
+    public void 月を省いた日にちはexplicitBaseの月で読む()
+    {
+        // Selected は 9/30。月を省いた「5日」は選んでいる日の月＝9月として読む
+        Assert.Equal(new DateOnly(2026, 9, 5), QuickParser.Parse("5日 確認", Base, Selected).Date);
+    }
+
+    [Fact]
+    public void 月日を書いた絶対日付はexplicitBaseを見ない()
+    {
+        // 「12/25」は日付そのものを書いているので、選んでいる日は関係ない
+        Assert.Equal(new DateOnly(2026, 12, 25), QuickParser.Parse("12/25 棚卸", Base, Selected).Date);
+    }
+
     [Fact]
     public void 明日15時打合せ()
     {

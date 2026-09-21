@@ -37,6 +37,25 @@
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
+            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
+            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskDoneCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="完了にする" />
+                        <Style.Triggers>
+                            <DataTrigger Value="True"
+                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
+                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <Setter Property="Header" Value="完了を取り消す" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <Separator />
             <MenuItem Header="削除"
                       Command="{Binding PlacementTarget.Tag.DeleteTaskCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -54,16 +73,15 @@
                     <Border DockPanel.Dock="Left" Width="3" CornerRadius="2" Margin="0,1,9,1"
                             Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
 
-                    <TextBlock DockPanel.Dock="Left" Text="{Binding TimeText}" Width="48"
-                               FontSize="11.5" LineHeight="17"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding TimeText}" Width="48" LineHeight="17"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource Ink2Brush}" />
 
                     <StackPanel>
-                        <TextBlock Text="{Binding Title}" FontSize="12.5" LineHeight="17"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" LineHeight="17"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource InkBrush}" />
-                        <TextBlock Text="{Binding SubText}" FontSize="11" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" LineHeight="15"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding SubText, Converter={StaticResource NullToVisibility}}" />
@@ -83,18 +101,17 @@
                              VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
 
-                    <TextBlock DockPanel.Dock="Left" Text="期限" Width="48"
-                               FontSize="11.5" LineHeight="17"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="期限" Width="48" LineHeight="17"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <StackPanel>
-                        <TextBlock x:Name="Title" Text="{Binding Title}" FontSize="12.5" LineHeight="17"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" Text="{Binding Title}" LineHeight="17"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource InkBrush}" />
-                        <TextBlock Text="{Binding DueText}" FontSize="11" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}" LineHeight="15"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}" />
-                        <TextBlock Text="{Binding DoneText}" FontSize="11" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DoneText}" LineHeight="15"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding DoneText, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
@@ -103,10 +120,11 @@
 
             <DataTemplate.Triggers>
                 <!-- 済んだものは取り消し線。消さずに残すのは、いつ片付いたかを見るため -->
+                <!-- 済み色は右ペイン・月ビューと同じ DoneBrush に揃える（項目13） -->
                 <DataTrigger Binding="{Binding IsDone}" Value="True">
                     <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
                     <Setter TargetName="Title" Property="Foreground"
-                            Value="{DynamicResource Ink3Brush}" />
+                            Value="{DynamicResource DoneBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -119,24 +137,23 @@
                     MouseLeftButtonDown="OnRowClicked">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Left" Width="132" Margin="0,0,12,0">
-                        <TextBlock x:Name="DateText" Text="{Binding DateText}"
-                                   FontSize="12.5" FontWeight="Medium" LineHeight="18"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DateText" Text="{Binding DateText}" FontWeight="Medium" LineHeight="18"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource InkBrush}" />
 
-                        <TextBlock Text="{Binding WorkingDayText}" FontSize="10.5" LineHeight="14"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding WorkingDayText}" LineHeight="14"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding WorkingDayText, Converter={StaticResource NullToVisibility}}" />
 
-                        <TextBlock Text="{Binding HolidayName}" FontSize="10.5" LineHeight="14"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding HolidayName}" LineHeight="14"
                                    Foreground="{DynamicResource SundayBrush}"
                                    Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
 
                     <StackPanel>
                         <!-- 畳んだ行。消さずに残すのは、間がどれだけ空いているかを示すため -->
-                        <TextBlock Text="{Binding GapText}" FontSize="11" LineHeight="17"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding GapText}" LineHeight="17"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding GapText, Converter={StaticResource NullToVisibility}}" />
 
@@ -193,11 +210,12 @@
     </UserControl.Resources>
 
     <DockPanel>
+        <!-- 「ビュー見出し」の寸法を日・年ビューと揃える（項目20） -->
         <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-            <TextBlock Text="{Binding HeaderText}" FontSize="13" FontWeight="SemiBold"
-                       Typography.NumeralAlignment="Tabular"
-                       Foreground="{DynamicResource InkBrush}" />
+            <TextBlock Text="{Binding HeaderText}" Style="{StaticResource SubheadingTextStyle}"
+                       FontWeight="SemiBold"
+                       Typography.NumeralAlignment="Tabular" />
         </Border>
 
         <Grid>
@@ -207,7 +225,7 @@
                               ItemTemplate="{StaticResource AgendaRowTemplate}" />
             </ScrollViewer>
 
-            <TextBlock Text="この期間に予定もタスクもありません" FontSize="12"
+            <TextBlock Style="{StaticResource BodyTextStyle}" Text="この期間に予定もタスクもありません"
                        HorizontalAlignment="Center" VerticalAlignment="Center"
                        Foreground="{DynamicResource Ink3Brush}"
                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}"

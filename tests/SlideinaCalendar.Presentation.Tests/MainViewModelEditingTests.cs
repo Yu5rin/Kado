@@ -115,24 +115,28 @@ public class MainViewModelEditingTests
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
 
-        var (vm, editors) = Create(test);
+        var (vm, _) = Create(test);
         vm.DeleteEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
 
         Assert.Empty(vm.SelectedDay.Events);
-        Assert.Equal("会議", editors.LastConfirmedTitle);
     }
 
+    /// <summary>
+    /// 削除に確認ダイアログは出さない（Undo が効くので不要）。
+    /// 手応えは Undo で戻せることで担保する。
+    /// </summary>
     [Fact]
-    public void 確認で断ると削除しない()
+    public void 削除は確認なしですぐ消え_Undoで戻せる()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
 
-        var (vm, editors) = Create(test);
-        editors.ConfirmsDelete = false;
-
+        var (vm, _) = Create(test);
         vm.DeleteEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
 
+        Assert.Empty(vm.SelectedDay.Events);
+
+        vm.UndoCommand.Execute(null);
         Assert.Single(vm.SelectedDay.Events);
     }
 
@@ -249,7 +253,7 @@ public class MainViewModelEditingTests
     public void マスの予定を消せる()
     {
         using var test = TestWorkspace.Create();
-        var (vm, editors) = Create(test);
+        var (vm, _) = Create(test);
 
         test.Workspace.AddEvent(new CalendarEvent
         {
@@ -260,26 +264,10 @@ public class MainViewModelEditingTests
         var chip = Chip(vm, "e1");
         vm.DeleteChipCommand.Execute(chip);
 
-        // 何を消すのか名前で尋ねる
-        Assert.Equal("定例", editors.LastConfirmedTitle);
+        // 確認なしですぐ消える。手応えは Undo で戻せることで返す
         Assert.Null(test.Workspace.Events.Find("e1"));
-    }
 
-    [Fact]
-    public void 消すのを断れば残る()
-    {
-        using var test = TestWorkspace.Create();
-        var (vm, editors) = Create(test);
-
-        test.Workspace.AddEvent(new CalendarEvent
-        {
-            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
-            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
-        });
-
-        editors.ConfirmsDelete = false;
-        vm.DeleteChipCommand.Execute(Chip(vm, "e1"));
-
+        vm.UndoCommand.Execute(null);
         Assert.NotNull(test.Workspace.Events.Find("e1"));
     }
 
@@ -354,7 +342,7 @@ public class MainViewModelEditingTests
     public void 時間軸の予定を消せる()
     {
         using var test = TestWorkspace.Create();
-        var (vm, editors) = Create(test);
+        var (vm, _) = Create(test);
 
         test.Workspace.AddEvent(new CalendarEvent
         {
@@ -364,7 +352,6 @@ public class MainViewModelEditingTests
 
         vm.DeleteBlockCommand.Execute(Block(vm, "e1"));
 
-        Assert.Equal("定例", editors.LastConfirmedTitle);
         Assert.Null(test.Workspace.Events.Find("e1"));
     }
 
@@ -409,5 +396,139 @@ public class MainViewModelEditingTests
         vm.DeleteBlockCommand.Execute(Block(vm, "b1"));
 
         Assert.NotNull(test.Workspace.Tasks.Find("t1"));
+    }
+
+    // ------------------------------------------------------------------
+    // 項目6: エディタの「削除」ボタンを受ける配線
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 予定エディタの削除ボタンで削除される()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
+
+        var (vm, editors) = Create(test);
+
+        // 編集画面の「削除」は RequestDelete() を呼んだあと DialogResult=false で閉じる
+        editors.OnEvent = editor => { editor.RequestDelete(); return false; };
+
+        vm.EditChipCommand.Execute(Chip(vm, "e1"));
+
+        Assert.Null(test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public void 予定エディタを取り消しで閉じても削除しない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
+
+        var (vm, editors) = Create(test);
+
+        // 削除は押していない。ふつうの取り消しなら消さない
+        editors.OnEvent = _ => false;
+
+        vm.EditChipCommand.Execute(Chip(vm, "e1"));
+
+        Assert.NotNull(test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public void タスクエディタの削除ボタンで削除される()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+
+        var (vm, editors) = Create(test);
+        editors.OnTask = editor => { editor.RequestDelete(); return false; };
+
+        vm.EditTaskCommand.Execute(Assert.Single(vm.SelectedDay.Tasks));
+
+        Assert.Null(test.Workspace.Tasks.Find("t1"));
+    }
+
+    [Fact]
+    public void 右ペインのタスクエディタの削除ボタンでも削除される()
+    {
+        // EditTask（右ペイン用）は EditTaskBy とは別の実装なので、こちらも確かめる
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+
+        var (vm, editors) = Create(test);
+        editors.OnTask = editor => { editor.RequestDelete(); return false; };
+
+        var task = vm.Month.Cells.SelectMany(c => c.Tasks).First(t => t.Id == "t1");
+        vm.EditTaskChipCommand.Execute(task);
+
+        Assert.Null(test.Workspace.Tasks.Find("t1"));
+    }
+
+    // ------------------------------------------------------------------
+    // 項目1: ステータス表示
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 操作の結果がStatusMessageに出て消せる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 9, 24) });
+
+        var (vm, _) = Create(test);
+        vm.DeleteEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        Assert.Equal("予定を削除しました", vm.StatusMessage);
+
+        // 画面側が一定時間後に呼ぶ。すでに出ている内容を消せる
+        vm.ClearStatusMessage();
+        Assert.Null(vm.StatusMessage);
+    }
+
+    // ------------------------------------------------------------------
+    // 項目7: 実働日計算パネルの配線（モードレス化・日付クリックの受け）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 実働日計算を開くまでは閉じている()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, _) = Create(test);
+
+        Assert.False(vm.IsWorkdayCalculatorOpen);
+    }
+
+    [Fact]
+    public void 開いているあいだだけ日付クリックを流せる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, _) = Create(test);
+
+        // 開く前に流しても、当てる先が無いので何も起きない
+        vm.FeedWorkdayCalculator(D(2026, 10, 1), isEnd: false);
+
+        vm.OpenWorkingDayCalculatorCommand.Execute(null);
+        Assert.True(vm.IsWorkdayCalculatorOpen);
+
+        vm.FeedWorkdayCalculator(D(2026, 10, 1), isEnd: false);
+        vm.FeedWorkdayCalculator(D(2026, 10, 10), isEnd: true);
+
+        // FakeEditorPresenter は ShowWorkdayCalculator を記録するだけなので、
+        // ここでは「例外なく呼べる」ことまでを確かめる（実際の反映は WorkdayCalculatorViewModel 側でテスト済み）
+    }
+
+    [Fact]
+    public void 二重に開いても同じパネルを使い回す()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        vm.OpenWorkingDayCalculatorCommand.Execute(null);
+        var first = editors.LastCalculator;
+
+        vm.OpenWorkingDayCalculatorCommand.Execute(null);
+        var second = editors.LastCalculator;
+
+        // 作り直していれば別インスタンスになり、入力中の内容が消えてしまう
+        Assert.Same(first, second);
     }
 }

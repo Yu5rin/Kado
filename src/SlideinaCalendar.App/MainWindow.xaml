@@ -19,7 +19,8 @@
         Icon="/Assets/app.png"
         FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         Background="{DynamicResource BackgroundBrush}"
-        Foreground="{DynamicResource InkBrush}">
+        Foreground="{DynamicResource InkBrush}"
+        PreviewKeyDown="OnPreviewKeyDown">
 
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
@@ -136,17 +137,47 @@
                     ContextMenu="{StaticResource MilestoneMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
                     Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー">
-                <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold" LineHeight="15"
+                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
         </DataTemplate>
     </Window.Resources>
 
-    <!-- 元に戻す・やり直しはツールバーに出さない。モックに無く、キーで足りる -->
+    <!--
+        元に戻す・やり直しはツールバーに出さない。モックに無く、キーで足りる。
+
+        毎日何度も開くアプリなので、よく使う操作は手が覚えられるように増やしてある
+        （項目3）。修飾キー無しの単独キー（T・1〜5・矢印・PageUp/PageDown）は、
+        クイック入力欄・検索欄・エディタの中で打ったときにまで奪うと実害が出る
+        （「3」と打つと月表示に切り替わる、など）。<c>OnPreviewKeyDown</c>
+        （MainWindow.xaml.cs）が、入力要素にフォーカスがあるときはここへ
+        届く前に止める。
+    -->
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
         <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
+
+        <KeyBinding Key="T" Command="{Binding TodayCommand}" />
+        <KeyBinding Key="Left" Command="{Binding PreviousCommand}" />
+        <KeyBinding Key="Right" Command="{Binding NextCommand}" />
+        <KeyBinding Key="PageUp" Command="{Binding PreviousCommand}" />
+        <KeyBinding Key="PageDown" Command="{Binding NextCommand}" />
+
+        <!-- 一覧・年・月・週・日。ビュー切替のセグメントと同じ並び -->
+        <KeyBinding Key="D1" Command="{Binding SwitchViewCommand}" CommandParameter="Agenda" />
+        <KeyBinding Key="D2" Command="{Binding SwitchViewCommand}" CommandParameter="Year" />
+        <KeyBinding Key="D3" Command="{Binding SwitchViewCommand}" CommandParameter="Month" />
+        <KeyBinding Key="D4" Command="{Binding SwitchViewCommand}" CommandParameter="Week" />
+        <KeyBinding Key="D5" Command="{Binding SwitchViewCommand}" CommandParameter="Day" />
+
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding AddEventCommand}" />
+        <KeyBinding Key="N" Modifiers="Control+Shift" Command="{Binding AddTaskCommand}" />
+
+        <!--
+            Ctrl＋F（検索）・Ctrl＋L と /（クイック入力）は ViewModel のコマンドではなく
+            フォーカス移動そのものなので、Command には繋がず OnPreviewKeyDown で直に受ける
+        -->
     </Window.InputBindings>
 
     <Grid x:Name="Root" PreviewMouseWheel="OnZoomWheel">
@@ -178,7 +209,7 @@
                 <DockPanel LastChildFill="False">
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
-                        Command="{Binding ToggleSidePanelCommand}" ToolTip="サイドパネルの表示切替">
+                        Command="{Binding ToggleSidePanelCommand}" ToolTip="左パネルの表示切替">
                     <Path Data="{StaticResource IconMenu}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -190,8 +221,8 @@
                     中央を畳んでいるときは出さない。見ているのは選んだ1日で、
                     右ペインの日付欄やミニ月暦と同じことを二度言うことになる
                 -->
-                <TextBlock DockPanel.Dock="Left" MinWidth="{Binding TitleRoom}" Margin="8,0,0,0"
-                           VerticalAlignment="Center" FontSize="19" FontWeight="SemiBold"
+                <TextBlock Style="{StaticResource HeadingTextStyle}" DockPanel.Dock="Left" MinWidth="{Binding TitleRoom}" Margin="8,0,0,0"
+                           VerticalAlignment="Center" FontWeight="SemiBold"
                            Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}"
                            Typography.NumeralAlignment="Tabular">
                     <Run Text="{Binding TitleYear, Mode=OneWay}" FontSize="14" FontWeight="Medium"
@@ -214,9 +245,23 @@
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
 
+                <!--
+                    「今日」。帯として細く使う場面ほど「今日へ戻る」が要るので、幅が
+                    無くても消さない（項目10）。380px を切ったらアイコンだけに畳む。
+                    T キーでも同じことができる
+                -->
                 <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0"
                         Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}"
-                        Visibility="{Binding ShowsTodayButton, Converter={StaticResource BoolToVisibility}}" />
+                        ToolTip="今日へ戻る（T）"
+                        Visibility="{Binding UsesCompactTodayButton, Converter={StaticResource InverseBoolToVisibility}}" />
+                <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
+                        Command="{Binding TodayCommand}" ToolTip="今日へ戻る（T）"
+                        Visibility="{Binding UsesCompactTodayButton, Converter={StaticResource BoolToVisibility}}">
+                    <!-- カレンダーの形。専用のアイコンリソースは無いので、ここに直に描く -->
+                    <Path Data="M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" Stretch="Uniform" Width="15" Height="15"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Button>
 
                 <!-- ビュー切替（.seg）。区切り線は右側、最後だけ引かない -->
                 <Border DockPanel.Dock="Left" Margin="10,0,0,0" CornerRadius="5" ClipToBounds="True"
@@ -272,7 +317,7 @@
                     <Border Margin="12,0,0,0" CornerRadius="5" Padding="10,3"
                             VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                             Visibility="{Binding HasWorkingDayData, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink2Brush}"
                                    Typography.NumeralAlignment="Tabular">
                             <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
                                   FontSize="14" FontWeight="SemiBold"
@@ -282,15 +327,15 @@
                     <Border Margin="6,0,0,0" CornerRadius="5" Padding="10,3"
                             VerticalAlignment="Center" Background="{DynamicResource AccentSoftBrush}"
                             Visibility="{Binding HasRemainingWorkingDays, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock FontSize="11.5" Foreground="{DynamicResource Ink2Brush}"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink2Brush}"
                                    Typography.NumeralAlignment="Tabular">
                             <Run Text="残り " /><Run Text="{Binding RemainingWorkingDaysText, Mode=OneWay}"
                                   FontSize="14" FontWeight="SemiBold"
                                   Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
                         </TextBlock>
                     </Border>
-                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center"
-                               Text="実働日データ未登録" FontSize="11.5"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="12,0,0,0" VerticalAlignment="Center"
+                               Text="実働日データ未登録"
                                Foreground="{DynamicResource Ink3Brush}"
                                Visibility="{Binding HasWorkingDayData, Converter={StaticResource InverseBoolToVisibility}}" />
                 </StackPanel>
@@ -375,7 +420,7 @@
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         Margin="0,0,2,0"
                         Command="{Binding Shell.ToggleSlideCommand}"
-                        ToolTip="{Binding Shell.ModeLabel}">
+                        ToolTip="{Binding Shell.ModeToggleLabel}">
                     <Button.ContextMenu>
                         <ContextMenu>
                             <!--
@@ -449,7 +494,13 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
                                  Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
-                        <TextBlock Text="{Binding SyncStatusText}" FontSize="11.5"
+                        <!--
+                            同期失敗の文言は長くなりうる。切らないと左（年月・送り・
+                            ビュー切替）を押し出す。全文はツールチップに回す
+                        -->
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SyncStatusText}"
+                                   MaxWidth="220" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SyncStatusText}"
                                    Foreground="{DynamicResource Ink3Brush}" />
                     </StackPanel>
                 </Button>
@@ -482,8 +533,8 @@
                                 Background="{DynamicResource PanelBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                             <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="{Binding SearchMessage}"
-                                           Margin="12,10" FontSize="12"
+                                <TextBlock Style="{StaticResource BodyTextStyle}" DockPanel.Dock="Top" Text="{Binding SearchMessage}"
+                                           Margin="12,10"
                                            Foreground="{DynamicResource Ink3Brush}"
                                            Visibility="{Binding SearchMessage,
                                                         Converter={StaticResource NullToVisibility}}" />
@@ -496,16 +547,15 @@
                                                         Background="Transparent"
                                                         MouseLeftButtonDown="OnSearchResultClicked">
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding DateText}"
-                                                                   FontSize="10.5" Margin="10,0,0,0"
+                                                        <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding DateText}" Margin="10,0,0,0"
                                                                    VerticalAlignment="Center"
                                                                    Typography.NumeralAlignment="Tabular"
                                                                    Foreground="{DynamicResource Ink3Brush}" />
                                                         <StackPanel>
-                                                            <TextBlock Text="{Binding Title}" FontSize="12.5"
+                                                            <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Foreground="{DynamicResource InkBrush}" />
-                                                            <TextBlock Text="{Binding Detail}" FontSize="10.5"
+                                                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Detail}"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Foreground="{DynamicResource Ink3Brush}"
                                                                        Visibility="{Binding Detail,
@@ -531,6 +581,38 @@
                 </DockPanel>
                 </ScrollViewer>
             </Grid>
+        </Border>
+
+        <!--
+            操作の結果を一時的に出す帯（項目1）。40か所以上から StatusMessage に代入
+            しているのに、受ける場所がどこにも無かった。数秒で消えるので、常設の
+            ステータスバーとは違い、出ているときだけ場所を取る。
+
+            幅が狭いとき（この画面は最小 160px まで細くなる）にも潰れないよう、
+            文言は MaxWidth と TextTrimming で切る。「元に戻す」は UndoCommand の
+            CanExecute に従って自動で出し引きする（IsEnabled=False のとき Collapsed）。
+        -->
+        <Border DockPanel.Dock="Bottom" Padding="12,6"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}"
+                Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibility}}">
+            <DockPanel LastChildFill="False">
+                <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2"
+                        Command="{Binding UndoCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource CaptionTextStyle}"
+                           VerticalAlignment="Center" MaxWidth="640" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding StatusMessage}" />
+            </DockPanel>
         </Border>
 
         <!-- 本体（.body） -->
@@ -600,7 +682,7 @@
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
-                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold"
                                                    VerticalAlignment="Center"
                                                    Typography.NumeralAlignment="Tabular" />
                                     </DockPanel>
@@ -611,7 +693,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding Name}" FontSize="9.5"
+                                                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}"
                                                            HorizontalAlignment="Center" Margin="0,0,0,2"
                                                            Foreground="{DynamicResource Ink3Brush}" />
                                             </DataTemplate>
@@ -651,7 +733,7 @@
                                                   StrokeThickness="2"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
-                                        <TextBlock Text="カレンダー" FontSize="11" VerticalAlignment="Center"
+                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="カレンダー" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Ink3Brush}" />
                                     </DockPanel>
                                     <!--
@@ -692,7 +774,7 @@
                                                   StrokeThickness="2"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
-                                        <TextBlock Text="タスクリスト" FontSize="11" VerticalAlignment="Center"
+                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクリスト" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Ink3Brush}" />
                                     </DockPanel>
                                     <TextBlock Text="このアプリ"
@@ -702,7 +784,7 @@
                                     <ItemsControl ItemsSource="{Binding SourceLists.LocalTaskLists}"
                                                   ItemTemplate="{StaticResource TaskListRowTemplate}" />
 
-                                    <TextBlock Text="Google ToDo" Margin="0,9,0,3"
+                                    <TextBlock Text="Google ToDo リスト" Margin="0,9,0,3"
                                                Style="{StaticResource SourceGroupHeaderStyle}"
                                                Visibility="{Binding SourceLists.ShowsTaskListGroups,
                                                             Converter={StaticResource BoolToVisibility}}" />
@@ -776,8 +858,11 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 日付ヘッダ（.dhead）。実働日の通し番号を出す場所のひとつ（要件書 4.3） -->
-                    <Border Grid.Row="0" Padding="14,11,14,9"
+                    <!--
+                        日付ヘッダ（.dhead）。実働日の通し番号を出す場所のひとつ（要件書 4.3）。
+                        「ビュー見出し」の寸法を一覧・年・日ビューと揃える（項目20）
+                    -->
+                    <Border Grid.Row="0" Padding="12,8"
                             BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
                         <DockPanel>
                             <!--
@@ -814,7 +899,8 @@
 
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding Title}" Style="{StaticResource SubheadingTextStyle}"
+                                           FontWeight="SemiBold"
                                            Typography.NumeralAlignment="Tabular" />
                                 <ItemsControl ItemsSource="{Binding Milestones}"
                                               ItemTemplate="{StaticResource MilestoneBadgeTemplate}"
@@ -827,16 +913,16 @@
 
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                 <!-- 祝日名。予定ではなく日付の添え書きとして出す -->
-                                <TextBlock Text="{Binding HolidayName}" FontSize="11.5" Margin="0,0,8,0"
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding HolidayName}" Margin="0,0,8,0"
                                            Foreground="{DynamicResource SundayBrush}"
                                            Visibility="{Binding HolidayName,
                                                        Converter={StaticResource NullToVisibility}}" />
 
-                                <TextBlock Text="{Binding WorkingDayLabel}" FontSize="11.5"
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding WorkingDayLabel}"
                                            Foreground="{DynamicResource AccentBrush}"
                                            Typography.NumeralAlignment="Tabular"
                                            Visibility="{Binding WorkingDayLabel, Converter={StaticResource NullToVisibility}}" />
-                                <TextBlock Text="{Binding RemainingInMonthText}" FontSize="11.5" Margin="8,0,0,0"
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding RemainingInMonthText}" Margin="8,0,0,0"
                                            Foreground="{DynamicResource Ink3Brush}"
                                            Typography.NumeralAlignment="Tabular"
                                            Visibility="{Binding RemainingInMonthText, Converter={StaticResource NullToVisibility}}" />
@@ -849,10 +935,10 @@
                         <StackPanel>
                             <!-- 予定の見出し（.dsec） -->
                             <DockPanel Margin="14,9,14,4">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding EventCountText}" FontSize="11"
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding EventCountText}"
                                            Foreground="{DynamicResource Ink3Brush}"
                                            Typography.NumeralAlignment="Tabular" />
-                                <TextBlock Text="予定" FontSize="11" Foreground="{DynamicResource Ink3Brush}" />
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定" Foreground="{DynamicResource Ink3Brush}" />
                             </DockPanel>
 
                             <!-- 予定（.ev）。時刻38px＋帯3px＋タイトル13px＋補助行 -->
@@ -863,8 +949,8 @@
                                                 ToolTip="ダブルクリックで編集"
                                                 MouseLeftButtonDown="OnEventRowClicked">
                                             <DockPanel>
-                                                <TextBlock DockPanel.Dock="Left" Width="38" Margin="0,2,9,0"
-                                                           Text="{Binding TimeText}" FontSize="11"
+                                                <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Width="38" Margin="0,2,9,0"
+                                                           Text="{Binding TimeText}"
                                                            TextAlignment="Right" VerticalAlignment="Top"
                                                            Foreground="{DynamicResource Ink2Brush}"
                                                            Typography.NumeralAlignment="Tabular" />
@@ -883,10 +969,10 @@
                                                 </Button>
 
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Title}" FontSize="13" LineHeight="18"
+                                                    <TextBlock Style="{StaticResource EmphasisTextStyle}" Text="{Binding Title}" LineHeight="18"
                                                                TextWrapping="Wrap"
                                                                Foreground="{DynamicResource InkBrush}" />
-                                                    <TextBlock Text="{Binding SubText}" FontSize="10.5" Margin="0,1,0,0"
+                                                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" Margin="0,1,0,0"
                                                                Foreground="{DynamicResource Ink3Brush}"
                                                                TextTrimming="CharacterEllipsis"
                                                                Visibility="{Binding SubText, Converter={StaticResource NullToVisibility}}" />
@@ -905,12 +991,17 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
+                            <!-- 0件のときは無言にしない（項目12） -->
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定はありません。下の欄に1行打つと追加できます" Padding="14,2,14,4" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding HasNoEvents, Converter={StaticResource BoolToVisibility}}" />
+
                             <!-- タスクの見出し（.dsec）。「3 / 4」は完了した数と全体 -->
                             <DockPanel Margin="14,9,14,4">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding TaskCountText}" FontSize="11"
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding TaskCountText}"
                                            Foreground="{DynamicResource Ink3Brush}"
                                            Typography.NumeralAlignment="Tabular" />
-                                <TextBlock Text="タスク" FontSize="11" Foreground="{DynamicResource Ink3Brush}" />
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスク" Foreground="{DynamicResource Ink3Brush}" />
                             </DockPanel>
 
                             <!-- タスク（.tk） -->
@@ -940,15 +1031,14 @@
                                                 </Button>
 
                                                 <StackPanel>
-                                                    <TextBlock x:Name="TaskTitle" Text="{Binding Title}"
-                                                               FontSize="13" LineHeight="18" TextWrapping="Wrap"
+                                                    <TextBlock Style="{StaticResource EmphasisTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" LineHeight="18" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource InkBrush}" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
                                                                 Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}">
-                                                        <TextBlock Text="{Binding DueText}" FontSize="10.5"
+                                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
                                                                    Typography.NumeralAlignment="Tabular"
                                                                    Foreground="{Binding Emphasis, Converter={StaticResource DueEmphasisBrush}}" />
-                                                        <TextBlock Text="{Binding DueSubText}" FontSize="10.5" Margin="7,0,0,0"
+                                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueSubText}" Margin="7,0,0,0"
                                                                    Typography.NumeralAlignment="Tabular"
                                                                    Foreground="{DynamicResource Ink3Brush}"
                                                                    Visibility="{Binding DueSubText, Converter={StaticResource NullToVisibility}}" />
@@ -958,8 +1048,7 @@
                                                         済んだタスクの結果。期限に間に合ったかどうかは
                                                         片付いたあとで振り返るときに要る
                                                     -->
-                                                    <TextBlock x:Name="DoneNote" Text="{Binding DoneText}"
-                                                               FontSize="10.5" Margin="0,1,0,0"
+                                                    <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="DoneNote" Text="{Binding DoneText}" Margin="0,1,0,0"
                                                                Typography.NumeralAlignment="Tabular"
                                                                Foreground="{DynamicResource Ink3Brush}"
                                                                Visibility="{Binding DoneText,
@@ -990,6 +1079,11 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- 0件のときは無言にしない（項目12） -->
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。下の欄に1行打つと追加できます" Padding="14,2,14,4" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding HasNoTasks, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1001,16 +1095,15 @@
                                 クイック入力。1行打って Enter で入る。
                                 編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
                             -->
-                            <TextBox Style="{StaticResource QuickInputBoxStyle}"
+                            <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
                                      Text="{Binding DataContext.QuickText,
                                             RelativeSource={RelativeSource AncestorType=Window},
                                             UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="1行で予定を追加します（Enter）&#10;例: 明日15時 打合せ @会議室A"
+                                     ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
                                      KeyDown="OnQuickKeyDown" />
 
-                            <TextBlock Text="{Binding DataContext.QuickPreview,
-                                              RelativeSource={RelativeSource AncestorType=Window}}"
-                                       FontSize="10.5" Margin="2,4,0,0" TextWrapping="Wrap"
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DataContext.QuickPreview,
+                                              RelativeSource={RelativeSource AncestorType=Window}}" Margin="2,4,0,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding DataContext.QuickPreview,
                                                     RelativeSource={RelativeSource AncestorType=Window},

@@ -95,19 +95,70 @@ public class QuickEntryTests
         Assert.False(main.QuickCommand.CanExecute(null));
     }
 
+    /// <summary>
+    /// 項目2: 日付を書かなければ、選んでいる日（今日ではない）に入る。
+    /// <para>
+    /// 選択日の下にある入力欄に「打合せ 15時」と打って今日に入るのは直感に反する。
+    /// </para>
+    /// </summary>
     [Fact]
-    public void 日付を書かなければ今日に入る()
+    public void 日付を書かなければ選んでいる日に入る()
     {
         using var test = TestWorkspace.Create();
         var main = Create(test);
 
-        // 別の日を眺めていても、基準は今日
         main.SelectedDate = new DateOnly(2026, 9, 30);
 
         main.QuickText = "棚卸";
         main.QuickCommand.Execute(null);
 
+        Assert.Equal(new DateOnly(2026, 9, 30),
+            test.Workspace.Events.All().Single(e => e.Title == "棚卸").Date);
+    }
+
+    /// <summary>選んでいる日が今日のままなら、これまでどおり今日に入る。</summary>
+    [Fact]
+    public void 選んでいる日が今日のままなら今日に入る()
+    {
+        using var test = TestWorkspace.Create();
+        var main = Create(test);
+
+        main.QuickText = "棚卸";
+        main.QuickCommand.Execute(null);
+
         Assert.Equal(Today, test.Workspace.Events.All().Single(e => e.Title == "棚卸").Date);
+    }
+
+    /// <summary>「3日後」のような相対語は、選んでいる日ではなく今日から数える。</summary>
+    [Fact]
+    public void N日後も今日から見て数える()
+    {
+        using var test = TestWorkspace.Create();
+        var main = Create(test);
+
+        main.SelectedDate = new DateOnly(2026, 10, 15);
+
+        main.QuickText = "3日後 確認";
+        main.QuickCommand.Execute(null);
+
+        Assert.Equal(Today.AddDays(3),
+            test.Workspace.Events.All().Single(e => e.Title == "確認").Date);
+    }
+
+    /// <summary>月を省いた「15日」は、選んでいる日が属する月の15日として入る。</summary>
+    [Fact]
+    public void 月を省いた日にちは選んでいる月で読む()
+    {
+        using var test = TestWorkspace.Create();
+        var main = Create(test);
+
+        main.SelectedDate = new DateOnly(2026, 12, 1);
+
+        main.QuickText = "15日 締切";
+        main.QuickCommand.Execute(null);
+
+        Assert.Equal(new DateOnly(2026, 12, 15),
+            test.Workspace.Events.All().Single(e => e.Title == "締切").Date);
     }
 
     [Fact]

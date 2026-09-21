@@ -386,7 +386,7 @@ public class MainViewModelTests
         Assert.True(vm.ShowsSearchBox);
         Assert.False(vm.UsesCompactSearch);
         Assert.True(vm.ShowsViewSwitcher);
-        Assert.True(vm.ShowsTodayButton);
+        Assert.False(vm.UsesCompactTodayButton);
 
         // 実働・残りのバッジがいちばん先。同じ数字は右ペインにも出ている
         Fit(vm, 950);
@@ -409,11 +409,11 @@ public class MainViewModelTests
 
         Fit(vm, 660);
         Assert.False(vm.ShowsViewSwitcher);
-        Assert.True(vm.ShowsTodayButton);
+        Assert.False(vm.UsesCompactTodayButton);
 
-        // いちばん細いところでは「今日」も置き場が無い
+        // いちばん細いところでも「今日」は消さない。アイコンだけに畳む（項目10）
         Fit(vm, 340);
-        Assert.False(vm.ShowsTodayButton);
+        Assert.True(vm.UsesCompactTodayButton);
     }
 
     [Fact]

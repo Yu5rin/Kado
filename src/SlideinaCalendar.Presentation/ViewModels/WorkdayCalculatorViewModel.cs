@@ -190,6 +190,20 @@ public sealed class WorkdayCalculatorViewModel : ObservableObject
         RaiseRange();
     }
 
+    /// <summary>
+    /// ウィンドウが閉じられたときに上がる。
+    /// <para>
+    /// モードレスで出すようになったので、開いているあいだだけカレンダー上の
+    /// クリックをこちらへ流したい（<c>MainViewModel</c> 側の役目）。閉じたことを
+    /// 知る手立てがここにしか無いので、窓を持つ側（<c>DialogEditorPresenter</c>）が
+    /// <see cref="NotifyClosed"/> を呼んで伝える。
+    /// </para>
+    /// </summary>
+    public event EventHandler? Closed;
+
+    /// <summary>窓を持つ側から、閉じられたことを伝える。</summary>
+    public void NotifyClosed() => Closed?.Invoke(this, EventArgs.Empty);
+
     private void RaiseRange() => Raise(
         nameof(RangeCount), nameof(RangeCalendarDays),
         nameof(RangeResultText), nameof(RangeDetailText), nameof(HasRangeResult));

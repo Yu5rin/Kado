@@ -223,6 +223,9 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>見出しの右に出す予定の件数。</summary>
     public string EventCountText => _events.Count.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>予定が1件もないか。0件のときの案内を出すかどうかに使う（項目12）。</summary>
+    public bool HasNoEvents => _events.Count == 0;
+
     /// <summary>
     /// 見出しの右に出す「3 / 4」。<b>残っている数と全体</b>。
     /// <para>片付いた数より、あと何件あるかのほうが知りたい。</para>
@@ -267,6 +270,9 @@ public sealed class SelectedDayViewModel : ObservableObject
         private set => Set(ref _tasks, value);
     }
 
+    /// <summary>タスクが1件もないか。0件のときの案内を出すかどうかに使う（項目12）。</summary>
+    public bool HasNoTasks => _tasks.Count == 0;
+
     /// <summary>完了した数。</summary>
     public int DoneTaskCount => _tasks.Count(t => t.IsDone);
 
@@ -307,7 +313,8 @@ public sealed class SelectedDayViewModel : ObservableObject
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
               nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
-              nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText));
+              nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText),
+              nameof(HasNoEvents), nameof(HasNoTasks));
     }
 
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];

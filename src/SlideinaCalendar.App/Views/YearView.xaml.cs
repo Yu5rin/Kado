@@ -66,15 +66,32 @@ public partial class YearView : UserControl
         _settle = new Settle(Fit);
     }
 
-    /// <summary>日を押したら選択を合わせる。ダブルクリックでその日に予定を足す。</summary>
+    /// <summary>
+    /// 日を押したら選択を合わせる。ダブルクリックでその日に予定を足す。
+    /// <para>
+    /// 実働日計算パネルが開いているあいだは、1回押しをその「から」「まで」にも流す
+    /// （月ビューのマスと同じ。要件書 4.5）。
+    /// </para>
+    /// </summary>
     private void OnDayClicked(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not YearDayViewModel day) return;
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
         // 月ビューのマスと同じ。1回押しで選び、2回で予定を足す
-        if (e.ClickCount == 2) main.AddEventOnCommand.Execute(day.Date);
-        else main.SelectDateCommand.Execute(day.Date);
+        if (e.ClickCount == 2)
+        {
+            main.AddEventOnCommand.Execute(day.Date);
+        }
+        else
+        {
+            main.SelectDateCommand.Execute(day.Date);
+
+            if (main.IsWorkdayCalculatorOpen)
+            {
+                main.FeedWorkdayCalculator(day.Date, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            }
+        }
 
         e.Handled = true;
     }

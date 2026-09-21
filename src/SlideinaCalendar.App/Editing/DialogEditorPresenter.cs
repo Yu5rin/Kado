@@ -25,11 +25,32 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
         Show(new SettingsWindow(settings));
     }
 
+    /// <summary>いま開いている実働日計算パネル。二重に開かないよう、あれば前面に出すだけにする。</summary>
+    private WorkdayCalculatorWindow? _workdayCalculatorWindow;
+
     public void ShowWorkdayCalculator(
         SlideinaCalendar.Presentation.ViewModels.WorkdayCalculatorViewModel calculator)
     {
-        // 数えるだけなので、閉じ方は見ない
-        Show(new WorkdayCalculatorWindow(calculator));
+        // すでに開いていれば、それを前面に出すだけ。数えている途中の内容も保たれる
+        if (_workdayCalculatorWindow is { } existing)
+        {
+            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+
+        // モードレス。カレンダーを見ながら期間を確かめられるようにする（要件書 4.5）。
+        // 親を設定するので、本体を閉じれば一緒に閉じる
+        var window = new WorkdayCalculatorWindow(calculator) { Owner = ownerProvider() };
+
+        _workdayCalculatorWindow = window;
+        window.Closed += (_, _) =>
+        {
+            _workdayCalculatorWindow = null;
+            calculator.NotifyClosed();
+        };
+
+        window.Show();
     }
 
     public void ShowShortcuts() => Show(new ShortcutsWindow());

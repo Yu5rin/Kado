@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -84,6 +85,15 @@ public partial class MainWindow : Window
 
         SizeChanged += (_, _) => _settle.Poke();
         StateChanged += (_, _) => TrackPlacement();
+
+        // ステータス行（項目1）。出すたびに数秒後へ仕切り直し、最後の1件だけを消す
+        _statusClear = new Views.Settle(() => ViewModel?.ClearStatusMessage(), TimeSpan.FromSeconds(4.5));
+
+        DataContextChanged += (_, args) =>
+        {
+            if (args.OldValue is MainViewModel before) before.PropertyChanged -= OnStatusMessageChanged;
+            if (args.NewValue is MainViewModel after) after.PropertyChanged += OnStatusMessageChanged;
+        };
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
         Loaded += (_, _) =>
@@ -403,14 +413,112 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>クイック入力は Enter で入れる。</summary>
+    /// <summary>
+    /// クイック入力は Enter で入れる。Esc は打ちかけを消してフォーカスを外す（項目17）。
+    /// <para>検索は Esc で消せるのに、クイック入力にはそれが無かった。</para>
+    /// </summary>
     private void OnQuickKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter) return;
-        if (ViewModel is not { } vm || !vm.QuickCommand.CanExecute(null)) return;
+        if (e.Key == Key.Escape)
+        {
+            if (ViewModel is { } vm) vm.QuickText = string.Empty;
 
-        vm.QuickCommand.Execute(null);
+            // フォーカスを外さないと、単独キーのショートカット（T・1〜5 など）が
+            // 引き続き奪われたままになる
+            Keyboard.ClearFocus();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter) return;
+        if (ViewModel is not { } main || !main.QuickCommand.CanExecute(null)) return;
+
+        main.QuickCommand.Execute(null);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// 本体のキー割当（項目3）。
+    /// <para>
+    /// 修飾キー無しの単独キー（T・1〜5・矢印・PageUp・PageDown）は、クイック入力欄・
+    /// 検索欄・エディタの中で打ったときにまで <c>Window.InputBindings</c> に奪われると
+    /// 実害が出る（「3」と打つと月表示に切り替わる、など）。フォーカスが
+    /// テキスト入力系の要素にあるときは、ここで <c>Handled</c> にして先に止め、
+    /// InputBindings まで届かせない（素通しして、いつもどおり文字として入力させる）。
+    /// </para>
+    /// <para>
+    /// Ctrl＋F（検索）・Ctrl＋L と /（クイック入力）はフォーカス移動そのものなので、
+    /// ViewModel のコマンドにはせず、ここで直に受ける。
+    /// </para>
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var inTextInput = Keyboard.FocusedElement is TextBoxBase or ComboBox;
+
+        if (inTextInput && IsBareShortcutKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            SearchBox.Focus();
+            Keyboard.Focus(SearchBox);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            FocusQuickInput();
+            e.Handled = true;
+            return;
+        }
+
+        // 「/」は単独キーなので、テキスト入力中は普通に打たせる
+        if (!inTextInput && e.Key == Key.OemQuestion && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            FocusQuickInput();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>InputBindings に登録してある、修飾キー無しの単独キー。</summary>
+    private static bool IsBareShortcutKey(Key key) => key is
+        Key.T or Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5
+        or Key.Left or Key.Right or Key.PageUp or Key.PageDown;
+
+    /// <summary>
+    /// クイック入力へフォーカスする（項目4）。
+    /// <para>
+    /// 右ペインが開いていればそちらへ、閉じていてスリムパネルが開いていればそちらへ。
+    /// どちらも閉じていれば右ペインを開いてから当てる。
+    /// </para>
+    /// <para>
+    /// トレイの Ctrl＋Alt＋N（<c>App.xaml.cs</c>）と、本体の Ctrl＋L・/ の両方から呼ぶ。
+    /// </para>
+    /// </summary>
+    public void FocusQuickInput()
+    {
+        if (ViewModel is not { } vm) return;
+
+        if (!vm.IsDetailPaneOpen && !vm.IsSlimPanelOpen) vm.IsDetailPaneOpen = true;
+
+        // パネルの開閉直後は、まだ幅が 0 のままでフォーカスを受け取れないことがある。
+        // レイアウトが一段落してから当てる
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (vm.IsDetailPaneOpen)
+            {
+                QuickInputBox.Focus();
+                Keyboard.Focus(QuickInputBox);
+            }
+            else if (vm.IsSlimPanelOpen)
+            {
+                Sidebar.FocusQuickInput();
+            }
+        }, DispatcherPriority.Input);
     }
 
     /// <summary>
