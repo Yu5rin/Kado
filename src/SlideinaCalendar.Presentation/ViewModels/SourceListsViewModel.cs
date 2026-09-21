@@ -316,6 +316,44 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         foreach (var item in _calendars) item.IsDefault = ReferenceEquals(item, current);
     }
 
+    /// <summary>
+    /// 新しいタスクの入れ先。
+    /// <para>
+    /// 決まっていなければ、Google のタスクリストがあればその先頭。ローカルの
+    /// <c>local:mytasks</c> は起動時に必ず先に作られるので、これを既定のまま
+    /// 使うと、Google に繋いでいてもローカル固定になり、同期対象に届かない
+    /// （項目2）。Google のリストが無ければローカルの先頭でしかたない。
+    /// </para>
+    /// </summary>
+    public SourceListItemViewModel? DefaultTaskList =>
+        _taskLists.FirstOrDefault(t => string.Equals(t.Id, DefaultTaskListId, StringComparison.Ordinal))
+        ?? _googleTaskLists.FirstOrDefault()
+        ?? _taskLists.FirstOrDefault();
+
+    /// <summary>設定で選ばれている入れ先。設定を持たない組み立て方では null。</summary>
+    public string? DefaultTaskListId { get; set; }
+
+    /// <summary>入れ先が変わったときに呼ばれる。設定に控えるのは持ち主の仕事。</summary>
+    public event EventHandler<string>? DefaultTaskListChanged;
+
+    /// <summary>タスクの入れ先を選び直す。</summary>
+    public void SetDefaultTaskList(SourceListItemViewModel? item)
+    {
+        if (item is null) return;
+
+        DefaultTaskListId = item.Id;
+        MarkDefaultTaskList();
+        DefaultTaskListChanged?.Invoke(this, item.Id);
+    }
+
+    /// <summary>どれがタスクの入れ先かを行に反映する。</summary>
+    private void MarkDefaultTaskList()
+    {
+        var current = DefaultTaskList;
+
+        foreach (var item in _taskLists) item.IsDefault = ReferenceEquals(item, current);
+    }
+
     /// <summary>ベルを押したとき。表のほうにも控える。</summary>
     private void OnCalendarNotifyToggled(SourceListItemViewModel item) =>
         _workspace.SetCalendarNotify(item.Id, item.Notifies);
@@ -337,12 +375,15 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
                 IsFromGoogle(t.GoogleRaw), OnTaskListToggled))
             .ToArray();
 
-        MarkDefault();
-
         LocalCalendars = _calendars.Where(c => !c.IsGoogle).ToArray();
         GoogleCalendars = _calendars.Where(c => c.IsGoogle).ToArray();
         LocalTaskLists = _taskLists.Where(t => !t.IsGoogle).ToArray();
         GoogleTaskLists = _taskLists.Where(t => t.IsGoogle).ToArray();
+
+        // タスクの既定入れ先は Google の一覧（_googleTaskLists）を見て決めるので、
+        // 上のグループ分けを済ませたあとで呼ぶこと。先に呼ぶと前回ぶんの古い一覧を見てしまう
+        MarkDefault();
+        MarkDefaultTaskList();
 
         Raise(nameof(ShowsCalendarGroups));
         Raise(nameof(ShowsTaskListGroups));

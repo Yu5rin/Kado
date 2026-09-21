@@ -127,6 +127,39 @@ public class ScheduleQueryTests
     }
 
     [Fact]
+    public void 序数つき曜日の繰り返しも展開される()
+    {
+        // 「毎月第2火曜の生産会議」。以前は RecurrenceCodes.ParseDay が例外を投げ、
+        // 壊れた指定と同じ扱いで開始日に1回だけ表示されていた（項目4-b）
+        var (db, query, events, _) = Setup();
+        using var _db = db;
+
+        // 2026/9/8 は第2火曜
+        events.Upsert(Event("monthly", D(2026, 9, 8)) with { Recurrence = "FREQ=MONTHLY;BYDAY=2TU" });
+
+        var found = query.EventsInRange(D(2026, 9, 1), D(2026, 11, 30));
+
+        // 9月・10月・11月それぞれの第2火曜（11/10 は 11月の第2火曜）
+        Assert.Equal([D(2026, 9, 8), D(2026, 10, 13), D(2026, 11, 10)], found.Select(e => e.Date));
+        Assert.All(found, e => Assert.True(e.IsRecurrence));
+    }
+
+    [Fact]
+    public void 終了回数つきの繰り返しは指定回数で止まる()
+    {
+        // Google で「3回で終了」とした予定が、これまでは無期限に展開されていた（項目4-a）
+        var (db, query, events, _) = Setup();
+        using var _db = db;
+
+        // 2026/9/1 は火曜
+        events.Upsert(Event("weekly", D(2026, 9, 1)) with { Recurrence = "FREQ=WEEKLY;BYDAY=TU;COUNT=3" });
+
+        var found = query.EventsInRange(D(2026, 9, 1), D(2026, 12, 31));
+
+        Assert.Equal([D(2026, 9, 1), D(2026, 9, 8), D(2026, 9, 15)], found.Select(e => e.Date));
+    }
+
+    [Fact]
     public void 壊れた繰り返し指定でも他の予定は表示できる()
     {
         var (db, query, events, _) = Setup();

@@ -159,6 +159,7 @@ public sealed class SelectedDayViewModel : ObservableObject
     private DateOnly _today;
     private IReadOnlyList<DayEventViewModel> _events = [];
     private IReadOnlyList<TaskListItemViewModel> _tasks = [];
+    private IReadOnlyList<TaskListItemViewModel> _noDueTasks = [];
 
     public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
         ICalendarSources? sources = null)
@@ -280,6 +281,36 @@ public sealed class SelectedDayViewModel : ObservableObject
     public int RemainingTaskCount => _tasks.Count(t => !t.IsDone);
 
     /// <summary>
+    /// 期限を付けていないタスク（要件書 3.1 の「いつやるか未定」）。
+    /// <para>
+    /// <see cref="Tasks"/> は期限が無いと外れてしまい、編集画面で「期限を付ける」を
+    /// 外すと二度と画面に出せなくなっていた。ここに別のまとまりとして出し、
+    /// 編集・削除・完了の切り替えができるようにする。
+    /// </para>
+    /// <para>
+    /// 完了済みは出さない。期限が無いままでは「いつ片付けたか」を表示する場所が
+    /// 無く、<see cref="Tasks"/> 側のように選択日で絞ることもできないため。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<TaskListItemViewModel> NoDueTasks
+    {
+        get => _noDueTasks;
+        private set => Set(ref _noDueTasks, value);
+    }
+
+    /// <summary>期限なしタスクの件数。見出しに出す。</summary>
+    public int NoDueTaskCount => _noDueTasks.Count;
+
+    /// <summary>
+    /// 期限なしタスクの節を出すか。1件もなければ節ごと畳む。
+    /// <para>
+    /// 既存の <see cref="Tasks"/> と違い、無い人には無関係な機能なので、
+    /// 空でも案内文を出す必要は無い（項目12は既存の「タスク」節でまかなう）。
+    /// </para>
+    /// </summary>
+    public bool ShowsNoDueTasks => _noDueTasks.Count > 0;
+
+    /// <summary>
     /// 済んだタスクの結果。期限か完了日時が無ければ null。
     /// <para>Google から来たタスクは完了日時を持っている。こちらで片付けたものも控えてある。</para>
     /// </summary>
@@ -311,10 +342,18 @@ public sealed class SelectedDayViewModel : ObservableObject
                 DoneOf(t)))
             .ToArray();
 
+        // 期限を付けていない、未完了のタスク（項目1）。並びは決めようが無いので題名順
+        NoDueTasks = _workspace.Tasks.All()
+            .Where(_sources.IncludesTask)
+            .Where(t => !t.HasDue && !t.IsDone)
+            .OrderBy(t => t.Title, StringComparer.Ordinal)
+            .Select(t => new TaskListItemViewModel(t, due: null))
+            .ToArray();
+
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
               nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
               nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText),
-              nameof(HasNoEvents), nameof(HasNoTasks));
+              nameof(HasNoEvents), nameof(HasNoTasks), nameof(NoDueTaskCount), nameof(ShowsNoDueTasks));
     }
 
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];

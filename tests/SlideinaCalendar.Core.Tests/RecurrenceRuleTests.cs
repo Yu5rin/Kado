@@ -148,6 +148,122 @@ public class RecurrenceRuleTests
     }
 
     // ------------------------------------------------------------------
+    // 毎月（序数つき曜日指定。「第2火曜」「最終金曜」）
+    //
+    // Google の「毎月第2火曜」（BYDAY=2TU）を、これまでは RecurrenceCodes.ParseDay が
+    // 例外を投げて読み取れず、開始日だけの単発として表示されていた（項目4-b）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 第n回目の曜日に該当する()
+    {
+        // 2026/9 の火曜は 1・8・15・22・29（第2火曜は9/8）
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=2TU");
+        var start = D(2026, 9, 1);
+
+        Assert.True(rule.Matches(D(2026, 9, 8), start));     // 9月の第2火曜
+        Assert.False(rule.Matches(D(2026, 9, 1), start));    // 第1火曜
+        Assert.False(rule.Matches(D(2026, 9, 15), start));   // 第3火曜
+        Assert.False(rule.Matches(D(2026, 9, 9), start));    // 曜日が違う（水）
+    }
+
+    [Fact]
+    public void 第n回目の曜日は月をまたいでも該当する()
+    {
+        // 2026/11 の火曜は 3・10・17・24（第2火曜は11/10）
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=2TU");
+
+        Assert.True(rule.Matches(D(2026, 11, 10), D(2026, 9, 8)));
+    }
+
+    [Fact]
+    public void 第5週が無い月は該当日が無い()
+    {
+        // 2026/9 は火曜が5回あるが、2026/11 は4回しか無い（第5週が無い月）
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=5TU");
+        var start = D(2026, 9, 1);
+
+        Assert.True(rule.Matches(D(2026, 9, 29), start));
+        // 例外にはしない。単にその月には該当日が無いだけ
+        Assert.False(rule.Matches(D(2026, 11, 24), start));
+        Assert.False(rule.Matches(D(2026, 11, 25), start));
+    }
+
+    [Fact]
+    public void 第5週が無い月はOccurrencesでも飛ばされる()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=5TU");
+        var days = rule.Occurrences(D(2026, 9, 1), D(2026, 9, 1), D(2026, 12, 31)).ToArray();
+
+        // 9月・12月は火曜が5回、10月・11月は4回しか無い
+        Assert.Equal([D(2026, 9, 29), D(2026, 12, 29)], days);
+    }
+
+    [Fact]
+    public void 負の序数は月末から数える()
+    {
+        // 2026/11 の金曜は 6・13・20・27（最終金曜は11/27）
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=-1FR");
+        var start = D(2026, 9, 1);   // Matches は開始日より前を該当しない扱いにするので、検証日より前に取る
+
+        Assert.True(rule.Matches(D(2026, 11, 27), start));
+        Assert.False(rule.Matches(D(2026, 11, 20), start));
+        // 2026/10 の金曜は 2・9・16・23・30。月をまたいでも最終金曜だけ該当
+        Assert.True(rule.Matches(D(2026, 10, 30), start));
+        Assert.False(rule.Matches(D(2026, 10, 23), start));
+    }
+
+    [Fact]
+    public void うるう年の2月でも第n回目の曜日を正しく数える()
+    {
+        // 2028年はうるう年で2月が29日。2/1 が火曜なので火曜は5回ある
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=5TU");
+        var start = D(2026, 9, 1);
+
+        Assert.True(rule.Matches(D(2028, 2, 29), start));
+        // 平年（2027年）の2月は火曜が4回しか無い
+        Assert.False(rule.Matches(D(2027, 2, 23), start));
+    }
+
+    [Fact]
+    public void うるう年の月末は最終火曜として数える()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=-1TU");
+        var start = D(2026, 9, 1);
+
+        Assert.True(rule.Matches(D(2028, 2, 29), start));    // うるう年2月の最終火曜
+        Assert.True(rule.Matches(D(2027, 2, 23), start));    // 平年2月の最終火曜
+    }
+
+    [Fact]
+    public void BYSETPOSで月内の該当日を位置で選ぶ()
+    {
+        // 「毎月最終営業日」＝平日（月〜金）のうち、月内最後の1日
+        var rule = RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1");
+        var start = D(2026, 9, 1);
+
+        Assert.True(rule.Matches(D(2026, 11, 30), start));   // 11月最終営業日（月曜）
+        Assert.True(rule.Matches(D(2026, 10, 30), start));   // 10月最終営業日（金。31日は土曜）
+        Assert.False(rule.Matches(D(2026, 10, 31), start));  // 土曜は対象外
+        Assert.False(rule.Matches(D(2026, 11, 27), start));  // 最終日ではない金曜
+    }
+
+    [Theory]
+    [InlineData("FREQ=MONTHLY;BYDAY=2TU")]
+    [InlineData("FREQ=MONTHLY;BYDAY=-1FR")]
+    [InlineData("FREQ=MONTHLY;INTERVAL=2;BYDAY=2TU")]
+    [InlineData("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")]
+    public void 序数つき曜日は指定文字列に復元できる(string spec)
+        => Assert.Equal(spec, RecurrenceRule.Parse(spec).ToSpec());
+
+    [Fact]
+    public void 序数つき曜日の表示ラベル()
+    {
+        Assert.Equal("毎月 第2火曜", RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=2TU").ToLabel());
+        Assert.Equal("毎月 最終金曜", RecurrenceRule.Parse("FREQ=MONTHLY;BYDAY=-1FR").ToLabel());
+    }
+
+    // ------------------------------------------------------------------
     // 毎年
     // ------------------------------------------------------------------
 
@@ -194,6 +310,80 @@ public class RecurrenceRuleTests
         Assert.Equal(D(2026, 12, 31), RecurrenceRule.Parse("FREQ=DAILY;UNTIL=20261231T145959Z").Until);
         Assert.Equal(D(2026, 12, 31), RecurrenceRule.Parse("FREQ=DAILY;UNTIL=2026-12-31").Until);
     }
+
+    // ------------------------------------------------------------------
+    // 終了回数（COUNT）
+    //
+    // これまで Core にも Converter にも扱いが無く、Google で「N回後に終了」とした
+    // 予定が無期限に展開されていた（項目4-a）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void COUNTを読める()
+        => Assert.Equal(3, RecurrenceRule.Parse("FREQ=WEEKLY;BYDAY=TU;COUNT=3").Count);
+
+    [Fact]
+    public void COUNTを指定しなければ無期限()
+        => Assert.Null(RecurrenceRule.Parse("FREQ=DAILY").Count);
+
+    [Fact]
+    public void COUNTは開始日から数えて打ち切る()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=WEEKLY;BYDAY=TU;COUNT=3");
+        var start = D(2026, 9, 1);
+
+        var days = rule.Occurrences(start, start, D(2026, 12, 31)).ToArray();
+
+        Assert.Equal([D(2026, 9, 1), D(2026, 9, 8), D(2026, 9, 15)], days);
+    }
+
+    [Fact]
+    public void COUNTは区間の途中から問い合わせても開始日から数え直す()
+    {
+        // 月ビューなどは表示している月の範囲だけを渡す。3回目までしか無い予定を
+        // 2回目以降の月だけ見ても、開始日から数え直して正しく打ち切られること
+        var rule = RecurrenceRule.Parse("FREQ=WEEKLY;BYDAY=TU;COUNT=3");
+        var start = D(2026, 9, 1);
+
+        var days = rule.Occurrences(start, D(2026, 9, 8), D(2026, 12, 31)).ToArray();
+
+        Assert.Equal([D(2026, 9, 8), D(2026, 9, 15)], days);
+    }
+
+    [Fact]
+    public void COUNTに満たない期間なら全部出る()
+    {
+        var rule = RecurrenceRule.Parse("FREQ=DAILY;COUNT=100");
+        var days = rule.Occurrences(D(2026, 9, 1), D(2026, 9, 1), D(2026, 9, 3)).ToArray();
+
+        Assert.Equal([D(2026, 9, 1), D(2026, 9, 2), D(2026, 9, 3)], days);
+    }
+
+    [Fact]
+    public void COUNTと除外日を併用できる()
+    {
+        // 除外日はそもそも回として数えない。9/2 を除いても、
+        // COUNT=3 が指す3回（9/1・9/3・9/4）はきちんと出る
+        var rule = RecurrenceRule.Parse("FREQ=DAILY;COUNT=3;EXDATE=20260902");
+        var days = rule.Occurrences(D(2026, 9, 1), D(2026, 9, 1), D(2026, 9, 10)).ToArray();
+
+        Assert.Equal([D(2026, 9, 1), D(2026, 9, 3), D(2026, 9, 4)], days);
+    }
+
+    [Theory]
+    [InlineData("FREQ=DAILY;COUNT=0")]
+    [InlineData("FREQ=DAILY;COUNT=-1")]
+    [InlineData("FREQ=DAILY;COUNT=abc")]
+    public void 不正なCOUNTは無期限として扱う(string spec)
+        => Assert.Null(RecurrenceRule.Parse(spec).Count);
+
+    [Fact]
+    public void COUNTはラベルに終了回数として添える()
+        => Assert.Equal("毎週 火曜（3回で終了）", RecurrenceRule.Parse("FREQ=WEEKLY;BYDAY=TU;COUNT=3").ToLabel());
+
+    [Fact]
+    public void COUNTは指定文字列に復元できる()
+        => Assert.Equal("FREQ=WEEKLY;BYDAY=TU;COUNT=5", RecurrenceRule.Parse("FREQ=WEEKLY;BYDAY=TU;COUNT=5").ToSpec());
 
     // ------------------------------------------------------------------
     // 除外日（EXDATE）
@@ -341,6 +531,8 @@ public class RecurrenceRuleTests
     [InlineData("FREQ=YEARLY;BYMONTH=13")]
     [InlineData("FREQ=DAILY;UNTIL=abc")]
     [InlineData("FREQ=DAILY;EXDATE=abc")]
+    [InlineData("FREQ=MONTHLY;BYDAY=0TU")]       // 序数が 0 は不正
+    [InlineData("FREQ=MONTHLY;BYDAY=2XX")]       // 序数の先の曜日が不正
     [InlineData("FREQ")]                         // 値が無い
     public void 不正な指定はTryParseで弾ける(string spec)
     {

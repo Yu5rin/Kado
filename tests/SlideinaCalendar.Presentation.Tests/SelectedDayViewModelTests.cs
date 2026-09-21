@@ -183,12 +183,84 @@ public class SelectedDayViewModelTests
     }
 
     [Fact]
-    public void 期限の無いタスクは右ペインに出さない()
+    public void 期限の無いタスクは右ペインのタスク節には出さない()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "いつかやる" });
 
         Assert.Empty(Create(test, D(2026, 9, 24)).Tasks);
+    }
+
+    // ------------------------------------------------------------------
+    // 期限なしタスクの節（項目1）
+    //
+    // 「期限を付ける」を外したタスクは Tasks から落ちるだけで、保存はされている。
+    // 二度と見えず編集も削除もできなかった分を、別の節として出す
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 期限の無いタスクはNoDueTasksに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "いつかやる" });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        var row = Assert.Single(vm.NoDueTasks);
+        Assert.Equal("t1", row.Id);
+        Assert.True(vm.ShowsNoDueTasks);
+        Assert.Equal(1, vm.NoDueTaskCount);
+    }
+
+    [Fact]
+    public void 期限の無い完了済みタスクはNoDueTasksにも出さない()
+    {
+        using var test = TestWorkspace.Create();
+        // 期限が無いまま完了したものは、いつ片付けたかを表示する場所が無い
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "片付けた", IsDone = true });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        Assert.Empty(vm.NoDueTasks);
+        Assert.False(vm.ShowsNoDueTasks);
+    }
+
+    [Fact]
+    public void 期限のあるタスクはNoDueTasksに出さない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 25) });
+
+        Assert.Empty(Create(test, D(2026, 9, 24)).NoDueTasks);
+    }
+
+    [Fact]
+    public void 期限なしタスクは題名順に並ぶ()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "び" });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "あ" });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        Assert.Equal(["あ", "び"], vm.NoDueTasks.Select(t => t.Title));
+    }
+
+    [Fact]
+    public void 日を変えても期限なしタスクの並びは変わらない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "いつかやる" });
+
+        var vm = Create(test, D(2026, 9, 24));
+        Assert.Single(vm.NoDueTasks);
+
+        vm.Date = D(2026, 9, 25);
+
+        // 選択日に関係なく見えている
+        Assert.Single(vm.NoDueTasks);
     }
 
     [Fact]

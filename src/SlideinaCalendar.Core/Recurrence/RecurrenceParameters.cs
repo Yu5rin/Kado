@@ -49,16 +49,30 @@ public sealed class RecurrenceParameters
         return result;
     }
 
-    /// <summary>カンマ区切りの曜日リスト（MO/TU/...）として取り出す。未指定なら空。</summary>
-    public IReadOnlyList<DayOfWeek> GetDayList(string key)
+    /// <summary>
+    /// カンマ区切りの曜日リスト（MO/TU/...）として取り出す。未指定なら空。
+    /// <para>
+    /// 序数つき（<c>2TU</c> 等）が来ても落とさない。<b>週次では序数に意味が無いので、
+    /// 曜日の部分だけを使う</b>（序数は無視する）。序数を活かす場所は
+    /// <see cref="GetOrdinalDayList"/> を使う（月次の「第n◯曜」）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<DayOfWeek> GetDayList(string key) =>
+        GetOrdinalDayList(key).Select(d => d.Day).ToArray();
+
+    /// <summary>
+    /// カンマ区切りの序数つき曜日リスト（<c>2TU</c>＝第2火曜、<c>-1FR</c>＝最終金曜）として取り出す。
+    /// 序数が無い（<c>TU</c> だけの）要素は <c>Ordinal = 0</c>。未指定なら空。
+    /// </summary>
+    public IReadOnlyList<(int Ordinal, DayOfWeek Day)> GetOrdinalDayList(string key)
     {
         var raw = Get(key);
         if (string.IsNullOrWhiteSpace(raw)) return [];
 
-        var result = new List<DayOfWeek>();
+        var result = new List<(int Ordinal, DayOfWeek Day)>();
         foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            result.Add(RecurrenceCodes.ParseDay(part));
+            result.Add(RecurrenceCodes.ParseOrdinalDay(part));
         }
         return result;
     }

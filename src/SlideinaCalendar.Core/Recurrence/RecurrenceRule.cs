@@ -37,10 +37,12 @@ public sealed class RecurrenceRule
             ["YEARLY"] = BuiltInPatterns.CreateYearly,
         };
 
-    private RecurrenceRule(IRecurrencePattern pattern, DateOnly? until, IReadOnlySet<DateOnly> exceptDates)
+    private RecurrenceRule(
+        IRecurrencePattern pattern, DateOnly? until, int? count, IReadOnlySet<DateOnly> exceptDates)
     {
         Pattern = pattern;
         Until = until;
+        Count = count;
         ExceptDates = exceptDates;
     }
 
@@ -49,6 +51,16 @@ public sealed class RecurrenceRule
 
     /// <summary>終了日（この日までは繰り返す）。無期限なら null。</summary>
     public DateOnly? Until { get; }
+
+    /// <summary>
+    /// 繰り返す回数（Google の <c>COUNT</c>）。無期限なら null。
+    /// <para>
+    /// <see cref="Until"/> と同時には来ない（RFC 5545 でも排他）。開始日を1回目として数える。
+    /// <see cref="Occurrences"/> がここで打ち切る。<see cref="Matches"/> は単発の判定にしか
+    /// 使っておらず、何回目かを求めるには開始日からの走査が要るため、こちらでは数えない。
+    /// </para>
+    /// </summary>
+    public int? Count { get; }
 
     /// <summary>
     /// 繰り返しから除外する日。
@@ -115,9 +127,10 @@ public sealed class RecurrenceRule
         var parameters = new RecurrenceParameters(values);
         var pattern = factory(parameters);
         var until = ParseUntil(parameters.Get("UNTIL"));
+        var count = ParseCount(parameters.Get("COUNT"));
         var except = ParseExceptDates(parameters.Get("EXDATE"));
 
-        return new RecurrenceRule(pattern, until, except);
+        return new RecurrenceRule(pattern, until, count, except);
     }
 
     /// <summary>パース失敗を例外にせず判定したい場合。</summary>
@@ -139,10 +152,11 @@ public sealed class RecurrenceRule
     public static RecurrenceRule FromPattern(
         IRecurrencePattern pattern,
         DateOnly? until = null,
-        IEnumerable<DateOnly>? exceptDates = null)
+        IEnumerable<DateOnly>? exceptDates = null,
+        int? count = null)
     {
         ArgumentNullException.ThrowIfNull(pattern);
-        return new RecurrenceRule(pattern, until, ToSet(exceptDates));
+        return new RecurrenceRule(pattern, until, count, ToSet(exceptDates));
     }
 
     private static IReadOnlySet<DateOnly> ToSet(IEnumerable<DateOnly>? dates) =>
@@ -183,15 +197,38 @@ public sealed class RecurrenceRule
 
     /// <summary>
     /// 期間内の該当日を列挙する。開始日から順に、<paramref name="to"/> まで。
+    /// <para>
+    /// <see cref="Count"/> があれば、<paramref name="from"/> が開始日より後でも
+    /// <b>開始日から数えて</b>その回数を超えたら打ち切る（Google の COUNT の仕様どおり）。
+    /// そのため <paramref name="from"/> が seriesStart より後の月だけを見るときも、
+    /// 開始日からいったん数え直す必要がある。
+    /// </para>
     /// </summary>
     public IEnumerable<DateOnly> Occurrences(DateOnly seriesStart, DateOnly from, DateOnly to)
     {
         var start = from < seriesStart ? seriesStart : from;
         var end = Until is { } u && u < to ? u : to;
+        if (end < seriesStart) yield break;
+
+        // COUNT は開始日を1回目として数える。from が開始日より後だと取りこぼすので、
+        // 該当区間より前の分もここで数えておく
+        var remaining = Count;
+        if (remaining is { } limit)
+        {
+            for (var d = seriesStart; d < start && limit > 0; d = d.AddDays(1))
+            {
+                if (Pattern.Matches(d, seriesStart) && !ExceptDates.Contains(d)) limit--;
+            }
+            remaining = limit;
+        }
 
         for (var d = start; d <= end; d = d.AddDays(1))
         {
-            if (Matches(d, seriesStart)) yield return d;
+            if (remaining is <= 0) yield break;
+            if (!Pattern.Matches(d, seriesStart) || ExceptDates.Contains(d)) continue;
+
+            yield return d;
+            if (remaining is { } r) remaining = r - 1;
         }
     }
 
@@ -206,7 +243,9 @@ public sealed class RecurrenceRule
         var label = Pattern.ToLabel(seriesStart);
         return Until is { } until
             ? $"{label}（{until.ToString("yyyy/M/d", CultureInfo.InvariantCulture)}まで）"
-            : label;
+            : Count is { } count
+                ? $"{label}（{count}回で終了）"
+                : label;
     }
 
     /// <summary>指定文字列に戻す。保存・Google への受け渡しに使う。</summary>
@@ -217,6 +256,11 @@ public sealed class RecurrenceRule
         if (Until is { } until)
         {
             parts.Add($"UNTIL={until.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}");
+        }
+
+        if (Count is { } count)
+        {
+            parts.Add($"COUNT={count.ToString(CultureInfo.InvariantCulture)}");
         }
 
         if (ExceptDates.Count > 0)
@@ -247,6 +291,15 @@ public sealed class RecurrenceRule
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         return ParseDate(raw, "UNTIL");
+    }
+
+    /// <summary>COUNT を読む。1以上の整数でなければ無期限（null）として扱う。</summary>
+    private static int? ParseCount(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && v > 0
+            ? v
+            : null;
     }
 
     /// <summary>

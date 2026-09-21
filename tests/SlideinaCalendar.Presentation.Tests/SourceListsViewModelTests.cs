@@ -569,6 +569,94 @@ public class SourceListsViewModelTests
         Assert.Single(vm.Calendars, c => c.IsDefault);
     }
 
+    // ------------------------------------------------------------------
+    // 新しいタスクの入れ先（項目2）
+    //
+    // ローカルの local:mytasks は起動時に必ず先に作られるので、決めていないと
+    // Google に繋いでいてもローカル固定になり、同期対象に届かない
+    // ------------------------------------------------------------------
+
+    /// <summary>Google から取り込んだ体のタスクリストを1件足す。</summary>
+    private static void AddGoogleTaskList(TestWorkspace test, string id, string name) =>
+        test.Workspace.Sources.Upsert(new TaskListSource
+        {
+            Id = id,
+            Title = name,
+            GoogleRaw = $$"""{"id":"{{id}}","title":"{{name}}"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+    [Fact]
+    public void 新しいタスクの入れ先に印が付く()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // 決めていなければ（Google のリストが無ければ）一覧の先頭。印はひとつだけ
+        Assert.Single(vm.TaskLists, t => t.IsDefault);
+        Assert.Same(vm.TaskLists.First(t => t.IsDefault), vm.DefaultTaskList);
+    }
+
+    [Fact]
+    public void 決めていなければGoogleのタスクリストの先頭を選ぶ()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+
+        // ローカルの「マイタスク」が先に作られたあとで Google のリストが増える想定
+        AddGoogleTaskList(test, "google-list-1", "Google のリスト");
+
+        var vm = new SourceListsViewModel(test.Workspace);
+
+        // ローカル固定にすると、作ったタスクが同期対象に届かない
+        Assert.True(vm.DefaultTaskList!.IsGoogle);
+        Assert.Equal("google-list-1", vm.DefaultTaskList.Id);
+    }
+
+    [Fact]
+    public void タスクの入れ先を選び直すと印が移る()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+        var created = test.Workspace.CreateTaskList("計画業務");
+
+        var vm = new SourceListsViewModel(test.Workspace);
+        var line = vm.TaskLists.Single(t => t.Id == created.Id);
+
+        string? told = null;
+        vm.DefaultTaskListChanged += (_, id) => told = id;
+
+        vm.SetDefaultTaskList(line);
+
+        Assert.Equal(created.Id, told);
+        Assert.True(line.IsDefault);
+        Assert.Single(vm.TaskLists, t => t.IsDefault);
+        Assert.Same(line, vm.DefaultTaskList);
+    }
+
+    [Fact]
+    public void 入れ先に選んだタスクリストが消えたら選び直す()
+    {
+        using var test = TestWorkspace.Create();
+        Seed(test);
+        AddGoogleTaskList(test, "google-list-1", "Google のリスト");
+
+        var vm = new SourceListsViewModel(test.Workspace)
+        {
+            // もう一覧に無い ID を持っている状態
+            DefaultTaskListId = "むかしのリスト",
+        };
+
+        vm.Refresh();
+
+        // 印が消えたままだと、どこへ入るのか分からない。Google があればそちらへ
+        Assert.NotNull(vm.DefaultTaskList);
+        Assert.True(vm.DefaultTaskList!.IsGoogle);
+        Assert.Single(vm.TaskLists, t => t.IsDefault);
+    }
+
     [Fact]
     public void 実働日データだけでも日付の行に出る()
     {

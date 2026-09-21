@@ -864,7 +864,18 @@ public sealed class CalendarWorkspace
     {
         if (Tasks.Find(id) is not { } before) return false;
 
-        var after = before with { IsDone = !before.IsDone, UpdatedAt = DateTimeOffset.Now };
+        var isDone = !before.IsDone;
+        var now = DateTimeOffset.Now;
+
+        var after = before with
+        {
+            IsDone = isDone,
+            // 完了にした瞬間だけ今の日時を入れる。もともと持っていた完了日時があれば
+            // それを優先し（Google から来た値を上書きしない）、完了を取り消したら消す。
+            // これが無いと「N実働日 遅れて完了」が出ない（項目3）
+            CompletedAt = isDone ? before.CompletedAt ?? now : null,
+            UpdatedAt = now,
+        };
         Run(new UpdateTaskEdit(Tasks, before, after));
         return true;
     }

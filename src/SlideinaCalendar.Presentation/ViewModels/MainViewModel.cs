@@ -107,6 +107,9 @@ public sealed class MainViewModel : ObservableObject
 
             SourceLists.DefaultCalendarId = settings.DefaultCalendarId;
             SourceLists.DefaultCalendarChanged += (_, id) => settings.DefaultCalendarId = id;
+
+            SourceLists.DefaultTaskListId = settings.DefaultTaskListId;
+            SourceLists.DefaultTaskListChanged += (_, id) => settings.DefaultTaskListId = id;
             _reminders = new ReminderService(workspace, settings, _notifier);
 
             // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
@@ -232,6 +235,12 @@ public sealed class MainViewModel : ObservableObject
         {
             SourceLists.SetDefaultCalendar(item);
             if (item is not null) StatusMessage = $"新しい予定は「{item.Name}」に入ります";
+        });
+
+        SetDefaultTaskListCommand = new RelayCommand<SourceListItemViewModel?>(item =>
+        {
+            SourceLists.SetDefaultTaskList(item);
+            if (item is not null) StatusMessage = $"新しいタスクは「{item.Name}」に入ります";
         });
 
         RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
@@ -1108,9 +1117,10 @@ public sealed class MainViewModel : ObservableObject
             .Where(e => Hits(text, e.Title, e.Location, e.Note))
             .Select(SearchResultViewModel.Of);
 
+        // 期限の無いタスクも対象にする（項目1）。期限が無ければ選んでいる日で代用して並べる
         var tasks = _workspace.Tasks.All()
-            .Where(t => t.Due is not null && Hits(text, t.Title, null, t.Note))
-            .Select(t => SearchResultViewModel.Of(t, t.Due!.Value));
+            .Where(t => Hits(text, t.Title, null, t.Note))
+            .Select(t => SearchResultViewModel.Of(t, t.Due ?? SelectedDate));
 
         var found = events.Concat(tasks)
             .OrderBy(r => Math.Abs(r.Date.DayNumber - _today.DayNumber))
@@ -1279,6 +1289,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>新しい予定の入れ先にする。</summary>
     public RelayCommand<SourceListItemViewModel?> SetDefaultCalendarCommand { get; }
+
+    /// <summary>新しいタスクの入れ先にする（項目2）。</summary>
+    public RelayCommand<SourceListItemViewModel?> SetDefaultTaskListCommand { get; }
 
     /// <summary>同じ内容の予定を1つにまとめる。</summary>
     public RelayCommand RemoveDuplicatesCommand { get; }
@@ -2276,7 +2289,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
     private void AddTask()
     {
-        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today);
+        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today, SourceLists.DefaultTaskList?.Id);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());

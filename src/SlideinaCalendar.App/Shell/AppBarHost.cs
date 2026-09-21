@@ -189,35 +189,73 @@ public sealed class AppBarHost : IDisposable
 
         var scale = Scale();
         var monitor = Screens.Of(hwnd, scale);
+
+        // 上下は作業領域、左右はモニタ全体から取る（不具合2）。
+        //
+        // 上下までモニタ全体を提案すると、タスクバー分の切り詰めを Windows 任せに
+        // することになり、ピン留めした瞬間に少し動く。左右まで作業領域から取って
+        // しまうと、登録中に再交渉が走るたびに、自分が削った帯のぶん内側へ
+        // 押し込まれていく。左右は必ずモニタ全体のままにすること
+        var work = Screens.WorkOf(hwnd, scale);
         var width = (int)Math.Round(Width * scale);
 
         var data = Data(hwnd);
         data.uEdge = Edge == DockEdge.Left ? ABE_LEFT : ABE_RIGHT;
-        data.rc = monitor;
+        data.rc = ShellGeometry.ProposeRect(monitor, work, Edge, width);
 
-        if (Edge == DockEdge.Left) data.rc.right = data.rc.left + width;
-        else data.rc.left = data.rc.right - width;
+        ShellDiagnosticsLog.Write(
+            $"Reposition edge={Edge} width={Width:F1} scale={scale:F2} " +
+            $"monitor=({monitor.left},{monitor.top},{monitor.right},{monitor.bottom}) " +
+            $"work=({work.left},{work.top},{work.right},{work.bottom}) " +
+            $"QUERYPOS前=({data.rc.left},{data.rc.top},{data.rc.right},{data.rc.bottom})");
 
         SHAppBarMessage(ABM_QUERYPOS, ref data);
 
+        ShellDiagnosticsLog.Write(
+            $"Reposition QUERYPOS後=({data.rc.left},{data.rc.top},{data.rc.right},{data.rc.bottom})");
+
         // 調整後の矩形から、改めて自分の幅を切り出す
-        if (Edge == DockEdge.Left) data.rc.right = data.rc.left + width;
-        else data.rc.left = data.rc.right - width;
+        data.rc = ShellGeometry.SliceWidth(data.rc, Edge, width);
 
         SHAppBarMessage(ABM_SETPOS, ref data);
 
+        var systemWorkArea = SystemParameters.WorkArea;
+
+        ShellDiagnosticsLog.Write(
+            $"Reposition SETPOS後=({data.rc.left},{data.rc.top},{data.rc.right},{data.rc.bottom}) " +
+            $"SystemParameters.WorkArea=({systemWorkArea.Left:F0},{systemWorkArea.Top:F0}," +
+            $"{systemWorkArea.Right:F0},{systemWorkArea.Bottom:F0})");
+
         MoveTo(data.rc);
+
+        if (GetWindowRect(hwnd, out var actual))
+        {
+            ShellDiagnosticsLog.Write(
+                $"Reposition GetWindowRect=({actual.left},{actual.top},{actual.right},{actual.bottom})");
+        }
     }
 
-    /// <summary>決まった矩形にウィンドウを合わせる。</summary>
+    /// <summary>
+    /// 決まった矩形にウィンドウを合わせる。
+    /// <para>
+    /// <b>1 DIP 未満のずれでは代入しない（不具合2）。</b>スライドとピンで矩形の
+    /// 出どころが少し違うだけで丸め誤差ぶんズレることがあり、そのたびに全プロパティへ
+    /// 代入すると「留めた瞬間にわずかに動く」形で見える。
+    /// </para>
+    /// </summary>
     private void MoveTo(RECT rect)
     {
         var scale = Scale();
 
-        _window.Left = rect.left / scale;
-        _window.Top = rect.top / scale;
-        _window.Width = rect.Width / scale;
-        _window.Height = rect.Height / scale;
+        Set(Window.LeftProperty, rect.left / scale, _window.Left);
+        Set(Window.TopProperty, rect.top / scale, _window.Top);
+        Set(Window.WidthProperty, rect.Width / scale, _window.Width);
+        Set(Window.HeightProperty, rect.Height / scale, _window.Height);
+
+        void Set(DependencyProperty property, double value, double current)
+        {
+            if (ShellGeometry.ShouldMove(value, current)) _window.SetValue(property, value);
+        }
     }
 
     private IntPtr OnMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

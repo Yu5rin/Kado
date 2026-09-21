@@ -67,25 +67,51 @@ internal sealed class WeeklyPattern(int interval, IReadOnlyList<DayOfWeek> byDay
 }
 
 /// <summary>
-/// 毎月（日付指定）。<c>FREQ=MONTHLY[;INTERVAL=n][;BYMONTHDAY=15]</c>
+/// 毎月（日付指定、または序数つき曜日指定）。
+/// <c>FREQ=MONTHLY[;INTERVAL=n][;BYMONTHDAY=15]</c> か
+/// <c>FREQ=MONTHLY[;INTERVAL=n];BYDAY=2TU[;BYSETPOS=...]</c>
 /// <para>
-/// BYMONTHDAY を省略した場合は開始日と同じ日。負の値は月末からの数えで、<c>-1</c> が月末。
-/// 31 日指定の月に 31 日が無い場合、その月はマッチしない（RFC 5545 と同じ挙動）。
+/// BYMONTHDAY・BYDAY のどちらも省略した場合は開始日と同じ日。負の値は月末からの数えで、
+/// <c>-1</c> が月末。31 日指定の月に 31 日が無い場合、その月はマッチしない
+/// （RFC 5545 と同じ挙動）。BYMONTHDAY と BYDAY が両方あれば BYMONTHDAY を優先する。
+/// </para>
+/// <para>
+/// BYDAY は「第2火曜」（<c>2TU</c>）のように<b>要素ごとに序数を持てる</b>。第5週が無い月
+/// （例: 第5火曜が存在しない月）は、その月だけ該当日が無い扱いにする（例外にしない）。
+/// <c>-1</c> は最終、<c>-2</c> は最終の1つ前……という数え方（月末から）。
+/// </para>
+/// <para>
+/// 序数を持たない BYDAY（<c>BYDAY=MO,TU,WE,TH,FR</c> のような曜日の集合）は、
+/// <see cref="BySetPos"/>（RFC 5545 の <c>BYSETPOS</c>）と組み合わせて使う。
+/// 月内でその曜日集合に該当する日を昇順に並べ、その中の n 番目（負なら末尾から）を選ぶ。
+/// 「毎月最終営業日」のような、曜日を問わない指定に使う。
 /// </para>
 /// </summary>
-internal sealed class MonthlyPattern(int interval, IReadOnlyList<int> byMonthDay) : IRecurrencePattern
+internal sealed class MonthlyPattern(
+    int interval,
+    IReadOnlyList<int> byMonthDay,
+    IReadOnlyList<(int Ordinal, DayOfWeek Day)> byDay,
+    IReadOnlyList<int> bySetPos) : IRecurrencePattern
 {
     public string Frequency => "MONTHLY";
     public int Interval { get; } = interval;
     public IReadOnlyList<int> ByMonthDay { get; } = byMonthDay;
+    public IReadOnlyList<(int Ordinal, DayOfWeek Day)> ByDay { get; } = byDay;
+    public IReadOnlyList<int> BySetPos { get; } = bySetPos;
 
     public bool Matches(DateOnly date, DateOnly seriesStart)
     {
         var months = (date.Year - seriesStart.Year) * 12 + (date.Month - seriesStart.Month);
         if (months % Interval != 0) return false;
 
-        if (ByMonthDay.Count == 0) return date.Day == seriesStart.Day;
+        if (ByMonthDay.Count > 0) return MatchesMonthDay(date);
+        if (ByDay.Count > 0) return MatchesByDay(date);
 
+        return date.Day == seriesStart.Day;
+    }
+
+    private bool MatchesMonthDay(DateOnly date)
+    {
         var daysInMonth = DateTime.DaysInMonth(date.Year, date.Month);
         foreach (var spec in ByMonthDay)
         {
@@ -95,18 +121,81 @@ internal sealed class MonthlyPattern(int interval, IReadOnlyList<int> byMonthDay
         return false;
     }
 
+    private bool MatchesByDay(DateOnly date)
+    {
+        var ordinalEntries = ByDay.Where(e => e.Ordinal != 0).ToArray();
+        if (ordinalEntries.Length > 0)
+        {
+            foreach (var (ordinal, day) in ordinalEntries)
+            {
+                if (date.DayOfWeek != day) continue;
+                if (OrdinalOf(date, fromStart: ordinal > 0) == Math.Abs(ordinal)) return true;
+            }
+            // 序数なしの要素が混ざっていれば、そちらは曜日が合えば常に該当する
+            return ByDay.Any(e => e.Ordinal == 0 && e.Day == date.DayOfWeek);
+        }
+
+        // 序数なし＝曜日の集合。BYSETPOS が無ければ、その曜日はすべて該当する
+        var days = ByDay.Select(e => e.Day).ToHashSet();
+        if (!days.Contains(date.DayOfWeek)) return false;
+        if (BySetPos.Count == 0) return true;
+
+        var candidates = DatesInMonthMatching(date.Year, date.Month, days);
+        var index = candidates.IndexOf(date);
+        if (index < 0) return false;
+
+        foreach (var pos in BySetPos)
+        {
+            var resolved = pos > 0 ? pos - 1 : candidates.Count + pos;
+            if (resolved == index) return true;
+        }
+        return false;
+    }
+
+    /// <summary>その日が、月内で同じ曜日の何回目か。<paramref name="fromStart"/> なら月初から、でなければ月末から数える。</summary>
+    private static int OrdinalOf(DateOnly date, bool fromStart)
+    {
+        if (fromStart) return (date.Day - 1) / 7 + 1;
+
+        var daysInMonth = DateTime.DaysInMonth(date.Year, date.Month);
+        return (daysInMonth - date.Day) / 7 + 1;
+    }
+
+    /// <summary>その月のうち、指定した曜日集合に当てはまる日を昇順で。</summary>
+    private static List<DateOnly> DatesInMonthMatching(int year, int month, IReadOnlySet<DayOfWeek> days)
+    {
+        var count = DateTime.DaysInMonth(year, month);
+        var result = new List<DateOnly>(count);
+        for (var d = 1; d <= count; d++)
+        {
+            var date = new DateOnly(year, month, d);
+            if (days.Contains(date.DayOfWeek)) result.Add(date);
+        }
+        return result;
+    }
+
     public string ToLabel(DateOnly? seriesStart)
     {
         var head = Interval == 1 ? "毎月" : $"{Interval}か月ごと";
 
-        var specs = ByMonthDay.Count > 0
-            ? ByMonthDay
-            : seriesStart is { } s ? [s.Day] : Array.Empty<int>();
+        if (ByMonthDay.Count > 0)
+        {
+            var names = ByMonthDay.Select(v => v == -1 ? "月末" : v < 0 ? $"月末から{-v - 1}日前" : $"{v}日");
+            return $"{head} {string.Join("・", names)}";
+        }
 
-        if (specs.Count == 0) return head;
+        if (ByDay.Count > 0)
+        {
+            var names = ByDay.Select(e => RecurrenceCodes.ToOrdinalLabel(e.Ordinal, e.Day));
+            var label = $"{head} {string.Join("・", names)}";
+            return BySetPos.Count > 0
+                ? $"{label}（{string.Join("・", BySetPos.Select(p => p.ToString(CultureInfo.InvariantCulture)))}番目）"
+                : label;
+        }
 
-        var names = specs.Select(v => v == -1 ? "月末" : v < 0 ? $"月末から{-v - 1}日前" : $"{v}日");
-        return $"{head} {string.Join("・", names)}";
+        if (seriesStart is { } s) return $"{head} {s.Day}日";
+
+        return head;
     }
 
     public string ToSpec()
@@ -114,6 +203,11 @@ internal sealed class MonthlyPattern(int interval, IReadOnlyList<int> byMonthDay
         var parts = new List<string> { "FREQ=MONTHLY" };
         if (Interval != 1) parts.Add($"INTERVAL={Interval}");
         if (ByMonthDay.Count > 0) parts.Add("BYMONTHDAY=" + string.Join(",", ByMonthDay));
+        if (ByDay.Count > 0)
+        {
+            parts.Add("BYDAY=" + string.Join(",", ByDay.Select(e => RecurrenceCodes.ToOrdinalCode(e.Ordinal, e.Day))));
+        }
+        if (BySetPos.Count > 0) parts.Add("BYSETPOS=" + string.Join(",", BySetPos));
         return string.Join(";", parts);
     }
 }
@@ -182,7 +276,11 @@ internal static class BuiltInPatterns
         new WeeklyPattern(p.GetPositiveInt("INTERVAL", 1), p.GetDayList("BYDAY"));
 
     public static IRecurrencePattern CreateMonthly(RecurrenceParameters p) =>
-        new MonthlyPattern(p.GetPositiveInt("INTERVAL", 1), Validate(p.GetIntList("BYMONTHDAY")));
+        new MonthlyPattern(
+            p.GetPositiveInt("INTERVAL", 1),
+            Validate(p.GetIntList("BYMONTHDAY")),
+            p.GetOrdinalDayList("BYDAY"),
+            p.GetIntList("BYSETPOS"));
 
     public static IRecurrencePattern CreateYearly(RecurrenceParameters p) =>
         new YearlyPattern(
