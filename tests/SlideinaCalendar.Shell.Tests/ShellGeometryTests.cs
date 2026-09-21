@@ -162,6 +162,55 @@ public class ShellGeometryTests
         Assert.NotEqual(narrowedWork.left, rc.left);
     }
 
+    // ------------------------------------------------------------------
+    // RevealLeft（開く演出：幅から Left を求める式、寄せている辺による左右の反転）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 左に寄せているときはLeftを動かさない()
+    {
+        // 幅がどう変わっても、左に寄せているときは定位置の Left のまま
+        foreach (var width in new[] { 1.0, 100.0, 200.0, 320.0 })
+        {
+            var left = ShellGeometry.RevealLeft(DockEdge.Left, restingLeft: 0, restingWidth: 320, width);
+            Assert.Equal(0, left);
+        }
+    }
+
+    [Fact]
+    public void 右に寄せているときは右端を固定してLeftを詰める()
+    {
+        // 定位置：Left=1600, Width=320 → 右端は 1920
+        const double restingLeft = 1600;
+        const double restingWidth = 320;
+
+        // 幅が 1 のとき、Left は右端ぎりぎり（1920 - 1 = 1919）
+        var atStart = ShellGeometry.RevealLeft(DockEdge.Right, restingLeft, restingWidth, width: 1);
+        Assert.Equal(1919, atStart);
+
+        // 幅が定位置まで戻れば、Left も定位置に戻る
+        var atRest = ShellGeometry.RevealLeft(DockEdge.Right, restingLeft, restingWidth, width: restingWidth);
+        Assert.Equal(restingLeft, atRest);
+    }
+
+    [Fact]
+    public void 右に寄せているときは幅が狭いほどLeftが右へ寄る()
+    {
+        // 右端（restingLeft + restingWidth）を固定したまま幅を広げていくので、
+        // Left は単調に減っていく（左へ伸びていく）はず
+        const double restingLeft = 1600;
+        const double restingWidth = 320;
+
+        var narrow = ShellGeometry.RevealLeft(DockEdge.Right, restingLeft, restingWidth, width: 50);
+        var wide = ShellGeometry.RevealLeft(DockEdge.Right, restingLeft, restingWidth, width: 200);
+
+        Assert.True(narrow > wide, "幅が狭いほうが Left は右（大きい値）にあるはず");
+
+        // どちらでも右端は動かない
+        Assert.Equal(restingLeft + restingWidth, narrow + 50);
+        Assert.Equal(restingLeft + restingWidth, wide + 200);
+    }
+
     [Fact]
     public void SliceWidthは寄せている辺の側だけ切り出す()
     {
