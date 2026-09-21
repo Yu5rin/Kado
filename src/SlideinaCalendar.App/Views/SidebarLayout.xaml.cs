@@ -15,6 +15,33 @@ public partial class SidebarLayout : UserControl
     {
         InitializeComponent();
 
+        // 仕切りの位置は覚えておく。カレンダーを広く見たい人と、予定の一覧を
+        // 長く出したい人がいる
+        Loaded += (_, _) => RestoreShare();
+        Split.DragCompleted += (_, _) => SaveShare();
+    }
+
+    /// <summary>控えてある割り振りに戻す。</summary>
+    private void RestoreShare()
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var share = vm.SlimCalendarShare;
+
+        CalendarRow.Height = new GridLength(share, GridUnitType.Star);
+        ListRow.Height = new GridLength(1 - share, GridUnitType.Star);
+    }
+
+    /// <summary>いまの割り振りを控える。</summary>
+    private void SaveShare()
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var total = CalendarRow.ActualHeight + ListRow.ActualHeight;
+
+        if (total <= 0) return;
+
+        vm.SlimCalendarShare = CalendarRow.ActualHeight / total;
     }
 
     /// <summary>クイック入力は Enter で入れる。</summary>

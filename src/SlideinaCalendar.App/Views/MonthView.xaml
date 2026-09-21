@@ -370,6 +370,13 @@
                             <Setter TargetName="Full" Property="Visibility" Value="Collapsed" />
                             <Setter TargetName="Compact" Property="Visibility" Value="Visible" />
                             <Setter TargetName="Cell" Property="Padding" Value="2" />
+
+                            <!--
+                                操作の説明は出さない。マスが小さいので、載せるたびに
+                                3行の吹き出しが開いて隣の日が隠れる。同じ説明は
+                                ふつうの月ビューで読める
+                            -->
+                            <Setter TargetName="Cell" Property="ToolTip" Value="{x:Null}" />
                         </DataTrigger>
 
                         <!--

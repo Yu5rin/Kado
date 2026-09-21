@@ -420,7 +420,7 @@ public sealed class MainViewModel : ObservableObject
 
             EnsureSomethingShows(nameof(IsSlimPanelOpen));
             SavePanes();
-            Raise(nameof(ShowsSlimToday));
+            Raise(nameof(ShowsSlimToday), nameof(ShowsToolbarNav));
         }
     }
 
@@ -515,8 +515,14 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public bool ShowsDayNav => !_isMainViewOpen && _isDetailPaneOpen;
 
-    /// <summary>ツールバーに「◀ ▶」を置くか。日付欄へ移したときは置かない。</summary>
-    public bool ShowsToolbarNav => !ShowsDayNav;
+    /// <summary>
+    /// ツールバーに「◀ ▶」を置くか。
+    /// <para>
+    /// 日付欄へ移したときは置かない。スリムパネルだけのときも、そちらの見出しに
+    /// 月の送りがあるので置かない。同じものが2か所にあると、どちらが効くのか迷う。
+    /// </para>
+    /// </summary>
+    public bool ShowsToolbarNav => !ShowsDayNav && !ShowsSlimToday;
 
     // ------------------------------------------------------------------
     // 幅に合わせた詰め方
@@ -540,6 +546,21 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
     public const double TodayButtonFloor = 380;
+
+    /// <summary>
+    /// スリムパネルで、カレンダーに割く高さの割合。
+    /// <para>仕切りをつまんで変えたぶんを覚える。</para>
+    /// </summary>
+    public double SlimCalendarShare
+    {
+        get => _settings?.SlimCalendarShare ?? AppSettings.DefaultSlimShare;
+        set
+        {
+            if (_settings is not { } settings) return;
+
+            settings.SlimCalendarShare = value;
+        }
+    }
 
     /// <summary>スリムパネルの既定の幅。</summary>
     public const double DefaultSlimPanelWidth = 264;
