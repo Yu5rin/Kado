@@ -351,4 +351,56 @@ public class ShellModeTests
 
         Assert.Equal(DockPlacement.MaxWidth, placement.Width);
     }
+
+    // ------------------------------------------------------------------
+    // Esc での引っ込め（項目9）
+    //
+    // 実際に画面を動かすのは ShellController（App 側、Win32 が絡むので Linux では
+    // 検査できない）。ここで確かめるのは、ShellViewModel から先へ頼みが伝わることと、
+    // ウィンドウ居かたでは何もしないこと
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void スライド中に頼むと伝わる()
+    {
+        var vm = Create(ShellMode.Overlay);
+
+        var raised = 0;
+        vm.RetractRequested += (_, _) => raised++;
+
+        vm.RequestRetract();
+
+        Assert.Equal(1, raised);
+    }
+
+    /// <summary>
+    /// 固定（ピン留め）中も頼み自体は伝わる。実際に引っ込めない判断（ピン留めは
+    /// 常駐が目的）は、これを受け取る ShellController 側（Win32 が絡むので
+    /// Windows でしか検査できない）が持つ。
+    /// </summary>
+    [Fact]
+    public void 固定中も頼み自体は伝わる()
+    {
+        var vm = Create(ShellMode.Dock);
+
+        var raised = 0;
+        vm.RetractRequested += (_, _) => raised++;
+
+        vm.RequestRetract();
+
+        Assert.Equal(1, raised);
+    }
+
+    [Fact]
+    public void ウィンドウ居かたでは頼んでも何も起きない()
+    {
+        var vm = Create(ShellMode.Window);
+
+        var raised = 0;
+        vm.RetractRequested += (_, _) => raised++;
+
+        vm.RequestRetract();
+
+        Assert.Equal(0, raised);
+    }
 }

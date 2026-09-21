@@ -43,6 +43,29 @@ public class ImportCommandTests
         Assert.False(test.Workspace.WorkingDays.HasDataFor(D(2026, 4, 1)));
     }
 
+    /// <summary>
+    /// 取り込みの間だけ IsBusy が立つ（項目5）。画面はこれを見て待機カーソルに変える。
+    /// 終わったら必ず戻り、「取り込んでいます…」のまま固まらない。
+    /// </summary>
+    [Fact]
+    public void 取り込みの間だけビジーになる()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        var (vm, files) = Create(test);
+
+        var wasBusy = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsBusy) && vm.IsBusy) wasBusy = true;
+        };
+
+        files.FileToPick = WorkdayFile;
+        vm.ImportWorkingDaysCommand.Execute(null);
+
+        Assert.True(wasBusy);
+        Assert.False(vm.IsBusy);
+    }
+
     [Fact]
     public void 取り消したら何も起きない()
     {

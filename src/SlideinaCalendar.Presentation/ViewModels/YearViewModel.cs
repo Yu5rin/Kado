@@ -361,8 +361,14 @@ public sealed class YearViewModel : ObservableObject
         }
     }
 
-    /// <summary>日付の文字の大きさ。細いマスでつぶれないよう、少し縮める。</summary>
-    public double DayFontSize => _dayWidth < 18 ? 9 : 10.5;
+    /// <summary>
+    /// 日付の文字の大きさ。細いマスでつぶれないよう、少し縮める。
+    /// <para>
+    /// 下限は 9.5。帯（設定の最小幅 160〜220px）ではマスが常にこの下限に当たるので、
+    /// 読める大きさを割らないようにする。入り切らないぶんは既にある横スクロールに任せる。
+    /// </para>
+    /// </summary>
+    public double DayFontSize => _dayWidth < 18 ? 9.5 : 10.5;
 
     /// <summary>予定の印の幅。マスより少し内側にする。</summary>
     public double MarkWidth => Math.Max(6, _dayWidth - 6);

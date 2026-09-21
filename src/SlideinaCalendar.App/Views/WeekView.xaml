@@ -234,12 +234,17 @@
             <Border x:Name="Cell" Padding="3" MinHeight="30" Background="Transparent"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
                     AllowDrop="True" DragOver="OnAllDayDragOver" Drop="OnAllDayDropped">
-                <StackPanel>
-                    <ItemsControl ItemsSource="{Binding AllDayEvents}"
-                                  ItemTemplate="{StaticResource AllDayEventTemplate}" />
-                    <ItemsControl ItemsSource="{Binding Tasks}"
-                                  ItemTemplate="{StaticResource AllDayTaskTemplate}" />
-                </StackPanel>
+                <!-- 終日の予定・タスクが多い日でも3行ぶん程度で頭打ちにし、内側でスクロールさせる。
+                     ここで抑えないと、7日のうち最も多い日に引きずられて時間軸が下へ押し出される -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              MaxHeight="88">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding AllDayEvents}"
+                                      ItemTemplate="{StaticResource AllDayEventTemplate}" />
+                        <ItemsControl ItemsSource="{Binding Tasks}"
+                                      ItemTemplate="{StaticResource AllDayTaskTemplate}" />
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <DataTemplate.Triggers>

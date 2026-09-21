@@ -89,8 +89,9 @@
                     ContextMenu="{StaticResource YearDayMenu}"
                     MouseLeftButtonDown="OnDayClicked">
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="8"
-                               HorizontalAlignment="Center" LineHeight="10"
+                    <!-- 帯の最小幅（160〜220px）では常にマスが最小になるため、下限でも読める大きさにする -->
+                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="9.5"
+                               HorizontalAlignment="Center" LineHeight="11"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <!--

@@ -61,6 +61,25 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>ドックの幅が変わった。ドラッグ中は呼ばれない（確定してから）。</summary>
     public event EventHandler<double>? DockWidthChanged;
 
+    /// <summary>
+    /// 今すぐ引っ込めてほしい（Esc など）。アプリ側（<c>ShellController</c>）が受けて、
+    /// マウスが外れたときと同じ経路で引っ込める。
+    /// <para>
+    /// 実際に画面を動かすのはここではなく <c>ShellController</c> の役目。<c>MainWindow</c>
+    /// は <c>ShellController</c> を直に持たないため、この <see cref="ShellViewModel"/> 越しに頼む
+    /// （<see cref="ModeChanged"/> などと同じ配線）。
+    /// </para>
+    /// </summary>
+    public event EventHandler? RetractRequested;
+
+    /// <summary>Esc などから呼ぶ。ウィンドウ居かたでは、そもそも引っ込める意味が無い。</summary>
+    public void RequestRetract()
+    {
+        if (Mode == ShellMode.Window) return;
+
+        RetractRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     public ShellMode Mode
     {
         get => _mode;

@@ -47,6 +47,12 @@ public sealed class SyncViewModel : ObservableObject
     private string? _detail;
     private DateTimeOffset? _lastSyncedAt;
 
+    /// <summary>走っている同期を止めるための印。走っていない間は null。</summary>
+    private CancellationTokenSource? _syncCts;
+
+    /// <summary>直前の中断が <see cref="CancelSyncCommand"/> によるものか。タイムアウトと区別する。</summary>
+    private bool _cancelledByUser;
+
     public SyncViewModel(IGoogleSync? google = null)
     {
         _google = google;
@@ -61,6 +67,9 @@ public sealed class SyncViewModel : ObservableObject
 
         SyncNowCommand = new AsyncRelayCommand(
             () => SyncAsync(), () => IsConnected && !IsBusy, ex => Fail(ex.Message));
+
+        // 走っている間だけ押せる。ボタン側は同じ場所に「中止」として出す
+        CancelSyncCommand = new RelayCommand(RequestCancel, () => IsBusy);
     }
 
     /// <summary>繋ぐ。ブラウザが開く。</summary>
@@ -72,15 +81,28 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>いま同期する。</summary>
     public AsyncRelayCommand SyncNowCommand { get; }
 
+    /// <summary>いま走っている同期を中止する。</summary>
+    public RelayCommand CancelSyncCommand { get; }
+
     /// <summary>同期が終わったときに呼ばれる。画面はこれを見て引き直す。</summary>
     public event EventHandler? Synced;
+
+    /// <summary>
+    /// 中止ボタンで止めたときに呼ばれる。<see cref="Synced"/> は何も変わっていないので流さない
+    /// （所属の作り直しなどを走らせる必要が無い）。
+    /// </summary>
+    public event EventHandler? Cancelled;
 
     public SyncState State
     {
         get => _state;
         private set
         {
-            if (Set(ref _state, value)) Raise(nameof(StatusText), nameof(IsConnected), nameof(IsBusy));
+            if (Set(ref _state, value))
+            {
+                Raise(nameof(StatusText), nameof(IsConnected), nameof(IsBusy),
+                    nameof(ActionLabel), nameof(ActionToolTip));
+            }
             RaiseCanExecute();
         }
     }
@@ -131,6 +153,16 @@ public sealed class SyncViewModel : ObservableObject
         SyncState.Warned => $"一部を伝えられません（{_detail}）",
         _ => _lastSyncedAt is { } at ? $"同期済み {at.ToLocalTime():HH:mm}" : "同期済み",
     };
+
+    /// <summary>
+    /// ボタンに出す文言。走っている間は「中止」にする。
+    /// <para>押すと止められることをその場で示す。右上の状態表示（<see cref="StatusText"/>）は
+    /// 「同期中…」のまま変えない。ボタンでの操作案内と状態表示は役目が違う。</para>
+    /// </summary>
+    public string ActionLabel => IsBusy ? "中止" : StatusText;
+
+    /// <summary>ボタンのツールチップ。走っている間だけ、押すと止まることを伝える。</summary>
+    public string ActionToolTip => IsBusy ? "押すと同期を中止します" : "押すと今すぐ同期します";
 
     /// <summary>直前の同期の結果。詳しく見せるとき用。</summary>
     public SyncReport? LastReport { get; private set; }
@@ -224,9 +256,16 @@ public sealed class SyncViewModel : ObservableObject
         if (_google is null || !_google.IsConnected) return;
 
         State = SyncState.Running;
+
+        // 中止ボタンはこの印を切る。外から渡された cancellationToken（裏の定期同期が
+        // 持つ既定のもの）とは別物なので、繋いだものを作って両方を見張る
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _syncCts = cts;
+        _cancelledByUser = false;
+
         try
         {
-            var report = await _google.SyncAsync(cancellationToken).ConfigureAwait(true);
+            var report = await _google.SyncAsync(cts.Token).ConfigureAwait(true);
 
             // すでに走っていた。状態は走っているほうが持っている
             if (report is null)
@@ -249,6 +288,13 @@ public sealed class SyncViewModel : ObservableObject
             }
 
             Synced?.Invoke(this, EventArgs.Empty);
+        }
+        // 中止ボタンで止めた。失敗ではないので赤くしない。タイムアウト（下の catch）とは
+        // 区別するので、こちらを先に置く（型が同じなので条件の無いほうが後だと拾えない）
+        catch (OperationCanceledException) when (_cancelledByUser)
+        {
+            State = SyncState.Idle;
+            Cancelled?.Invoke(this, EventArgs.Empty);
         }
         catch (OAuthException ex)
         {
@@ -283,7 +329,19 @@ public sealed class SyncViewModel : ObservableObject
             // catch で拾い切れない抜け方をしても、Running のまま残さない。
             // ここが無いと、以後の同期も IsBusy に阻まれて二度と走らなくなる
             if (State == SyncState.Running) State = SyncState.Idle;
+
+            // この同期の印を片付ける。中止ボタンは次の同期が始まるまで押せない
+            _syncCts = null;
+            _cancelledByUser = false;
         }
+    }
+
+    private void RequestCancel()
+    {
+        if (_syncCts is not { IsCancellationRequested: false } cts) return;
+
+        _cancelledByUser = true;
+        cts.Cancel();
     }
 
     private void Fail(string detail)
@@ -297,5 +355,6 @@ public sealed class SyncViewModel : ObservableObject
         ConnectCommand.RaiseCanExecuteChanged();
         DisconnectCommand.RaiseCanExecuteChanged();
         SyncNowCommand.RaiseCanExecuteChanged();
+        CancelSyncCommand.RaiseCanExecuteChanged();
     }
 }

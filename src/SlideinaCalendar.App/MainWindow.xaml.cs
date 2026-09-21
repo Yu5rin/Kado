@@ -74,7 +74,6 @@ public partial class MainWindow : Window
         // 窓ができた時点で入れる。出してから動かすと、一度出てから飛ぶのが見える
         SourceInitialized += (_, _) => RestorePlacement();
 
-        LocationChanged += (_, _) => TrackPlacement();
         // 幅を伝えるとツールバーの詰め方が決まり、レイアウトが走る。ドラッグの
         // あいだ毎回やると重いので、手が止まってから1回だけにする
         _settle = new Views.Settle(() =>
@@ -83,16 +82,43 @@ public partial class MainWindow : Window
             PublishLayoutWidth();
         });
 
-        SizeChanged += (_, _) => _settle.Poke();
-        StateChanged += (_, _) => TrackPlacement();
+        // 置き場所とパネル幅の DB 書き込み（項目7）。強制終了・電源断だと Closed が
+        // 来ず、最後に正常終了したときの位置に戻ってしまう。落ち着いたところでも
+        // 書いておく。DB を叩くので、_settle よりゆったりした間隔にする
+        _persist = new Views.Settle(SavePlacementAndPanes, TimeSpan.FromSeconds(3));
+
+        LocationChanged += (_, _) =>
+        {
+            TrackPlacement();
+            _persist.Poke();
+        };
+
+        SizeChanged += (_, _) =>
+        {
+            _settle.Poke();
+            _persist.Poke();
+        };
+        StateChanged += (_, _) =>
+        {
+            TrackPlacement();
+            _persist.Poke();
+        };
 
         // ステータス行（項目1）。出すたびに数秒後へ仕切り直し、最後の1件だけを消す
         _statusClear = new Views.Settle(() => ViewModel?.ClearStatusMessage(), TimeSpan.FromSeconds(4.5));
 
         DataContextChanged += (_, args) =>
         {
-            if (args.OldValue is MainViewModel before) before.PropertyChanged -= OnStatusMessageChanged;
-            if (args.NewValue is MainViewModel after) after.PropertyChanged += OnStatusMessageChanged;
+            if (args.OldValue is MainViewModel before)
+            {
+                before.PropertyChanged -= OnStatusMessageChanged;
+                before.PropertyChanged -= OnBusyChanged;
+            }
+            if (args.NewValue is MainViewModel after)
+            {
+                after.PropertyChanged += OnStatusMessageChanged;
+                after.PropertyChanged += OnBusyChanged;
+            }
         };
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
@@ -108,6 +134,7 @@ public partial class MainWindow : Window
         {
             _clock.Stop();
             _statusClear.Dispose();
+            _persist.Dispose();
             SavePaneWidths();
             Placements?.Save(_placement);
         };
@@ -283,6 +310,15 @@ public partial class MainWindow : Window
     /// <summary>ステータス行（項目1）を数秒後に消すためのタイマー。</summary>
     private readonly Views.Settle _statusClear;
 
+    /// <summary>
+    /// 置き場所とパネル幅を落ち着いてから DB へ書く（項目7）。
+    /// <para>
+    /// <c>Closed</c> だけだと、強制終了・電源断で前回正常終了したときの位置に
+    /// 戻ってしまう。書き込みのたびに DB を叩くので、間隔は控えめに取ってある。
+    /// </para>
+    /// </summary>
+    private readonly Views.Settle _persist;
+
     /// <summary>StatusMessage が変わるたびに、消すまでの時間を仕切り直す。</summary>
     private void OnStatusMessageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -293,6 +329,33 @@ public partial class MainWindow : Window
 
         _statusClear.Poke();
     }
+
+    /// <summary>
+    /// 取り込み・復元の間、待機カーソルに変える（項目5）。
+    /// <para>
+    /// 重い処理は UI スレッドのまま動くので、<c>StatusMessage</c> の「実行しています…」は
+    /// 描画のタイミングによっては間に合わないことがある。カーソルは OS へ直接効くので、
+    /// この形でも確実に見える。
+    /// </para>
+    /// </summary>
+    private void OnBusyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.IsBusy)) return;
+
+        Mouse.OverrideCursor = ViewModel?.IsBusy == true ? Cursors.Wait : null;
+    }
+
+    /// <summary>
+    /// 落ち着いたところで、置き場所とパネル幅の両方を書く（項目7）。<c>_persist</c> から呼ぶ。
+    /// </summary>
+    private void SavePlacementAndPanes()
+    {
+        SavePaneWidths();
+        Placements?.Save(_placement);
+    }
+
+    /// <summary>仕切りをつまんで離した。パネル幅を落ち着いてから書く側へ仕切り直す。</summary>
+    private void OnPaneResized(object sender, MouseButtonEventArgs e) => _persist.Poke();
 
     /// <summary>手で決めた幅を覚える。次に起動したときも同じ幅で出す。</summary>
     private void SavePaneWidths()
@@ -472,6 +535,19 @@ public partial class MainWindow : Window
 
         if (inTextInput && IsBareShortcutKey(e.Key))
         {
+            e.Handled = true;
+            return;
+        }
+
+        // Esc でスライドを引っ込める（項目9）。検索欄・クイック入力は自分の Esc
+        // （打ちかけを消す・検索を消す）を持っているので、そちらを優先して奪わない。
+        // ウィンドウ居かたでは意味が無いので ShellViewModel.RequestRetract 側で弾く。
+        // 実際に画面を動かすのは ShellController（App 側）で、マウスが外れたときと
+        // 同じ経路を通る
+        if (!inTextInput && e.Key == Key.Escape
+            && ViewModel is { } shellVm && shellVm.Shell.Mode != ShellMode.Window)
+        {
+            shellVm.Shell.RequestRetract();
             e.Handled = true;
             return;
         }

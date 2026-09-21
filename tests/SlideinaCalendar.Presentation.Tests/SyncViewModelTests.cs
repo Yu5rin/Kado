@@ -32,6 +32,12 @@ public class SyncViewModelTests
         /// <summary>同期のときに投げる例外。</summary>
         public Exception? ThrowOnSync { get; set; }
 
+        /// <summary>
+        /// true にすると、渡された <see cref="CancellationToken"/> が切られるまで戻らない。
+        /// 中止ボタン（項目8）を試すためのもの。
+        /// </summary>
+        public bool WaitsForCancellation { get; set; }
+
         public Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             if (ThrowOnConnect is { } error) throw error;
@@ -46,12 +52,18 @@ public class SyncViewModelTests
             return Task.CompletedTask;
         }
 
-        public Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default)
+        public async Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default)
         {
             if (ThrowOnSync is { } error) throw error;
 
+            if (WaitsForCancellation)
+            {
+                // 中止ボタンが切るまで戻らない。実際の通信中の見た目に合わせる
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
             SyncCount++;
-            return Task.FromResult(Report);
+            return Report;
         }
     }
 
@@ -338,5 +350,75 @@ public class SyncViewModelTests
         // すでに繋いであるなら、繋ぐ操作は出さない
         Assert.False(vm.ConnectCommand.CanExecute(null));
         Assert.True(vm.DisconnectCommand.CanExecute(null));
+    }
+
+    // ------------------------------------------------------------------
+    // 中止（項目8）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 走っていなければ中止は押せない()
+    {
+        var vm = new SyncViewModel(new FakeGoogle { IsConnected = true });
+
+        Assert.False(vm.CancelSyncCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task 中止すると失敗にはせずアイドルへ戻す()
+    {
+        var google = new FakeGoogle { IsConnected = true, WaitsForCancellation = true };
+        var vm = new SyncViewModel(google);
+
+        var cancelled = 0;
+        var synced = 0;
+        vm.Cancelled += (_, _) => cancelled++;
+        vm.Synced += (_, _) => synced++;
+
+        var running = vm.SyncAsync();
+
+        // 走っている間だけ「中止」に切り替わる
+        Assert.True(vm.IsBusy);
+        Assert.Equal("中止", vm.ActionLabel);
+        Assert.True(vm.CancelSyncCommand.CanExecute(null));
+
+        vm.CancelSyncCommand.Execute(null);
+        await running;
+
+        // 失敗ではないので赤い表示（Failed）にはしない。取り込んでもいない
+        Assert.Equal(SyncState.Idle, vm.State);
+        Assert.Equal(1, cancelled);
+        Assert.Equal(0, synced);
+        Assert.Equal(0, google.SyncCount);
+
+        // 「同期中…」のまま固まっていない。次の同期がまた押せる
+        Assert.False(vm.IsBusy);
+        Assert.False(vm.CancelSyncCommand.CanExecute(null));
+        Assert.True(vm.SyncNowCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task タイムアウトは中止と違って失敗にする()
+    {
+        // HttpClient 側のタイムアウトなど、中止ボタンを押していない OperationCanceledException は
+        // 従来どおり失敗として扱う（赤い表示のまま）
+        var google = new FakeGoogle { IsConnected = true, ThrowOnSync = new TaskCanceledException("timeout") };
+        var vm = new SyncViewModel(google);
+
+        var cancelled = 0;
+        vm.Cancelled += (_, _) => cancelled++;
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.Equal(0, cancelled);
+    }
+
+    [Fact]
+    public void ボタンの文言は状態を映す()
+    {
+        var vm = new SyncViewModel(new FakeGoogle());
+
+        Assert.Equal("Google 未接続", vm.ActionLabel);
     }
 }
