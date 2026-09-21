@@ -207,9 +207,18 @@ public sealed class MainViewModel : ObservableObject
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(ShowWorkdayCalculator);
 
-        // 設定を持たない組み立て方（テストなど）では開けない
+        // 設定を持たない組み立て方（テストなど）では開けない。
+        //
+        // sync 以降は、⚙メニューから設定画面へ移した項目の配線。このコマンド自体は
+        // ここで一度だけ作るが、中のラムダはボタンを押した時点（＝コンストラクタを
+        // 抜けたあと）に評価されるので、まだ代入していないプロパティ（Sync や
+        // 下の各コマンド）を先に参照しても構わない
         OpenSettingsCommand = new RelayCommand(
-            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup, _notifier, SourceLists.Calendars)),
+            () => _editors.ShowSettings(new SettingsViewModel(
+                _settings!, _startup, _notifier, SourceLists.Calendars, Sync,
+                ImportWorkingDaysCommand, ImportLegacyBackupCommand, FetchWorkingDayFeedCommand,
+                ExportWorkingDayFeedCommand, RemoveDuplicatesCommand, BackupCommand, RestoreCommand,
+                ImportGoogleClientCommand, CheckForUpdateCommand)),
             () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));

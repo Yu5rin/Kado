@@ -439,4 +439,75 @@ public class SettingsTests
 
         Assert.False(main.FetchWorkingDayFeedCommand.CanExecute(null));
     }
+
+    // ------------------------------------------------------------------
+    // ⚙メニューから設定画面へ移した項目
+    //
+    // MainViewModel が持っているコマンドが、そのまま SettingsViewModel から
+    // 呼べることを確かめる。中の処理（確認ダイアログやファイル選択）自体は
+    // ImportCommandTests・BackupCommandTests・DuplicateTests がすでに見ている
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 設定画面はMainViewModelのコマンドをそのまま受け取る()
+    {
+        using var test = TestWorkspace.Create();
+        var editors = new FakeEditorPresenter();
+        var main = new MainViewModel(
+            test.Workspace, today: new DateOnly(2026, 9, 24), editors: editors,
+            settings: new AppSettings(test.Workspace.Settings));
+
+        main.OpenSettingsCommand.Execute(null);
+        var settingsVm = editors.LastSettings;
+
+        Assert.NotNull(settingsVm);
+        Assert.Same(main.Sync, settingsVm!.Sync);
+        Assert.Same(main.ImportWorkingDaysCommand, settingsVm.ImportWorkingDaysCommand);
+        Assert.Same(main.ImportLegacyBackupCommand, settingsVm.ImportLegacyBackupCommand);
+        Assert.Same(main.FetchWorkingDayFeedCommand, settingsVm.FetchWorkingDayFeedCommand);
+        Assert.Same(main.ExportWorkingDayFeedCommand, settingsVm.ExportWorkingDayFeedCommand);
+        Assert.Same(main.RemoveDuplicatesCommand, settingsVm.RemoveDuplicatesCommand);
+        Assert.Same(main.BackupCommand, settingsVm.BackupCommand);
+        Assert.Same(main.RestoreCommand, settingsVm.RestoreCommand);
+        Assert.Same(main.ImportGoogleClientCommand, settingsVm.ImportGoogleClientCommand);
+        Assert.Same(main.CheckForUpdateCommand, settingsVm.CheckForUpdateCommand);
+    }
+
+    [Fact]
+    public void 渡されなければ移した項目のコマンドは持たない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new SettingsViewModel(settings);
+
+        Assert.False(vm.HasSync);
+        Assert.Null(vm.Sync);
+        Assert.Null(vm.ImportLegacyBackupCommand);
+        Assert.Null(vm.BackupCommand);
+        Assert.Null(vm.CheckForUpdateCommand);
+    }
+
+    [Theory]
+    [InlineData(null, "開発版")]
+    [InlineData("", "開発版")]
+    [InlineData("1.0.0.0", "開発版")] // -p:Version を渡さないローカルビルドの既定値
+    [InlineData("0.0.0.0", "開発版")] // release.yml を手動実行したとき（0.0.0-dev）の印
+    [InlineData("0.4.7.0", "0.4.7")] // タグ v0.4.7 からのリリースビルド
+    [InlineData("1.2.3.0", "1.2.3")]
+    public void バージョンはアセンブリの値から組み立てる(string? fileVersion, string expected)
+    {
+        Assert.Equal(expected, SettingsViewModel.FormatVersion(fileVersion));
+    }
+
+    [Theory]
+    [InlineData("https://github.com/Yu5rin/SlideinaCalendar", true)]
+    [InlineData("http://github.com/Yu5rin/SlideinaCalendar", false)]
+    [InlineData("https://evil.example.com/github.com", false)]
+    [InlineData("https://github.com.evil.example.com", false)]
+    [InlineData("file:///etc/passwd", false)]
+    [InlineData("", false)]
+    public void 外部へのリンクはhttpsのGitHubだけ通す(string url, bool allowed)
+    {
+        Assert.Equal(allowed, SettingsViewModel.IsAllowedExternalUrl(url));
+    }
 }
