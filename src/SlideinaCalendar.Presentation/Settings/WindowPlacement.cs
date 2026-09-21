@@ -30,7 +30,7 @@ public readonly record struct WindowPlacement(
     public const double DefaultHeight = 760;
 
     /// <summary>これより小さい大きさは受け取らない。MainWindow.xaml の下限に合わせる。</summary>
-    public const double MinWidth = 880;
+    public const double MinWidth = 280;
 
     /// <inheritdoc cref="MinWidth"/>
     public const double MinHeight = 520;
@@ -45,8 +45,8 @@ public readonly record struct WindowPlacement(
     /// <summary>下限を下回らない大きさに直す。</summary>
     public WindowPlacement WithUsableSize() => this with
     {
-        Width = IsReal(Width) && Width >= MinWidth ? Width : DefaultWidth,
-        Height = IsReal(Height) && Height >= MinHeight ? Height : DefaultHeight,
+        Width = IsReal(Width) ? Math.Max(MinWidth, Width) : DefaultWidth,
+        Height = IsReal(Height) ? Math.Max(MinHeight, Height) : DefaultHeight,
     };
 
     /// <summary>

@@ -102,6 +102,31 @@ public sealed class MilestoneBrushConverter : IValueConverter
     }
 }
 
+/// <summary>
+/// 年ビューの印の色。
+/// <para>
+/// 日付の行の印（仕様期限・1次GO など）は名前ごとに色が決まっている。ふつうの
+/// 予定は所属カレンダーの色。どちらなのかは印自身が持っている。
+/// </para>
+/// </summary>
+public sealed class DayMarkBrushConverter : IValueConverter
+{
+    private static readonly MilestoneBrushConverter Milestones = new();
+    private static readonly EventColorBrushConverter Events = new();
+
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not SlideinaCalendar.Presentation.ViewModels.DayMark mark) return null;
+
+        return mark.MilestoneName is { Length: > 0 } name
+            ? Milestones.Convert(name, targetType, parameter!, culture)
+            : Events.Convert(mark.Color!, targetType, parameter!, culture);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>期限の強調度から文字色を引く。</summary>
 public sealed class DueEmphasisBrushConverter : IValueConverter
 {

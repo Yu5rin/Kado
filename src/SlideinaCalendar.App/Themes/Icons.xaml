@@ -28,6 +28,26 @@
                   Figures="M12 3a5 5 0 0 0-5 5v3.5L5.5 14h13L17 11.5V8a5 5 0 0 0-5-5zM10 17a2 2 0 0 0 4 0M4 4l16 16" />
 
     <!-- 新しい予定の入れ先を示す印 -->
+    <!-- 出しかた（ウィンドウ／スライド）。画面と、そこから出る帯 -->
+    <PathGeometry x:Key="IconLayout"
+                  Figures="M4 5h16v14H4zM14 5v14" />
+
+    <!-- 年表示の出し方。ストリップは1行1か月なので、横に長い行を重ねた形 -->
+    <PathGeometry x:Key="IconRows"
+                  Figures="M3 5h18v14H3zM3 9.7h18M3 14.3h18" />
+
+    <!-- 年表示の出し方。カレンダーは12枚並ぶので、格子 -->
+    <PathGeometry x:Key="IconGrid"
+                  Figures="M3 5h18v14H3zM3 9.7h18M3 14.3h18M9 5v14M15 5v14" />
+
+    <!-- 出すパネルの選び方。3つの区画 -->
+    <PathGeometry x:Key="IconPanes"
+                  Figures="M3 5h18v14H3zM9 5v14M15 5v14" />
+
+    <!-- ピン。押すと画面を分割し、他のウィンドウと重ならなくなる -->
+    <PathGeometry x:Key="IconPin"
+                  Figures="M9 4h6l-1 6 3 3H7l3-3-1-6M12 13v7" />
+
     <PathGeometry x:Key="IconStar"
                   Figures="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.7l5.9-.9z" />
 

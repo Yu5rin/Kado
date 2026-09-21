@@ -25,6 +25,15 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
         Show(new SettingsWindow(settings));
     }
 
+    public void ShowWorkdayCalculator(
+        SlideinaCalendar.Presentation.ViewModels.WorkdayCalculatorViewModel calculator)
+    {
+        // 数えるだけなので、閉じ方は見ない
+        Show(new WorkdayCalculatorWindow(calculator));
+    }
+
+    public void ShowShortcuts() => Show(new ShortcutsWindow());
+
     public bool ConfirmDelete(string title) =>
         MessageBox.Show(
             ownerProvider() ?? Application.Current.MainWindow,

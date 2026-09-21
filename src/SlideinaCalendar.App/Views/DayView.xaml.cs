@@ -119,6 +119,10 @@ public partial class DayView : UserControl
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
         if (e.Delta == 0) return;
+
+        // Ctrl はビューの切り替えに使う。いちばん外が受けるので、ここでは何もしない
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+
         if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
 
         var command = e.Delta > 0 ? main.PreviousCommand : main.NextCommand;
