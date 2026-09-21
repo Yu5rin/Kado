@@ -88,7 +88,7 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="閉じる"
                         Style="{StaticResource PrimaryButtonStyle}"
-                        IsCancel="True" IsDefault="True" />
+                        IsCancel="True" />
 
                 <TextBlock Text="{Binding Message}" FontSize="11" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0"
@@ -203,7 +203,7 @@
                                   IsEnabled="{Binding NotifyEnabled}"
                                   ItemsSource="{Binding Leads}" ItemTemplate="{StaticResource ChoiceTemplate}"
                                   SelectedValuePath="Value" SelectedValue="{Binding NotifyLeadMinutes}" />
-                        <TextBlock Text="どのカレンダーを知らせるかは、左の一覧のベルで決めます。予定ごとの指定はその予定の画面から。"
+                        <TextBlock Text="どのカレンダーを知らせるかは、左パネルのベルで決めます。予定ごとの指定はその予定の画面から。"
                                    Style="{StaticResource FieldNoteStyle}" />
                     </StackPanel>
 
@@ -285,7 +285,7 @@
                                        Foreground="{DynamicResource Ink3Brush}" />
                             <TextBox Width="80" HorizontalAlignment="Left"
                                      Style="{StaticResource FieldTextBoxStyle}"
-                                     Text="{Binding MinWidth, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding MinWidthText, UpdateSourceTrigger=LostFocus}" />
                         </DockPanel>
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
                                    Text="帯として使うときに、どこまで詰められるようにするか。160〜640px。&#10;細くすると場所を取りませんが、ツールバーの中身は順に切れていきます。" />

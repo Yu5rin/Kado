@@ -241,6 +241,11 @@ public sealed class AppSettings
             var trimmed = (value ?? string.Empty).Trim();
             if (string.Equals(_feedUrl, trimmed, StringComparison.Ordinal)) return;
 
+            // https でない URL や、URL として解釈できない文字列は保存しない。以後の取得が
+            // 毎回失敗するだけでなく、起動時の自動取得が黙って失敗して「今日は確認済み」に
+            // なってしまう。空（取りに行かない）だけは特別に許す
+            if (trimmed.Length > 0 && !IsUsableFeedUrl(trimmed)) return;
+
             _feedUrl = trimmed;
             _store.Set(FeedUrlKey, trimmed);
             Changed?.Invoke(this, EventArgs.Empty);

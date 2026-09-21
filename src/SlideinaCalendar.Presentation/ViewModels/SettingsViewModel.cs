@@ -278,18 +278,44 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// 窓をいちばん細くできる幅。
-    /// <para>帯としてどこまで詰めたいかは使う人による。</para>
+    /// <para>
+    /// 文字列として受ける。<c>TextBox</c> に <c>int</c> を直接束ねると、数字以外を
+    /// 打ったとき WPF の既定の型変換エラーで元の値へ静かに戻るだけで、何も言われない。
+    /// ここで <see cref="int.TryParse(string?, out int)"/> して、失敗したときは理由を出す。
+    /// 全角の数字も半角に直してから読む。
+    /// </para>
+    /// <para>範囲外（160〜640の外）は <see cref="AppSettings.MinWidth"/> 側で丸められる。丸まったら伝える。</para>
     /// </summary>
-    public int MinWidth
+    public string MinWidthText
     {
-        get => _settings.MinWidth;
+        get => _settings.MinWidth.ToString(CultureInfo.InvariantCulture);
         set
         {
-            if (_settings.MinWidth == value) return;
+            var normalized = NormalizeDigits(value);
 
-            _settings.MinWidth = value;
+            if (!int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                Message = "いちばん細くできる幅は数字で入れてください。";
+                Raise();
+                return;
+            }
+
+            _settings.MinWidth = parsed;
+            Message = _settings.MinWidth == parsed
+                ? null
+                : $"{AppSettings.LowestMinWidth}〜{AppSettings.HighestMinWidth}px の範囲に収めました（{_settings.MinWidth}px）。";
+
             Raise();
         }
+    }
+
+    /// <summary>全角の数字を半角に直す。「１６０」のような入力も受けたい。</summary>
+    private static string NormalizeDigits(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
+
+        return new string(value.Select(
+            c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray());
     }
 
     /// <summary>知らせるときに音を鳴らすか。</summary>
@@ -331,19 +357,37 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>実働日データの配信元（feed.json の URL）。</summary>
+    /// <summary>
+    /// 実働日データの配信元（feed.json の URL）。
+    /// <para>
+    /// https でない URL や、URL として解釈できない文字列は保存しない。取得が毎回
+    /// 失敗するだけでなく、起動時の自動取得が黙って失敗して「今日は確認済み」に
+    /// なってしまうため。空（取りに行かない）だけは特別に許す。
+    /// </para>
+    /// </summary>
     public string FeedUrl
     {
         get => _settings.FeedUrl;
         set
         {
-            if (string.Equals(_settings.FeedUrl, value, StringComparison.Ordinal)) return;
+            var trimmed = (value ?? string.Empty).Trim();
 
-            _settings.FeedUrl = value ?? string.Empty;
-            Message = _settings.FeedUrl.Length > 0 && !AppSettings.IsUsableFeedUrl(_settings.FeedUrl)
-                ? "配信元は https:// で始まる URL にしてください"
-                : null;
+            if (string.Equals(_settings.FeedUrl, trimmed, StringComparison.Ordinal))
+            {
+                Message = null;
+                return;
+            }
 
+            if (trimmed.Length > 0 && !AppSettings.IsUsableFeedUrl(trimmed))
+            {
+                // 保存はしない。前の値のまま留め、理由だけ返す
+                Message = "配信元は https:// で始まる URL にしてください（保存されていません）";
+                Raise();
+                return;
+            }
+
+            _settings.FeedUrl = trimmed;
+            Message = null;
             Raise();
         }
     }

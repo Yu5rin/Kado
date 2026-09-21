@@ -21,7 +21,8 @@ public partial class EventEditorWindow : Window
         InitializeComponent();
         DataContext = _editor = editor;
 
-        SaveCommand = new RelayCommand(() => DialogResult = true, () => editor.CanSave);
+        SaveCommand = new RelayCommand(Save, () => editor.CanSave);
+        DeleteCommand = new RelayCommand(Delete, () => !editor.IsNew);
 
         // RelayCommand は CommandManager に乗っていないので、自分で知らせないと
         // 「保存できるようになったのにボタンが戻らない」状態のままになる
@@ -30,8 +31,46 @@ public partial class EventEditorWindow : Window
         Loaded += (_, _) => TitleBox.Focus();
     }
 
-    /// <summary>保存して閉じる。取り消しは「取り消し」ボタンの IsCancel が受ける。</summary>
+    /// <summary>保存して閉じる。キャンセルは「キャンセル」ボタンの IsCancel が受ける。</summary>
     public RelayCommand SaveCommand { get; }
+
+    /// <summary>削除を求めて閉じる。既存の予定を編集しているときだけボタンを出す。</summary>
+    public RelayCommand DeleteCommand { get; }
+
+    /// <summary>
+    /// 保存の先頭で、いま打ちかけの値を確定させる。
+    /// <para>
+    /// 「保存」は IsDefault なので、Enter で押すとフォーカスを動かさずに閉じる。
+    /// 時刻欄は LostFocus で確定するバインディングなので、放っておくと打った値が
+    /// ViewModel に届く前に閉じてしまう。
+    /// </para>
+    /// </summary>
+    private void Save()
+    {
+        CommitFocusedBinding();
+
+        // 確定した値で保存できるかをもう一度確かめる。無効なまま閉じない
+        if (!_editor.CanSave) return;
+
+        DialogResult = true;
+    }
+
+    /// <summary>削除を ViewModel に求めて閉じる。実際の削除は呼び出し側が行う。</summary>
+    private void Delete()
+    {
+        _editor.RequestDelete();
+        DialogResult = false;
+    }
+
+    /// <summary>いまフォーカスしている要素の Text 系バインディングを確定させる。</summary>
+    private static void CommitFocusedBinding()
+    {
+        switch (Keyboard.FocusedElement)
+        {
+            case TextBox box: box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource(); break;
+            case ComboBox box: box.GetBindingExpression(ComboBox.TextProperty)?.UpdateSource(); break;
+        }
+    }
 
     /// <summary>上下キーで15分ずつ動かす。打ち直すより速い。</summary>
     /// <summary>

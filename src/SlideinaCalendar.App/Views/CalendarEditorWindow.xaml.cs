@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using SlideinaCalendar.Presentation.Editing;
 using SlideinaCalendar.Presentation.Infrastructure;
 
@@ -38,7 +40,7 @@ public partial class CalendarEditorWindow : Window
         InitializeComponent();
         DataContext = editor;
 
-        SaveCommand = new RelayCommand(() => DialogResult = true, () => editor.CanSave);
+        SaveCommand = new RelayCommand(() => Save(editor), () => editor.CanSave);
         PickColorCommand = new RelayCommand<string?>(color =>
         {
             if (color is not null) editor.Color = color;
@@ -54,4 +56,18 @@ public partial class CalendarEditorWindow : Window
 
     /// <summary>色見本を押したとき。</summary>
     public RelayCommand<string?> PickColorCommand { get; }
+
+    /// <summary>
+    /// 保存の先頭で、いま打ちかけの値を確定させる。
+    /// <para>この画面の名前欄は PropertyChanged で確定するが、他の編集画面と形を揃えておく。</para>
+    /// </summary>
+    private void Save(CalendarEditorViewModel editor)
+    {
+        if (Keyboard.FocusedElement is TextBox box)
+            box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+        if (!editor.CanSave) return;
+
+        DialogResult = true;
+    }
 }

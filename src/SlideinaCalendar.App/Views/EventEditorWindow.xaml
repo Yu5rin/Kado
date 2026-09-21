@@ -40,12 +40,18 @@
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="取り消し" Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0"
+                    <Button Content="キャンセル" Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0"
                             IsCancel="True" />
                     <Button Content="保存" Style="{StaticResource PrimaryButtonStyle}"
                             IsDefault="True" IsEnabled="{Binding CanSave}"
                             Command="{Binding SaveCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                 </StackPanel>
+
+                <!-- 既存の予定を編集しているときだけ出す。新規作成では消すものが無い -->
+                <Button Content="削除" DockPanel.Dock="Left" Style="{StaticResource GhostButtonStyle}"
+                        Foreground="{DynamicResource SundayBrush}" Margin="0,0,10,0"
+                        Command="{Binding DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}" />
 
                 <TextBlock Text="{Binding ValidationMessage}" FontSize="11" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0"
@@ -70,7 +76,7 @@
             -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                 <StackPanel Margin="0,0,8,0">
-                    <TextBlock Text="日付" Style="{StaticResource FieldLabelStyle}" />
+                    <TextBlock Text="開始日" Style="{StaticResource FieldLabelStyle}" />
                     <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
                                 SelectedDate="{Binding Date, Converter={StaticResource DateOnlyToDateTime}}" />
                 </StackPanel>
@@ -148,7 +154,7 @@
                           Style="{StaticResource FieldComboBoxStyle}"
                           ItemsSource="{Binding NotifyOptions}"
                           SelectedValuePath="Value" SelectedValue="{Binding Notify}"
-                          ToolTip="ふつうはカレンダー側（左の一覧のベル）で決めます">
+                          ToolTip="ふつうはカレンダー側（左パネルのベル）で決めます">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding Label}" />

@@ -99,4 +99,50 @@ public class TaskEditorViewModelTests
         Assert.True(vm.HasDue);
         Assert.Equal(D(2026, 9, 30), vm.ToModel().Due);
     }
+
+    [Fact]
+    public void 長すぎるタイトルは保存できない()
+    {
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), TaskLists, D(2026, 9, 24))
+        {
+            Title = new string('あ', 1025),
+        };
+
+        Assert.False(vm.CanSave);
+        Assert.Contains("タイトル", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 長すぎる詳細は保存できない()
+    {
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), TaskLists, D(2026, 9, 24))
+        {
+            Title = "集計",
+            Note = new string('あ', 8193),
+        };
+
+        Assert.False(vm.CanSave);
+        Assert.Contains("詳細", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 新規作成では削除を求めても効かない()
+    {
+        var vm = new TaskEditorViewModel(D(2026, 9, 24), TaskLists, D(2026, 9, 24));
+        vm.RequestDelete();
+
+        Assert.False(vm.Deleted);
+    }
+
+    [Fact]
+    public void 既存のタスクは削除を求められる()
+    {
+        var source = new TaskItem { Id = "t1", Title = "集計", Due = D(2026, 9, 24) };
+        var vm = new TaskEditorViewModel(source, TaskLists, D(2026, 9, 24));
+
+        Assert.False(vm.Deleted);
+        vm.RequestDelete();
+
+        Assert.True(vm.Deleted);
+    }
 }

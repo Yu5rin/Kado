@@ -43,7 +43,7 @@
         <Border DockPanel.Dock="Bottom" Padding="16,11"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <Button Content="閉じる" HorizontalAlignment="Right"
-                    Style="{StaticResource GhostButtonStyle}" IsCancel="True" IsDefault="True" />
+                    Style="{StaticResource GhostButtonStyle}" IsCancel="True" />
         </Border>
 
         <StackPanel Margin="16,14">
