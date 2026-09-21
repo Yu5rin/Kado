@@ -14,6 +14,22 @@
         <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
     </Style>
 
+    <!--
+        文字サイズの段階。
+        Views では 8〜19px の16種類が直書きされている（FontSize="..." の直値）。
+        ここでは実際に使われている値を汲んで6段階に絞り、それぞれ何に使うものかを
+        コメントで示す。Views 側の置き換えは別担当の仕事なので、ここでは定義だけ行う。
+
+        直書きサイズとの対応（近い段階に丸める。カッコ内は実際の出現箇所の例）:
+          8, 9, 9.5, 10        → MicroTextStyle   （祝日名・終日ラベル・実働日の通し番号など最小の添え書き）
+          10.5, 11, 11.5       → CaptionTextStyle （曜日・補助ラベル・ツールチップ本文相当）
+          12, 12.5             → BodyTextStyle    （通常の本文・入力欄・一覧の行）
+          13, 14               → EmphasisTextStyle（強調した本文・パネルの小見出し）
+          15, 16, 17           → SubheadingTextStyle（日付ヘッダの数字などの準見出し）
+          18, 19               → HeadingTextStyle （月の見出しなど画面の主見出し）
+    -->
+
+    <!-- 本文。通常のテキスト・入力欄・一覧の行に使う基準サイズ -->
     <Style x:Key="BodyTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}" />
         <Setter Property="FontSize" Value="12.5" />
@@ -21,9 +37,31 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
+    <!-- 補助ラベル・キャプション。曜日やツールチップ本文など、本文より一段静かに扱う文字 -->
     <Style x:Key="CaptionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+    </Style>
+
+    <!-- 最小の添え書き。祝日名・終日レーンのラベル・実働日の通し番号など、いちばん小さく静かな表記 -->
+    <Style x:Key="MicroTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+        <Setter Property="FontSize" Value="10" />
+    </Style>
+
+    <!-- 強調した本文。パネルの小見出しや、一覧の中で目立たせたい行に使う -->
+    <Style x:Key="EmphasisTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+
+    <!-- 準見出し。週・日ビューの日付の数字など、本文より大きいが画面の主見出しほどではないもの -->
+    <Style x:Key="SubheadingTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <!-- 見出し。ツールバーの月の見出しなど、画面でいちばん大きく扱う文字 -->
+    <Style x:Key="HeadingTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
 </ResourceDictionary>

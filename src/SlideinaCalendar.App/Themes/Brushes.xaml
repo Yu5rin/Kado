@@ -14,6 +14,10 @@
     <SolidColorBrush x:Key="Ink3Brush" Color="{DynamicResource Ink3Color}" />
     <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="{DynamicResource AccentSoftColor}" />
+    <!-- アクセントの面に重ねる文字色。テーマごとに 4.5:1 以上を確保できる値を選んでいる -->
+    <SolidColorBrush x:Key="OnAccentBrush" Color="{DynamicResource OnAccentColor}" />
+    <!-- DoneBrush（完了したタスクの面）に重ねる文字色。アクセントとは明暗の向きが逆になりうるので別トークン -->
+    <SolidColorBrush x:Key="OnDoneBrush" Color="{DynamicResource OnDoneColor}" />
     <SolidColorBrush x:Key="SundayBrush" Color="{DynamicResource SundayColor}" />
     <SolidColorBrush x:Key="SaturdayBrush" Color="{DynamicResource SaturdayColor}" />
     <SolidColorBrush x:Key="WorkingDayBrush" Color="{DynamicResource WorkingDayColor}" />
