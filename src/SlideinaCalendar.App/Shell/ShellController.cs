@@ -136,6 +136,10 @@ public sealed class ShellController : IDisposable
         {
             if (_shell.IsPinned) _shell.Mode = ShellMode.Overlay;
         };
+
+        // Esc などキー操作での引っ込め（要件書外だが実機の使い勝手として足した）。
+        // マウスが外れたときと同じ経路（SlideOutIfIdle）を通す。独自の経路は作らない
+        _shell.RetractRequested += (_, _) => SlideOutIfIdle();
     }
 
     /// <summary>

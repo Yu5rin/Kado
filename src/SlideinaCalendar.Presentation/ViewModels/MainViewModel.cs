@@ -67,6 +67,7 @@ public sealed class MainViewModel : ObservableObject
     private string _quickText = string.Empty;
     private double _sidePanelWidth;
     private double _detailPaneWidth;
+    private bool _isBusy;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
@@ -208,7 +209,7 @@ public sealed class MainViewModel : ObservableObject
 
         // 設定を持たない組み立て方（テストなど）では開けない
         OpenSettingsCommand = new RelayCommand(
-            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup, _notifier)),
+            () => _editors.ShowSettings(new SettingsViewModel(_settings!, _startup, _notifier, SourceLists.Calendars)),
             () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
@@ -266,6 +267,10 @@ public sealed class MainViewModel : ObservableObject
                 Raise(nameof(SyncStatusText), nameof(IsSynced));
             }
         };
+
+        // 中止ボタンで止めたときだけ、下のステータス行に断りを出す（項目8）。
+        // 失敗ではないので、Sync 側の赤い表示（StatusText）は使わない
+        Sync.Cancelled += (_, _) => StatusMessage = "同期を中止しました";
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -860,6 +865,19 @@ public sealed class MainViewModel : ObservableObject
     /// <para>画面側が一定時間後に呼ぶ。すでに次の内容に差し替わっていれば、何もしない。</para>
     /// </summary>
     public void ClearStatusMessage() => StatusMessage = null;
+
+    /// <summary>
+    /// 取り込み・復元など、重い処理が走っている間。
+    /// <para>
+    /// 画面側（<c>MainWindow</c>）はこれを見て待機カーソルに変える（項目5）。
+    /// このクラスは WPF に依存しない作りを保つので、カーソルそのものはここでは持たない。
+    /// </para>
+    /// </summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set => Set(ref _isBusy, value);
+    }
 
     // ------------------------------------------------------------------
     // ツールバーの表示
@@ -1724,7 +1742,12 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            File.WriteAllText(path, WorkdayFeed.Write(_workspace.WorkingDays, _today));
+            // 直書きせず、一時ファイルへ書いてから置き換える（DpapiTokenStore.Save と同じ流儀）。
+            // 途中で失敗しても、配信中の feed.json を壊さない
+            var temporary = path + ".tmp";
+            File.WriteAllText(temporary, WorkdayFeed.Write(_workspace.WorkingDays, _today));
+            File.Move(temporary, path, overwrite: true);
+
             StatusMessage = $"実働日データを書き出しました（{Path.GetFileName(path)}）";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -1780,6 +1803,11 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        // DB の入れ替えが絡むので Run() と同じ理由で別スレッドへは逃がさない。
+        // 待機カーソルだけ出す（項目5）
+        IsBusy = true;
+        StatusMessage = "復元しています…";
+
         try
         {
             RestoreBackup(path);
@@ -1787,6 +1815,10 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
         {
             StatusMessage = $"復元できませんでした（{ex.Message}）";
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
@@ -1902,9 +1934,19 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// ファイルを開いて取り込み、結果を見せる。
     /// <para>読めないファイルを選んでも落とさない。何が起きたかを出して続ける。</para>
+    /// <para>
+    /// 大きめのファイルだと結果が出るまで固まって見える（項目5）。ここで実際に行う
+    /// 解析・反映（<c>CalendarWorkspace</c> 側）は <c>ObservableCollection</c> を
+    /// UI スレッドの外から更新することになりかねず、別スレッドへ逃がすのは見送った。
+    /// <see cref="IsBusy"/> を立てて画面側（<c>MainWindow</c>）に待機カーソルを
+    /// 出させるだけに留める。
+    /// </para>
     /// </summary>
     private void Run(string path, string title, Func<Stream, (string Report, string Status)> import)
     {
+        IsBusy = true;
+        StatusMessage = $"{title}を実行しています…";
+
         try
         {
             using var stream = File.OpenRead(path);
@@ -1918,7 +1960,13 @@ public sealed class MainViewModel : ObservableObject
                                   or FormatException or InvalidDataException
                                   or InvalidOperationException or JsonException)
         {
+            // 「実行しています…」を出しっぱなしにしない
+            StatusMessage = $"{title}に失敗しました（{e.Message}）";
             _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{e.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 

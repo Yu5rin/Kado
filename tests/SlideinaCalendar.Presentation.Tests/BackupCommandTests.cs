@@ -88,4 +88,25 @@ public class BackupCommandTests
 
         Assert.False(main.RestoreCommand.CanExecute(null));
     }
+
+    /// <summary>復元の間だけ IsBusy が立つ（項目5）。終わったら必ず戻る。</summary>
+    [Fact]
+    public void 復元の間だけビジーになる()
+    {
+        using var test = TestWorkspace.Create();
+        var files = new FakeFileDialogs { FileToPick = @"C:\temp\backup.db", Confirms = true };
+
+        var main = new MainViewModel(test.Workspace, Today, files: files) { RestoreBackup = _ => { } };
+
+        var wasBusy = false;
+        main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsBusy) && main.IsBusy) wasBusy = true;
+        };
+
+        main.RestoreCommand.Execute(null);
+
+        Assert.True(wasBusy);
+        Assert.False(main.IsBusy);
+    }
 }

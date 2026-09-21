@@ -182,6 +182,33 @@
 
     <Grid x:Name="Root" PreviewMouseWheel="OnZoomWheel">
     <DockPanel>
+        <!--
+            ドックグリップ（下の DockGrip）とぶつからないよう、内側の辺に8pxぶん
+            余白を空ける。中身に直書きせず Style のトリガーで与える（下の DockGrip
+            と同じ理由。タグの直書きはトリガーに勝ってしまう）。
+
+            右端に寄せていれば内側は左（既定のまま）。左端に寄せていれば内側は右
+            なので、DockGrip 側と同じ条件で上書きする。ドックしていないときは
+            余白を空けない（ふつうの窓に OS の掴みしろがある）。
+        -->
+        <DockPanel.Style>
+            <Style TargetType="DockPanel">
+                <Setter Property="Margin" Value="0" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Shell.IsAtEdge}" Value="True">
+                        <Setter Property="Margin" Value="8,0,0,0" />
+                    </DataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding Shell.IsAtEdge}" Value="True" />
+                            <Condition Binding="{Binding Shell.IsAtLeft}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="Margin" Value="0,0,8,0" />
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
+        </DockPanel.Style>
+
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
@@ -484,13 +511,29 @@
 
                 <!--
                     押すと同期する。繋いでいなければ押せない（⚙から接続する）。
-                    丸印の色で状態を出す。文字は状態だけを出し、操作の結果は混ぜない
+                    丸印の色で状態を出す。文字は状態だけを出し、操作の結果は混ぜない。
+
+                    走っている間は押すと止まる（項目8）。ボタンを無効にするのではなく
+                    コマンドと文言を差し替える。無効のままだと、積み上がったときに
+                    待つ以外の手が無くなる
+                -->
+                <!--
+                    Command はタグに直書きしない。直書きした値は Style のトリガより強く、
+                    そちらでは中止に切り替えられなくなる（DockGrip と同じ落とし穴）
                 -->
                 <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,2"
-                        Style="{StaticResource SyncStatusButtonStyle}"
-                        Command="{Binding Sync.SyncNowCommand}"
                         Visibility="{Binding ShowsSyncStatus, Converter={StaticResource BoolToVisibility}}"
-                        ToolTip="押すと今すぐ同期します">
+                        ToolTip="{Binding Sync.ActionToolTip}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SyncStatusButtonStyle}">
+                            <Setter Property="Command" Value="{Binding Sync.SyncNowCommand}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Sync.IsBusy}" Value="True">
+                                    <Setter Property="Command" Value="{Binding Sync.CancelSyncCommand}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
                                  Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
@@ -498,7 +541,7 @@
                             同期失敗の文言は長くなりうる。切らないと左（年月・送り・
                             ビュー切替）を押し出す。全文はツールチップに回す
                         -->
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SyncStatusText}"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Sync.ActionLabel}"
                                    MaxWidth="220" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding SyncStatusText}"
                                    Foreground="{DynamicResource Ink3Brush}" />
@@ -529,7 +572,8 @@
                     <Popup IsOpen="{Binding IsSearching, Mode=OneWay}" PlacementTarget="{Binding ElementName=SearchBox}"
                            Placement="Bottom" AllowsTransparency="True" StaysOpen="True"
                            HorizontalOffset="0" VerticalOffset="3">
-                        <Border MinWidth="320" MaxWidth="440" MaxHeight="420" CornerRadius="6"
+                        <!-- 最小幅は検索欄そのものに連動させる。固定値だと帯（160〜220px）より広くなり、本体からはみ出す -->
+                        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxWidth="440" MaxHeight="420" CornerRadius="6"
                                 Background="{DynamicResource PanelBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
                             <DockPanel>
@@ -643,7 +687,8 @@
                                               Converter={StaticResource BoolToVisibility}}" />
 
             <GridSplitter Grid.Column="1" x:Name="SlimSplitter"
-                          Style="{StaticResource PaneSplitterStyle}" />
+                          Style="{StaticResource PaneSplitterStyle}"
+                          PreviewMouseUp="OnPaneResized" />
 
             <!-- 左パネル（.side 216px） -->
             <Border Grid.Column="2" Background="{DynamicResource PanelBrush}"
@@ -800,7 +845,8 @@
             <!-- 左パネルと中央の境目。閉じているあいだは出さない -->
             <GridSplitter Grid.Column="3" x:Name="SideSplitter"
                           Style="{StaticResource PaneSplitterStyle}"
-                          Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}" />
+                          Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}"
+                          PreviewMouseUp="OnPaneResized" />
 
             <!-- 中央（.main） -->
             <DockPanel Grid.Column="4" x:Name="MainPane"
@@ -833,7 +879,8 @@
 
             <!-- 中央と右ペインの境目 -->
             <GridSplitter Grid.Column="5" x:Name="DetailSplitter"
-                          Style="{StaticResource PaneSplitterStyle}" />
+                          Style="{StaticResource PaneSplitterStyle}"
+                          PreviewMouseUp="OnPaneResized" />
             <!--
                 どちらかを畳んだら境目も消す。掴みしろだけ残っても、つまんで動かす
                 相手がいない
