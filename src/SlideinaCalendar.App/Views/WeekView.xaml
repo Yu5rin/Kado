@@ -191,7 +191,7 @@
                 <!-- 今日は日にちを丸で囲う -->
                 <DataTrigger Binding="{Binding IsToday}" Value="True">
                     <Setter TargetName="NumberFace" Property="Background" Value="{DynamicResource AccentBrush}" />
-                    <Setter TargetName="DayNumber" Property="Foreground" Value="White" />
+                    <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
                     <Setter TargetName="DayNumber" Property="FontWeight" Value="SemiBold" />
                     <Setter TargetName="DayNumber" Property="FontSize" Value="14" />
                 </DataTrigger>

@@ -215,6 +215,14 @@
                             <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
+                        <!--
+                            無効時。SegmentButtonStyle の無効表示（Opacity 0.5 / Cursor を
+                            既定へ戻す）に揃える。押せるように見えて何も起きない状態を消す
+                        -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -263,7 +271,7 @@
                         </MultiTrigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentBrush}" />
-                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
@@ -287,8 +295,13 @@
                     <Border x:Name="Box" Width="15" Height="15" CornerRadius="3.5"
                             Background="{DynamicResource PanelBrush}"
                             BorderThickness="1.5" BorderBrush="{DynamicResource LineStrongBrush}">
+                        <!--
+                            チェックが付いたときの面は DoneBrush（完了を静かに沈める中間トーン）。
+                            アクセント面用の OnAccentBrush はここでは向きが逆になることがあるため、
+                            DoneBrush 専用の OnDoneBrush を使う
+                        -->
                         <Path x:Name="Mark" Data="{StaticResource IconCheck}"
-                              Stroke="White" StrokeThickness="2.6" Visibility="Collapsed"
+                              Stroke="{DynamicResource OnDoneBrush}" StrokeThickness="2.6" Visibility="Collapsed"
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Stretch="Uniform" Width="9" Height="9" />
                     </Border>
@@ -323,7 +336,8 @@
                                 Background="{DynamicResource BackgroundBrush}"
                                 BorderThickness="1.5" BorderBrush="{DynamicResource LineStrongBrush}">
                             <Path x:Name="Mark" Data="{StaticResource IconCheck}"
-                                  Stroke="White" StrokeThickness="2.6" Visibility="Collapsed"
+                                  Stroke="{DynamicResource OnAccentBrush}" StrokeThickness="2.6"
+                                  Visibility="Collapsed"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                   Stretch="Uniform" Width="9" Height="9" />
                         </Border>
@@ -478,7 +492,7 @@
 
                         <DataTrigger Binding="{Binding IsToday}" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentBrush}" />
-                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </DataTrigger>
                     </ControlTemplate.Triggers>
@@ -732,6 +746,12 @@
                                       Focusable="False" HorizontalScrollBarVisibility="Hidden"
                                       VerticalScrollBarVisibility="Hidden" />
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- 無効時。FieldTextBoxStyle と同じく文字を補助色へ落とす（面は外側の FieldDatePickerStyle が持つ） -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -751,6 +771,19 @@
             <Style TargetType="primitives:DatePickerTextBox"
                    BasedOn="{StaticResource FieldDatePickerTextBoxStyle}" />
         </Style.Resources>
+
+        <!--
+            無効時。FieldTextBoxStyle の無効表示に揃える（背景を沈め、枠と文字を補助色にし、
+            カーソルを既定へ戻す）。通知・期限の付随欄が「押せるのに開かない」ように見える問題への対応
+        -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- 一覧に出す行 -->
@@ -847,6 +880,15 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
+                        <!--
+                            無効時。FieldTextBoxStyle の無効表示に揃える。
+                            期限を付けない・通知OFFのときの選択欄が押せるように見えてしまう問題への対応
+                        -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -924,7 +966,7 @@
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="16,0" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -1020,6 +1062,169 @@
                             <Setter TargetName="Line" Property="Fill" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        右クリックメニューとツールチップ。
+        暗黙スタイル（x:Key 無し）にする。ScrollBar・CheckBox（ふつうのチェックボックス）と
+        同じ書き方で、アプリ全体の ContextMenu / MenuItem / Separator / ToolTip に効く。
+        月ビューのチップ・左パネルの行・⚙ボタン・▥ボタンのメニューは自前で ContextMenu を
+        組んでおり、ここに書かなければ Windows 既定の明色（白地）のまま出てしまう。
+
+        ポップアップ（ComboBox・DatePicker系）と角丸・枠・背景の書きぶりを揃えている
+        （CornerRadius 5 / BorderThickness 1 / LineStrongBrush / PanelBrush）。
+    -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <!--
+                        ContextMenu 自身の開閉・位置決めはフレームワークが Popup を
+                        使ってやってくれる。ここに書くのは中身（枠と背景）だけでよい
+                    -->
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="5" SnapsToDevicePixels="True">
+                        <StackPanel IsItemsHost="True" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- メニューの区切り線 -->
+    <Style TargetType="Separator">
+        <Setter Property="Background" Value="{DynamicResource LineBrush}" />
+        <Setter Property="Margin" Value="4,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Background="{TemplateBinding Background}" Height="1" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        メニューの1行。
+        ContextMenu からしか使わないので、Menu バーに出るときだけの見た目
+        （TopLevelHeader のアイコン無し表示など）は考えない。IsCheckable の
+        チェック印・サブメニュー（「詳細」のような入れ子）・無効表示の3つは扱う。
+
+        サブメニューの開閉先は既定の名前どおり x:Name="PART_Popup" にしておく。
+        MenuItem 自身がコードでこの名前を探して開閉・位置合わせに使うため、
+        名前を変えると入れ子のメニューが正しく振る舞わない
+    -->
+    <Style TargetType="MenuItem">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Root" Background="Transparent" CornerRadius="4" Padding="4,2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="22" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="16" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- チェック印。IsCheckable のときだけ出す -->
+                            <Path x:Name="Check" Grid.Column="0" Data="{StaticResource IconCheck}"
+                                  Width="10" Height="10" Stretch="Uniform"
+                                  Stroke="{DynamicResource AccentBrush}" StrokeThickness="2.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Visibility="Collapsed"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                            <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                               RecognizesAccessKey="True"
+                                               VerticalAlignment="Center" Margin="6,4,10,4" />
+
+                            <!-- ショートカットキーの文字（Ctrl+Z など）。今のところ使っていないが受け皿は置く -->
+                            <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                            <!-- サブメニューがあることを示す山形。「詳細」のような入れ子だけに出す -->
+                            <Path x:Name="Arrow" Grid.Column="3" Data="{StaticResource IconChevronRight}"
+                                  Width="9" Height="9" Stretch="Uniform"
+                                  Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.8"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Visibility="Collapsed"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                            <Popup x:Name="PART_Popup" Placement="Right" Focusable="False"
+                                   AllowsTransparency="True"
+                                   HorizontalOffset="2" VerticalOffset="-6"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}">
+                                <Border CornerRadius="5" Padding="4"
+                                        Background="{DynamicResource PanelBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                                    <StackPanel IsItemsHost="True" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsCheckable" Value="True">
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!-- IsCheckable の後に置き、チェックが外れているときはこちらを勝たせる -->
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter TargetName="Check" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <!-- 子を持つ行（TopLevelHeader・SubmenuHeader どちらも HasItems は True） -->
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        ツールチップ。
+        ポップアップ系（ComboBox・DatePicker）と同じ角丸・枠・背景に揃える。
+        既定テンプレートに PART_ 付きの必須要素は無いので、ここは安全に差し替えられる
+    -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="5" SnapsToDevicePixels="True">
+                        <ContentPresenter />
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

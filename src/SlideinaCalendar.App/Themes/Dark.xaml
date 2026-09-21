@@ -19,6 +19,16 @@
     <Color x:Key="AccentColor">#7AA5DF</Color>
     <Color x:Key="AccentSoftColor">#233247</Color>
 
+    <!--
+        アクセントの面に重ねる文字色。
+        Dark のアクセント #7AA5DF は明るい水色で、白文字だと約2.5:1 しか出ない
+        （WCAG AA の 4.5:1 を割る）。濃紺 #0F1720 なら約7.1:1 まで上がる
+    -->
+    <Color x:Key="OnAccentColor">#0F1720</Color>
+
+    <!-- DoneColor（完了したタスクの面）に重ねるチェック印の色。白で約5.9:1 出るので据え置き -->
+    <Color x:Key="OnDoneColor">#FFFFFF</Color>
+
     <Color x:Key="SundayColor">#E0827C</Color>
     <Color x:Key="SaturdayColor">#7AA5DF</Color>
 

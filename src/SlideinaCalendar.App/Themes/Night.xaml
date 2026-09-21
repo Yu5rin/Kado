@@ -10,27 +10,65 @@
 
     <Color x:Key="BackgroundColor">#363B40</Color>
     <Color x:Key="PanelColor">#3E4348</Color>
-    <Color x:Key="SunkenColor">#2E3033</Color>
+    <!--
+        一段沈めた面（前後の月）。以前は OffDayColor と同じ値で、休業日と見分けが
+        付かなかった。休業日よりわずかに明るく留め、2つが別物だと分かるようにする
+    -->
+    <Color x:Key="SunkenColor">#2B2E31</Color>
 
     <Color x:Key="LineColor">#4A4F54</Color>
     <Color x:Key="LineStrongColor">#555555</Color>
 
+    <!--
+        文字（主／副／補助）。
+        以前は3色の明度がほぼ揃っていて（L 75/73/69）、見出し・本文・補助ラベルの
+        階層が付かなかった。Dark.xaml の段差（Ink→Ink2 で約1.8倍、Ink2→Ink3 で
+        約2.0倍のコントラスト比）に寄せつつ、Ink3 は背景（Panel）に対して
+        3:1 を下回らない値に留めている（詳細は報告のコントラスト計算を参照）
+    -->
     <Color x:Key="InkColor">#B8BFC6</Color>
-    <Color x:Key="Ink2Color">#B5B9BE</Color>
-    <Color x:Key="Ink3Color">#AAB0B8</Color>
+    <Color x:Key="Ink2Color">#A2ABB3</Color>
+    <Color x:Key="Ink3Color">#8A939E</Color>
 
     <Color x:Key="AccentColor">#6DC1E7</Color>
-    <Color x:Key="AccentSoftColor">#3C4851</Color>
+    <!--
+        以前は Panel（#3E4348）とほぼ同色（明度差1.3）で、実働日バッジなどの面が
+        背景に溶けていた。Panel よりはっきり明るく、アクセントに寄せた色に上げる
+    -->
+    <Color x:Key="AccentSoftColor">#39586F</Color>
+
+    <!--
+        アクセントの面に重ねる文字色。
+        Night のアクセント #6DC1E7 も明るい水色で、白文字は約2.0:1 しか出ない。
+        Dark と同じ濃紺 #0F1720 なら約9.0:1 まで上がる
+    -->
+    <Color x:Key="OnAccentColor">#0F1720</Color>
+
+    <!--
+        DoneColor（完了したタスクの面）に重ねるチェック印の色。
+        DoneColor が中間トーンのグレーなので、白よりも濃色のほうが立つ
+        （#0F1720 で約4.7:1、白だと約3.8:1）
+    -->
+    <Color x:Key="OnDoneColor">#0F1720</Color>
 
     <Color x:Key="SundayColor">#E07B6E</Color>
     <Color x:Key="SaturdayColor">#7FB3D5</Color>
 
     <Color x:Key="WorkingDayColor">#3D4247</Color>
-    <Color x:Key="OffDayColor">#2E3033</Color>
+    <!--
+        休業日。以前は SunkenColor と同じ値で、前後の月のマスと見分けが付かなかった。
+        SunkenColor よりはっきり暗くし、休業日のほうが沈んで見えるようにする
+    -->
+    <Color x:Key="OffDayColor">#222426</Color>
 
-    <!-- マスを押したときと、マウスを載せたときの面。前後の月・休業日と見分けられること -->
-    <Color x:Key="CellHoverColor">#3F4A52</Color>
-    <Color x:Key="CellSelectedColor">#35434D</Color>
+    <!--
+        マスを押したときと、マウスを載せたときの面。
+        以前は CellHover が Panel とほぼ同色（明度差2.1）で乗せても分からず、
+        CellSelected は Sunken/OffDay に近く選択中かどうか読めなかった。
+        Panel から明度をはっきり離し、選択はアクセントに寄せてホバーより一段明るくする
+    -->
+    <Color x:Key="CellHoverColor">#4B6171</Color>
+    <Color x:Key="CellSelectedColor">#437CA3</Color>
 
     <Color x:Key="CategoryGreenColor">#8FDAD2</Color>
     <Color x:Key="CategoryAmberColor">#D9A24A</Color>

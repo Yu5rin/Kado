@@ -25,6 +25,21 @@
     <Color x:Key="AccentColor">#27528F</Color>
     <Color x:Key="AccentSoftColor">#E8EEF7</Color>
 
+    <!--
+        アクセントの面に重ねる文字色。
+        ライトのアクセントは濃い藍なので白地で問題ない（#27528F 上の白は約7.8:1）。
+        Dark / Night は逆にアクセントが明るい水色系のため、そちらでは濃色を使う
+        （Themes/Dark.xaml・Night.xaml 参照）
+    -->
+    <Color x:Key="OnAccentColor">#FFFFFF</Color>
+
+    <!--
+        DoneColor（完了したタスクの面）に重ねるチェック印の色。
+        DoneColor 自身は「済みを静かに沈める」ための中間トーンなので、
+        アクセントとは明暗の向きが逆になることがある。ここだけ別トークンにする
+    -->
+    <Color x:Key="OnDoneColor">#0F1720</Color>
+
     <!-- 日曜・祝日 / 土曜 -->
     <Color x:Key="SundayColor">#B03A34</Color>
     <Color x:Key="SaturdayColor">#3B6EA8</Color>
