@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using SlideinaCalendar.Presentation.Infrastructure;
 using SlideinaCalendar.Presentation.Notifications;
 using SlideinaCalendar.Presentation.Settings;
@@ -43,10 +44,26 @@ public sealed class SettingsViewModel : ObservableObject
     /// まだ持っていないため、既定値付きの任意引数にしてある。渡されなければ、
     /// 設定画面の通知タブにこの節は出さない。
     /// </para>
+    /// <para>
+    /// <c>sync</c> 以降は、⚙メニューから設定画面へ移した項目のための配線。<c>MainViewModel</c>
+    /// がすでに持っているコマンドをそのまま渡してもらう形にしてある。既定値付きの
+    /// 任意引数にしてあるのは <c>calendars</c> と同じ理由で、渡されなければ画面側は
+    /// 「押せない」または「節ごと出さない」で受ける（各プロパティのコメントを参照）。
+    /// </para>
     /// </summary>
     public SettingsViewModel(
         AppSettings settings, IStartupRegistration? startup = null, INotifier? notifier = null,
-        IReadOnlyList<SourceListItemViewModel>? calendars = null)
+        IReadOnlyList<SourceListItemViewModel>? calendars = null,
+        SyncViewModel? sync = null,
+        Infrastructure.RelayCommand? importWorkingDays = null,
+        Infrastructure.RelayCommand? importLegacyBackup = null,
+        Infrastructure.AsyncRelayCommand? fetchWorkingDayFeed = null,
+        Infrastructure.RelayCommand? exportWorkingDayFeed = null,
+        Infrastructure.RelayCommand? removeDuplicates = null,
+        Infrastructure.RelayCommand? backup = null,
+        Infrastructure.RelayCommand? restore = null,
+        Infrastructure.RelayCommand? importGoogleClient = null,
+        Infrastructure.AsyncRelayCommand? checkForUpdate = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startup = startup ?? NullStartupRegistration.Instance;
@@ -57,9 +74,22 @@ public sealed class SettingsViewModel : ObservableObject
         NotifiableCalendars = calendars?.Where(c => c.HasNotifyToggle).ToArray()
             ?? Array.Empty<SourceListItemViewModel>();
 
+        Sync = sync;
+        ImportWorkingDaysCommand = importWorkingDays;
+        ImportLegacyBackupCommand = importLegacyBackup;
+        FetchWorkingDayFeedCommand = fetchWorkingDayFeed;
+        ExportWorkingDayFeedCommand = exportWorkingDayFeed;
+        RemoveDuplicatesCommand = removeDuplicates;
+        BackupCommand = backup;
+        RestoreCommand = restore;
+        ImportGoogleClientCommand = importGoogleClient;
+        CheckForUpdateCommand = checkForUpdate;
+
         TestNotifyCommand = new Infrastructure.RelayCommand(TestNotify);
         OpenCrashLogCommand = new Infrastructure.RelayCommand(OpenCrashLog, () => HasCrashLog);
         ClearCrashLogCommand = new Infrastructure.RelayCommand(ClearCrashLog, () => HasCrashLog);
+        OpenDataFolderCommand = new Infrastructure.RelayCommand(OpenDataFolder);
+        OpenRepositoryCommand = new Infrastructure.RelayCommand(OpenRepository);
     }
 
     /// <summary>カレンダーごとの通知オン・オフの一覧。渡されていなければ空。</summary>
@@ -67,6 +97,54 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>通知タブに、カレンダーごとの一覧の節を出すか。</summary>
     public bool HasCalendarNotifyList => NotifiableCalendars.Count > 0;
+
+    // ------------------------------------------------------------------
+    // ⚙メニューから移した項目
+    //
+    // どれも MainViewModel がすでに持っているコマンドをそのまま受け取って
+    // 画面に出すだけ。ここで新しく処理は書かない（確認ダイアログや
+    // ファイル選択は呼び出し先の MainViewModel 側にある）。
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 右上の同期表示と同じ <see cref="SyncViewModel"/>。
+    /// <para>
+    /// 「同期（Google）」節の接続状態・接続／切断ボタンに使う。<b>「今すぐ同期」は
+    /// ⚙メニューに残すので、ここでは使わない。</b>
+    /// </para>
+    /// <para>既定は null。渡されなければ「同期（Google）」節ごと出さない（<see cref="HasSync"/>）。</para>
+    /// </summary>
+    public SyncViewModel? Sync { get; }
+
+    /// <summary>「同期（Google）」節を出すか。</summary>
+    public bool HasSync => Sync is not null;
+
+    /// <summary>実働日ファイルを取り込む（Excel）。⚙メニューにもあるが、配信元 URL の隣に置くと便利なのでこちらにも出す。</summary>
+    public Infrastructure.RelayCommand? ImportWorkingDaysCommand { get; }
+
+    /// <summary>旧 inaCalendar のバックアップを取り込む（JSON）。移行時の1回きりなので、⚙メニューからはここへ移した。</summary>
+    public Infrastructure.RelayCommand? ImportLegacyBackupCommand { get; }
+
+    /// <summary>配信元から実働日を取り込む。⚙メニューにもあるが、配信元 URL の隣に置くと便利なのでこちらにも出す。</summary>
+    public Infrastructure.AsyncRelayCommand? FetchWorkingDayFeedCommand { get; }
+
+    /// <summary>実働日を配信用に書き出す（feed.json）。⚙メニューからここへ移した。</summary>
+    public Infrastructure.RelayCommand? ExportWorkingDayFeedCommand { get; }
+
+    /// <summary>重複した予定を整理する。元に戻せないので「データ」節の末尾に置く。⚙メニューからここへ移した。</summary>
+    public Infrastructure.RelayCommand? RemoveDuplicatesCommand { get; }
+
+    /// <summary>バックアップを保存する。⚙メニューからここへ移した。</summary>
+    public Infrastructure.RelayCommand? BackupCommand { get; }
+
+    /// <summary>バックアップから復元する。いまの内容が置き換わるので「データ」節の末尾に置く。⚙メニューからここへ移した。</summary>
+    public Infrastructure.RelayCommand? RestoreCommand { get; }
+
+    /// <summary>自分の Google Cloud プロジェクトのクライアント設定を使う（上級者向け）。⚙メニューの「詳細」からここへ移した。</summary>
+    public Infrastructure.RelayCommand? ImportGoogleClientCommand { get; }
+
+    /// <summary>更新を確かめる。⚙メニューから「バージョン情報」節へ移した。</summary>
+    public Infrastructure.AsyncRelayCommand? CheckForUpdateCommand { get; }
 
     /// <summary>
     /// 試しに1つ出してみる。
@@ -539,6 +617,111 @@ public sealed class SettingsViewModel : ObservableObject
         Raise(nameof(Message), nameof(HasCrashLog));
         OpenCrashLogCommand.RaiseCanExecuteChanged();
         ClearCrashLogCommand.RaiseCanExecuteChanged();
+    }
+
+    // ------------------------------------------------------------------
+    // バージョン情報
+    // ------------------------------------------------------------------
+
+    /// <summary>アプリ名。画面にそのまま出す。</summary>
+    public string AppName => "SlideinaCalendar";
+
+    /// <summary>使っている主なもの。決め打ちの表示なので、大きく変えたときだけ直す。</summary>
+    public string TechStack => ".NET 8 ／ WPF ／ SQLite";
+
+    /// <summary>
+    /// 画面に出すバージョン。
+    /// <para>
+    /// <b>決め打ちにしない。</b>アセンブリの <c>AssemblyFileVersion</c> から読む。
+    /// リリースワークフロー（<c>.github/workflows/release.yml</c>）がタグから
+    /// <c>-p:Version=</c> で焼き込む値で、これが <c>AssemblyFileVersion</c> と
+    /// <c>AssemblyInformationalVersion</c> の両方に反映される。
+    /// </para>
+    /// <para>
+    /// タグを押さずに手動実行したときは <c>0.0.0-dev</c> が入る。ローカルでの
+    /// ふつうの <c>dotnet build</c>（<c>-p:Version=</c> を渡さないとき）は
+    /// SDK の既定値 <c>1.0.0</c> になる。どちらもリリースの版数ではないので
+    /// 「開発版」に落とす（<see cref="FormatVersion"/>）。
+    /// </para>
+    /// </summary>
+    public string AppVersion => FormatVersion(
+        Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version);
+
+    /// <summary>
+    /// <see cref="AppVersion"/> の中身。文字列を渡す形にして、実際のアセンブリが無い
+    /// テストからも確かめられるようにしてある。
+    /// </summary>
+    internal static string FormatVersion(string? fileVersion)
+    {
+        if (string.IsNullOrWhiteSpace(fileVersion) || !Version.TryParse(fileVersion, out var version))
+        {
+            return "開発版";
+        }
+
+        // 1.0.0 は -p:Version を渡さなかったときの SDK の既定値、0.0.0 は
+        // ワークフローを手動実行したときの印（0.0.0-dev）。どちらもタグから
+        // 来た本物の版数ではない
+        var isUnfilled = version is { Major: 1, Minor: 0, Build: 0 } or { Major: 0, Minor: 0, Build: 0 };
+
+        return isUnfilled ? "開発版" : $"{version.Major}.{version.Minor}.{version.Build}";
+    }
+
+    /// <summary>リポジトリのページ。固定の URL なので定数で持つ。</summary>
+    private const string RepositoryUrl = "https://github.com/Yu5rin/SlideinaCalendar";
+
+    /// <summary>データの保存先を開く。</summary>
+    public Infrastructure.RelayCommand OpenDataFolderCommand { get; }
+
+    /// <summary>リポジトリのページをブラウザで開く。</summary>
+    public Infrastructure.RelayCommand OpenRepositoryCommand { get; }
+
+    private void OpenDataFolder()
+    {
+        try
+        {
+            var folder = Path.GetDirectoryName(SlideinaCalendar.Data.CalendarDatabase.DefaultPath)!;
+
+            // 中身をアプリが持ってしまうより、使い慣れたエクスプローラーに任せる
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or IOException or PlatformNotSupportedException)
+        {
+            Message = $"保存先を開けませんでした（{ex.Message}）";
+            Raise(nameof(Message));
+        }
+    }
+
+    private void OpenRepository()
+    {
+        // 定数なので通信先が変わることは無いが、ShellExecute に無検証で文字列を
+        // 渡さない流儀は更新の確認（ReleaseFeed.IsAllowedDownloadUrl）と揃える
+        if (!IsAllowedExternalUrl(RepositoryUrl))
+        {
+            Message = "リポジトリのページを開けませんでした。";
+            Raise(nameof(Message));
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(RepositoryUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or IOException or PlatformNotSupportedException)
+        {
+            Message = $"リポジトリのページを開けませんでした（{ex.Message}）";
+            Raise(nameof(Message));
+        }
+    }
+
+    /// <summary>https で、github.com 宛てであること。</summary>
+    internal static bool IsAllowedExternalUrl(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        return uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private static SettingChoice<int>[] Hours(int from, int to) =>

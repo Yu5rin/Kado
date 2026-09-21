@@ -374,59 +374,26 @@
                 <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden"
                               VerticalScrollBarVisibility="Disabled" Focusable="False">
                 <DockPanel LastChildFill="False">
+                <!--
+                    ここには日常的に押すものだけを置く。使う人は1日に何度もここを
+                    開く（製造業の生産管理担当が実働日計算と生産台数の計画に使う）ので、
+                    たまにしか使わないもの（旧データの取り込み・配信用の書き出し・
+                    重複整理・バックアップ・更新確認・Google の接続／切断・上級者向けの
+                    クライアント設定）は設定画面（⚙→設定…）へ移してある
+                -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         ToolTip="取り込みと設定" Click="OnSettingsClicked">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="実働日ファイルを取り込む…（Excel）"
-                                      Command="{Binding ImportWorkingDaysCommand}" />
-                            <MenuItem Header="旧 inaCalendar のバックアップを取り込む…（JSON）"
-                                      Command="{Binding ImportLegacyBackupCommand}" />
-                            <MenuItem Header="配信元から実働日を取り込む"
-                                      Command="{Binding FetchWorkingDayFeedCommand}"
-                                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
-                            <MenuItem Header="実働日を配信用に書き出す…（feed.json）"
-                                      Command="{Binding ExportWorkingDayFeedCommand}"
-                                      ToolTip="いまの実働日データを、配る側のファイルとして書き出します" />
-                            <Separator />
-                            <MenuItem Header="Google に接続…"
-                                      Command="{Binding Sync.ConnectCommand}"
-                                      ToolTip="ブラウザが開きます。許可するとカレンダーとタスクの同期が始まります" />
                             <MenuItem Header="今すぐ同期"
                                       Command="{Binding Sync.SyncNowCommand}"
                                       InputGestureText="F5" />
-                            <MenuItem Header="Google との接続を切る"
-                                      Command="{Binding Sync.DisconnectCommand}"
-                                      ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
-
                             <Separator />
-                            <MenuItem Header="重複した予定を整理…"
-                                      Command="{Binding RemoveDuplicatesCommand}"
-                                      ToolTip="同じ日・同じ時刻・同じ名前の予定を1つにまとめます" />
-
-                            <Separator />
-                            <MenuItem Header="バックアップを保存…"
-                                      Command="{Binding BackupCommand}"
-                                      ToolTip="予定・タスク・設定・実働日データを1つのファイルに書き出します" />
-                            <MenuItem Header="バックアップから復元…"
-                                      Command="{Binding RestoreCommand}"
-                                      ToolTip="いまの内容はすべて置き換わります。復元後にアプリを立ち上げ直します" />
-
-                            <Separator />
-                            <MenuItem Header="更新を確認…"
-                                      Command="{Binding CheckForUpdateCommand}"
-                                      ToolTip="新しい版があれば知らせます" />
-
-                            <!--
-                                自分の Google Cloud プロジェクトで使いたい人だけの項目。
-                                ふつうは触らせない。アプリに焼き込んだ設定で繋がる
-                            -->
-                            <Separator />
-                            <MenuItem Header="詳細">
-                                <MenuItem Header="自分のクライアント設定を使う…（JSON）"
-                                          Command="{Binding ImportGoogleClientCommand}"
-                                          ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
-                            </MenuItem>
+                            <MenuItem Header="実働日ファイルを取り込む…（Excel）"
+                                      Command="{Binding ImportWorkingDaysCommand}" />
+                            <MenuItem Header="配信元から実働日を取り込む"
+                                      Command="{Binding FetchWorkingDayFeedCommand}"
+                                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
                             <Separator />
                             <MenuItem Header="ショートカット…" Command="{Binding ShowShortcutsCommand}" />
                             <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
