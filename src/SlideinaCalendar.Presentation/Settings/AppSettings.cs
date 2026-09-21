@@ -54,6 +54,7 @@ public sealed class AppSettings
     private const string CloseToTrayKey = "ui.close_to_tray";
     private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
     private const string MinWidthKey = "shell.min_width";
+    private const string SlimShareKey = "ui.slim_calendar_share";
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
 
@@ -103,6 +104,10 @@ public sealed class AppSettings
         _slideOutOnLeave =
             !string.Equals(_store.Get(SlideOutOnLeaveKey), "false", StringComparison.Ordinal);
         _minWidth = ReadNumber(MinWidthKey, DefaultMinWidth, LowestMinWidth, HighestMinWidth);
+        _slimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var share)
+            ? Math.Clamp(share, 0.2, 0.8)
+            : DefaultSlimShare;
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -329,8 +334,38 @@ public sealed class AppSettings
         set => _store.Set(EdgePanesKey, value);
     }
 
-    /// <summary>いちばん細くできる幅の既定。</summary>
-    public const int DefaultMinWidth = 280;
+    /// <summary>
+    /// スリムパネルで、カレンダーに割く高さの割合。
+    /// <para>
+    /// 仕切りをつまんで変えたぶんを覚える。カレンダーを広く見たい人と、予定の一覧を
+    /// 長く出したい人がいる。0.2〜0.8 の範囲に収める。
+    /// </para>
+    /// </summary>
+    public double SlimCalendarShare
+    {
+        get => _slimShare;
+        set
+        {
+            var share = Math.Clamp(value, 0.2, 0.8);
+
+            if (Math.Abs(_slimShare - share) < 0.005) return;
+
+            _slimShare = share;
+            _store.Set(SlimShareKey, share.ToString("R", CultureInfo.InvariantCulture));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private double _slimShare = DefaultSlimShare;
+
+    /// <summary>カレンダーを広めに取る。日付を引き当てるのが主な使い道。</summary>
+    public const double DefaultSlimShare = 0.6;
+
+    /// <summary>
+    /// いちばん細くできる幅の既定。
+    /// <para>実機で詰めてみて、月のマスと予定の行がどちらも読める下限がこのあたり。</para>
+    /// </summary>
+    public const int DefaultMinWidth = 220;
 
     /// <summary>そこまで下げられる下限。これ以下は日付も読めない。</summary>
     public const int LowestMinWidth = 160;

@@ -109,7 +109,7 @@
                 <!-- 上下の割り振りは手で変えられる。既定はカレンダーを広めに取る -->
                 <RowDefinition x:Name="CalendarRow" Height="3*" MinHeight="120" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="2*" MinHeight="120" />
+                <RowDefinition x:Name="ListRow" Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
 
             <!--
@@ -118,7 +118,7 @@
             -->
             <views:MonthView Grid.Row="0" DataContext="{Binding SlimMonth}" />
 
-            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+            <GridSplitter Grid.Row="1" x:Name="Split" Height="5" HorizontalAlignment="Stretch"
                           Background="{DynamicResource LineBrush}"
                           ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
                           Cursor="SizeNS" />
