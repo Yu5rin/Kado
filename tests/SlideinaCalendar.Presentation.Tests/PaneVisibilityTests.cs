@@ -148,6 +148,25 @@ public class PaneVisibilityTests
     }
 
     [Fact]
+    public void スリムパネルだけのときは今日を出す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.ToggleSlimPanelCommand.Execute(null);
+
+        // ほかが出ていればツールバーに「今日」がある
+        Assert.False(vm.ShowsSlimToday);
+
+        vm.ToggleSidePanelCommand.Execute(null);
+        vm.ToggleDetailPaneCommand.Execute(null);
+        vm.ToggleMainViewCommand.Execute(null);
+
+        // スリムパネルだけになったら、そこが唯一の戻り口
+        Assert.True(vm.ShowsSlimToday);
+    }
+
+    [Fact]
     public void 中央を最後に畳んだら右パネルを残す()
     {
         using var test = TestWorkspace.Create();

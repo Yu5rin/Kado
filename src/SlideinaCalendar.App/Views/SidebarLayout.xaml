@@ -19,6 +19,7 @@
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
     </UserControl.Resources>
 
     <DockPanel>
@@ -63,6 +64,16 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <!--
+                        スリムパネルだけのときは、ツールバーの「今日」が出ていない。
+                        ここが唯一の戻り口になる
+                    -->
+                    <Button Content="今日" Margin="0,0,6,0"
+                            Style="{StaticResource GhostButtonStyle}"
+                            Command="{Binding TodayCommand}"
+                            Visibility="{Binding ShowsSlimToday,
+                                         Converter={StaticResource BoolToVisibility}}" />
+
                     <Button Style="{StaticResource IconButtonStyle}" ToolTip="前の月"
                             Command="{Binding SlimPreviousCommand}">
                         <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
@@ -124,10 +135,33 @@
                 <Border DockPanel.Dock="Top" Padding="10,6,10,4"
                         DataContext="{Binding SelectedDay}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding WorkingDayLabel}"
-                                   FontSize="10.5" VerticalAlignment="Center"
-                                   Typography.NumeralAlignment="Tabular"
-                                   Foreground="{DynamicResource Ink3Brush}" />
+                        <!--
+                            日付の横は、実働日の通し番号ではなく実働日カレンダー
+                            （inaCalendar）の中身。仕様期限や中日程は、その日に
+                            何があるかを決める手がかりになる。通し番号はカレンダーの
+                            マスと右ペインに出ている
+                        -->
+                        <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Milestones}"
+                                      VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="3" Padding="5,0" Margin="4,0,0,0"
+                                            ToolTip="{Binding Name}"
+                                            Background="{Binding Name,
+                                                        Converter={StaticResource MilestoneBrush},
+                                                        ConverterParameter=Face}">
+                                        <TextBlock Text="{Binding Name}" FontSize="10"
+                                                   FontWeight="SemiBold" LineHeight="15"
+                                                   Foreground="{Binding Name,
+                                                               Converter={StaticResource MilestoneBrush}}" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource InkBrush}" />
