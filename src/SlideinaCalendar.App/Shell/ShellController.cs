@@ -128,8 +128,20 @@ public sealed class ShellController : IDisposable
         _hotZone.Left += (_, _) => SlideOutIfIdle();
 
         // 他のアプリへ移ったら引っ込める。スライドは「用があるときだけ出る」もので、
-        // 出しっぱなしにしたいならピンで留める
-        _window.Deactivated += (_, _) => SlideOutIfIdle();
+        // 出しっぱなしにしたいならピンで留める。
+        //
+        // 判定は1パス遅らせる（不具合3）。Win32 の WM_ACTIVATE は、先に非活性になる
+        // 窓へ WA_INACTIVE を送る。WPF の HandleActivate はその中で同期的に
+        // IsActive=false → OnDeactivated を起こすので、Deactivated の時点では
+        // まだどの窓も IsActive になっていない。相手（予定追加の編集画面など）の
+        // IsActive=true はそのあとの WA_ACTIVE で立つ。次のディスパッチまで待ち、
+        // それでも戻っていなければ本当に前面を譲ったと判断する
+        _window.Deactivated += (_, _) =>
+            _window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (_window.IsActive) return;   // すぐ戻ってきた
+                SlideOutIfIdle();
+            }));
 
         // 全画面アプリなどで外れたら、見た目も合わせる
         _appBar.Undocked += (_, _) =>
@@ -140,6 +152,9 @@ public sealed class ShellController : IDisposable
         // Esc などキー操作での引っ込め（要件書外だが実機の使い勝手として足した）。
         // マウスが外れたときと同じ経路（SlideOutIfIdle）を通す。独自の経路は作らない
         _shell.RetractRequested += (_, _) => SlideOutIfIdle();
+
+        // 起動時に1回、モニタ構成を shell.log へ残す（不具合1の切り分け用）
+        LogStartupScreens();
     }
 
     /// <summary>
@@ -179,6 +194,14 @@ public sealed class ShellController : IDisposable
     {
         if (_shell.Mode != ShellMode.Overlay) return;
 
+        // もう出ている。飛ばして滑り直さない（不具合1）。
+        //
+        // 出たあとも帯を見張り続けていて（Apply(Overlay) が WatchLeaving を呼んで
+        // いなかった）、カーソルが帯に留まるたびにここへ入り、見えている窓を
+        // 画面外へ飛ばしてから滑り直していた。SlideOutOnLeave=false のときは
+        // 約350msごとに繰り返す
+        if (_window.IsVisible && !_slidingOut) return;
+
         ApplyOverlayBounds();
 
         var resting = _window.Left;
@@ -188,11 +211,12 @@ public sealed class ShellController : IDisposable
         // 画面外の矩形を見張ることになり、カーソルがどこにあっても「外れている」
         // と判定されて、出たそばから引っ込む
         var shown = WindowRectAt(resting);
-        var offScreen = OffScreenLeft();
+        var offScreen = OffScreenLeft(resting);
 
         // 画面の外から滑り込ませる。位置を決めてから出す
         _window.Left = offScreen;
         Show();
+        LogWindowRect("Show直後");
 
         // Show() の直後、同じフレームでアニメーションを始めない。窓が出る処理と
         // 競合して開始値が拾われないことがあるため、出きった次のフレームまで待つ
@@ -206,8 +230,11 @@ public sealed class ShellController : IDisposable
             // 動かないまま最終位置に出る、という形で症状が出る
             if (Math.Abs(_window.Left - offScreen) > 0.5) _window.Left = offScreen;
 
+            LogWindowRect("アニメーション開始直前");
+
             // 開始値は現在値まかせにせず、画面外の位置を明示して渡す
-            Animate(offScreen, resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut });
+            Animate(offScreen, resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut },
+                () => LogWindowRect("Animate完了"));
         }));
 
         // 出たあとは、外れるのを見張る番
@@ -238,7 +265,7 @@ public sealed class ShellController : IDisposable
 
         // 開始値は現在値まかせ（From を渡さない）のまま。引っ込みは元からこの形で
         // 完璧に動いているので、挙動を変えない
-        Animate(null, OffScreenLeft(), SlideOutTime, new QuadraticEase { EasingMode = EasingMode.EaseIn },
+        Animate(null, OffScreenLeft(resting), SlideOutTime, new QuadraticEase { EasingMode = EasingMode.EaseIn },
             () =>
             {
                 _slidingOut = false;
@@ -252,17 +279,90 @@ public sealed class ShellController : IDisposable
 
     /// <summary>
     /// 画面の外に置いたときの左端。
-    /// <para>寄せている辺の向こう側へ、まるごと1枚ぶん出す。</para>
+    /// <para>
+    /// <paramref name="resting"/>（休止位置）を基準にする。モニタの取り違えや
+    /// 倍率のずれがあっても、寄せている辺の向こう側にしか行かない（不具合1）。
+    /// 計算そのものは <see cref="ShellGeometry.OffScreenLeft"/> に切り出してある
+    /// （<c>Window</c> に依存しないのでテストできる）。
+    /// </para>
     /// </summary>
-    private double OffScreenLeft()
+    private double OffScreenLeft(double resting)
     {
         var scale = Scale();
         var screen = ScreenOfWindow();
         var width = _window.Width;
 
-        return _shell.Edge == DockEdge.Left
-            ? (screen.left / scale) - width
-            : screen.right / scale;
+        var offScreen = ShellGeometry.OffScreenLeft(_shell.Edge, resting, width, screen, scale);
+
+        ShellDiagnosticsLog.Write(
+            $"OffScreenLeft edge={_shell.Edge} dockWidth={_shell.DockWidth:F1} windowWidth={width:F1} " +
+            $"screen=({screen.left},{screen.top},{screen.right},{screen.bottom}) scale={scale:F2} " +
+            $"resting={resting:F1} offScreen={offScreen:F1}");
+
+        return offScreen;
+    }
+
+    /// <summary>いまの <c>_window.Left</c> と、Windows 自身が答える実際の矩形を記録する。</summary>
+    private void LogWindowRect(string phase)
+    {
+        try
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+            var actual = handle != IntPtr.Zero && NativeMethods.GetWindowRect(handle, out var rect)
+                ? $"{rect.left},{rect.top},{rect.right},{rect.bottom}"
+                : "取得不可";
+
+            ShellDiagnosticsLog.Write($"SlideIn {phase} Left={_window.Left:F1} GetWindowRect=({actual})");
+        }
+        catch
+        {
+            // 記録できなくても、動作は止めない
+        }
+    }
+
+    /// <summary>
+    /// 起動時に1回、モニタ構成を控える。
+    /// <para>
+    /// 不具合1（反対側から出る）は原因が確定していない。実機の値を <c>shell.log</c> に
+    /// 残せるようにしておく。
+    /// </para>
+    /// </summary>
+    private static void LogStartupScreens()
+    {
+        try
+        {
+            var monitors = new List<string>();
+
+            NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
+                (IntPtr hMonitor, IntPtr _, ref NativeMethods.RECT rect, IntPtr _) =>
+                {
+                    var dpi = "?";
+                    try
+                    {
+                        if (NativeMethods.GetDpiForMonitor(
+                                hMonitor, NativeMethods.MDT_EFFECTIVE_DPI, out var dpiX, out var dpiY) == 0)
+                        {
+                            dpi = $"{dpiX}x{dpiY}";
+                        }
+                    }
+                    catch
+                    {
+                        // 古い Windows などで取れなくても、矩形だけは残す
+                    }
+
+                    monitors.Add($"[{rect.left},{rect.top},{rect.right},{rect.bottom}]@{dpi}");
+                    return true;
+                }, IntPtr.Zero);
+
+            ShellDiagnosticsLog.Write(
+                $"startup virtualScreen=({SystemParameters.VirtualScreenLeft:F0}," +
+                $"{SystemParameters.VirtualScreenWidth:F0}) primaryScreenWidth=" +
+                $"{SystemParameters.PrimaryScreenWidth:F0} monitors=[{string.Join(" ", monitors)}]");
+        }
+        catch
+        {
+            // 記録できなくても、起動は止めない
+        }
     }
 
     /// <summary>
@@ -329,10 +429,48 @@ public sealed class ShellController : IDisposable
         return Screens.Of(handle, Scale());
     }
 
-    /// <summary>いま前にいるのが、自分の出した窓か。</summary>
-    private bool OwnsForeground() =>
-        Application.Current?.Windows.OfType<Window>()
-            .Any(w => !ReferenceEquals(w, _window) && w.IsActive) ?? false;
+    /// <summary>
+    /// いま窓が乗っているモニタの作業領域（DIP）。
+    /// <para>
+    /// <b>メインディスプレイ固定の <c>SystemParameters.WorkArea</c> をそのまま使わない
+    /// （不具合1・複数モニタ対策）。</b>会社のような複数モニタでメイン以外へ寄せて
+    /// 使うと、スライドの位置・高さがまるごと別の画面の値になる。窓がまだどこにも
+    /// 出ていなければ <see cref="Screens.WorkOf"/> 側の代用（プライマリ画面）に任せる。
+    /// </para>
+    /// </summary>
+    private Rect CurrentMonitorWorkArea()
+    {
+        var scale = Scale();
+        var handle = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+        var work = Screens.WorkOf(handle, scale);
+
+        return new Rect(work.left / scale, work.top / scale, work.Width / scale, work.Height / scale);
+    }
+
+    /// <summary>
+    /// いま前にいるのが、自分の出した窓か。
+    /// <para>
+    /// <c>MessageBox</c>（削除の確認など）やファイル選択ダイアログは WPF の
+    /// <see cref="Window"/> ではないので、<c>Application.Current.Windows</c> だけを
+    /// 見る判定では決して true にならない（不具合3）。前面の窓を Win32 側から
+    /// 引き直し、自分と同じプロセスの窓かで補う。
+    /// </para>
+    /// </summary>
+    private bool OwnsForeground()
+    {
+        if (Application.Current?.Windows.OfType<Window>()
+                .Any(w => !ReferenceEquals(w, _window) && w.IsActive) == true) return true;
+
+        // MessageBox・ファイル選択など、WPF の Window ではない窓
+        var foreground = NativeMethods.GetForegroundWindow();
+        var self = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+
+        // 自分が前面なら従来どおり（カーソルが外れたときの経路に任せる）
+        if (foreground == IntPtr.Zero || foreground == self) return false;
+
+        NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
+        return processId == (uint)Environment.ProcessId;
+    }
 
     /// <summary>いまの居場所を控える。</summary>
     public void Save() => _store.Save(_shell.Placement());
@@ -375,13 +513,24 @@ public sealed class ShellController : IDisposable
                 // 見張る画面は、いま窓が乗っているモニタ。出してから引くのは、
                 // 隠れているあいだはハンドルがまだ無いことがあるため
                 _hotZone.Arm(_shell.Edge, ScreenOfWindow());
+
+                // 出したその場で「外れたら引っ込める」へ切り替える（不具合1）。
+                //
+                // ここを素通りして帯の見張りのままにすると、出ている窓の上を
+                // 帯が兼ねてしまう。カーソルを帯の上（＝出ている窓の端）に
+                // 置いたままにするたびに SlideIn が走り、見えている窓を
+                // 画面外へ飛ばしてから滑り直していた。出しっぱなしにする
+                // 設定（SlideOutOnLeave=false）のときは、これまでどおり
+                // 帯の見張りのままにする（切り替えない＝勝手に引っ込まない）
+                if (SlideOutOnLeave) _hotZone.WatchLeaving(WindowRectAt(_window.Left));
                 break;
 
             case ShellMode.Dock:
                 _hotZone.Disarm();
 
-                // 削る前に控える。外したあとでは正しい値が取れない
-                _workBeforeDock ??= SystemParameters.WorkArea;
+                // 削る前に控える。外したあとでは正しい値が取れない。
+                // いま窓が乗っているモニタの作業領域を測る（複数モニタ対策。後述）
+                _workBeforeDock ??= CurrentMonitorWorkArea();
 
                 ToEdge();
 
@@ -476,7 +625,7 @@ public sealed class ShellController : IDisposable
 
         // 留める前に控えた値があればそちらを使い、使ったら捨てる。次に出すときには
         // ワークエリアも戻っているので、そのときは素直に測ってよい
-        var work = _workBeforeDock ?? SystemParameters.WorkArea;
+        var work = _workBeforeDock ?? CurrentMonitorWorkArea();
         _workBeforeDock = null;
 
         var width = _shell.DockWidth;

@@ -44,13 +44,21 @@ public sealed class TaskEditorViewModel : ObservableObject
     private string? _note;
     private string? _taskListId;
 
-    /// <summary>新しく作る。</summary>
-    public TaskEditorViewModel(DateOnly due, IReadOnlyList<SourceChoice> taskLists, DateOnly today)
+    /// <summary>
+    /// 新しく作る。
+    /// <para>
+    /// <paramref name="defaultTaskListId"/> は呼び出し側（<c>SourceListsViewModel.DefaultTaskList</c>）
+    /// が決めた入れ先。渡さなければ一覧の先頭にするが、これは<b>同期対象外のローカル
+    /// リストに固定されうる</b>ので、呼び出し側は極力渡すこと（項目2）。
+    /// </para>
+    /// </summary>
+    public TaskEditorViewModel(DateOnly due, IReadOnlyList<SourceChoice> taskLists, DateOnly today,
+        string? defaultTaskListId = null)
     {
         TaskLists = taskLists;
         _today = today;
         _due = due;
-        _taskListId = taskLists.Count > 0 ? taskLists[0].Id : null;
+        _taskListId = defaultTaskListId ?? (taskLists.Count > 0 ? taskLists[0].Id : null);
     }
 
     /// <summary>すでにあるタスクを直す。</summary>
@@ -187,6 +195,9 @@ public sealed class TaskEditorViewModel : ObservableObject
             Title = _title.Trim(),
             Due = _hasDue ? _due : null,
             IsDone = _isDone,
+            // 完了にしているときだけ入れる。もともとの完了日時があれば（Google 側の値を
+            // 含む）そのまま残し、無ければ今にする。外していれば消す（項目3）
+            CompletedAt = _isDone ? _original?.CompletedAt ?? DateTimeOffset.Now : null,
             Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
             TaskListId = _taskListId,
 

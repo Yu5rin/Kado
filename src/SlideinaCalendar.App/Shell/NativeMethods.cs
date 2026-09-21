@@ -222,4 +222,42 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetCursorPos(out POINT lpPoint);
+
+    // ------------------------------------------------------------------
+    // 前面の窓（不具合3：予定追加でスライドが閉じる対策）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// いま前面にいる窓。<c>MessageBox</c> やファイル選択ダイアログのように
+    /// WPF の <see cref="System.Windows.Window"/> ではない窓にも効く判定に使う。
+    /// </summary>
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    // ------------------------------------------------------------------
+    // 実際の窓の矩形（切り分け用ログ）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 窓の実際の矩形（物理ピクセル）。
+    /// <para>
+    /// <c>Window.Left</c> は WPF がそう思っている値でしかない。実機で「反対側から
+    /// 出る」原因を確かめるため、Windows 自身が答える値と突き合わせられるようにする。
+    /// </para>
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    // ------------------------------------------------------------------
+    // モニタの DPI（起動時の記録用）
+    // ------------------------------------------------------------------
+
+    internal const int MDT_EFFECTIVE_DPI = 0;
+
+    [DllImport("shcore.dll")]
+    internal static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 }

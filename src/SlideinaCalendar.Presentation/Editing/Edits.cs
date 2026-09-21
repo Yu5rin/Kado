@@ -85,10 +85,15 @@ public sealed class UpdateTaskEdit(TaskRepository repository, TaskItem before, T
     /// <summary>
     /// 完了の切り替えだけなら、その旨を説明に出す。
     /// 「タスクの変更を元に戻しますか」より「完了の取り消し」のほうが何が起きるか分かる。
+    /// <para>
+    /// <c>CompletedAt</c> も完了の切り替えに連動して変わる（項目3）ので、ここで一緒に
+    /// 逃がす。逃がさないと、完了を切り替えただけなのに「タスクの変更」に化けてしまう。
+    /// </para>
     /// </summary>
-    public string Description => before with { IsDone = after.IsDone, UpdatedAt = after.UpdatedAt } == after
-        ? after.IsDone ? "タスクを完了にする" : "タスクの完了を取り消す"
-        : "タスクの変更";
+    public string Description =>
+        before with { IsDone = after.IsDone, CompletedAt = after.CompletedAt, UpdatedAt = after.UpdatedAt } == after
+            ? after.IsDone ? "タスクを完了にする" : "タスクの完了を取り消す"
+            : "タスクの変更";
 
     public void Apply() => repository.Upsert(after);
 

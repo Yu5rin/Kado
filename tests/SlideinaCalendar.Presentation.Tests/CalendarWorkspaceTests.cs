@@ -99,6 +99,46 @@ public class CalendarWorkspaceTests
     }
 
     [Fact]
+    public void 完了にすると完了日時が入る()
+    {
+        // 完了日時が無いと「N実働日 遅れて完了」が出ない（項目3）
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "やること" });
+        ws.ToggleTaskDone("t1");
+
+        Assert.NotNull(ws.Tasks.Find("t1")!.CompletedAt);
+    }
+
+    [Fact]
+    public void 完了を取り消すと完了日時も消える()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "やること" });
+        ws.ToggleTaskDone("t1");
+        ws.ToggleTaskDone("t1");
+
+        Assert.Null(ws.Tasks.Find("t1")!.CompletedAt);
+    }
+
+    [Fact]
+    public void 完了日時を元に戻すとまた消える()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "やること" });
+        ws.ToggleTaskDone("t1");
+        Assert.NotNull(ws.Tasks.Find("t1")!.CompletedAt);
+
+        ws.UndoLast();
+        Assert.Null(ws.Tasks.Find("t1")!.CompletedAt);
+    }
+
+    [Fact]
     public void 完了の切り替えは説明が分かれる()
     {
         using var test = TestWorkspace.Create();

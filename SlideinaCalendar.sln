@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.App.Tests"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.Google.Tests", "tests\SlideinaCalendar.Google.Tests\SlideinaCalendar.Google.Tests.csproj", "{04886CFD-92B9-4B27-A498-9E5E11CC988B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideinaCalendar.Shell.Tests", "tests\SlideinaCalendar.Shell.Tests\SlideinaCalendar.Shell.Tests.csproj", "{EAC984B0-18E0-4E1C-B457-E00828AA0374}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -90,6 +92,10 @@ Global
 		{04886CFD-92B9-4B27-A498-9E5E11CC988B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04886CFD-92B9-4B27-A498-9E5E11CC988B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{04886CFD-92B9-4B27-A498-9E5E11CC988B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAC984B0-18E0-4E1C-B457-E00828AA0374}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAC984B0-18E0-4E1C-B457-E00828AA0374}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAC984B0-18E0-4E1C-B457-E00828AA0374}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAC984B0-18E0-4E1C-B457-E00828AA0374}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{44194D89-B633-4BE2-A810-7335EB7C2F4F} = {C76B1A71-E17E-4C2A-A5FB-A5D03E2C489B}
@@ -104,5 +110,6 @@ Global
 		{BFB7168B-0B61-48A6-97DE-94023ABC0C36} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
 		{E9BB3530-AAC5-4CC9-9F7A-059B230829E6} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
 		{04886CFD-92B9-4B27-A498-9E5E11CC988B} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
+		{EAC984B0-18E0-4E1C-B457-E00828AA0374} = {AC8EA7CF-E214-4D55-9682-6F8632A277ED}
 	EndGlobalSection
 EndGlobal

@@ -71,16 +71,21 @@ public class SearchTests
     }
 
     [Fact]
-    public void 期限の無いタスクは出さない()
+    public void 期限の無いタスクも出す()
     {
+        // 保存はされるのに検索からも見えなくなっていた分（項目1）。並びには選んでいる日を
+        // 代用するが、画面には「期限なし」と出す（HasDue で判定）
         using var test = TestWorkspace.Create();
         test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "資料作成" });
 
         var main = Create(test);
         main.SearchText = "資料";
 
-        Assert.Empty(main.SearchResults);
-        Assert.NotNull(main.SearchMessage);
+        var found = main.SearchResults.Single();
+        Assert.True(found.IsTask);
+        Assert.False(found.HasDue);
+        Assert.Equal("期限なし", found.DateText);
+        Assert.Equal(main.SelectedDate, found.Date);
     }
 
     [Fact]

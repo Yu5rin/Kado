@@ -50,6 +50,7 @@ public sealed class AppSettings
     private const string SummaryTimeKey = "notify.summary_time";
     private const string NotifySoundKey = "notify.sound";
     private const string DefaultCalendarKey = "ui.default_calendar";
+    private const string DefaultTaskListKey = "ui.default_task_list";
     private const string YearLayoutKey = "ui.year_layout";
     private const string CloseToTrayKey = "ui.close_to_tray";
     private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
@@ -463,6 +464,26 @@ public sealed class AppSettings
             if (string.Equals(DefaultCalendarId, value, StringComparison.Ordinal)) return;
 
             _store.Set(DefaultCalendarKey, value ?? string.Empty);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 新しいタスクを入れる先のタスクリスト。
+    /// <para>
+    /// 左の一覧から選ぶ。決めていなければ、呼び出し側（<c>SourceListsViewModel.DefaultTaskList</c>）が
+    /// Google のリストがあればその先頭、無ければローカルの先頭を選ぶ
+    /// （<c>local:</c> は同期対象外なので、決めていないのにローカル固定にしない）。
+    /// </para>
+    /// </summary>
+    public string? DefaultTaskListId
+    {
+        get => _store.Get(DefaultTaskListKey) is { Length: > 0 } id ? id : null;
+        set
+        {
+            if (string.Equals(DefaultTaskListId, value, StringComparison.Ordinal)) return;
+
+            _store.Set(DefaultTaskListKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
