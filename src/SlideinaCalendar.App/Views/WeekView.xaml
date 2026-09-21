@@ -191,10 +191,17 @@
                     <Setter TargetName="Head" Property="Background" Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
 
-                <!-- 選んでいる日。実働日の塗りより後に置いてこちらを勝たせる -->
+                <!--
+                    選んでいる日。実働日の塗りより後に置いてこちらを勝たせる。
+                    月ビュー・年ビューと同じく、面の色に加えて2pxのアクセント枠で
+                    示す（項目E）。今日（丸い面）とは形で区別する
+                -->
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter TargetName="Head" Property="Background"
                             Value="{DynamicResource CellSelectedBrush}" />
+                    <Setter TargetName="Head" Property="BorderThickness" Value="2" />
+                    <Setter TargetName="Head" Property="BorderBrush"
+                            Value="{DynamicResource AccentBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />

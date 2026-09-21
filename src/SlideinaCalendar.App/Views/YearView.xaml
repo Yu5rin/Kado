@@ -96,15 +96,21 @@
 
                     <!--
                         日付の上は「inaCalendar」の予定だけ。仕様期限などの区切りは
-                        自分の用事とは意味が違うので、混ぜずに上下へ分ける
+                        自分の用事とは意味が違うので、混ぜずに上下へ分ける。
+
+                        スリムパネルの月カレンダーと同じく、印の枠は印の有無に
+                        かかわらず常に同じ高さを取る（Height 固定）。これで日付の
+                        数字の位置が、印のある日もない日も横一列に揃う
                     -->
-                    <ItemsControl ItemsSource="{Binding TopMarks}" Margin="0,1,0,0"
-                                  HorizontalAlignment="Center"
-                                  ItemTemplate="{StaticResource DayMarkTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+                    <Border Height="6" Margin="0,1,0,0" ClipToBounds="True">
+                        <ItemsControl ItemsSource="{Binding TopMarks}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                      ItemTemplate="{StaticResource DayMarkTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Border>
 
                     <TextBlock x:Name="Number" Text="{Binding DayNumber}"
                                FontSize="{Binding DataContext.DayFontSize,
@@ -210,6 +216,21 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- カレンダー表示の曜日見出し(1文字)。日曜は赤、土曜は青(月ビューと同じ扱い) -->
+        <DataTemplate x:Key="GridWeekDayHeaderTemplate">
+            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="9.5"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource Ink3Brush}" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSunday}" Value="True">
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSaturday}" Value="True">
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SaturdayBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- カレンダー表示の1か月。日付を引き当てる用途なので、実働日は塗らない -->
         <DataTemplate x:Key="MonthGridTemplate">
             <!--
@@ -235,18 +256,33 @@
                     </DockPanel>
 
                     <!--
-                        7列5行に等分する。ストリップと同じで1日から順に折り返すだけで、
-                        曜日は揃えない（空の枠を置くと月によって右端がぶれる）。
-
-                        行数を 5 で固定するのは、31日の月も28日の月も同じ高さのマスに
-                        するため。任せると、短い月だけマスが縦に伸びて不揃いになる。
-                        高さは入れ物から配られるので、縦に余ったぶんもマスが受け取る
+                        曜日見出し。週の始まりは設定に従う（月ビューと同じ）。曜日の
+                        並びそのものは12か月とも同じなので、UserControl の
+                        DataContext（YearViewModel）から直に引く
                     -->
-                    <ItemsControl ItemsSource="{Binding Days}"
+                    <ItemsControl DockPanel.Dock="Top" Margin="0,0,0,2"
+                                  ItemsSource="{Binding DataContext.WeekDayHeaders,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  ItemTemplate="{StaticResource GridWeekDayHeaderTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Rows="1" Columns="7" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <!--
+                        7列×6行。月初を週の開始曜日の位置に置くための空きマス
+                        （null）が ViewModel 側で先頭に入っている。末尾も6行ぶんに
+                        揃うまで空きマスで埋めてあるので、ここでは並べるだけでよい。
+
+                        行数を 6 で固定するのは、31日の月も28日の月も同じ高さの
+                        マスにするため。月ごとに行数を変えると、12枚のカードで
+                        1マスの高さがまちまちになり、縦の並びが崩れて見える
+                    -->
+                    <ItemsControl ItemsSource="{Binding GridDays}"
                                   BorderThickness="1,1,0,0"
                                   BorderBrush="{DynamicResource LineBrush}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><UniformGrid Rows="5" Columns="7" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><UniformGrid Rows="6" Columns="7" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -254,7 +290,7 @@
                                     マスは線で区切る。帯と日付が続けて並ぶので、
                                     区切りが無いと隣の日のものか下の週のものか分からない
                                 -->
-                                <Border x:Name="Cell" MinHeight="28"
+                                <Border x:Name="Cell" MinHeight="24"
                                         BorderThickness="0,0,1,1"
                                         BorderBrush="{DynamicResource LineBrush}"
                                         Cursor="Hand" ToolTip="{Binding Tooltip}"
@@ -263,10 +299,12 @@
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
                                     <!--
-                                        ストリップと同じ並び。実働日カレンダー
-                                        （inaCalendar）の予定は日付の上、それ以外は
-                                        日付の下。仕様期限や1次GOが日付の上に出て、
-                                        自分の予定が下に付く。
+                                        スリムパネルの月カレンダーと同じ並び。
+                                        1) いちばん上に inaCalendar の印の枠を固定の高さで
+                                           置く（印が無い日も高さを取るので、日付の位置が揃う）
+                                        2) その下に日付の数字
+                                        3) その下にそれ以外の予定の印
+                                        仕様期限や1次GOが上、自分の予定が下に付く。
 
                                         <b>帯は日付に寄せ、余白はマスの上下に逃がす。</b>
                                         上下の端に貼り付けていたら、下の帯が次の週の
@@ -274,12 +312,15 @@
                                         どの日のものかが離れて見て分かる
                                     -->
                                     <StackPanel VerticalAlignment="Center" Margin="1,3,1,3">
-                                        <ItemsControl ItemsSource="{Binding TopMarks}"
-                                                      ItemTemplate="{StaticResource GridMarkTemplate}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                        </ItemsControl>
+                                        <Border Height="8" ClipToBounds="True">
+                                            <ItemsControl ItemsSource="{Binding TopMarks}"
+                                                          VerticalAlignment="Bottom"
+                                                          ItemTemplate="{StaticResource GridMarkTemplate}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                            </ItemsControl>
+                                        </Border>
 
                                         <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
                                                    HorizontalAlignment="Center" LineHeight="14"
@@ -296,6 +337,17 @@
                                 </Border>
 
                                 <DataTemplate.Triggers>
+                                    <!--
+                                        月初の曜日を合わせるための空きマス（null）。日付も
+                                        印も出ないので押せる必要が無く、面も塗らない
+                                        （前後の月の日は出さない方針）
+                                    -->
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter TargetName="Cell" Property="Cursor" Value="Arrow" />
+                                        <Setter TargetName="Cell" Property="ToolTip" Value="{x:Null}" />
+                                        <Setter TargetName="Cell" Property="ContextMenu" Value="{x:Null}" />
+                                        <Setter TargetName="Cell" Property="IsHitTestVisible" Value="False" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                                         <Setter TargetName="Number" Property="Foreground"
                                                 Value="{DynamicResource SaturdayBrush}" />

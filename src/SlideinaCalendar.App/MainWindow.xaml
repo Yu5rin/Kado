@@ -34,6 +34,42 @@
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:SyncStateBrushConverter x:Key="SyncStateBrush" />
         <conv:SyncStateIsAlertConverter x:Key="SyncStateIsAlert" />
+        <conv:NotNullToBoolConverter x:Key="NotNullToBool" />
+        <conv:ShrinkWidthConverter x:Key="ShrinkWidth" />
+
+        <!--
+            操作の結果を一時的に出す帯（項目1）。Opacity を DataTrigger の
+            EnterActions/ExitActions でアニメーションさせるので、既定を透明・
+            当たり判定なしにしておき、StatusMessage が付いたときだけ動かす。
+            起動直後（StatusMessage が null）はトリガーの条件がそもそも成り立たない
+            ので、アニメーションは走らない
+        -->
+        <Style x:Key="StatusPillStyle" TargetType="Grid">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Style.Triggers>
+                <DataTrigger Value="True"
+                             Binding="{Binding StatusMessage, Converter={StaticResource NotNullToBool}}">
+                    <Setter Property="IsHitTestVisible" Value="True" />
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                  To="1" Duration="0:0:0.15" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                  To="0" Duration="0:0:0.2" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!--
             カレンダー／タスクリストの行を右クリックしたときのメニュー。
@@ -71,9 +107,46 @@
         </ContextMenu>
 
         <!--
+            タスクリスト行の右クリックメニュー。上の SourceRowMenu と中身はほぼ同じ
+            だが、先頭だけ「新しいタスクの入れ先にする」（SetDefaultTaskListCommand）
+            にする。共有していたときは「新しい予定の入れ先にする」が
+            SetDefaultCalendarCommand 固定で、タスクリスト行では何も起きなかった。
+        -->
+        <ContextMenu x:Key="TaskListRowMenu">
+            <MenuItem Header="新しいタスクの入れ先にする"
+                      Command="{Binding PlacementTarget.Tag.SetDefaultTaskListCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="名前を変える"
+                      Command="{Binding PlacementTarget.Tag.EditSourceCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                    Converter={StaticResource InverseBoolToVisibility}}" />
+            <MenuItem Header="削除"
+                      Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                   Converter={StaticResource InverseBoolToVisibility}}"
+                      Command="{Binding PlacementTarget.Tag.DeleteSourceCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <!--
             カレンダー／タスクリストの1行。「このアプリ」と「Google」で2つずつ
             並べるので、テンプレートはここに出して使い回す。
             色を選べるのはカレンダーだけなので、言い添える文だけ分けてある。
+
+            操作説明のツールチップ（「右クリックで名前と色を変えられます」）は
+            外した（項目12）。ToolTip はデータのもの（切れた名前の全文）に変える。
+            右クリックメニューはカレンダー行とタスクリスト行で別にする（項目14）。
+            共有していたときは「新しい予定の入れ先にする」が SetDefaultCalendarCommand
+            固定で、タスクリスト行では何も起きなかった。
         -->
         <DataTemplate x:Key="CalendarRowTemplate">
             <ToggleButton Style="{StaticResource SourceListRowStyle}"
@@ -84,7 +157,7 @@
                           DragOver="OnSourceRowDragOver"
                           DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
-                          ToolTip="右クリックで名前と色を変えられます"
+                          ToolTip="{Binding Name}"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"
                           ContextMenu="{StaticResource SourceRowMenu}" />
@@ -99,10 +172,10 @@
                           DragOver="OnSourceRowDragOver"
                           DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
-                          ToolTip="右クリックで名前を変えられます"
+                          ToolTip="{Binding Name}"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"
-                          ContextMenu="{StaticResource SourceRowMenu}" />
+                          ContextMenu="{StaticResource TaskListRowMenu}" />
         </DataTemplate>
 
         <!-- 「このアプリ」「Google」の小見出し（.subsec）。10px は Ink3 の 4.5:1 基準を
@@ -114,18 +187,93 @@
         </Style>
 
 
-        <!-- マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す。
-             ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
+        <!--
+            マイルストーンのラベル（.ms）。右ペインの見出しと日付ヘッダで使い回す。
+            ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13）。
+
+            操作説明のツールチップは外した（項目12）。バッジの文字がそのまま
+            マイルストーン名なので、切れて読めなくなる題も無い
+        -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource MilestoneMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
-                    Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー">
+                    Cursor="Hand">
                 <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="TaskRowTemplate">
+            <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
+                    ToolTip="{Binding DueTooltip}"
+                    MouseLeftButtonDown="OnTaskRowClicked">
+                <DockPanel>
+                    <!-- 完了の切り替えは画面を開かずにここで済ませる -->
+                    <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
+                              Style="{StaticResource TaskCheckBoxStyle}"
+                              IsChecked="{Binding IsDone, Mode=OneWay}"
+                              Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                              CommandParameter="{Binding}" />
+
+                    <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
+                            Style="{StaticResource RowDeleteButtonStyle}"
+                            Command="{Binding DataContext.DeleteTaskCommand,
+                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}">
+                        <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
+
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource InkBrush}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
+                                    Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}">
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{Binding Emphasis, Converter={StaticResource DueEmphasisBrush}}" />
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueSubText}" Margin="7,0,0,0"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding DueSubText, Converter={StaticResource NullToVisibility}}" />
+                        </StackPanel>
+
+                        <!--
+                            済んだタスクの結果。期限に間に合ったかどうかは
+                            片付いたあとで振り返るときに要る
+                        -->
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="DoneNote" Text="{Binding DoneText}" Margin="0,1,0,0"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding DoneText,
+                                                Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <!-- 遅れて済ませたものだけ色を変える。早い・期限どおりは静かに -->
+                <DataTrigger Binding="{Binding IsLate}" Value="True">
+                    <Setter TargetName="DoneNote" Property="Foreground"
+                            Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background"
+                            Value="{DynamicResource SunkenBrush}" />
+                    <Setter TargetName="Delete" Property="Opacity" Value="1" />
+                </Trigger>
+                <!-- 済みは取り消し線で沈める -->
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="TaskTitle" Property="Foreground"
+                            Value="{DynamicResource DoneBrush}" />
+                    <Setter TargetName="TaskTitle" Property="TextDecorations"
+                            Value="Strikethrough" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </Window.Resources>
 
@@ -603,38 +751,6 @@
             </Grid>
         </Border>
 
-        <!--
-            操作の結果を一時的に出す帯（項目1）。40か所以上から StatusMessage に代入
-            しているのに、受ける場所がどこにも無かった。数秒で消えるので、常設の
-            ステータスバーとは違い、出ているときだけ場所を取る。
-
-            幅が狭いとき（この画面は最小 160px まで細くなる）にも潰れないよう、
-            文言は MaxWidth と TextTrimming で切る。「元に戻す」は UndoCommand の
-            CanExecute に従って自動で出し引きする（IsEnabled=False のとき Collapsed）。
-        -->
-        <Border DockPanel.Dock="Bottom" Padding="12,6"
-                Background="{DynamicResource PanelBrush}"
-                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}"
-                Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibility}}">
-            <DockPanel LastChildFill="False">
-                <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2"
-                        Command="{Binding UndoCommand}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                            <Style.Triggers>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource CaptionTextStyle}"
-                           VerticalAlignment="Center" MaxWidth="640" TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding StatusMessage}" />
-            </DockPanel>
-        </Border>
-
         <!-- 本体（.body） -->
         <Grid x:Name="WindowLayout">
             <!--
@@ -1030,85 +1146,32 @@
                             </DockPanel>
 
                             <!-- タスク（.tk） -->
-                            <ItemsControl ItemsSource="{Binding Tasks}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
-                                                ToolTip="{Binding DueTooltip}"
-                                                MouseLeftButtonDown="OnTaskRowClicked">
-                                            <DockPanel>
-                                                <!-- 完了の切り替えは画面を開かずにここで済ませる -->
-                                                <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
-                                                          Style="{StaticResource TaskCheckBoxStyle}"
-                                                          IsChecked="{Binding IsDone, Mode=OneWay}"
-                                                          Command="{Binding DataContext.ToggleTaskDoneCommand,
-                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}" />
-
-                                                <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
-                                                        Style="{StaticResource RowDeleteButtonStyle}"
-                                                        Command="{Binding DataContext.DeleteTaskCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}">
-                                                    <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
-                                                          StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                </Button>
-
-                                                <StackPanel>
-                                                    <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
-                                                               Foreground="{DynamicResource InkBrush}" />
-                                                    <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
-                                                                Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}">
-                                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
-                                                                   Typography.NumeralAlignment="Tabular"
-                                                                   Foreground="{Binding Emphasis, Converter={StaticResource DueEmphasisBrush}}" />
-                                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueSubText}" Margin="7,0,0,0"
-                                                                   Typography.NumeralAlignment="Tabular"
-                                                                   Foreground="{DynamicResource Ink3Brush}"
-                                                                   Visibility="{Binding DueSubText, Converter={StaticResource NullToVisibility}}" />
-                                                    </StackPanel>
-
-                                                    <!--
-                                                        済んだタスクの結果。期限に間に合ったかどうかは
-                                                        片付いたあとで振り返るときに要る
-                                                    -->
-                                                    <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="DoneNote" Text="{Binding DoneText}" Margin="0,1,0,0"
-                                                               Typography.NumeralAlignment="Tabular"
-                                                               Foreground="{DynamicResource Ink3Brush}"
-                                                               Visibility="{Binding DoneText,
-                                                                            Converter={StaticResource NullToVisibility}}" />
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </Border>
-                                        <DataTemplate.Triggers>
-                                            <!-- 遅れて済ませたものだけ色を変える。早い・期限どおりは静かに -->
-                                            <DataTrigger Binding="{Binding IsLate}" Value="True">
-                                                <Setter TargetName="DoneNote" Property="Foreground"
-                                                        Value="{DynamicResource SundayBrush}" />
-                                            </DataTrigger>
-
-                                            <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Row" Property="Background"
-                                                        Value="{DynamicResource SunkenBrush}" />
-                                                <Setter TargetName="Delete" Property="Opacity" Value="1" />
-                                            </Trigger>
-                                            <!-- 済みは取り消し線で沈める -->
-                                            <DataTrigger Binding="{Binding IsDone}" Value="True">
-                                                <Setter TargetName="TaskTitle" Property="Foreground"
-                                                        Value="{DynamicResource DoneBrush}" />
-                                                <Setter TargetName="TaskTitle" Property="TextDecorations"
-                                                        Value="Strikethrough" />
-                                            </DataTrigger>
-                                        </DataTemplate.Triggers>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding Tasks}"
+                                          ItemTemplate="{StaticResource TaskRowTemplate}" />
 
                             <!-- 0件のときは無言にしない（項目12） -->
                             <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。下の欄に1行打つと追加できます" Padding="14,2,14,4" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding HasNoTasks, Converter={StaticResource BoolToVisibility}}" />
+
+                            <!--
+                                期限なしのタスク（項目B）。期限を付けずに作ったタスクは
+                                右ペインの「タスク」（期限のあるものだけ）にも検索にも
+                                出ず、保存されるのに二度と見えなくなっていた。
+                                0件のときは節ごと畳む（ShowsNoDueTasks）。行の見た目・
+                                挙動は上の「タスク」と同じ TaskRowTemplate を使い回す
+                            -->
+                            <StackPanel Visibility="{Binding ShowsNoDueTasks, Converter={StaticResource BoolToVisibility}}">
+                                <DockPanel Margin="14,9,14,4">
+                                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding NoDueTaskCount}"
+                                               Foreground="{DynamicResource Ink3Brush}"
+                                               Typography.NumeralAlignment="Tabular" />
+                                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="期限なしのタスク" Foreground="{DynamicResource Ink3Brush}" />
+                                </DockPanel>
+
+                                <ItemsControl ItemsSource="{Binding NoDueTasks}"
+                                              ItemTemplate="{StaticResource TaskRowTemplate}" />
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1206,5 +1269,55 @@
                 </Style>
             </Border.Style>
         </Border>
+
+        <!--
+            操作の結果を一時的に出す帯（項目1）。40か所以上から StatusMessage に
+            代入しているのに、受ける場所がどこにも無かった。
+
+            以前は DockPanel.Dock="Bottom" で本体の下に積んでいたため、出るたびに
+            本体の高さが変わり、4.5秒後にまた戻るので月ビューのマスが毎回組み直
+            されていた（項目1）。Root Grid の最後の子として本体の上に重ねる形にし、
+            レイアウトの高さには一切関わらないようにする。
+
+            影は文字を載せる Border とは別の兄弟 Border に掛ける。文字入りの
+            Border に直接 Effect を掛けると文字まで滲む。
+
+            幅が狭いとき（この画面は最小160pxまで細くなる）は MaxWidth を
+            Root.ActualWidth-24 に結び、広いときは既定の560で頭打ちにする。
+        -->
+        <Grid Style="{StaticResource StatusPillStyle}"
+              HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16"
+              MaxWidth="{Binding ActualWidth, ElementName=Root,
+                         Converter={StaticResource ShrinkWidth}, ConverterParameter=24:560}">
+            <Border CornerRadius="6" Background="{DynamicResource PanelBrush}">
+                <Border.Effect>
+                    <!-- ポップアップの影（Themes/Controls.xaml）と同じ値に揃える -->
+                    <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
+                                       Direction="270" Color="#000000" />
+                </Border.Effect>
+            </Border>
+
+            <Border CornerRadius="6" Padding="12,8"
+                    Background="{DynamicResource PanelBrush}"
+                    BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                <DockPanel LastChildFill="False">
+                    <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2"
+                            Command="{Binding UndoCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                <Style.Triggers>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource CaptionTextStyle}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding StatusMessage}" />
+                </DockPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

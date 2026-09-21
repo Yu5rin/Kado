@@ -19,6 +19,23 @@ public sealed class BoolToVisibilityConverter : IValueConverter
 }
 
 /// <summary>null や空文字なら畳む。補足の行を出し分けるのに使う。</summary>
+/// <summary>
+/// 値が null でないかを bool にする。
+/// <para>
+/// ステータス帯の出入りを DataTrigger の EnterActions/ExitActions で
+/// アニメーションさせるために使う。null かどうかの比較だけなら
+/// <c>Binding.Value="{x:Null}"</c> で足りるが、Trigger の bool 条件として
+/// 扱いたいのでここで変換する。
+/// </para>
+/// </summary>
+public sealed class NotNullToBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is not null;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class NullToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -288,6 +305,36 @@ public sealed class TimelineOffsetToMarginConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is double top ? new Thickness(2, top, 2, 0) : new Thickness(2, 0, 2, 0);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 幅から一定量を引き、上限で頭打ちにする。
+/// <para>
+/// ステータス帯の <c>MaxWidth</c> を「本体の幅 − 余白」に結ぶために使う。広い
+/// ウィンドウでは既定の上限（560）で止め、狭い帯（最小160px）では
+/// <c>Root.ActualWidth</c> ぴったりまで伸びて左右の縁にくっつくのを避ける。
+/// <c>ConverterParameter</c> に <c>"引く量:上限"</c>（例: <c>"24:560"</c>）を渡す。
+/// </para>
+/// </summary>
+public sealed class ShrinkWidthConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not double width) return double.PositiveInfinity;
+
+        double margin = 24, cap = double.PositiveInfinity;
+        if (parameter is string s)
+        {
+            var parts = s.Split(':');
+            if (parts.Length > 0) double.TryParse(parts[0], out margin);
+            if (parts.Length > 1) double.TryParse(parts[1], out cap);
+        }
+
+        return Math.Min(cap, Math.Max(0, width - margin));
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

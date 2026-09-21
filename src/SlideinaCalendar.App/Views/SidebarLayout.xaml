@@ -42,6 +42,46 @@
 
         <!-- 日付の行のラベル（マイルストーン）の右クリックメニューは
              Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13） -->
+        <!--
+            右ペインのタスク行（.tk）。「タスク」「期限なしのタスク」の両方の節で
+            使い回す（項目B）。右ペインと見た目を揃える（項目13）。チェックの
+            スタイルと済み色を右ペインと同じ TaskCheckBoxStyle / DoneBrush に統一する
+        -->
+        <DataTemplate x:Key="SlimTaskRowTemplate">
+            <Border Background="Transparent" Padding="0,4" Cursor="Hand"
+                    MouseLeftButtonDown="OnTaskClicked">
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Left" Margin="0,0,8,0"
+                              Style="{StaticResource TaskCheckBoxStyle}"
+                              IsChecked="{Binding IsDone, Mode=OneWay}"
+                              Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                        RelativeSource={RelativeSource
+                                        AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" Text="{Binding Title}" LineHeight="16"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Title}"
+                                   Foreground="{DynamicResource InkBrush}" />
+                        <!-- 期限なしのときは空行を残さない -->
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
+                                   LineHeight="14"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding DueText,
+                                                Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="Title" Property="TextDecorations"
+                            Value="Strikethrough" />
+                    <Setter TargetName="Title" Property="Foreground"
+                            Value="{DynamicResource DoneBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
     <DockPanel>
@@ -179,11 +219,12 @@
                                 <DataTemplate>
                                     <!--
                                         右ペイン・月ビューと同じ見た目なので、挙動も揃える。
-                                        ダブルクリックで編集・右クリックでメニュー
+                                        操作説明のツールチップは外した（項目12）。バッジの
+                                        文字がそのままマイルストーン名なので、切れて読めなく
+                                        なる題も無い
                                     -->
                                     <Border CornerRadius="3" Padding="5,0" Margin="4,0,0,0"
                                             Cursor="Hand"
-                                            ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
                                             Tag="{Binding DataContext,
                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                             ContextMenu="{StaticResource MilestoneMenu}"
@@ -285,55 +326,33 @@
                                        Foreground="{DynamicResource Ink3Brush}" />
                         </DockPanel>
 
-                        <ItemsControl ItemsSource="{Binding Tasks}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <!--
-                                        右ペインと見た目を揃える（項目13）。チェックの
-                                        スタイルと済み色を右ペインと同じ TaskCheckBoxStyle /
-                                        DoneBrush に統一する
-                                    -->
-                                    <Border Background="Transparent" Padding="0,4" Cursor="Hand"
-                                            MouseLeftButtonDown="OnTaskClicked">
-                                        <DockPanel>
-                                            <CheckBox DockPanel.Dock="Left" Margin="0,0,8,0"
-                                                      Style="{StaticResource TaskCheckBoxStyle}"
-                                                      IsChecked="{Binding IsDone, Mode=OneWay}"
-                                                      Command="{Binding DataContext.ToggleTaskDoneCommand,
-                                                                RelativeSource={RelativeSource
-                                                                AncestorType=UserControl}}"
-                                                      CommandParameter="{Binding}" />
-                                            <StackPanel>
-                                                <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" Text="{Binding Title}" LineHeight="16"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding Title}"
-                                                           Foreground="{DynamicResource InkBrush}" />
-                                                <!-- 期限なしのときは空行を残さない -->
-                                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
-                                                           LineHeight="14"
-                                                           Foreground="{DynamicResource Ink3Brush}"
-                                                           Visibility="{Binding DueText,
-                                                                        Converter={StaticResource NullToVisibility}}" />
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Border>
-
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding IsDone}" Value="True">
-                                            <Setter TargetName="Title" Property="TextDecorations"
-                                                    Value="Strikethrough" />
-                                            <Setter TargetName="Title" Property="Foreground"
-                                                    Value="{DynamicResource DoneBrush}" />
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding Tasks}"
+                                      ItemTemplate="{StaticResource SlimTaskRowTemplate}" />
 
                         <!-- 0件のときは無言にしない（項目12） -->
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。下の欄に1行打つと追加できます" Margin="0,2,0,0" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding HasNoTasks, Converter={StaticResource BoolToVisibility}}" />
+
+                        <!--
+                            期限なしのタスク（項目B）。期限を付けずに作ったタスクは
+                            右ペインの「タスク」にも検索にも出ず、保存されるのに
+                            二度と見えなくなっていた。0件のときは節ごと畳む
+                            （ShowsNoDueTasks）。行の見た目・挙動は上の「タスク」と
+                            同じ SlimTaskRowTemplate を使い回す
+                        -->
+                        <StackPanel Visibility="{Binding ShowsNoDueTasks, Converter={StaticResource BoolToVisibility}}">
+                            <DockPanel Margin="0,10,0,2">
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding NoDueTaskCount}"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="{DynamicResource Ink3Brush}" />
+                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="期限なしのタスク"
+                                           Foreground="{DynamicResource Ink3Brush}" />
+                            </DockPanel>
+
+                            <ItemsControl ItemsSource="{Binding NoDueTasks}"
+                                          ItemTemplate="{StaticResource SlimTaskRowTemplate}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>

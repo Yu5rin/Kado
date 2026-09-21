@@ -2433,7 +2433,7 @@ public sealed class MainViewModel : ObservableObject
         Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
 
         Year = new YearViewModel(
-            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists)
+            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart)
         {
             SelectedDate = selected,
         };
