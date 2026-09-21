@@ -165,6 +165,9 @@ public partial class App : Application
             {
                 // 閉じたときの置き場所と大きさを覚え、次はそこで出す
                 Placements = new WindowPlacementStore(workspace.Settings),
+
+                // いちばん細くできる幅は設定から。窓の下限をそのまま決める
+                Settings = settings,
                 DataContext = new MainViewModel(
                     workspace, today, editors: editors, files: files,
                     googleClient: googleClient, google: _google,

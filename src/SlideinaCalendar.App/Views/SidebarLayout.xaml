@@ -1,11 +1,11 @@
 <!--
-    サイドバーモードの中身（要件書 5.3）。幅およそ 352px。
+    スリムパネル。4つ目のパネルとして、ほかと並べて置く。
 
-    上にカレンダー、下に予定／タスクのタブ。この幅で上下に分けて同時に出すと、
-    各ペインが3行しか入らず実用にならない。仕切りはドラッグで高さを変えられる。
-    実働日計算はフッターのボタンから開く。
+    上にひと月の並び、下に選んだ日の予定とタスク。仕切りはドラッグで高さを
+    変えられる。細いので月だけにしてある（週や日は時間軸が要るぶん、この幅では
+    読めない）。マスには予定の名前を出さず、入っていることを色で示す。
 
-    同じ UI を縮小して使い回さない（要件書 5.1）。3ペインのほうとは別の形にしてある。
+    幅では切り替えない。出すかどうかは、ほかのパネルと同じく手で選ぶ。
 -->
 <UserControl x:Class="SlideinaCalendar.App.Views.SidebarLayout"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -18,51 +18,79 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- フッター。実働日計算はここから下からせり出す -->
+        <!-- フッター。右ペインと同じで、1行打って足せる。実働日計算もここから -->
         <Border DockPanel.Dock="Bottom" Padding="10,8"
                 Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-            <Button Content="実働日計算を開く" Style="{StaticResource CalcButtonStyle}"
-                    Command="{Binding OpenWorkingDayCalculatorCommand}" />
+            <StackPanel>
+                <TextBox Style="{StaticResource QuickInputBoxStyle}"
+                         Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="1行で予定を追加します（Enter）&#10;例: 明日15時 打合せ @会議室A"
+                         KeyDown="OnQuickKeyDown" />
+
+                <TextBlock Text="{Binding QuickPreview}" FontSize="10.5" Margin="2,3,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Ink3Brush}"
+                           Visibility="{Binding QuickPreview,
+                                        Converter={StaticResource NullToVisibility}}" />
+
+                <UniformGrid Rows="1" Columns="2" Margin="0,7,0,0">
+                    <Button Content="＋ 予定" Margin="0,0,3,0"
+                            Style="{StaticResource CalcButtonStyle}"
+                            Command="{Binding AddEventCommand}" />
+                    <Button Content="＋ タスク" Margin="3,0,0,0"
+                            Style="{StaticResource CalcButtonStyle}"
+                            Command="{Binding AddTaskCommand}" />
+                </UniformGrid>
+
+                <Button Content="実働日計算を開く" Margin="0,7,0,0"
+                        Style="{StaticResource CalcButtonStyle}"
+                        Command="{Binding OpenWorkingDayCalculatorCommand}" />
+            </StackPanel>
         </Border>
 
-        <!-- ビュー切替。3ペインのときより狭いので、月・週・日・一覧に絞る -->
-        <Border DockPanel.Dock="Top" Padding="10,8"
+        <!--
+            選んでいる日と送り。ここは月だけを出すので、ビューの切り替えは置かない。
+            実働日の通し番号は下の欄に出るので、ここでは繰り返さない
+        -->
+        <Border DockPanel.Dock="Top" Padding="10,7"
                 Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
-            <Border CornerRadius="5" ClipToBounds="True"
-                    BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
-                <UniformGrid Rows="1" Columns="4">
-                    <ToggleButton Content="月" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Mode=OneWay,
-                                             Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Month}"
-                                 Command="{Binding SwitchViewCommand}"
-                                 CommandParameter="Month" />
-                    <ToggleButton Content="週" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Mode=OneWay,
-                                             Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Week}"
-                                 Command="{Binding SwitchViewCommand}"
-                                 CommandParameter="Week" />
-                    <ToggleButton Content="日" Style="{StaticResource SegmentButtonStyle}"
-                                 IsChecked="{Binding CurrentView, Mode=OneWay,
-                                             Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Day}"
-                                 Command="{Binding SwitchViewCommand}"
-                                 CommandParameter="Day" />
-                    <ToggleButton Content="一覧" Style="{StaticResource SegmentButtonStyle}"
-                                 BorderThickness="0"
-                                 IsChecked="{Binding CurrentView, Mode=OneWay,
-                                             Converter={StaticResource EnumToBool},
-                                             ConverterParameter=Agenda}"
-                                 Command="{Binding SwitchViewCommand}"
-                                 CommandParameter="Agenda" />
-                </UniformGrid>
-            </Border>
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button Style="{StaticResource IconButtonStyle}" ToolTip="前の月"
+                            Command="{Binding SlimPreviousCommand}">
+                        <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
+                              Width="15" Height="15"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.7"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                    <Button Style="{StaticResource IconButtonStyle}" ToolTip="次の月"
+                            Command="{Binding SlimNextCommand}">
+                        <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                              Width="15" Height="15"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.7"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                </StackPanel>
+
+                <TextBlock VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"
+                           Typography.NumeralAlignment="Tabular"
+                           Foreground="{DynamicResource InkBrush}">
+                    <Run Text="{Binding SlimTitleYear, Mode=OneWay}" FontSize="11" FontWeight="Medium"
+                         Foreground="{DynamicResource Ink3Brush}" /><Run Text=" " /><Run
+                         Text="{Binding SlimTitleMonth, Mode=OneWay}" />
+                </TextBlock>
+            </DockPanel>
         </Border>
 
         <Grid>
@@ -73,29 +101,11 @@
                 <RowDefinition Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
 
-            <!-- 上：カレンダー -->
-            <Grid Grid.Row="0">
-                <views:MonthView DataContext="{Binding Month}"
-                                 Visibility="{Binding DataContext.IsMonthView,
-                                              RelativeSource={RelativeSource AncestorType=UserControl},
-                                              Converter={StaticResource BoolToVisibility}}" />
-                <views:WeekView DataContext="{Binding Week}"
-                                Visibility="{Binding DataContext.IsWeekView,
-                                             RelativeSource={RelativeSource AncestorType=UserControl},
-                                             Converter={StaticResource BoolToVisibility}}" />
-                <views:DayView DataContext="{Binding Day}"
-                               Visibility="{Binding DataContext.IsDayView,
-                                            RelativeSource={RelativeSource AncestorType=UserControl},
-                                            Converter={StaticResource BoolToVisibility}}" />
-                <views:YearView DataContext="{Binding Year}"
-                                Visibility="{Binding DataContext.IsYearView,
-                                             RelativeSource={RelativeSource AncestorType=UserControl},
-                                             Converter={StaticResource BoolToVisibility}}" />
-                <views:AgendaView DataContext="{Binding Agenda}"
-                                  Visibility="{Binding DataContext.IsAgendaView,
-                                               RelativeSource={RelativeSource AncestorType=UserControl},
-                                               Converter={StaticResource BoolToVisibility}}" />
-            </Grid>
+            <!--
+                上：ひと月の並び。中央のカレンダーが何を出していても、ここは月。
+                ここだけ別の月暦を持つので、中央とは独立して送れる
+            -->
+            <views:MonthView Grid.Row="0" DataContext="{Binding SlimMonth}" />
 
             <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
                           Background="{DynamicResource LineBrush}"

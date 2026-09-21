@@ -30,8 +30,15 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due, DoneText?
     public bool IsDone => Task.IsDone;
     public string? Note => Task.Note;
 
-    /// <summary>「残り 3実働日」などの表示。期限が無ければ null。</summary>
-    public string? DueText => due?.Text;
+    /// <summary>
+    /// 「残り 3実働日」などの表示。期限が無ければ null。
+    /// <para>
+    /// <b>済んだタスクには出さない。</b>片付いているのに「3日 遅れ」と出たままでは、
+    /// まだ残っているように読める。済んだあとに要るのは結果のほう
+    /// （<see cref="DoneText"/>）で、そちらを出す。
+    /// </para>
+    /// </summary>
+    public string? DueText => IsDone ? null : due?.Text;
 
     /// <summary>
     /// 「2実働日 遅れて完了」などの結果。済んでいない、または期限が無ければ null。

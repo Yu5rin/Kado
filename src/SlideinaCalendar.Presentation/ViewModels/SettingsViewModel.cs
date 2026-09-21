@@ -276,6 +276,22 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 窓をいちばん細くできる幅。
+    /// <para>帯としてどこまで詰めたいかは使う人による。</para>
+    /// </summary>
+    public int MinWidth
+    {
+        get => _settings.MinWidth;
+        set
+        {
+            if (_settings.MinWidth == value) return;
+
+            _settings.MinWidth = value;
+            Raise();
+        }
+    }
+
     /// <summary>知らせるときに音を鳴らすか。</summary>
     public bool NotifySound
     {

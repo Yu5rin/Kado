@@ -323,65 +323,55 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void 狭いと左から順にパネルを畳み広がれば戻す()
+    public void パネルの組は居かたごとに覚える()
     {
         using var test = TestWorkspace.Create();
-        var vm = Create(test);
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings);
 
-        Fit(vm, 1200);
+        // ウィンドウでは3ペイン
         Assert.True(vm.IsSidePanelOpen);
-        Assert.True(vm.IsDetailPaneOpen);
-
-        // まず左パネル
-        Fit(vm, 800);
-        Assert.False(vm.IsSidePanelOpen);
-        Assert.True(vm.IsDetailPaneOpen);
-
-        // それでも足りなければ右パネル。中央のカレンダーは最後まで残す
-        Fit(vm, 560);
-        Assert.False(vm.IsDetailPaneOpen);
         Assert.True(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        vm.ToggleSidePanelCommand.Execute(null);
+
+        // 画面端へ寄せると、そちらの組に入れ替わる
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+
+        vm.ToggleSlimPanelCommand.Execute(null);
+
+        // ウィンドウへ戻すと、さっきの組が戻る
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.False(vm.IsSlimPanelOpen);
+
+        // もう一度寄せれば、帯のほうの組
+        vm.Shell.ToggleSlideCommand.Execute(null);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.True(vm.IsSlimPanelOpen);
+    }
+
+    [Fact]
+    public void 狭くしてもパネルは勝手に畳まない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
 
         Fit(vm, 1200);
         Assert.True(vm.IsSidePanelOpen);
         Assert.True(vm.IsDetailPaneOpen);
-    }
 
-    [Fact]
-    public void 出ているのが一つなら狭めても畳まない()
-    {
-        using var test = TestWorkspace.Create();
-        var vm = Create(test);
+        // 出しておきたくて出しているものが、幅の都合で消えるのは筋が悪い。
+        // 入りきらないぶんは切れるだけにして、何を出すかは手で決めてもらう
+        Fit(vm, 320);
 
-        Fit(vm, 1200);
-
-        // 右ペインだけを出して使う。細い帯での主な使い方
-        vm.ToggleSidePanelCommand.Execute(null);
-        vm.ToggleMainViewCommand.Execute(null);
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
         Assert.True(vm.IsDetailPaneOpen);
-        Assert.False(vm.IsMainViewOpen);
-
-        // ここで畳むと、代わりに中央のカレンダーが出てくる。それでは困る
-        Fit(vm, 300);
-
-        Assert.True(vm.IsDetailPaneOpen);
-        Assert.False(vm.IsMainViewOpen);
-        Assert.False(vm.IsSidePanelOpen);
-    }
-
-    [Fact]
-    public void 手で閉じたパネルは広げても勝手に開かない()
-    {
-        using var test = TestWorkspace.Create();
-        var vm = Create(test);
-
-        Fit(vm, 1200);
-        vm.ToggleSidePanelCommand.Execute(null);
-
-        Fit(vm, 1400);
-
-        // 開け直すのは、幅が足りなくて自分で畳んだぶんだけ
-        Assert.False(vm.IsSidePanelOpen);
     }
 
     [Fact]

@@ -313,6 +313,25 @@
                         <!-- 詰めた形。日付を真ん中に置き、予定は色の点だけ -->
                         <StackPanel x:Name="Compact" Visibility="Collapsed"
                                     VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <!--
+                                実働日カレンダー（inaCalendar）の印は日付の上。
+                                仕様期限や1次GOが、ひと月の並びの中で拾える
+                            -->
+                            <ItemsControl ItemsSource="{Binding Milestones}"
+                                          HorizontalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="5" Height="5" CornerRadius="2.5" Margin="1,0"
+                                                ToolTip="{Binding Name}"
+                                                Background="{Binding Name,
+                                                            Converter={StaticResource MilestoneBrush}}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
                             <TextBlock x:Name="CompactNumber" Text="{Binding DayNumber}"
                                        FontSize="12.5" LineHeight="17"
                                        HorizontalAlignment="Center"

@@ -131,20 +131,31 @@ public sealed class MainViewModel : ObservableObject
         ToggleSidePanelCommand = new RelayCommand(() => IsSidePanelOpen = !IsSidePanelOpen);
         ToggleMainViewCommand = new RelayCommand(() => IsMainViewOpen = !IsMainViewOpen);
         ToggleDetailPaneCommand = new RelayCommand(() => IsDetailPaneOpen = !IsDetailPaneOpen);
+        ToggleSlimPanelCommand = new RelayCommand(() => IsSlimPanelOpen = !IsSlimPanelOpen);
+        SlimPreviousCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(-1)));
+        SlimNextCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(1)));
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
         Shell.PropertyChanged += (_, args) =>
         {
             // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
             // 古いまま残る。幅が変わったことはここでも受けておく
             if (args.PropertyName == nameof(ShellViewModel.LayoutWidth)) FitTo(Shell.LayoutWidth);
-
-            // スリムパネルでは、月のマスに予定の名前を並べても読めない
-            if (args.PropertyName is nameof(ShellViewModel.LayoutWidth)
-                or nameof(ShellViewModel.UsesSidebarLayout))
-            {
-                Month.IsCompact = Shell.UsesSidebarLayout;
-            }
         };
+
+        // 居かたが変わったら、そのときに出していたパネルの組へ入れ替える
+        Shell.ModeChanged += (_, mode) =>
+        {
+            var atEdge = mode != ShellMode.Window;
+
+            if (atEdge == _atEdge) return;
+
+            SavePanes();
+            _atEdge = atEdge;
+            LoadPanes();
+        };
+
+        _atEdge = Shell.Mode != ShellMode.Window;
+        LoadPanes();
 
         OpenSearchCommand = new RelayCommand(() =>
         {
@@ -275,6 +286,20 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>月ビュー。</summary>
     public MonthViewModel Month { get; private set; }
 
+    /// <summary>
+    /// スリムパネルのひと月。
+    /// <para>中央とは別に持つ。中央が週や日を出していても、こちらは月のまま。</para>
+    /// </summary>
+    public MonthViewModel SlimMonth { get; private set; }
+
+    /// <summary>スリムパネルの見出し。「2026」。</summary>
+    public string SlimTitleYear =>
+        SlimMonth.Month.ToString("yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>スリムパネルの見出し。「9月」。</summary>
+    public string SlimTitleMonth =>
+        SlimMonth.Month.ToString("M月", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>右ペイン（選択日）。</summary>
     public SelectedDayViewModel SelectedDay { get; }
 
@@ -371,9 +396,46 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isSidePanelOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsSidePanelOpen));
+            SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
                 nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
         }
+    }
+
+    /// <summary>
+    /// スリムパネルを出しているか。
+    /// <para>
+    /// ひと月の並びと、選んだ日の予定・タスクだけを細く置く4つ目のパネル。
+    /// <b>幅では切り替えない。</b>出すかどうかは、ほかのパネルと同じく手で選ぶ。
+    /// 狭いからといって別の形へ化けると、同じ操作を探し直すことになる。
+    /// </para>
+    /// </summary>
+    public bool IsSlimPanelOpen
+    {
+        get => _isSlimPanelOpen;
+        set
+        {
+            if (!Set(ref _isSlimPanelOpen, value)) return;
+
+            EnsureSomethingShows(nameof(IsSlimPanelOpen));
+            SavePanes();
+        }
+    }
+
+    private bool _isSlimPanelOpen;
+
+    public RelayCommand ToggleSlimPanelCommand { get; private set; } = null!;
+
+    /// <summary>スリムパネルの月を前へ。中央とは別に送る。</summary>
+    public RelayCommand SlimPreviousCommand { get; private set; } = null!;
+
+    /// <summary>スリムパネルの月を次へ。</summary>
+    public RelayCommand SlimNextCommand { get; private set; } = null!;
+
+    private void SlimGoTo(DateOnly month)
+    {
+        SlimMonth.GoTo(month);
+        Raise(nameof(SlimTitleYear), nameof(SlimTitleMonth));
     }
 
     /// <summary>
@@ -390,6 +452,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isMainViewOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsMainViewOpen));
+            SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
                 nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
             RaiseHeader();
@@ -405,6 +468,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isDetailPaneOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
+            SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
                 nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
         }
@@ -463,17 +527,17 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
     public const double TodayButtonFloor = 380;
 
+    /// <summary>スリムパネルの既定の幅。</summary>
+    public const double DefaultSlimPanelWidth = 264;
+
+    /// <summary>スリムパネルの下げ止まり。マスが正方形で読める幅。</summary>
+    public const double MinSlimPanelWidth = 200;
+
     /// <summary>
     /// 中央のカレンダーの下げ止まり。
     /// <para>帯として使うときはここまで詰める。月ビューの7列がぎりぎり読める幅。</para>
     /// </summary>
     public const double MinMainViewWidth = 260;
-
-    /// <summary>左パネルを開けておく下限。これを切ると、ひとりでに畳む。</summary>
-    public const double SidePaneFloor = 880;
-
-    /// <summary>右パネルを開けておく下限。左を畳んでも足りないときに、次はここ。</summary>
-    public const double DetailPaneFloor = 620;
 
     /// <summary>ツールバーの詰め方を決める幅。ウィンドウの見た目の幅。</summary>
     private double Room => Shell.LayoutWidth;
@@ -509,51 +573,87 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>年月の見出しに取っておく幅。細いときは詰める。</summary>
     public double TitleRoom => ShowsTodayButton ? 118 : 44;
 
-    /// <summary>自分で畳んだぶん。広がったときに開け直すのは、これだけ。</summary>
-    private bool _autoClosedSide;
-
-    private bool _autoClosedDetail;
-
     /// <summary>
-    /// 幅に合わせてパネルを畳む。
+    /// 幅に合わせてツールバーの中身を詰める。
     /// <para>
-    /// 左 → 右 の順。<b>ただし畳むのは、ほかに出ているものがあるときだけ。</b>
-    /// いま出ているのが1つなら、それが何であれ残す。右ペインだけを出して使って
-    /// いるのに、狭めたらそれが消えて中央のカレンダーが出てきた、では困る。
-    /// 細い帯では右ペイン（予定・タスク）を主に使う。
+    /// <b>パネルは勝手に畳まない。</b>狭いからと消していたが、出しておきたくて
+    /// 出しているものが幅の都合で消えるのは筋が悪い。入りきらないぶんは切れる
+    /// だけにして、何を出すかは手で決めてもらう。
     /// </para>
-    /// <para><b>手で閉じたものは勝手に開け直さない。</b>自分で畳んだものだけ戻す。</para>
     /// </summary>
     public void FitTo(double width)
     {
         Raise(nameof(ShowsWorkdayBadges), nameof(ShowsSyncStatus), nameof(UsesCompactSearch),
             nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(ShowsTodayButton),
             nameof(TitleRoom));
+    }
 
-        if (double.IsNaN(width) || width <= 0) return;
+    // ------------------------------------------------------------------
+    // 出しているパネルの組み合わせ
+    //
+    // ウィンドウのときと、画面端に寄せているときとで別に覚える。広い
+    // ウィンドウでは3つとも出し、細い帯では予定だけ、という使い分けが
+    // ふつうなので、行き来のたびに直すのは手間になる
+    // ------------------------------------------------------------------
 
-        // 左は、中央か右が出ているときだけ畳む
-        if (width < SidePaneFloor && _isSidePanelOpen && (_isMainViewOpen || _isDetailPaneOpen))
-        {
-            _autoClosedSide = true;
-            IsSidePanelOpen = false;
-        }
-        else if (width >= SidePaneFloor && _autoClosedSide)
-        {
-            _autoClosedSide = false;
-            IsSidePanelOpen = true;
-        }
+    /// <summary>どのパネルを出しているか。</summary>
+    private readonly record struct PaneSet(bool Side, bool Main, bool Detail, bool Slim)
+    {
+        /// <summary>ウィンドウのときの既定。3ペインを開く。</summary>
+        public static PaneSet Windowed { get; } = new(true, true, true, false);
 
-        // 右は、中央が出ているときだけ畳む。右だけで使っているなら触らない
-        if (width < DetailPaneFloor && _isDetailPaneOpen && _isMainViewOpen)
+        /// <summary>画面端に寄せたときの既定。細いので、選んだ日の予定だけ。</summary>
+        public static PaneSet AtEdge { get; } = new(false, false, true, false);
+
+        public override string ToString() => $"{Bit(Side)}{Bit(Main)}{Bit(Detail)}{Bit(Slim)}";
+
+        private static char Bit(bool on) => on ? '1' : '0';
+
+        public static PaneSet Parse(string? text, PaneSet fallback) =>
+            text is { Length: 4 }
+                ? new(text[0] == '1', text[1] == '1', text[2] == '1', text[3] == '1')
+                : fallback;
+    }
+
+    /// <summary>いま画面端に寄せている（スライド・固定）か。組の切り替えに使う。</summary>
+    private bool _atEdge;
+
+    /// <summary>組を読み書きしている最中。そのあいだは控え直さない。</summary>
+    private bool _swappingPanes;
+
+    private PaneSet CurrentPanes() =>
+        new(_isSidePanelOpen, _isMainViewOpen, _isDetailPaneOpen, _isSlimPanelOpen);
+
+    /// <summary>いまの組を控える。</summary>
+    private void SavePanes()
+    {
+        if (_settings is not { } settings || _swappingPanes) return;
+
+        var text = CurrentPanes().ToString();
+
+        if (_atEdge) settings.EdgePanes = text;
+        else settings.WindowPanes = text;
+    }
+
+    /// <summary>控えてある組に戻す。</summary>
+    private void LoadPanes()
+    {
+        var set = _atEdge
+            ? PaneSet.Parse(_settings?.EdgePanes, PaneSet.AtEdge)
+            : PaneSet.Parse(_settings?.WindowPanes, PaneSet.Windowed);
+
+        _swappingPanes = true;
+
+        try
         {
-            _autoClosedDetail = true;
-            IsDetailPaneOpen = false;
+            IsSidePanelOpen = set.Side;
+            IsMainViewOpen = set.Main;
+            IsDetailPaneOpen = set.Detail;
+            IsSlimPanelOpen = set.Slim;
         }
-        else if (width >= DetailPaneFloor && _autoClosedDetail)
+        finally
         {
-            _autoClosedDetail = false;
-            IsDetailPaneOpen = true;
+            _swappingPanes = false;
         }
     }
 
@@ -563,7 +663,7 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void EnsureSomethingShows(string justChanged)
     {
-        if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen) return;
+        if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen || _isSlimPanelOpen) return;
 
         // いま閉じたものではなく、中央を戻す。何を見る画面なのかが分かる
         if (justChanged == nameof(IsMainViewOpen)) Set(ref _isDetailPaneOpen, true, nameof(IsDetailPaneOpen));
@@ -669,6 +769,7 @@ public sealed class MainViewModel : ObservableObject
             // ビューを切り替えたときにどこを見ていたのか分からなくなる
             Year.SelectedDate = value;
             Agenda.SelectedDate = value;
+            SlimMonth.SelectedDate = value;
 
             // 中央を畳んでいるときは、見出しが選んだ日そのものになっている
             if (!_isMainViewOpen) RaiseHeader();
@@ -2120,7 +2221,7 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
-        nameof(Year), nameof(Agenda))]
+        nameof(Year), nameof(Agenda), nameof(SlimMonth))]
     private void BuildViews(DateOnly month, DateOnly selected)
     {
         var start = _settings?.DayStart;
@@ -2153,6 +2254,14 @@ public sealed class MainViewModel : ObservableObject
 
         Agenda = new AgendaViewModel(_workspace, _today, SourceLists);
         Agenda.GoTo(selected);
+
+        // スリムパネルは自前の月暦を持つ。中央が週や日を出していても、
+        // こちらはひと月の並びを見せ続ける
+        SlimMonth = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+        {
+            SelectedDate = selected,
+            IsCompact = true,
+        };
     }
 
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
