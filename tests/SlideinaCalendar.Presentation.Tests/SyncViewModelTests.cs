@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using SlideinaCalendar.Google.OAuth;
 using SlideinaCalendar.Google.Sync;
 using SlideinaCalendar.Presentation.Sync;
@@ -202,6 +203,64 @@ public class SyncViewModelTests
         await vm.SyncAsync();
 
         Assert.Contains("繋ぎ直して", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 応答が来ないまま固まらない()
+    {
+        // GoogleConnection の HttpClient がタイムアウトすると TaskCanceledException が来る。
+        // これを拾わずに抜けると State が Running のまま残り、以後の同期が二度と走らなくなる
+        var google = new FakeGoogle { IsConnected = true, ThrowOnSync = new TaskCanceledException("timeout") };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.False(vm.IsBusy);
+        Assert.Contains("時間内に応答がありませんでした", vm.StatusText, StringComparison.Ordinal);
+
+        // 固まっていないので、もう一度同期できる
+        google.ThrowOnSync = null;
+        await vm.SyncAsync();
+        Assert.Equal(SyncState.Idle, vm.State);
+    }
+
+    [Fact]
+    public async Task 応答を読み取れなければ固まらない()
+    {
+        // キャプティブポータルが HTML を 200 で返すと、応答を JSON として読めず JsonException になる
+        var google = new FakeGoogle
+        {
+            IsConnected = true,
+            ThrowOnSync = new JsonException("invalid json"),
+        };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.False(vm.IsBusy);
+        Assert.Contains("応答を読み取れませんでした", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 想定外の例外でも固まらない()
+    {
+        var google = new FakeGoogle
+        {
+            IsConnected = true,
+            ThrowOnSync = new InvalidOperationException("想定外"),
+        };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.False(vm.IsBusy);
+
+        // 固まっていないので、SyncNowCommand / DisconnectCommand が再び押せる
+        Assert.True(vm.SyncNowCommand.CanExecute(null));
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
     }
 
     [Fact]

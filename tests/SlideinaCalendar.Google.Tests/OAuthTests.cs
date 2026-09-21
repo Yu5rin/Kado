@@ -152,6 +152,40 @@ public class OAuthTests
     }
 
     // ------------------------------------------------------------------
+    // 打ち切り
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 取り消すと待ちを抜ける()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, TokenResponse)));
+
+        // ブラウザは開かせるだけで、戻り先は叩かない（許可待ちのまま）
+        var flow = new LoopbackOAuthFlow(Options(), http, _ => { });
+
+        using var cts = new CancellationTokenSource();
+        var task = flow.AuthorizeAsync(cts.Token);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => task);
+    }
+
+    [Fact]
+    public async Task 戻ってこなければ諦める()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, TokenResponse)));
+
+        // 上限を極端に短くして、5分待たずに確かめる
+        var flow = new LoopbackOAuthFlow(
+            Options(), http, _ => { }, authorizationTimeout: TimeSpan.FromMilliseconds(50));
+
+        var error = await Assert.ThrowsAsync<OAuthException>(() => flow.AuthorizeAsync());
+
+        Assert.Contains("もう一度お試しください", error.Message);
+    }
+
+    // ------------------------------------------------------------------
     // 応答の読み取り
     // ------------------------------------------------------------------
 

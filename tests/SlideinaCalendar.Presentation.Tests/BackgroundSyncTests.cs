@@ -191,4 +191,35 @@ public class BackgroundSyncTests
 
         Assert.True(sync.CurrentDelay > Interval);
     }
+
+    [Fact]
+    public async Task 自前の停止トークンでなければタイムアウトでもループを終えない()
+    {
+        // HttpClient の既定タイムアウトなどで TaskCanceledException が来る場面。
+        // こちらの Stop() が呼ばれたわけではないので、ループそのものは終わらせない
+        var clock = new FakeTimeProvider();
+        var runs = 0;
+
+        using var sync = new BackgroundSync(
+            _ =>
+            {
+                runs++;
+                throw new TaskCanceledException("timeout");
+            },
+            Interval, clock);
+
+        sync.Start();
+        clock.Advance(Interval);
+
+        await WaitUntilAsync(() => runs >= 1 && sync.CurrentDelay > Interval);
+
+        // 1回失敗したとして数えているだけで、止まってはいない
+        Assert.Equal(1, runs);
+        Assert.True(sync.IsRunning);
+
+        clock.Advance(sync.CurrentDelay);
+        await WaitUntilAsync(() => runs >= 2);
+
+        Assert.Equal(2, runs);
+    }
 }

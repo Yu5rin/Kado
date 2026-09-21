@@ -18,7 +18,11 @@ public sealed class GoogleConnection(
     HttpClient? http = null,
     DateTimeOffset? from = null) : IGoogleSync, IDisposable
 {
-    private readonly HttpClient _http = http ?? new HttpClient();
+    /// <summary>Google API への既定の待ち時間。カレンダー数だけ呼ぶので、既定の100秒のままだと長すぎる。</summary>
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
+
+    // 外から HttpClient を渡されたときは、そちらの設定を尊重する。自前で作ったときだけ絞る
+    private readonly HttpClient _http = http ?? new HttpClient { Timeout = DefaultTimeout };
     private readonly bool _ownsHttp = http is null;
 
     private GoogleSyncService? _service;

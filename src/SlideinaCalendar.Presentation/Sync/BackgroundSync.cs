@@ -87,13 +87,16 @@ public sealed class BackgroundSync : IDisposable
                 Runs++;
                 _failures = await _sync(cancellationToken).ConfigureAwait(false) ? 0 : _failures + 1;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // 自前の停止トークンが立っている。Stop() が呼ばれたということなので終える
                 return;
             }
             catch (Exception)
             {
-                // 頼まれていない同期で落ちるのが、いちばん困る。次の回に賭ける
+                // 頼まれていない同期で落ちるのが、いちばん困る。次の回に賭ける。
+                // HttpClient のタイムアウトなど、こちらの停止指示ではない
+                // OperationCanceledException もここに落ちる。ループそのものは終わらせない
                 _failures++;
             }
         }
