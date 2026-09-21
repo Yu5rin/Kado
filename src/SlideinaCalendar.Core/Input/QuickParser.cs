@@ -95,7 +95,9 @@ public static class QuickParser
         {
             rest = Replace(rest, withDay.Value);
             var head = baseDate.AddMonths(1);
-            return Build(head.Year, head.Month, int.Parse(withDay.Groups[1].Value, Invariant), baseDate);
+            return TryDigits(withDay.Groups[1].Value, out var day)
+                ? Build(head.Year, head.Month, day, baseDate)
+                : (baseDate, true);
         }
 
         if (!rest.Contains("来月", StringComparison.Ordinal)) return null;
@@ -113,10 +115,11 @@ public static class QuickParser
         if (full.Success)
         {
             rest = Replace(rest, full.Value);
-            return Build(
-                int.Parse(full.Groups[1].Value, Invariant),
-                int.Parse(full.Groups[2].Value, Invariant),
-                int.Parse(full.Groups[3].Value, Invariant), baseDate);
+            return TryDigits(full.Groups[1].Value, out var year)
+                && TryDigits(full.Groups[2].Value, out var month)
+                && TryDigits(full.Groups[3].Value, out var day)
+                ? Build(year, month, day, baseDate)
+                : (baseDate, true);
         }
 
         foreach (var pattern in MonthDayPatterns)
@@ -126,8 +129,9 @@ public static class QuickParser
 
             rest = Replace(rest, match.Value);
 
-            var month = int.Parse(match.Groups[1].Value, Invariant);
-            var day = int.Parse(match.Groups[2].Value, Invariant);
+            if (!TryDigits(match.Groups[1].Value, out var month) || !TryDigits(match.Groups[2].Value, out var day))
+                return (baseDate, true);
+
             return Build(NearFutureYear(baseDate, month, day), month, day, baseDate);
         }
 
@@ -136,7 +140,9 @@ public static class QuickParser
         if (after.Success)
         {
             rest = Replace(rest, after.Value);
-            return (baseDate.AddDays(int.Parse(after.Groups[1].Value, Invariant)), false);
+            return TryDigits(after.Groups[1].Value, out var daysAfter)
+                ? (baseDate.AddDays(daysAfter), false)
+                : (baseDate, true);
         }
 
         // 「N日間」は期間なので日付として取らない
@@ -144,7 +150,9 @@ public static class QuickParser
         if (dayOnly.Success)
         {
             rest = Replace(rest, dayOnly.Value);
-            return Build(baseDate.Year, baseDate.Month, int.Parse(dayOnly.Groups[1].Value, Invariant), baseDate);
+            return TryDigits(dayOnly.Groups[1].Value, out var dayOfMonth)
+                ? Build(baseDate.Year, baseDate.Month, dayOfMonth, baseDate)
+                : (baseDate, true);
         }
 
         return (baseDate, false);
@@ -221,8 +229,8 @@ public static class QuickParser
     /// <summary>午前・午後を24時制に直して組み立てる。</summary>
     private static TimeOnly? At(string half, string hourText, string minuteText)
     {
-        if (!int.TryParse(hourText, NumberStyles.Integer, Invariant, out var hour)) return null;
-        if (!int.TryParse(minuteText, NumberStyles.Integer, Invariant, out var minute)) minute = 0;
+        if (!TryDigits(hourText, out var hour)) return null;
+        if (!TryDigits(minuteText, out var minute)) minute = 0;
 
         // 「午前12時」は0時、「午後12時」は正午
         hour = half switch
@@ -271,6 +279,28 @@ public static class QuickParser
     private static string Replace(string text, string found) =>
         text.Replace(found, " ", StringComparison.Ordinal);
 
+    /// <summary>
+    /// 全角数字（０〜９）を半角に直したうえで整数に読む。
+    /// <para>
+    /// 正規表現の <c>\d</c> は全角数字にも一致するが、<see cref="int.Parse(string, IFormatProvider)"/> は
+    /// 受け付けず <see cref="FormatException"/> になる。読めなければ例外を投げず false を返す
+    /// （呼び出し側は既存の日付エラー・時刻エラーの扱いに倒す）。
+    /// </para>
+    /// <para>ここで受け取るのは正規表現が切り出した数字部分だけなので、題や場所の文字には影響しない。</para>
+    /// </summary>
+    private static bool TryDigits(string text, out int value)
+    {
+        Span<char> buffer = text.Length <= 32 ? stackalloc char[text.Length] : new char[text.Length];
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            buffer[i] = c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c;
+        }
+
+        return int.TryParse(buffer, NumberStyles.Integer, Invariant, out value);
+    }
+
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
     private const string WeekdayNames = "日月火水木金土";
@@ -294,22 +324,24 @@ public static class QuickParser
     private static readonly Regex DigitsPattern = new(@"\d{1,2}", RegexOptions.Compiled);
     private static readonly Regex WeekdayPattern = new(@"([日月火水木金土])曜日?", RegexOptions.Compiled);
     private static readonly Regex NextMonthDayPattern = new(@"来月(\d{1,2})日?", RegexOptions.Compiled);
+    // 区切りは全角（／・：・－）でも打てるようにしてある。IME を点けたまま数字だけ
+    // 全角で打つ、コロンや区切りまでつられて全角になる、のどちらも起きるため
     private static readonly Regex FullDatePattern =
-        new(@"(\d{4})[/\-年](\d{1,2})[/\-月](\d{1,2})日?", RegexOptions.Compiled);
+        new(@"(\d{4})[/\-／－年](\d{1,2})[/\-／－月](\d{1,2})日?", RegexOptions.Compiled);
     private static readonly Regex[] MonthDayPatterns =
     [
         new(@"(\d{1,2})月(\d{1,2})日?", RegexOptions.Compiled),
-        new(@"(\d{1,2})/(\d{1,2})", RegexOptions.Compiled),
+        new(@"(\d{1,2})[/／](\d{1,2})", RegexOptions.Compiled),
     ];
     private static readonly Regex DaysAfterPattern = new(@"(\d{1,2})日後", RegexOptions.Compiled);
     private static readonly Regex DayOfMonthPattern = new(@"(\d{1,2})日(?!間|後)", RegexOptions.Compiled);
 
     private static readonly Regex ColonRangePattern = new(
-        AmPm + @"(\d{1,2}):(\d{2})\s*(?:から|[-〜~ー−])\s*" + AmPm + @"(\d{1,2}):(\d{2})", RegexOptions.Compiled);
+        AmPm + @"(\d{1,2})[:：](\d{2})\s*(?:から|[-〜~ー−－])\s*" + AmPm + @"(\d{1,2})[:：](\d{2})", RegexOptions.Compiled);
     private static readonly Regex KanjiRangePattern = new(
-        AmPm + @"(\d{1,2})時(?!間)(半|\d{1,2}分?)?\s*(?:から|[-〜~ー−])\s*" + AmPm + @"(\d{1,2})時(?!間)(半|\d{1,2}分?)?",
+        AmPm + @"(\d{1,2})時(?!間)(半|\d{1,2}分?)?\s*(?:から|[-〜~ー−－])\s*" + AmPm + @"(\d{1,2})時(?!間)(半|\d{1,2}分?)?",
         RegexOptions.Compiled);
-    private static readonly Regex ColonPattern = new(AmPm + @"(\d{1,2}):(\d{2})", RegexOptions.Compiled);
+    private static readonly Regex ColonPattern = new(AmPm + @"(\d{1,2})[:：](\d{2})", RegexOptions.Compiled);
     private static readonly Regex KanjiPattern =
         new(AmPm + @"(\d{1,2})時(?!間)(半|\d{1,2}分?)?", RegexOptions.Compiled);
 

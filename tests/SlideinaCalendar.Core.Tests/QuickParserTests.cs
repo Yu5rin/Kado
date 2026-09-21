@@ -200,4 +200,57 @@ public class QuickParserTests
         Assert.False(Parse("明日15時").CanCommit);
         Assert.False(Parse("").CanCommit);
     }
+
+    [Fact]
+    public void 全角数字の日にちは半角と同じに読む()
+    {
+        var zenkaku = Parse("１５日 打合せ");
+        var hankaku = Parse("15日 打合せ");
+
+        Assert.Equal(hankaku.Date, zenkaku.Date);
+        Assert.Equal(hankaku.Title, zenkaku.Title);
+        Assert.True(zenkaku.CanCommit);
+    }
+
+    [Theory]
+    [InlineData("２０２６/１０/１ 会議")]
+    [InlineData("2026／10／1 会議")]
+    public void 全角の数字や区切りでも年月日として読める(string text)
+    {
+        var entry = Parse(text);
+
+        Assert.Equal(new DateOnly(2026, 10, 1), entry.Date);
+        Assert.Equal("会議", entry.Title);
+        Assert.True(entry.CanCommit);
+    }
+
+    [Theory]
+    [InlineData("明日 １０:００ 打合せ")]
+    [InlineData("明日 10：00 打合せ")]
+    public void 全角の数字やコロンでも時刻として読める(string text)
+    {
+        var entry = Parse(text);
+
+        Assert.Equal(new TimeOnly(10, 0), entry.Start);
+        Assert.Equal("打合せ", entry.Title);
+        Assert.True(entry.CanCommit);
+    }
+
+    [Fact]
+    public void 題や場所の全角文字は半角にしない()
+    {
+        var entry = Parse("打合せ　＠会議室Ａ");
+
+        Assert.Equal("打合せ", entry.Title);
+        Assert.Equal("会議室Ａ", entry.Location);
+    }
+
+    [Fact]
+    public void 桁あふれる数字でも例外にならず日付エラーになる()
+    {
+        var entry = Parse("99999999999日 x");
+
+        Assert.True(entry.HasDateError);
+        Assert.False(entry.CanCommit);
+    }
 }
