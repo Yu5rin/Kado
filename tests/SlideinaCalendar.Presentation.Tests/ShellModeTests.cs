@@ -71,6 +71,24 @@ public class ShellModeTests
         Assert.Equal(ShellMode.Window, vm.Mode);
     }
 
+    /// <summary>
+    /// 出しかたボタン（項目1）のツールチップ。状態名ではなく、押したら何が
+    /// 起きるかを短く書く。パネルの選び方は別のボタンに分けたので、ここには含めない
+    /// </summary>
+    [Fact]
+    public void 出しかたボタンの文言は動作を短く言う()
+    {
+        var vm = Create();
+
+        Assert.Equal("スライドにする（Ctrl＋Alt＋S）", vm.SlideActionLabel);
+
+        vm.ToggleSlideCommand.Execute(null);
+        Assert.Equal("ウィンドウに戻す", vm.SlideActionLabel);
+
+        vm.TogglePinCommand.Execute(null);
+        Assert.Equal("ウィンドウに戻す", vm.SlideActionLabel);
+    }
+
     [Fact]
     public void いまの出しかたに名前が付く()
     {

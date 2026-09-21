@@ -1,3 +1,4 @@
+using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Presentation.ViewModels;
 
@@ -509,5 +510,54 @@ public class SettingsTests
     public void 外部へのリンクはhttpsのGitHubだけ通す(string url, bool allowed)
     {
         Assert.Equal(allowed, SettingsViewModel.IsAllowedExternalUrl(url));
+    }
+
+    // ------------------------------------------------------------------
+    // 工程逆算のオフセット列（項目1）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 何も保存していなければ既定の1セット()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        var plan = Assert.Single(settings.WorkdayOffsetPlans);
+        Assert.Equal("標準", plan.Name);
+        Assert.Equal(4, plan.Steps.Count);
+        Assert.Equal("仕様期限", plan.Steps[0].Name);
+        Assert.Equal(-12, plan.Steps[0].Offset);
+    }
+
+    [Fact]
+    public void 保存したオフセット列は次に開いたときも残る()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        var plan = new WorkdayOffsetPlan("p1", "量産品", [new WorkdayOffsetStep("仕様期限", -20)]);
+        settings.WorkdayOffsetPlans = [plan];
+        settings.SelectedWorkdayOffsetPlanId = "p1";
+
+        var next = new AppSettings(test.Workspace.Settings);
+
+        var loaded = Assert.Single(next.WorkdayOffsetPlans);
+        Assert.Equal("量産品", loaded.Name);
+        Assert.Equal(-20, loaded.Steps[0].Offset);
+        Assert.Equal("p1", next.SelectedWorkdayOffsetPlanId);
+    }
+
+    [Fact]
+    public void 全部消して空にした状態は既定に戻さない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        // 一度何か保存してから空にする。「一度も保存していない」とは区別する
+        settings.WorkdayOffsetPlans = [WorkdayOffsetPlan.CreateDefault()];
+        settings.WorkdayOffsetPlans = [];
+
+        var next = new AppSettings(test.Workspace.Settings);
+        Assert.Empty(next.WorkdayOffsetPlans);
     }
 }

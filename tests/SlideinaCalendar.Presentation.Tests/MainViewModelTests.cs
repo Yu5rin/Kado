@@ -10,6 +10,41 @@ public class MainViewModelTests
     private static MainViewModel Create(TestWorkspace test) =>
         new(test.Workspace, today: D(2026, 9, 24));
 
+    // ------------------------------------------------------------------
+    // 初回起動だけの案内（項目7）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 初回は案内を出し既読は覚える()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Assert.True(vm.ShowsOnboarding);
+        Assert.True(vm.ShowsStatusPill);
+
+        vm.DismissOnboardingCommand.Execute(null);
+
+        Assert.False(vm.ShowsOnboarding);
+        Assert.False(vm.ShowsStatusPill);
+
+        // 既読は workspace.Settings（DB）に書く。作り直しても再び出ない
+        var again = Create(test);
+        Assert.False(again.ShowsOnboarding);
+    }
+
+    [Fact]
+    public void 案内の試すはスライドへ切り替えて既読にする()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.TryOnboardingCommand.Execute(null);
+
+        Assert.False(vm.ShowsOnboarding);
+        Assert.Equal(SlideinaCalendar.Presentation.Settings.ShellMode.Overlay, vm.Shell.Mode);
+    }
+
     [Fact]
     public void 起動時は今日が選ばれている()
     {
@@ -258,6 +293,32 @@ public class MainViewModelTests
         Assert.Equal("2026年10月", vm.MiniCalendar.Title);
     }
 
+    /// <summary>
+    /// ミニ月暦の追従（項目9）。既定は中央に追従し、自分で送ったときだけ離れる。
+    /// 中央を送ったら、また追従に戻る。
+    /// </summary>
+    [Fact]
+    public void ミニ月暦から離れても中央を送ると追従に戻る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 自分で送って離れる
+        vm.MiniNextCommand.Execute(null);
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
+
+        // 中央だけをさらに送っても、離れたミニ月暦は動かない
+        vm.NextCommand.Execute(null);
+        Assert.Equal("2026年10月", vm.Title);
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
+
+        vm.NextCommand.Execute(null);
+        Assert.Equal("2026年11月", vm.Title);
+
+        // 離れたままなら動かないはずが、動いた ＝ 追従に戻っている
+        Assert.Equal("2026年11月", vm.MiniCalendar.Title);
+    }
+
     [Fact]
     public void 日を選ぶとミニ月暦の印も動く()
     {
@@ -308,6 +369,61 @@ public class MainViewModelTests
 
         vm.NextCommand.Execute(null);
         Assert.Equal(D(2026, 10, 2), vm.Day.Date);
+    }
+
+    // ------------------------------------------------------------------
+    // キーボードで日を選ぶ（項目8）
+    //
+    // ←→↑↓ の実際のキー入力は MainWindow.xaml.cs（WPF、Linux では検査できない）が
+    // 受けるが、動かす先は MainViewModel.MoveSelection に一本化してあるので、
+    // ここで押さえられる
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 矢印キー相当でその日から1日ずつ動く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+        vm.SelectedDate = D(2026, 9, 14);
+
+        vm.MoveSelection(1);
+        Assert.Equal(D(2026, 9, 15), vm.SelectedDate);
+
+        vm.MoveSelection(-1);
+        vm.MoveSelection(-1);
+        Assert.Equal(D(2026, 9, 13), vm.SelectedDate);
+    }
+
+    [Fact]
+    public void 上下キー相当で1週間ずつ動く()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+        vm.SelectedDate = D(2026, 9, 14);
+
+        vm.MoveSelection(7);
+        Assert.Equal(D(2026, 9, 21), vm.SelectedDate);
+
+        vm.MoveSelection(-7);
+        vm.MoveSelection(-7);
+        Assert.Equal(D(2026, 9, 7), vm.SelectedDate);
+    }
+
+    [Fact]
+    public void 月をまたいで動くとビューも追いかける()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+        vm.SelectedDate = D(2026, 9, 28);
+
+        vm.MoveSelection(7);
+
+        Assert.Equal(D(2026, 10, 5), vm.SelectedDate);
+        Assert.Equal("2026年10月", vm.Title);
+        Assert.Equal(D(2026, 10, 1), vm.Month.Month);
+
+        // ミニ月暦も追従したまま（項目9）
+        Assert.Equal("2026年10月", vm.MiniCalendar.Title);
     }
 
     // ------------------------------------------------------------------
@@ -414,6 +530,31 @@ public class MainViewModelTests
         // いちばん細いところでも「今日」は消さない。アイコンだけに畳む（項目10）
         Fit(vm, 340);
         Assert.True(vm.UsesCompactTodayButton);
+    }
+
+    /// <summary>
+    /// 右列を「…」に畳む（項目5）。320px を切ると 🔍・▥・⚙ を1個にまとめる。
+    /// 📌 だけは戻り口として ShowsWorkdayBadges 等とは別に常に出るので、ここでは扱わない
+    /// （MainWindow.xaml で Visibility を結ばず常時表示にしてある）。
+    /// </summary>
+    [Fact]
+    public void とても狭いと右列を畳みボタン1個にまとめる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        Fit(vm, 340);
+        Assert.False(vm.UsesOverflowMenu);
+        Assert.True(vm.ShowsCompactSearchIcon);
+
+        Fit(vm, 319);
+        Assert.True(vm.UsesOverflowMenu);
+
+        // 検索も「…」へ集約するので、畳んだ虫めがねは出さない
+        Assert.False(vm.ShowsCompactSearchIcon);
+
+        Fit(vm, 320);
+        Assert.False(vm.UsesOverflowMenu);
     }
 
     [Fact]

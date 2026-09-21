@@ -24,6 +24,7 @@
              PreviewMouseWheel="OnWheel">
 
     <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
@@ -252,6 +253,7 @@
             </ItemsControl>
         </Border>
 
+        <Grid>
         <ItemsControl x:Name="CellsHost" ItemsSource="{Binding Cells}"
                       SizeChanged="OnCellsResized"
                       Background="{DynamicResource LineBrush}">
@@ -505,5 +507,19 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <!--
+            初めて開いた人への道案内（項目7）。予定が0件・実働日データも無い月は
+            白い格子だけが出て、何から始めればいいか分からない。一覧ビューの
+            空の一文（IsEmpty）と同じ、中央に重ねる形にする
+        -->
+        <TextBlock Style="{StaticResource BodyTextStyle}"
+                   Text="ダブルクリックで予定を追加 ／ ⚙→設定→実働日データ で会社の暦を取り込む"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextAlignment="Center" TextWrapping="Wrap" MaxWidth="320"
+                   Foreground="{DynamicResource Ink3Brush}"
+                   Visibility="{Binding ShowsEmptyGuide, Converter={StaticResource BoolToVisibility}}"
+                   IsHitTestVisible="False" />
+        </Grid>
     </DockPanel>
 </UserControl>

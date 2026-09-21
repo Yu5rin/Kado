@@ -11,7 +11,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:SlideinaCalendar.App.Converters"
-        Title="実働日計算" Width="420" SizeToContent="Height"
+        Title="実働日計算" Width="520" SizeToContent="Height" MaxHeight="800"
         Icon="/Assets/app.png"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
@@ -39,6 +39,12 @@
                            Visibility="{Binding CoverageText, Converter={StaticResource NullToVisibility}}">
                     <Run Text="取り込み済み " /><Run Text="{Binding CoverageText, Mode=OneWay}" />
                 </TextBlock>
+
+                <!-- この画面はモードレスで、カレンダーのクリックが「から」「まで」に入ることが
+                     利用者に伝わっていなかったので、ここで案内する -->
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="0,3,0,0"
+                           Foreground="{DynamicResource Ink3Brush}"
+                           Text="カレンダーの日をクリック＝から、Shift＋クリック＝まで" />
             </StackPanel>
         </Border>
 
@@ -48,6 +54,7 @@
                     Style="{StaticResource GhostButtonStyle}" IsCancel="True" />
         </Border>
 
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="16,14">
             <!-- 実働日データが無ければ、どちらも出しようがない -->
             <Border CornerRadius="5" Padding="12,10" Margin="0,0,0,14"
@@ -118,6 +125,133 @@
                                Visibility="{Binding ArrivalDetailText, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
             </Border>
+
+            <!--
+                工程逆算（項目1）。納期を入れると、名前付きのオフセット列（複数セット持てる）に
+                従って各節目の到達日が並ぶ。要件書 4.2「仕様期限→1次GO→S中→M中が連続する
+                稼働日に並ぶ」のような、節目が固定のリードタイム構造を持つ生産計画向け。
+            -->
+            <TextBlock Text="工程逆算（納期から節目を逆算）" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" Margin="0,18,0,8" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <StackPanel Margin="0,0,10,0">
+                    <TextBlock Text="セット" Style="{StaticResource FieldLabelStyle}" />
+                    <ComboBox Width="170" Style="{StaticResource FieldComboBoxStyle}"
+                              ItemsSource="{Binding Plans}" DisplayMemberPath="Name"
+                              SelectedItem="{Binding SelectedPlan}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="＋セット" Style="{StaticResource GhostButtonStyle}" Command="{Binding AddPlanCommand}" />
+                    <Button Content="セット削除" Margin="8,0,0,0" Style="{StaticResource GhostButtonStyle}"
+                            Command="{Binding RemovePlanCommand}"
+                            Visibility="{Binding HasSelectedPlan, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,10"
+                        Visibility="{Binding HasSelectedPlan, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Margin="0,0,10,0">
+                        <TextBlock Text="セット名" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBox Width="180" Style="{StaticResource FieldTextBoxStyle}"
+                                 Text="{Binding SelectedPlan.Name, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Text="基準日（＝納期）" Style="{StaticResource FieldLabelStyle}" />
+                        <DatePicker Width="150" Style="{StaticResource FieldDatePickerStyle}"
+                                    SelectedDate="{Binding PlanDueDate, Converter={StaticResource DateOnlyToDateTime}}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 節目の編集。名前・オフセットの書き換えは即座に保存される -->
+                <TextBlock Text="節目（並び順・オフセットは自由に変えられる）" Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{DynamicResource Ink3Brush}" Margin="0,10,0,5" />
+
+                <ItemsControl ItemsSource="{Binding SelectedPlan.Steps}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <TextBox Width="150" Style="{StaticResource FieldTextBoxStyle}"
+                                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Width="56" Margin="6,0,0,0" Style="{StaticResource FieldTextBoxStyle}"
+                                         Typography.NumeralAlignment="Tabular"
+                                         Text="{Binding Offset, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}" />
+                                <Button Content="▲" Margin="6,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                        Command="{Binding DataContext.MoveStepUpCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <Button Content="▼" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                        Command="{Binding DataContext.MoveStepDownCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <Button Content="×" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                        Command="{Binding DataContext.RemoveStepCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="＋節目" HorizontalAlignment="Left" Margin="0,2,0,0"
+                        Style="{StaticResource GhostButtonStyle}" Command="{Binding AddStepCommand}" />
+            </StackPanel>
+
+            <!-- セットが1つも無ければ、逆算のしようがない -->
+            <Border CornerRadius="5" Padding="12,10" Margin="0,0,0,14"
+                    Background="{DynamicResource AccentSoftBrush}"
+                    Visibility="{Binding HasSelectedPlan, Converter={StaticResource InverseBoolToVisibility}}">
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{DynamicResource Ink2Brush}"
+                           Text="セットがありません。「＋セット」で節目の並びを作ってください。" />
+            </Border>
+
+            <!-- 各節目の到達日。実働日データが足りない行は、その旨だけ静かに出す -->
+            <ItemsControl ItemsSource="{Binding PlanRows}" Margin="0,0,0,8">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border CornerRadius="5" Padding="10,8" Margin="0,0,0,6"
+                                Background="{DynamicResource SunkenBrush}">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel Width="220">
+                                    <TextBlock Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink3Brush}">
+                                        <Run Text="{Binding Name, Mode=OneWay}" />
+                                        <Run Text="（" /><Run Text="{Binding OffsetText, Mode=OneWay}" /><Run Text="）" />
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding DateText, Mode=OneWay}" Style="{StaticResource BodyTextStyle}"
+                                               FontWeight="SemiBold" Typography.NumeralAlignment="Tabular"
+                                               Foreground="{DynamicResource AccentBrush}" />
+                                </StackPanel>
+
+                                <Button Content="予定を作る" Margin="0,0,6,0" Style="{StaticResource GhostButtonStyle}"
+                                        IsEnabled="{Binding HasDate}"
+                                        Visibility="{Binding DataContext.HasCreateEventAction,
+                                                     RelativeSource={RelativeSource AncestorType=Window},
+                                                     Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding DataContext.CreateEventFromPlanCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <Button Content="タスクを作る" Style="{StaticResource GhostButtonStyle}"
+                                        IsEnabled="{Binding HasDate}"
+                                        Visibility="{Binding DataContext.HasCreateTaskAction,
+                                                     RelativeSource={RelativeSource AncestorType=Window},
+                                                     Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding DataContext.CreateTaskFromPlanCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Excel にそのまま貼れるよう、タブ区切りでクリップボードへ渡す -->
+            <Button Content="結果をコピー（タブ区切り／Excel 貼り付け用）" HorizontalAlignment="Left"
+                    Style="{StaticResource GhostButtonStyle}" Command="{Binding CopyPlanResultCommand}" />
         </StackPanel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

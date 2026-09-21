@@ -86,7 +86,8 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref _mode, value)) return;
 
             Raise(nameof(IsWindowMode), nameof(IsOverlayMode), nameof(IsPinned),
-                nameof(IsAtEdge), nameof(PinLabel), nameof(ModeLabel), nameof(ModeToggleLabel), nameof(DockWidth));
+                nameof(IsAtEdge), nameof(PinLabel), nameof(ModeLabel), nameof(ModeToggleLabel),
+                nameof(SlideActionLabel), nameof(DockWidth));
             ModeChanged?.Invoke(this, value);
         }
     }
@@ -245,6 +246,18 @@ public sealed class ShellViewModel : ObservableObject
     /// </summary>
     public string ModeToggleLabel =>
         $"{ModeLabel}（左クリックでウィンドウ⇔スライドを切替 ・ 右クリックで端の選択とパネルの出し入れ）";
+
+    /// <summary>
+    /// 出しかたボタン（項目1）のツールチップ。
+    /// <para>
+    /// 状態名（<see cref="ModeLabel"/>）ではなく、押したら何が起きるかを短く書く。
+    /// パネルの出し入れは別のボタン（IconPanes）の役目になったので、ここは
+    /// ウィンドウ⇔スライドの切り替えだけを伝える。
+    /// </para>
+    /// </summary>
+    public string SlideActionLabel => IsAtEdge
+        ? "ウィンドウに戻す"
+        : "スライドにする（Ctrl＋Alt＋S）";
 
     /// <summary>いまの居場所。終了時に控える。</summary>
     public DockPlacement Placement(string? monitorId = null) => new(_mode, _edge, _width, monitorId);

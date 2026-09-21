@@ -1,3 +1,5 @@
+using SlideinaCalendar.Core.WorkingDays;
+using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.Presentation.Tests;
@@ -204,5 +206,197 @@ public class WorkdayCalculatorTests
         vm.NotifyClosed();
 
         Assert.True(raised);
+    }
+
+    // ------------------------------------------------------------------
+    // 工程逆算（項目1）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 既定のセットは4節目持つ()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        var plan = Assert.Single(vm.Plans);
+        Assert.Same(plan, vm.SelectedPlan);
+        Assert.Equal(4, plan.Steps.Count);
+    }
+
+    [Fact]
+    public void 負のオフセットは基準日より前へ遡る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 9/25（金・稼働日）を納期として、-1 は直前の稼働日 9/24（木）
+        vm.PlanDueDate = D(2026, 9, 25);
+        vm.SelectedPlan!.Steps.Clear();
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("前工程", -1));
+
+        var row = Assert.Single(vm.PlanRows);
+        Assert.Equal(D(2026, 9, 24), row.Date);
+        Assert.Equal("-1", row.OffsetText);
+    }
+
+    [Fact]
+    public void 実働日データの範囲外の行だけ静かに断る()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.PlanDueDate = D(2026, 9, 25);
+        vm.SelectedPlan!.Steps.Clear();
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("近い節目", -1));
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("遠すぎる節目", -100));
+
+        Assert.Equal(2, vm.PlanRows.Count);
+
+        var near = vm.PlanRows[0];
+        var far = vm.PlanRows[1];
+
+        Assert.True(near.HasDate);
+        Assert.False(far.HasDate);
+        Assert.Equal("実働日データが足りません", far.DateText);
+
+        // ほかの行はデータが足りていれば出せる。1行がだめでも全体を諦めない
+        Assert.NotEqual("実働日データが足りません", near.DateText);
+    }
+
+    [Fact]
+    public void 基準日が非稼働日でも逆算できる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 9/22（火）は休業日として登録されている（TestWorkspace のコメント参照）
+        vm.PlanDueDate = D(2026, 9, 22);
+        vm.SelectedPlan!.Steps.Clear();
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("前工程", -1));
+
+        // 基準日自身は稼働日でなくてよい。直前の稼働日から1つ遡って 9/18（金）
+        var row = Assert.Single(vm.PlanRows);
+        Assert.Equal(D(2026, 9, 18), row.Date);
+    }
+
+    [Fact]
+    public void うるう年の2月29日をまたいでも逆算できる()
+    {
+        // 2028年は閏年。2/1〜3/5 の平日をすべて稼働日として登録する
+        var days = Enumerable.Range(0, 34)
+            .Select(offset => D(2028, 2, 1).AddDays(offset))
+            .Where(d => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            .ToArray();
+
+        var math = new WorkingDayMath(WorkingDayCalendar.Create(days));
+        var vm = new WorkdayCalculatorViewModel(math, D(2028, 3, 1));
+
+        // 3/1（水・稼働日）を納期に、-1 は 2/29（火）、-2 は 2/28（月）
+        vm.PlanDueDate = D(2028, 3, 1);
+        vm.SelectedPlan!.Steps.Clear();
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("前日", -1));
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("前々日", -2));
+
+        Assert.Equal(D(2028, 2, 29), vm.PlanRows[0].Date);
+        Assert.Equal(D(2028, 2, 28), vm.PlanRows[1].Date);
+    }
+
+    [Fact]
+    public void 節目の追加削除並べ替えができる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SelectedPlan!.Steps.Clear();
+        vm.AddStepCommand.Execute(null);
+        vm.AddStepCommand.Execute(null);
+        Assert.Equal(2, vm.SelectedPlan.Steps.Count);
+
+        var first = vm.SelectedPlan.Steps[0];
+        var second = vm.SelectedPlan.Steps[1];
+        first.Name = "A";
+        second.Name = "B";
+
+        vm.MoveStepDownCommand.Execute(first);
+        Assert.Equal(["B", "A"], vm.SelectedPlan.Steps.Select(s => s.Name));
+
+        vm.RemoveStepCommand.Execute(first);
+        Assert.Equal(["B"], vm.SelectedPlan.Steps.Select(s => s.Name));
+    }
+
+    [Fact]
+    public void セットの追加と削除ができる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        var initialCount = vm.Plans.Count;
+
+        vm.AddPlanCommand.Execute(null);
+        Assert.Equal(initialCount + 1, vm.Plans.Count);
+        Assert.Same(vm.Plans[^1], vm.SelectedPlan);
+
+        vm.RemovePlanCommand.Execute(null);
+        Assert.Equal(initialCount, vm.Plans.Count);
+    }
+
+    [Fact]
+    public void セットの書き換えは設定へ保存され次に開いたときも残る()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        var vm = new WorkdayCalculatorViewModel(test.Workspace.WorkingDayMath, D(2026, 9, 24), settings);
+        vm.SelectedPlan!.Name = "量産品";
+        vm.SelectedPlan.Steps[0].Offset = -30;
+
+        var reopened = new WorkdayCalculatorViewModel(test.Workspace.WorkingDayMath, D(2026, 9, 24), settings);
+
+        Assert.Equal("量産品", reopened.SelectedPlan!.Name);
+        Assert.Equal(-30, reopened.SelectedPlan.Steps[0].Offset);
+    }
+
+    [Fact]
+    public void 各行から予定とタスクを作る窓口を呼べる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        DateOnly? forEvent = null;
+        DateOnly? forTask = null;
+        vm.CreateEventAt = d => forEvent = d;
+        vm.CreateTaskAt = d => forTask = d;
+
+        Assert.True(vm.HasCreateEventAction);
+        Assert.True(vm.HasCreateTaskAction);
+
+        vm.PlanDueDate = D(2026, 9, 25);
+        var row = vm.PlanRows[0];
+
+        vm.CreateEventFromPlanCommand.Execute(row);
+        vm.CreateTaskFromPlanCommand.Execute(row);
+
+        Assert.Equal(row.Date, forEvent);
+        Assert.Equal(row.Date, forTask);
+    }
+
+    [Fact]
+    public void 結果をタブ区切りでコピーへ渡す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.PlanDueDate = D(2026, 9, 25);
+        vm.SelectedPlan!.Steps.Clear();
+        vm.SelectedPlan.Steps.Add(new WorkdayStepEditRow("前工程", -1));
+
+        string? copied = null;
+        vm.CopyText = text => copied = text;
+
+        vm.CopyPlanResultCommand.Execute(null);
+
+        Assert.NotNull(copied);
+        Assert.Contains("前工程\t-1\t", copied);
+        Assert.Contains('\t', copied);
     }
 }

@@ -399,11 +399,12 @@
                                                  ConverterParameter=Strip}"
                                      Command="{Binding SetLayoutCommand}"
                                      CommandParameter="Strip">
+                            <!-- アイコンの粒度を16px@1.7に揃える（項目11） -->
                             <Path Data="{StaticResource IconRows}" Stretch="Uniform"
-                                  Width="15" Height="15"
+                                  Width="16" Height="16"
                                   Stroke="{Binding Foreground,
                                            RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                  StrokeThickness="1.6"
+                                  StrokeThickness="1.7"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                         </ToggleButton>
                         <ToggleButton Style="{StaticResource SegmentButtonStyle}" Padding="9,4"
@@ -415,10 +416,10 @@
                                      Command="{Binding SetLayoutCommand}"
                                      CommandParameter="Grid">
                             <Path Data="{StaticResource IconGrid}" Stretch="Uniform"
-                                  Width="15" Height="15"
+                                  Width="16" Height="16"
                                   Stroke="{Binding Foreground,
                                            RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                  StrokeThickness="1.6"
+                                  StrokeThickness="1.7"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                         </ToggleButton>
                     </StackPanel>

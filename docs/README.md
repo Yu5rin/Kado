@@ -727,6 +727,59 @@ XAML の読み込みで落ちるかどうかは `XamlResourceTests` が静的に
 Google Calendar のイベントは `reminders` を持つので、項目としては揃っていない。
 ただ、欄だけ先に付けると「設定したのに鳴らない」状態になる。欄が無いより悪い。
 
+## 作業時間ブロック（`work_blocks`）は、まだ作る導線が無い
+
+要件書 5.4「タスクを時間軸へドラッグするとブロックが確保される」が未達。
+利用者と相談し、**いま作るのは見送り、揃っているところまでを残す**ことにした。
+
+### 揃っているもの
+
+- **テーブル**（`work_blocks`）。`task_id` / `date` / `start_time` /
+  `duration_minutes` を持つ（`SchemaMigrations`）
+- **モデルとリポジトリ**。`Data.Models.WorkBlock`、
+  `TaskRepository.BlocksOf` / `BlocksInRange` / `UpsertBlock`
+- **Undo の控え**。`DeleteTaskEdit` はタスクを消すとき、連鎖して消える
+  作業時間ブロックも控えておき、元に戻すときに一緒に入れ直す（`Editing/Edits.cs`）
+- **時間軸の点線描画**。`TimelineBuilder` が `WorkBlock` を
+  `TimeBlockViewModel { IsWorkBlock = true }` として並べ、週・日ビューは
+  これを予定と区別して点線枠で描く（要件書 5.4）
+- **開く操作**。時間軸のブロックをダブルクリックすると、ブロックではなく
+  もとのタスクの編集画面が開く（`MainViewModel.EditBlock`）
+
+### 無いもの
+
+- **ブロックを作る手段そのものが無い。** 右ペイン・スリムパネルのタスクを
+  時間軸へドラッグしても、いまは何も起きない（そもそもドラッグ元として
+  扱っていない）
+- 時間軸の空きにタスクを**落とした**場合の受け口も無い
+
+### 将来作るときの手がかり
+
+タスクを時間軸（週・日ビューの時間軸の列）へ落としたときの受け口は、
+[`src/SlideinaCalendar.App/Views/TimelineColumnView.xaml.cs`](../src/SlideinaCalendar.App/Views/TimelineColumnView.xaml.cs)
+の `OnColumnDropped` にある。いまはここに来た `TaskItem` を、終日レーンに
+落としたとき（`DayView.xaml.cs` / `WeekView.xaml.cs` の `OnAllDayDropped`）と
+同じ `MainViewModel.MoveTaskTo` へ流し、**期限を変えるだけ**にしている
+（コメントに「タスクが持つのは期限で、時刻は持たない」とあるとおり、時間軸に
+落ちても時刻を持たせていない）。
+
+```csharp
+// TimelineColumnView.xaml.cs, OnColumnDropped 内
+case TaskItem task:
+    main.MoveTaskTo(task.Id, column.Date, copy);
+    break;
+```
+
+ブロックを作るなら、ここを分けて「終日レーンへは期限を変える／時間軸の列へは
+`WorkBlock` を確保する」にする。落とした Y 座標から時刻を割り出す
+`TimeAt(...)` は同じファイルに既にある（予定の追加 `AddEventAt` が使っている）ので、
+そのまま使える。所要時間は既定を決め打ちするか（例：30分）、編集画面で
+直せるようにするかは未検討。
+
+タスク側をドラッグの起点にする対応（右ペイン・スリムパネルの `TaskListItemViewModel`
+の行に `DragSession.Current.DragIfMoved` を仕込む）も、あわせて要る。
+月ビューの予定・終日レーンのドラッグ開始が同じ仕組みを使っているので、そこを参考にする。
+
 ## その他、要件書で方針が定まっているもの
 
 - **ビュー別の表示項目 ON/OFF は廃止する**（5.5）。旧データの `settings.show` と

@@ -71,6 +71,12 @@ public partial class MonthView : UserControl
         var rows = month.Cells.Count / 7;
         if (rows <= 0) return;
 
+        // マス幅が64pxを切ったら詰めた形にする（項目6）。同じテンプレートを
+        // 使い回すので描画側の変更は要らない。スリムパネルの月はいつもこの幅を
+        // 下回るので、既存の「常に詰める」指定（MainViewModel.BuildViews）と
+        // 衝突しない
+        if (CellsHost.ActualWidth > 0) month.IsCompact = CellsHost.ActualWidth / 7 < 64;
+
         if (month.IsCompact)
         {
             // 正方形は「これ以上は潰さない」の線。高さに余裕があれば伸びる。

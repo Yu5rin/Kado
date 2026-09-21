@@ -103,6 +103,47 @@ public partial class TimelineColumnView : UserControl
     /// <summary>出している時間の数。時刻の見出しの数で分かる。</summary>
     private int HourCount => HourLabels is System.Collections.ICollection labels ? labels.Count : 24;
 
+    // ------------------------------------------------------------------
+    // 空いている時間帯をダブルクリックして予定を足す（項目2）
+    // ------------------------------------------------------------------
+
+    /// <summary>ホバー中、押す前に15分幅の帯で位置を示す。</summary>
+    private void OnColumnHovering(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (RowHeight <= 0) return;
+
+        var y = e.GetPosition(Column).Y;
+        var quarter = RowHeight / 4;
+        var snapped = Math.Floor(y / quarter) * quarter;
+
+        HoverBand.Height = quarter;
+        HoverBand.Margin = new Thickness(0, snapped, 0, 0);
+        HoverBand.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>列から外れたら帯を消す。</summary>
+    private void OnColumnLeft(object sender, System.Windows.Input.MouseEventArgs e) =>
+        HoverBand.Visibility = Visibility.Collapsed;
+
+    /// <summary>
+    /// 空いている時間帯をダブルクリックすると、その時刻で予定を足す。
+    /// <para>
+    /// 1回押しは月ビューと同じくドラッグの始まりを兼ねる。予定・作業時間ブロックの
+    /// 上で押されたときは、そちら（<see cref="OnBlockClicked"/>）が先に <c>Handled</c>
+    /// にするので、ここまでは届かない。
+    /// </para>
+    /// </summary>
+    private void OnColumnPressed(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if (DataContext is not WeekDayColumnViewModel column) return;
+        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
+
+        var at = TimeAt(e.GetPosition(Column).Y);
+        main.AddEventAt(column.Date, at);
+        e.Handled = true;
+    }
+
     /// <summary>押したまま動かしたらドラッグを始める。</summary>
     private void OnBlockDragging(object sender, System.Windows.Input.MouseEventArgs e) =>
         DragSession.Current.DragIfMoved(sender, e);

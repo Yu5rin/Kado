@@ -21,17 +21,24 @@ Google カレンダー／Google タスクと同期しつつ、**会社の実働�
 ```
 SlideinaCalendar.sln
 ├ src/
-│  ├ SlideinaCalendar.Core/      … 繰り返し・実働日・日付計算。UI 非依存
-│  ├ SlideinaCalendar.Data/      … SQLite・旧データ移行
-│  ├ SlideinaCalendar.Google/    … Calendar / Tasks 同期（Phase 4）
-│  ├ SlideinaCalendar.Shell/     … AppBar・トレイ・通知（Phase 5）
-│  └ SlideinaCalendar.App/       … WPF 本体（Phase 3）
-├ tests/
-│  ├ SlideinaCalendar.Core.Tests/    … xUnit
-│  └ SlideinaCalendar.Data.Tests/    … xUnit
+│  ├ SlideinaCalendar.Core/          … 繰り返し・実働日・日付計算・クイック入力の解釈。UI 非依存
+│  ├ SlideinaCalendar.Data/          … SQLite・旧データ移行・バックアップ
+│  ├ SlideinaCalendar.Google/        … Calendar / Tasks 同期
+│  ├ SlideinaCalendar.Presentation/  … ViewModel・Undo・通知（WPF 非依存、UI から差し替え可能）
+│  ├ SlideinaCalendar.Shell/         … AppBar・トレイ・通知の Win32 部分
+│  └ SlideinaCalendar.App/           … WPF 本体・画面
+├ tests/                             … 上の6プロジェクトに対応する xUnit プロジェクトが6つ
+│  ├ SlideinaCalendar.Core.Tests/
+│  ├ SlideinaCalendar.Data.Tests/
+│  ├ SlideinaCalendar.Google.Tests/
+│  ├ SlideinaCalendar.Presentation.Tests/
+│  ├ SlideinaCalendar.Shell.Tests/
+│  └ SlideinaCalendar.App.Tests/
 └ samples/
    └ AppBarProbe/                … AppBar 成立性の検証用プロトタイプ
 ```
+
+テストは6プロジェクト合計で1000件を超える（`dotnet test` の実行結果で件数を確認できる）。
 
 ## ビルドとテスト
 
@@ -195,14 +202,17 @@ SQLite のオンラインバックアップ API を使う。**`VACUUM INTO` は�
 
 ## 開発フェーズ
 
+計画時点の区切りを残しておくが、**現状はどの区分も実装済み**（詳細と、まだ手が
+付いていない箇所は `docs/README.md` の「まだ実装していないところ」「まだ無いもの」を参照）。
+
 | Phase | 内容 | 状態 |
 |---|---|---|
 | 1 | Core（繰り返し判定・実働日計算・期限カウント）＋単体テスト | 完了 |
-| 2 | SQLite データ層＋旧 JSON インポート | **今回** |
-| 3 | WPF ウィンドウモード＋予定・タスク CRUD＋Undo | |
-| 4 | Google 同期（Calendar → Tasks の順） | |
-| 5 | Shell 統合（トレイ→サイドバー→ホバー→ピン／AppBar） | プロトタイプのみ先行 |
-| 6 | 通知・フィード・祝日取得・バックアップ・年ストリップ・一覧ビュー | |
+| 2 | SQLite データ層＋旧 JSON インポート | 完了 |
+| 3 | WPF ウィンドウモード＋予定・タスク CRUD＋Undo | 完了 |
+| 4 | Google 同期（Calendar → Tasks の順） | 実装済み。実際の Google にはまだ一度も繋いでいない |
+| 5 | Shell 統合（トレイ→サイドバー→ホバー→ピン／AppBar） | 実装済み。Windows 実機での確認は継続中 |
+| 6 | 通知・フィード・祝日取得・バックアップ・年ストリップ・一覧ビュー | 実装済み |
 
-Phase 5 は最重要要件（要件書 2 章）そのものであり最大の技術リスクなので、
-`samples/AppBarProbe` で成立性だけを先に確認する。
+Phase 5 は最重要要件（要件書 2 章）そのものであり最大の技術リスクだったため、
+`samples/AppBarProbe` で成立性を先に確認してから本実装へ進んだ。

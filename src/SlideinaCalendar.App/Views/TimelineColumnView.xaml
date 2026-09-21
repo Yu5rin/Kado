@@ -49,8 +49,19 @@
 
     <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
             Background="Transparent"
-            AllowDrop="True" DragOver="OnColumnDragOver" Drop="OnColumnDropped">
+            AllowDrop="True" DragOver="OnColumnDragOver" Drop="OnColumnDropped"
+            MouseLeftButtonDown="OnColumnPressed"
+            MouseMove="OnColumnHovering" MouseLeave="OnColumnLeft">
         <Grid>
+            <!--
+                ホバー中の15分幅の帯（項目2）。ダブルクリックで何が起きるかを、
+                押す前に分かるようにする。予定・作業時間ブロックの上に出しても
+                実害は無いので、いちばん下（罫線のすぐ上）に置く
+            -->
+            <Border x:Name="HoverBand"
+                    VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"
+                    Background="{DynamicResource AccentSoftBrush}" />
+
             <!-- 1時間ごとの罫線 -->
             <ItemsControl ItemsSource="{Binding HourLabels, ElementName=Root}" IsHitTestVisible="False">
                 <ItemsControl.ItemTemplate>
