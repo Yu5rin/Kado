@@ -533,6 +533,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>スリムパネルの下げ止まり。マスが正方形で読める幅。</summary>
     public const double MinSlimPanelWidth = 200;
 
+    /// <summary>スリムパネルの上げ止まり。これ以上広げるなら、ふつうのパネルを使う。</summary>
+    public const double MaxSlimPanelWidth = 420;
+
     /// <summary>
     /// 中央のカレンダーの下げ止まり。
     /// <para>帯として使うときはここまで詰める。月ビューの7列がぎりぎり読める幅。</para>
@@ -655,6 +658,9 @@ public sealed class MainViewModel : ObservableObject
         {
             _swappingPanes = false;
         }
+
+        // 読み込んだ組が空っぽだったときだけ、ここで1つ戻す
+        EnsureSomethingShows(nameof(IsMainViewOpen));
     }
 
     /// <summary>
@@ -663,6 +669,11 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void EnsureSomethingShows(string justChanged)
     {
+        // 組を入れ替えている最中は見ない。閉じてから開くので、途中で
+        // 「3つとも畳んだ」状態を通る。そこで中央を戻すと、読み込んだ組に
+        // 余計なパネルが混ざる（スリムだけにしたのに中央が出てくる）
+        if (_swappingPanes) return;
+
         if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen || _isSlimPanelOpen) return;
 
         // いま閉じたものではなく、中央を戻す。何を見る画面なのかが分かる

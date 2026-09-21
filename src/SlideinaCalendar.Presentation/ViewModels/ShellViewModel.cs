@@ -100,7 +100,9 @@ public sealed class ShellViewModel : ObservableObject
         get => _mode == ShellMode.Dock ? _dockedWidth : _overlayWidth;
         set
         {
-            var width = DockPlacement.Usable(value);
+            var width = double.IsNaN(value) || double.IsInfinity(value)
+                ? DockPlacement.DefaultWidth
+                : Math.Clamp(value, _minWidth, DockPlacement.MaxWidth);
 
             if (_mode == ShellMode.Dock)
             {
@@ -130,6 +132,29 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     private bool _isResizing;
+
+    /// <summary>
+    /// いちばん細くできる幅。設定から受ける。
+    /// <para>
+    /// <b>窓の下限と揃えておく。</b>片方だけ下げても、もう片方が押し戻すので
+    /// そこまで細くならない。設定で 160px にしたのに縮まない、という形で出る。
+    /// </para>
+    /// </summary>
+    public double MinWidth
+    {
+        get => _minWidth;
+        set
+        {
+            var width = Math.Clamp(value, 100, DockPlacement.MaxWidth);
+
+            if (!Set(ref _minWidth, width)) return;
+
+            // いまの幅が下限を割っていたら引き上げる
+            DockWidth = DockWidth;
+        }
+    }
+
+    private double _minWidth = DockPlacement.MinWidth;
 
     /// <summary>サイドバーの下半分に出しているもの。</summary>
     public SidebarTab Tab
