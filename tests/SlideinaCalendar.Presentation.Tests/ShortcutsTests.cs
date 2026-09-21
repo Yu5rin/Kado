@@ -51,6 +51,24 @@ public class ShortcutsTests
         Assert.Contains("Ctrl＋Z", keys);
         Assert.Contains("Ctrl＋Y", keys);
         Assert.Contains("F5", keys);
+
+        // 実働日計算を開く口をツールバーの外にも足した（項目4）
+        Assert.Contains("Ctrl＋K", keys);
+    }
+
+    /// <summary>
+    /// キーボードで日を選ぶ（項目8）。MainWindow.xaml.cs の
+    /// HandleDaySelectionKey と揃える。
+    /// </summary>
+    [Fact]
+    public void キーボードでの日移動が載っている()
+    {
+        var keys = Shortcuts.All.SelectMany(g => g.Items).Select(s => s.Keys).ToArray();
+
+        Assert.Contains("← →", keys);
+        Assert.Contains("↑ ↓", keys);
+        Assert.Contains("PageUp PageDown", keys);
+        Assert.Contains("Delete", keys);
     }
 
     [Fact]

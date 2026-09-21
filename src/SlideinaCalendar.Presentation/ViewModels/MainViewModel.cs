@@ -69,6 +69,20 @@ public sealed class MainViewModel : ObservableObject
     private double _detailPaneWidth;
     private bool _isBusy;
 
+    /// <summary>
+    /// ミニ月暦が中央に追従しているか（項目9）。
+    /// <para>
+    /// 既定は追従。ミニ月暦自身の「前の月／次の月」で送ったときだけ離れ、
+    /// 中央が動いたら（<see cref="SyncMiniToCenter"/>）また追従に戻す。
+    /// </para>
+    /// </summary>
+    private bool _miniFollowsCenter = true;
+
+    /// <summary>初回起動だけ出す案内（項目7）を、もう読んだか。</summary>
+    private const string OnboardingSeenKey = "ui.onboarding_seen";
+
+    private bool _showsOnboarding;
+
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
         GoogleClientSecretsStore? googleClient = null,
@@ -100,6 +114,11 @@ public sealed class MainViewModel : ObservableObject
         SourceLists = new SourceListsViewModel(workspace);
         SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
         BuildViews(today, today);
+
+        // 初回起動だけの案内（項目7）。AppSettings ではなく、既に幅の記憶などで
+        // 使っている workspace.Settings（DB の汎用キーと値）に乗せる。AppSettings.cs は
+        // 別担当の範囲のため触れない
+        _showsOnboarding = _workspace.Settings.Get(OnboardingSeenKey) != "1";
 
         if (settings is not null)
         {
@@ -139,6 +158,14 @@ public sealed class MainViewModel : ObservableObject
         SlimPreviousCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(-1)));
         SlimNextCommand = new RelayCommand(() => SlimGoTo(SlimMonth.Month.AddMonths(1)));
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
+
+        // 初回案内（項目7）。「試す」はスライドに切り替えてから既読にする
+        TryOnboardingCommand = new RelayCommand(() =>
+        {
+            Shell.Mode = ShellMode.Overlay;
+            DismissOnboarding();
+        });
+        DismissOnboardingCommand = new RelayCommand(DismissOnboarding);
         Shell.PropertyChanged += (_, args) =>
         {
             // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
@@ -180,8 +207,17 @@ public sealed class MainViewModel : ObservableObject
         ZoomInCommand = new RelayCommand(() => Zoom(1));
         ZoomOutCommand = new RelayCommand(() => Zoom(-1));
 
-        MiniPreviousCommand = new RelayCommand(() => MiniCalendar.GoToPreviousMonth());
-        MiniNextCommand = new RelayCommand(() => MiniCalendar.GoToNextMonth());
+        // ミニ月暦は既定で中央に追従する（項目9）。ここから自分で送ったときだけ離す
+        MiniPreviousCommand = new RelayCommand(() =>
+        {
+            _miniFollowsCenter = false;
+            MiniCalendar.GoToPreviousMonth();
+        });
+        MiniNextCommand = new RelayCommand(() =>
+        {
+            _miniFollowsCenter = false;
+            MiniCalendar.GoToNextMonth();
+        });
 
         AddEventCommand = new RelayCommand(AddEvent);
         AddEventOnCommand = new RelayCommand<DateOnly?>(date =>
@@ -462,6 +498,39 @@ public sealed class MainViewModel : ObservableObject
 
     public RelayCommand ToggleSlimPanelCommand { get; private set; } = null!;
 
+    // ------------------------------------------------------------------
+    // 初回だけの案内（項目7）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 初回起動の案内を出すか。
+    /// <para>
+    /// ステータス行の帯（項目1）を流用して出す。既読になったら二度と出さない。
+    /// </para>
+    /// </summary>
+    public bool ShowsOnboarding => _showsOnboarding;
+
+    /// <summary>
+    /// ステータス行の帯そのものを出すか。
+    /// <para>通常の操作結果（<see cref="StatusMessage"/>）と、初回案内のどちらかがあれば出す。</para>
+    /// </summary>
+    public bool ShowsStatusPill => StatusMessage is not null || _showsOnboarding;
+
+    /// <summary>案内の「試す」。スライドへ切り替えてから既読にする。</summary>
+    public RelayCommand TryOnboardingCommand { get; private set; } = null!;
+
+    /// <summary>案内の「閉じる」。</summary>
+    public RelayCommand DismissOnboardingCommand { get; private set; } = null!;
+
+    private void DismissOnboarding()
+    {
+        if (!_showsOnboarding) return;
+
+        _showsOnboarding = false;
+        _workspace.Settings.Set(OnboardingSeenKey, "1");
+        Raise(nameof(ShowsOnboarding), nameof(ShowsStatusPill));
+    }
+
     /// <summary>スリムパネルの月を前へ。中央とは別に送る。</summary>
     public RelayCommand SlimPreviousCommand { get; private set; } = null!;
 
@@ -572,6 +641,16 @@ public sealed class MainViewModel : ObservableObject
     public const double TodayButtonFloor = 380;
 
     /// <summary>
+    /// 右列（🔍・▥・⚙）を「…」1個に畳む下限（項目5）。
+    /// <para>
+    /// 右列は常に約124px を確保する作りで、これを切ると「◀ ▶」や「今日」が
+    /// 真っ先に押し出されて消える。畳んで戻り口を1つに集約し、📌 だけは
+    /// 戻り口として常に残す。
+    /// </para>
+    /// </summary>
+    public const double OverflowFloor = 320;
+
+    /// <summary>
     /// スリムパネルで、カレンダーに割く高さの割合。
     /// <para>仕切りをつまんで変えたぶんを覚える。</para>
     /// </summary>
@@ -628,7 +707,19 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>虫めがねを押したとき。入力欄を開く。</summary>
     public RelayCommand OpenSearchCommand { get; private set; } = null!;
 
+    /// <summary>
+    /// 畳んだ虫めがねのボタンを出すか（項目5）。
+    /// <para>さらに狭く「…」に畳むときは、検索もそちらへ集約するのでここには出さない。</para>
+    /// </summary>
+    public bool ShowsCompactSearchIcon => UsesCompactSearch && !UsesOverflowMenu;
+
     public bool ShowsViewSwitcher => ShowsCalendarTools && (RoomUnknown || Room >= ViewSwitcherFloor);
+
+    /// <summary>
+    /// 右列を「…」1個に畳むか（項目5）。
+    /// <para>畳んだときも 📌 だけは戻り口として別に出し続ける。</para>
+    /// </summary>
+    public bool UsesOverflowMenu => !RoomUnknown && Room < OverflowFloor;
 
     /// <summary>
     /// 「今日」をアイコンだけに畳むか。
@@ -654,7 +745,7 @@ public sealed class MainViewModel : ObservableObject
     {
         Raise(nameof(ShowsWorkdayBadges), nameof(ShowsSyncStatus), nameof(UsesCompactSearch),
             nameof(ShowsSearchBox), nameof(ShowsViewSwitcher), nameof(UsesCompactTodayButton),
-            nameof(TitleRoom));
+            nameof(TitleRoom), nameof(UsesOverflowMenu), nameof(ShowsCompactSearchIcon));
     }
 
     // ------------------------------------------------------------------
@@ -838,6 +929,15 @@ public sealed class MainViewModel : ObservableObject
             Month.SelectedDate = value;
             SelectedDay.Date = value;
             MiniCalendar.SelectedDate = value;
+
+            // ミニ月暦が追従しているあいだは、選んだ日の月へページも合わせる（項目9）。
+            // 離れているとき（自分で送ったとき）は触らない
+            if (_miniFollowsCenter &&
+                (value.Year != MiniCalendar.Month.Year || value.Month != MiniCalendar.Month.Month))
+            {
+                MiniCalendar.GoTo(value);
+            }
+
             Week.GoTo(value);
             Week.SelectedDate = value;
             Day.Date = value;
@@ -875,7 +975,12 @@ public sealed class MainViewModel : ObservableObject
     public string? StatusMessage
     {
         get => _statusMessage;
-        private set => Set(ref _statusMessage, value);
+        private set
+        {
+            if (!Set(ref _statusMessage, value)) return;
+
+            Raise(nameof(ShowsStatusPill));
+        }
     }
 
     /// <summary>
@@ -1020,23 +1125,40 @@ public sealed class MainViewModel : ObservableObject
         var entry = QuickParser.Parse(_quickText, _today, SelectedDate);
         if (!entry.CanCommit) return;
 
-        _workspace.AddEvent(new CalendarEvent
+        // 先頭に「□」「- 」「todo」「タスク」の印があればタスクとして入れる
+        if (entry.IsTask)
         {
-            Id = Guid.NewGuid().ToString("N")[..15],
-            Title = entry.Title,
-            Date = entry.Date,
-            StartTime = entry.Start,
+            _workspace.AddTask(new TaskItem
+            {
+                Id = Guid.NewGuid().ToString("N")[..15],
+                Title = entry.Title,
+                Due = entry.Date,
+                TaskListId = SourceLists.DefaultTaskList?.Id,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
+        else
+        {
+            _workspace.AddEvent(new CalendarEvent
+            {
+                Id = Guid.NewGuid().ToString("N")[..15],
+                Title = entry.Title,
+                Date = entry.Date,
+                StartTime = entry.Start,
 
-            // 終わりを書いていなければ1時間。時刻を書いていなければ終日のまま
-            EndTime = entry.End ?? (entry.Start is { } start ? start.AddHours(1) : null),
-            Location = entry.Location,
-            CalendarId = QuickCalendarId,
-            UpdatedAt = DateTimeOffset.Now,
-        });
+                // 終わりを書いていなければ1時間。時刻を書いていなければ終日のまま
+                EndTime = entry.End ?? (entry.Start is { } start ? start.AddHours(1) : null),
+                Location = entry.Location,
+                CalendarId = QuickCalendarId,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+        }
 
         SelectedDate = entry.Date;
         QuickText = string.Empty;
-        StatusMessage = $"「{entry.Title}」を追加しました";
+        StatusMessage = entry.IsTask
+            ? $"「{entry.Title}」をタスクとして追加しました"
+            : $"「{entry.Title}」を追加しました";
     }
 
     private static string Weekday(DateOnly date) => "日月火水木金土"[(int)date.DayOfWeek].ToString();
@@ -1323,6 +1445,15 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public Action<string>? RestoreBackup { get; set; }
 
+    /// <summary>
+    /// 取り込みの直前に、世代バックアップを1本取ってほしいときの窓口。App 側が入れる。
+    /// <para>
+    /// 取り込みは Undo に積まない（戻したいときはバックアップから復元する）作りなので、
+    /// その前提のバックアップを自動で取っておく。
+    /// </para>
+    /// </summary>
+    public Action? AutoBackupBeforeImport { get; set; }
+
     /// <summary>カレンダーを作る。</summary>
     public RelayCommand AddCalendarCommand { get; }
 
@@ -1434,6 +1565,22 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 矢印キーで選択日を動かす（項目8）。
+    /// <para>
+    /// どのビューを出していても、選んでいる日をそのまま前後に動かす。ビューは
+    /// <see cref="FocusOn"/> と同じ経路で選んだ日を追いかけ、月をまたげば
+    /// 月ビューやミニ月暦も送られる（ミニ月暦は項目9の追従に乗る）。
+    /// </para>
+    /// </summary>
+    public void MoveSelection(int days)
+    {
+        var next = SelectedDate.AddDays(days);
+
+        SelectedDate = next;
+        FocusOn(next);
+    }
+
     private void GoToToday()
     {
         Month.GoToToday();
@@ -1442,7 +1589,7 @@ public sealed class MainViewModel : ObservableObject
         Day.GoToToday();
         Year.GoToToday();
         Agenda.GoToToday();
-        MiniCalendar.GoTo(_today);
+        SyncMiniToCenter(_today);
         MiniCalendar.SelectedDate = _today;
         SlimMonth.GoTo(_today);
         SlimMonth.SelectedDate = _today;
@@ -1461,8 +1608,21 @@ public sealed class MainViewModel : ObservableObject
         FollowInto(anchor);
 
         Month.GoTo(anchor);
-        MiniCalendar.GoTo(anchor);
+        SyncMiniToCenter(anchor);
         RaiseHeader();
+    }
+
+    /// <summary>
+    /// ミニ月暦を中央に合わせ、追従へ戻す（項目9）。
+    /// <para>
+    /// 中央を動かす操作（前へ・次へ・今日・ビュー切替など）はすべてここを通す。
+    /// ミニ月暦自身の「前の月／次の月」で離れていても、中央が動いたら追従に戻る。
+    /// </para>
+    /// </summary>
+    private void SyncMiniToCenter(DateOnly anchor)
+    {
+        _miniFollowsCenter = true;
+        MiniCalendar.GoTo(anchor);
     }
 
     /// <summary>
@@ -1966,6 +2126,9 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void Run(string path, string title, Func<Stream, (string Report, string Status)> import)
     {
+        // 取り込みは Undo に積まないので、戻れるように先に1本控える
+        AutoBackupBeforeImport?.Invoke();
+
         IsBusy = true;
         StatusMessage = $"{title}を実行しています…";
 
@@ -2182,6 +2345,29 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = "予定を追加しました";
     }
 
+    /// <summary>
+    /// 時間軸のマスをダブルクリックして、時刻つきで予定を足す（項目2）。
+    /// <para>
+    /// 押した位置から15分刻みに丸めた時刻は <c>TimelineColumnView.TimeAt</c> がすでに
+    /// 出しているので、ここでは受け取るだけ。長さは既定の1時間のまま、開始を
+    /// 動かすと終了も付いてくる（<c>EventEditorViewModel.StartTimeText</c>）。
+    /// </para>
+    /// </summary>
+    public void AddEventAt(DateOnly date, TimeOnly time)
+    {
+        SelectedDate = date;
+
+        var editor = new EventEditorViewModel(date, CalendarNames, defaultCalendarId: QuickCalendarId)
+        {
+            StartTimeText = TimeInput.Format(time),
+        };
+
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        _workspace.AddEvent(editor.ToModel());
+        StatusMessage = "予定を追加しました";
+    }
+
     private void EditEvent(DayEventViewModel? target) => EditEventBy(target?.Id);
 
     /// <summary>
@@ -2290,6 +2476,26 @@ public sealed class MainViewModel : ObservableObject
     private void AddTask()
     {
         var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today, SourceLists.DefaultTaskList?.Id);
+        if (!_editors.ShowTaskEditor(editor)) return;
+
+        _workspace.AddTask(editor.ToModel());
+        StatusMessage = "タスクを追加しました";
+    }
+
+    /// <summary>日を指定して予定を作る。工程逆算の行から呼ぶ。</summary>
+    private void CreateEventOn(DateOnly date)
+    {
+        var editor = new EventEditorViewModel(date, CalendarNames, NowTime, QuickCalendarId);
+        if (!_editors.ShowEventEditor(editor)) return;
+
+        _workspace.AddEvent(editor.ToModel());
+        StatusMessage = "予定を追加しました";
+    }
+
+    /// <summary>日を指定してタスクを作る。工程逆算の行から呼ぶ。</summary>
+    private void CreateTaskOn(DateOnly date)
+    {
+        var editor = new TaskEditorViewModel(date, TaskListNames, _today, SourceLists.DefaultTaskList?.Id);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
@@ -2492,11 +2698,17 @@ public sealed class MainViewModel : ObservableObject
         // すでに開いていれば、開いたままの内容を使う（作り直すと入力中のものが消える）
         if (_openCalculator is null)
         {
-            _openCalculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today)
+            _openCalculator = new WorkdayCalculatorViewModel(_workspace.WorkingDayMath, _today, _settings)
             {
                 RangeFrom = SelectedDate,
                 RangeTo = SelectedDate,
                 BaseDate = SelectedDate,
+                PlanDueDate = SelectedDate,
+
+                // 工程逆算の各行から、その日の予定・タスクを作れるようにする。
+                // 代入しなければ計算画面側でボタンごと出ない
+                CreateEventAt = CreateEventOn,
+                CreateTaskAt = CreateTaskOn,
             };
             _openCalculator.Closed += OnCalculatorClosed;
         }
@@ -2615,7 +2827,7 @@ public sealed class MainViewModel : ObservableObject
     private void FocusOn(DateOnly date)
     {
         Month.GoTo(date);
-        MiniCalendar.GoTo(date);
+        SyncMiniToCenter(date);
         Week.GoTo(date);
         Week.SelectedDate = date;
         Day.Date = date;

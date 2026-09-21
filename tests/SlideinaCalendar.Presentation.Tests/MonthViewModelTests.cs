@@ -243,6 +243,46 @@ public class MonthViewModelTests
         Assert.False(vm.HasFullWorkingDayData);
     }
 
+    // ------------------------------------------------------------------
+    // 初めて開いた人への道案内（項目7）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 予定もタスクも実働日データも無い月は道案内を出す()
+    {
+        // 実働日データの無い月（10月）を見ている状態を作る
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.GoToNextMonth();
+
+        Assert.False(vm.HasFullWorkingDayData);
+        Assert.True(vm.ShowsEmptyGuide);
+    }
+
+    [Fact]
+    public void 実働日データがある月では道案内を出さない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);   // 9月は実働日データの範囲内
+
+        Assert.True(vm.HasFullWorkingDayData);
+        Assert.False(vm.ShowsEmptyGuide);
+    }
+
+    [Fact]
+    public void 予定が1件でもあれば道案内を出さない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent { Id = "e1", Title = "会議", Date = D(2026, 10, 5) });
+        var vm = Create(test);
+
+        vm.GoToNextMonth();
+
+        Assert.False(vm.HasFullWorkingDayData);
+        Assert.False(vm.ShowsEmptyGuide);
+    }
+
     [Fact]
     public void 編集したあと引き直せる()
     {

@@ -613,13 +613,100 @@ public partial class MainWindow : Window, ISlideRevealHost
         {
             FocusQuickInput();
             e.Handled = true;
+            return;
+        }
+
+        // キーボードだけで日を選ぶ（項目8）。入力欄にフォーカスが無いときだけ効かせる
+        if (!inTextInput && Keyboard.Modifiers == ModifierKeys.None && HandleDaySelectionKey(e.Key))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// ←→↑↓・Enter・Delete で選択日を動かす、その日に予定を足す、行を消す（項目8）。
+    /// <para>
+    /// ←→ は ±1日、↑↓ は ±7日。PageUp/PageDown は今までどおり
+    /// <c>Window.InputBindings</c> の Previous/NextCommand（ビューの単位＝月）が受ける。
+    /// </para>
+    /// </summary>
+    private bool HandleDaySelectionKey(Key key)
+    {
+        if (ViewModel is not { } vm) return false;
+
+        switch (key)
+        {
+            case Key.Left:
+                vm.MoveSelection(-1);
+                return true;
+
+            case Key.Right:
+                vm.MoveSelection(1);
+                return true;
+
+            case Key.Up:
+                vm.MoveSelection(-7);
+                return true;
+
+            case Key.Down:
+                vm.MoveSelection(7);
+                return true;
+
+            case Key.Enter:
+                if (!vm.AddEventCommand.CanExecute(null)) return false;
+                vm.AddEventCommand.Execute(null);
+                return true;
+
+            case Key.Delete:
+                return DeletePointedRow(vm);
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>右ペインでマウスが指している行を消す（項目8）。何も指していなければ何もしない。</summary>
+    private bool DeletePointedRow(MainViewModel vm)
+    {
+        switch (_pointedRow)
+        {
+            case DayEventViewModel ev when vm.DeleteEventCommand.CanExecute(ev):
+                vm.DeleteEventCommand.Execute(ev);
+                return true;
+
+            case TaskListItemViewModel task when vm.DeleteTaskCommand.CanExecute(task):
+                vm.DeleteTaskCommand.Execute(task);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// 右ペインでマウスが指している行（予定・タスク）。Delete キー（項目8）が使う。
+    /// <para>キーボードだけでは「指している」に相当する場所が無いので、ホバーで代える。</para>
+    /// </summary>
+    private object? _pointedRow;
+
+    /// <summary>右ペインの行に乗った。</summary>
+    private void OnRowPointerEntered(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: { } item }) _pointedRow = item;
+    }
+
+    /// <summary>右ペインの行から外れた。指しているものが無くなる。</summary>
+    private void OnRowPointerExited(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: { } item } && ReferenceEquals(_pointedRow, item))
+        {
+            _pointedRow = null;
         }
     }
 
     /// <summary>InputBindings に登録してある、修飾キー無しの単独キー。</summary>
     private static bool IsBareShortcutKey(Key key) => key is
-        Key.T or Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5
-        or Key.Left or Key.Right or Key.PageUp or Key.PageDown;
+        Key.T or Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.PageUp or Key.PageDown;
 
     /// <summary>
     /// クイック入力へフォーカスする（項目4）。
@@ -692,11 +779,22 @@ public partial class MainWindow : Window, ISlideRevealHost
     }
 
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
-    private void OnSettingsClicked(object sender, RoutedEventArgs e)
+    private void OnSettingsClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);
+
+    /// <summary>
+    /// パネルのボタン（項目1）。左クリックで、寄せる辺と出すパネルを選ぶメニューを開く。
+    /// <para>ツールバーのボタンを右クリックする習慣は Windows に無いため、左クリックで開く。</para>
+    /// </summary>
+    private void OnPanesClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);
+
+    /// <summary>「…」畳みボタン（項目5）。左クリックでメニューを開く。</summary>
+    private void OnOverflowClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);
+
+    /// <summary>右クリック待ちの ContextMenu を、既定の右クリックではなく左クリックで開く。</summary>
+    private void OpenAttachedMenu(object sender)
     {
         if (sender is not FrameworkElement { ContextMenu: { } menu } button) return;
 
-        // 既定の右クリック待ちではなく、左クリックで開く
         menu.PlacementTarget = button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.DataContext = DataContext;

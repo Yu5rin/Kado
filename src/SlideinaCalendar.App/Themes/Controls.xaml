@@ -52,8 +52,27 @@
                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
     </ContextMenu>
 
+    <!--
+        キーボードで辿ったときの焦点の輪（項目8）。
+        Tab で回っても居場所が分からなかった。IconButtonStyle / GhostButtonStyle /
+        SegmentButtonStyle / MiniDayStyle の FocusVisualStyle に共通で当てる。
+        Margin を負にして、ボタン自身の縁の外側に輪を描く
+    -->
+    <Style x:Key="FocusRingStyle" TargetType="Control">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
+                               RadiusX="6" RadiusY="6" Margin="-2"
+                               SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- アイコンボタン -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Width" Value="28" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
@@ -229,6 +248,7 @@
 
     <!-- 枠線だけのボタン（今日・実働日計算・＋予定） -->
     <Style x:Key="GhostButtonStyle" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="11,0" />
         <Setter Property="FontSize" Value="12.5" />
@@ -283,6 +303,7 @@
         打ち消し合う仕掛けそのものが要らない。
     -->
     <Style x:Key="SegmentButtonStyle" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="13,0" />
         <Setter Property="FontSize" Value="12.5" />
@@ -431,9 +452,10 @@
                             BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}"
                             Padding="9,0">
                         <DockPanel>
+                            <!-- アイコンの粒度を16px@1.7に揃える（項目11） -->
                             <Path DockPanel.Dock="Left" Data="{StaticResource IconSearch}"
                                   Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.7"
-                                  Stretch="Uniform" Width="14" Height="14"
+                                  Stretch="Uniform" Width="16" Height="16"
                                   Margin="0,0,6,0" VerticalAlignment="Center" />
                             <Grid>
                                 <!-- 空のときだけ出す。既定は隠しておき、トリガで出す -->
@@ -509,6 +531,7 @@
         ため、ここは寄せずに据え置く
     -->
     <Style x:Key="MiniDayStyle" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="FontSize" Value="10.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Cursor" Value="Hand" />
@@ -637,7 +660,7 @@
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border Background="Transparent" Padding="2">
                                             <Path x:Name="Shape" Data="{StaticResource IconBellOff}"
-                                                  Stretch="Uniform" Width="13" Height="13"
+                                                  Stretch="Uniform" Width="12" Height="12"
                                                   StrokeThickness="1.5" StrokeStartLineCap="Round"
                                                   StrokeEndLineCap="Round"
                                                   Stroke="{DynamicResource Ink3Brush}" />
@@ -663,7 +686,7 @@
                             -->
                             <Path x:Name="DefaultMark" DockPanel.Dock="Right"
                                   Data="{StaticResource IconStar}" Stretch="Uniform"
-                                  Width="11" Height="11" Margin="4,0,0,0"
+                                  Width="12" Height="12" Margin="4,0,0,0"
                                   VerticalAlignment="Center"
                                   Fill="{DynamicResource AccentBrush}"
                                   ToolTip="新しい予定はここに入ります"

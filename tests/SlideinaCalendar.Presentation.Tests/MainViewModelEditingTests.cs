@@ -43,6 +43,39 @@ public class MainViewModelEditingTests
         Assert.Single(vm.Month.Cells.Single(c => c.Date == D(2026, 9, 24)).AllEvents);
     }
 
+    /// <summary>
+    /// 時間軸のマスをダブルクリックしたときの追加（項目2）。
+    /// <para>
+    /// 実際の位置→時刻の変換は <c>TimelineColumnView.TimeAt</c>（WPF、Linux では
+    /// 検査できない）が行い、丸めた時刻を <see cref="MainViewModel.AddEventAt"/> に渡す。
+    /// ここでは渡された時刻がそのまま開始になり、長さは既定の1時間を保つことを見る。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void 時間軸をダブルクリックした時刻が開始になる()
+    {
+        using var test = TestWorkspace.Create();
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = editor =>
+        {
+            editor.Title = "打合せ";
+            return true;
+        };
+
+        vm.AddEventAt(D(2026, 9, 14), new TimeOnly(14, 15));
+
+        // 選んでいる日もその日へ移る
+        Assert.Equal(D(2026, 9, 14), vm.SelectedDate);
+        Assert.Equal("14:15", editors.LastEventEditor!.StartTimeText);
+
+        // 開始を動かすと終了も同じ長さ（既定の1時間）のまま付いてくる
+        Assert.Equal("15:15", editors.LastEventEditor!.EndTimeText);
+
+        var added = Assert.Single(vm.SelectedDay.Events);
+        Assert.Equal("14:15", added.TimeText);
+    }
+
     [Fact]
     public void 追加の初期値は選択している日()
     {

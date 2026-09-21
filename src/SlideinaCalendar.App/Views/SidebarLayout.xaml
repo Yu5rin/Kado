@@ -85,34 +85,50 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- フッター。右ペインと同じで、1行打って足せる。実働日計算もここから -->
+        <!--
+            フッター（項目10）。クイック入力1行だけにする。
+            「＋予定／＋タスク」＋「実働日計算を開く」の3行ぶん（約130px）が、
+            160〜264px 幅の帯で一覧と同じ背丈を取っていた。
+            「＋予定／＋タスク」はクイック入力の右端の＋ボタンへ（左＝予定、
+            右クリック＝タスクのメニュー）、「実働日計算」は見出し行の「今日」の
+            隣（12pxのアイコンボタン）へ移した。約70pxが一覧に戻る
+        -->
         <Border DockPanel.Dock="Bottom" Padding="10,8"
                 Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <StackPanel>
-                <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
-                         Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
-                         KeyDown="OnQuickKeyDown" />
+                <Grid>
+                    <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
+                             Margin="0,0,26,0"
+                             Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
+                             KeyDown="OnQuickKeyDown" />
+
+                    <!--
+                        ＋予定／＋タスク。左クリックで予定、右クリックでタスクのメニュー
+                        （項目10）。クイック入力の右端に重ねる20pxの＋ボタン
+                    -->
+                    <Button Width="20" Height="20" Margin="0,0,3,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource SmallIconButtonStyle}"
+                            Command="{Binding AddEventCommand}"
+                            ToolTip="＋予定（右クリックで＋タスク）">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="＋タスク" Command="{Binding AddTaskCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
+                </Grid>
 
                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding QuickPreview}" Margin="2,3,0,0"
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource Ink3Brush}"
                            Visibility="{Binding QuickPreview,
                                         Converter={StaticResource NullToVisibility}}" />
-
-                <UniformGrid Rows="1" Columns="2" Margin="0,7,0,0">
-                    <Button Content="＋ 予定" Margin="0,0,3,0"
-                            Style="{StaticResource CalcButtonStyle}"
-                            Command="{Binding AddEventCommand}" />
-                    <Button Content="＋ タスク" Margin="3,0,0,0"
-                            Style="{StaticResource CalcButtonStyle}"
-                            Command="{Binding AddTaskCommand}" />
-                </UniformGrid>
-
-                <Button Content="実働日計算を開く" Margin="0,7,0,0"
-                        Style="{StaticResource CalcButtonStyle}"
-                        Command="{Binding OpenWorkingDayCalculatorCommand}" />
             </StackPanel>
         </Border>
 
@@ -143,22 +159,39 @@
                             Visibility="{Binding ShowsSlimToday,
                                          Converter={StaticResource BoolToVisibility}}" />
 
-                    <Button Style="{StaticResource IconButtonStyle}" ToolTip="前の月"
-                            Command="{Binding SlimPreviousCommand}">
-                        <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
-                              Width="15" Height="15"
+                    <!--
+                        実働日計算（項目10）。「今日」の隣に12pxのアイコンボタンで置く。
+                        「＋予定／＋タスク」はクイック入力の右端の＋ボタンへ、
+                        フッターはクイック入力1行だけにした
+                    -->
+                    <Button Style="{StaticResource SmallIconButtonStyle}" Margin="0,0,6,0"
+                            Command="{Binding OpenWorkingDayCalculatorCommand}"
+                            ToolTip="実働日計算を開く（Ctrl＋K）">
+                        <Path Data="{StaticResource IconCalc}" Stretch="Uniform"
+                              Width="12" Height="12"
                               Stroke="{Binding Foreground,
                                        RelativeSource={RelativeSource AncestorType=Button}}"
-                              StrokeThickness="1.7"
+                              StrokeThickness="1.5"
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                     </Button>
-                    <Button Style="{StaticResource IconButtonStyle}" ToolTip="次の月"
-                            Command="{Binding SlimNextCommand}">
-                        <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
-                              Width="15" Height="15"
+
+                    <!-- アイコンの粒度を12px@1.5に揃える（項目11） -->
+                    <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="前の月"
+                            Command="{Binding SlimPreviousCommand}">
+                        <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
+                              Width="12" Height="12"
                               Stroke="{Binding Foreground,
                                        RelativeSource={RelativeSource AncestorType=Button}}"
-                              StrokeThickness="1.7"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                    <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="次の月"
+                            Command="{Binding SlimNextCommand}">
+                        <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                              Width="12" Height="12"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5"
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                     </Button>
                 </StackPanel>
@@ -285,7 +318,7 @@
                                                     CommandParameter="{Binding}">
                                                 <Path Data="{StaticResource IconTrash}" Stretch="Uniform"
                                                       Width="12" Height="12"
-                                                      StrokeThickness="1.6" StrokeStartLineCap="Round"
+                                                      StrokeThickness="1.5" StrokeStartLineCap="Round"
                                                       StrokeEndLineCap="Round"
                                                       Stroke="{Binding Foreground,
                                                                RelativeSource={RelativeSource AncestorType=Button}}" />

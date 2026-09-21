@@ -63,4 +63,18 @@
     <PathGeometry x:Key="IconWarning"
                   Figures="M12 7v6M12 16.5h.01" />
 
+    <!--
+        出しかたボタンが「スライド」中のときだけの絵（項目1）。ウィンドウ中は
+        IconLayout（画面＋帯）を使い、スライド中はこちら（帯だけ）にする。
+        絵が常に同じで今どちらか分からない、という声への対応
+    -->
+    <PathGeometry x:Key="IconSlideOnly" Figures="M14 5h6v14h-6z" />
+
+    <!-- ツールバーが狭いときに畳む「…」メニュー（項目5） -->
+    <PathGeometry x:Key="IconMore" Figures="M5 12h.01M12 12h.01M19 12h.01" />
+
+    <!-- 実働日計算（項目10）。スリムパネルの見出し行に12pxで置く -->
+    <PathGeometry x:Key="IconCalc"
+                  Figures="M6 3h12v18H6zM9 7h6M9 11h.01M12 11h.01M15 11h.01M9 15h.01M12 15h.01M15 15h.01" />
+
 </ResourceDictionary>

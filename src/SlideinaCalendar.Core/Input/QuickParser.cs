@@ -30,7 +30,14 @@ public static class QuickParser
     /// </param>
     public static QuickEntry Parse(string? text, DateOnly baseDate, DateOnly? explicitBase = null)
     {
-        var rest = " " + (text ?? string.Empty).Trim() + " ";
+        // タスクの印は行の先頭でしか見ない。文中の「-」まで拾うと誤検知が増える
+        var (body, kind) = ReadKind((text ?? string.Empty).TrimStart());
+
+        var rest = " " + body.Trim() + " ";
+
+        // 「終日」は時刻を書かなければどのみち終日になるので、読み飛ばすだけでよい
+        // （読めない言い回しとして止める必要が無い）。他の解釈が食い荒らす前に外す
+        rest = Replace(rest, "終日");
 
         // 読めない言い回しは、下の解釈が食い荒らす前に見つけておく
         var unsupported = Unsupported(rest);
@@ -41,8 +48,32 @@ public static class QuickParser
 
         var title = Whitespace.Replace(rest, " ").Trim();
 
-        return new QuickEntry(title, date, start, end, location, dateError, timeError, unsupported);
+        return new QuickEntry(title, date, start, end, location, dateError, timeError, unsupported, kind);
     }
+
+    // ------------------------------------------------------------------
+    // タスクかどうかの判定
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 先頭の印からタスクかどうかを判定し、印を取り除いた残りを返す。
+    /// <para>
+    /// 「□ 部品表確認」「- 部品表確認」「todo 部品表確認」「タスク: 部品表確認」のような
+    /// 書き出しをタスクと読む。「-」は日付の区切り（「9/1-9/5」など）と衝突しないよう、
+    /// <b>直後に空白があるときだけ</b>印として扱う。
+    /// </para>
+    /// </summary>
+    private static (string Body, QuickEntryKind Kind) ReadKind(string text)
+    {
+        var match = TaskMarkerPattern.Match(text);
+        return match.Success
+            ? (text[match.Length..], QuickEntryKind.Task)
+            : (text, QuickEntryKind.Event);
+    }
+
+    private static readonly Regex TaskMarkerPattern = new(
+        @"^(?:[□☐]\s*|[-－]\s+|todo\s*[:：]?\s*|タスク\s*[:：]?\s*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // ------------------------------------------------------------------
     // 日付
@@ -364,7 +395,6 @@ public static class QuickParser
     [
         new(@"毎週|毎日|毎月|毎年", RegexOptions.Compiled),
         new(@"来年|再来年|先週|先月|今月|去年|昨年", RegexOptions.Compiled),
-        new(@"終日", RegexOptions.Compiled),
         new(@"\d{1,2}\s*[/月]\s*\d{1,2}日?\s*[-〜~ー−]\s*\d{1,2}", RegexOptions.Compiled),
     ];
 }

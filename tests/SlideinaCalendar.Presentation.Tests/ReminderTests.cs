@@ -278,6 +278,152 @@ public class ReminderTests
         Assert.Contains("予定はありません", notifier.Sent.Single().Message);
     }
 
+    // ------------------------------------------------------------------
+    // タスクの期限通知（項目3）。朝のまとめに「今日まで／遅れ」の行を足す
+    // ------------------------------------------------------------------
+
+    private static void AddTask(
+        TestWorkspace test, string id, DateOnly? due, string title = "部品表確認",
+        bool isDone = false, string? taskListId = null) =>
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = id, Title = title, Due = due, IsDone = isDone, TaskListId = taskListId,
+        });
+
+    [Fact]
+    public void 今日までのタスクをまとめに足す()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", Today);
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        var sent = notifier.Sent.Single();
+        Assert.Contains("今日まで 部品表確認", sent.Message);
+    }
+
+    [Fact]
+    public void 遅れているタスクをまとめに足す()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", Today.AddDays(-3), "見積提出");
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        var sent = notifier.Sent.Single();
+        Assert.Contains("遅れ", sent.Message);
+        Assert.Contains("見積提出", sent.Message);
+    }
+
+    [Fact]
+    public void まだ先のタスクはまとめに足さない()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", Today.AddDays(10), "来月の準備");
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        // 先の予告まで出すと長くなりすぎる。今日と遅れだけに絞る
+        Assert.DoesNotContain("来月の準備", notifier.Sent.Single().Message);
+    }
+
+    [Fact]
+    public void 完了済みタスクはまとめに足さない()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", Today, "片付いた作業", isDone: true);
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        Assert.DoesNotContain("片付いた作業", notifier.Sent.Single().Message);
+    }
+
+    [Fact]
+    public void 期限なしタスクはまとめに足さない()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", due: null, title: "いつかやる");
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        Assert.DoesNotContain("いつかやる", notifier.Sent.Single().Message);
+    }
+
+    [Fact]
+    public void 表示を切ったタスクリストのものはまとめに足さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        var hidden = test.Workspace.CreateTaskList("下書き");
+        test.Workspace.Sources.SetTaskListVisible(hidden.Id, false);
+
+        AddTask(test, "t1", Today, "見せないタスク", taskListId: hidden.Id);
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        Assert.DoesNotContain("見せないタスク", notifier.Sent.Single().Message);
+    }
+
+    [Fact]
+    public void 予定が無くてもタスクだけでまとめを出す()
+    {
+        using var test = TestWorkspace.Create();
+        AddTask(test, "t1", Today, "唯一のタスク");
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+
+        var sent = notifier.Sent.Single();
+
+        // 予定側は0件のままなのが正しい。以前ここを取り違えて、表示している
+        // カレンダーで絞るべきところを通知の設定でも絞ってしまい、タスクがあるのに
+        // 「本日の予定はありません」と出た不具合があった。同じ轍を踏まないよう、
+        // 予定が無いことと通知そのものが出ないことを分けて確かめる
+        Assert.Contains("0件", sent.Title);
+        Assert.Contains("唯一のタスク", sent.Message);
+    }
+
     [Fact]
     public void 音を鳴らすかは設定に従う()
     {

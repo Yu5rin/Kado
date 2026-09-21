@@ -1,4 +1,5 @@
 using System.Globalization;
+using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Presentation.Settings;
 
 namespace SlideinaCalendar.Presentation.Notifications;
@@ -65,7 +66,14 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         var heading = $"今日の予定（{today.ToString("M/d", CultureInfo.InvariantCulture)}）";
 
-        if (items.Length == 0)
+        // タスクの期限通知（要件書 7.5）はここで、朝のまとめに「今日まで／遅れ」の数行を
+        // 足す形で出す。絞り込みは右ペイン（SelectedDayViewModel.Tasks）と同じ、
+        // 未完了・期限あり・期限順。以前この右ペインの絞り込みを取り違えて
+        // 「本日の予定はありません」になった不具合があるので、ここでも同じ轍を踏まない
+        // よう、予定とタスクを別々に数える（両方0件でも「予定はありません」だけを言う）
+        var dueLines = DueTaskLines(today);
+
+        if (items.Length == 0 && dueLines.Count == 0)
         {
             _notifier.Notify(heading, "予定はありません", _settings.NotifySound);
             return;
@@ -75,12 +83,51 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
             .Take(SummaryLimit)
             .Select(e => e.Source.StartTime is { } at
                 ? $"{at.ToString("HH:mm", CultureInfo.InvariantCulture)} {e.Source.Title}"
-                : e.Source.Title);
+                : e.Source.Title)
+            .ToList();
+
+        if (items.Length == 0) lines.Add("予定はありません");
 
         var more = items.Length > SummaryLimit ? $"\n…ほか {items.Length - SummaryLimit} 件" : string.Empty;
 
+        if (dueLines.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add("タスク");
+            lines.AddRange(dueLines.Take(SummaryLimit));
+
+            if (dueLines.Count > SummaryLimit) lines.Add($"…ほか {dueLines.Count - SummaryLimit} 件");
+        }
+
         _notifier.Notify(
             $"{heading} {items.Length}件", string.Join("\n", lines) + more, _settings.NotifySound);
+    }
+
+    /// <summary>
+    /// 「今日まで」「遅れ」のタスクを期限の近い順に並べる。
+    /// <para>
+    /// 絞り込みは右ペイン（<c>SelectedDayViewModel.Tasks</c>）と同じ、未完了・期限あり・
+    /// 期限順。表示を切ったタスクリストのものは数えない。
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string> DueTaskLines(DateOnly today)
+    {
+        var hiddenTaskLists = _workspace.Sources.TaskLists()
+            .Where(list => !list.IsVisible)
+            .Select(list => list.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return _workspace.Tasks.All()
+            .Where(t => t.TaskListId is not { Length: > 0 } id || !hiddenTaskLists.Contains(id))
+            .Where(t => !t.IsDone && t.HasDue)
+            .OrderBy(t => t.Due)
+            .ThenBy(t => t.Title, StringComparer.Ordinal)
+            .Select(t => (Task: t, Due: _workspace.DueFormatter.Format(t.Due!.Value, today)))
+            // 「残り 3実働日」のような先の予告までは出さない。まとめに載せるのは
+            // 今日と遅れ（超過）だけ
+            .Where(x => x.Due.Kind is DueKind.Today or DueKind.Overdue)
+            .Select(x => $"{x.Due.Text} {x.Task.Title}")
+            .ToArray();
     }
 
     /// <summary>そろそろ始まる予定。設定した分だけ前に知らせる。</summary>

@@ -1,4 +1,5 @@
 using System.Globalization;
+using SlideinaCalendar.Core.WorkingDays;
 using SlideinaCalendar.Data.Repositories;
 using SlideinaCalendar.Presentation.ViewModels;
 
@@ -59,6 +60,8 @@ public sealed class AppSettings
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
     private const string CheckForUpdateOnStartupKey = "update.check_on_startup";
+    private const string WorkdayOffsetPlansKey = "workday.offset_plans";
+    private const string WorkdaySelectedPlanKey = "workday.offset_plan_selected";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -342,6 +345,42 @@ public sealed class AppSettings
     {
         get => _store.Get(EdgePanesKey) ?? string.Empty;
         set => _store.Set(EdgePanesKey, value);
+    }
+
+    /// <summary>
+    /// 工程逆算（実働日計算パネル）の、名前付きオフセット列。
+    /// <para>
+    /// 「仕様期限 −12実働日」「1次GO −9」のような節目の並びを複数セット持てる。
+    /// 製品や区分でリードタイム構造が違う場合に使い分ける（要件書 4.2）。
+    /// </para>
+    /// <para>
+    /// 値そのものはキャッシュしない。<see cref="WindowPanes"/> と同じく、書くたびに
+    /// 設定の表へ直接入れて読み直す（構造のある値は JSON、という既存の約束に従う）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<WorkdayOffsetPlan> WorkdayOffsetPlans
+    {
+        get => WorkdayOffsetPlanStore.Read(_store.Get(WorkdayOffsetPlansKey));
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+
+            _store.Set(WorkdayOffsetPlansKey, WorkdayOffsetPlanStore.Write(value));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>最後に選んでいた工程逆算のセット。次に開いたときも同じものを出す。</summary>
+    public string? SelectedWorkdayOffsetPlanId
+    {
+        get => _store.Get(WorkdaySelectedPlanKey) is { Length: > 0 } id ? id : null;
+        set
+        {
+            if (string.Equals(SelectedWorkdayOffsetPlanId, value, StringComparison.Ordinal)) return;
+
+            _store.Set(WorkdaySelectedPlanKey, value ?? string.Empty);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>

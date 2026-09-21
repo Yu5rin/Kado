@@ -212,7 +212,6 @@ public class QuickParserTests
 
     [Theory]
     [InlineData("毎週月曜 定例")]
-    [InlineData("終日 出張")]
     [InlineData("来年4月 入社式")]
     [InlineData("9/1-9/3 出張")]
     public void 読めない言い回しは登録を止める(string text)
@@ -221,6 +220,78 @@ public class QuickParserTests
 
         Assert.NotNull(entry.UnsupportedWord);
         Assert.False(entry.CanCommit);
+    }
+
+    [Fact]
+    public void 終日は時刻を書かなければどのみち終日なので読み飛ばす()
+    {
+        var entry = Parse("終日 出張");
+
+        Assert.Null(entry.UnsupportedWord);
+        Assert.Null(entry.Start);
+        Assert.Equal("出張", entry.Title);
+        Assert.True(entry.CanCommit);
+    }
+
+    [Fact]
+    public void 終日と時刻を両方書いても時刻を優先して読む()
+    {
+        var entry = Parse("終日 15時 出張");
+
+        Assert.Null(entry.UnsupportedWord);
+        Assert.Equal(new TimeOnly(15, 0), entry.Start);
+        Assert.Equal("出張", entry.Title);
+    }
+
+    // ------------------------------------------------------------------
+    // タスクかどうかの判定（項目2）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 印が無ければ予定として読む()
+    {
+        var entry = Parse("明日 打合せ");
+
+        Assert.Equal(QuickEntryKind.Event, entry.Kind);
+        Assert.False(entry.IsTask);
+    }
+
+    [Theory]
+    [InlineData("□ 部品表確認")]
+    [InlineData("☐ 部品表確認")]
+    [InlineData("- 部品表確認")]
+    [InlineData("todo 部品表確認")]
+    [InlineData("todo: 部品表確認")]
+    [InlineData("TODO：部品表確認")]
+    [InlineData("タスク 部品表確認")]
+    [InlineData("タスク: 部品表確認")]
+    [InlineData("タスク：部品表確認")]
+    public void 先頭の印でタスクと読む(string text)
+    {
+        var entry = Parse(text);
+
+        Assert.True(entry.IsTask);
+        Assert.Equal("部品表確認", entry.Title);
+    }
+
+    [Fact]
+    public void 印つきでも日付は今までどおり読める()
+    {
+        // 「明日」は今までどおり相対語として読める。印を外したぶんだけ渡す
+        var entry = Parse("todo 明日 部品表確認");
+
+        Assert.True(entry.IsTask);
+        Assert.Equal(Base.AddDays(1), entry.Date);
+        Assert.Equal("部品表確認", entry.Title);
+    }
+
+    [Fact]
+    public void ハイフンは直後に空白が無ければ印として扱わない()
+    {
+        // 「9/1-9/3」のような日付の区切りと衝突させない
+        var entry = Parse("9/1-9/3 出張");
+
+        Assert.False(entry.IsTask);
     }
 
     [Fact]

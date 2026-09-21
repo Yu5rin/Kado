@@ -148,6 +148,18 @@ public sealed class MonthViewModel : ObservableObject
     public bool HasFullWorkingDayData =>
         _workspace.WorkingDays.IsMonthFullyCovered(_month.Year, _month.Month);
 
+    /// <summary>
+    /// 中央に道案内の一文を重ねるか（項目7）。
+    /// <para>
+    /// この月に予定もタスクも1件も無く、実働日データも登録されていない月は、
+    /// 白い格子だけが出て何をすればいいのか分からない。一覧ビューと同じ場所
+    /// （中央に重ねる一文）で最初の一歩を示す。
+    /// </para>
+    /// </summary>
+    public bool ShowsEmptyGuide =>
+        !HasFullWorkingDayData &&
+        _cells.Where(c => c.IsCurrentMonth).All(c => c.AllEvents.Count == 0 && c.AllTasks.Count == 0);
+
     /// <summary>表示する月を変える。</summary>
     public void GoTo(DateOnly month)
     {
@@ -218,7 +230,8 @@ public sealed class MonthViewModel : ObservableObject
         foreach (var cell in cells) cell.IsSelected = cell.Date == _selectedDate;
 
         Cells = cells;
-        Raise(nameof(WorkingDayCount), nameof(RemainingWorkingDays), nameof(HasFullWorkingDayData));
+        Raise(nameof(WorkingDayCount), nameof(RemainingWorkingDays), nameof(HasFullWorkingDayData),
+            nameof(ShowsEmptyGuide));
     }
 
     /// <summary>マスに並べる期間。月初を含む週の頭から、月末を含む週の終わりまで。</summary>

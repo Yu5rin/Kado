@@ -141,6 +141,11 @@ public partial class App : Application
             return;
         }
 
+        // 起動時の自動バックアップ（世代保存）。取り込み系は Undo に積まないので、
+        // 戻したいときの拠り所がこれしか無い。裏の別接続で取るので起動は待たせず、
+        // 失敗しても起動そのものは止めない（AutoBackupService.TryRun が例外を外へ出さない）
+        _ = AutoBackupService.RunInBackgroundAsync();
+
         var workspace = new CalendarWorkspace(_connection);
         var today = DateOnly.FromDateTime(DateTime.Today);
 
@@ -245,6 +250,13 @@ public partial class App : Application
                 // 「復元」は CanExecute が false のまま押せない
                 main.SaveBackup = backupPath => DatabaseBackup.SaveTo(_connection!, backupPath);
                 main.RestoreBackup = RestoreAndRestart;
+
+                // 取り込みの直前にも世代バックアップを取る。取り込みは Undo に
+                // 積まないので、これが唯一の戻り道になる
+                main.AutoBackupBeforeImport = () =>
+                {
+                    if (_connection is { } current) AutoBackupService.TryRun(current);
+                };
 
                 // RelayCommand は CommandManager に乗っていない。RestoreBackup を
                 // あとから入れても、これを呼ばないと「復元」ボタンが無効のまま戻らない
@@ -412,6 +424,11 @@ public partial class App : Application
     /// </summary>
     private void RestoreAndRestart(string backupPath)
     {
+        // 復元の直前にも世代バックアップを1本残す（項目4）。復元は「いまの内容を
+        // すべて置き換える」破壊的操作で、選んだファイルを取り違えても後戻りできない。
+        // 接続を閉じる前、まだ読める間に取る。失敗しても復元そのものは止めない
+        if (_connection is { } current) AutoBackupService.TryRun(current);
+
         _background?.Dispose();
         _background = null;
         _google?.Dispose();
