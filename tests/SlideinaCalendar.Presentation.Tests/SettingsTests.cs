@@ -352,11 +352,67 @@ public class SettingsTests
     public void 配信元がhttpsでなければ断る()
     {
         using var test = TestWorkspace.Create();
-        var vm = new SettingsViewModel(new AppSettings(test.Workspace.Settings))
-        {
-            FeedUrl = "http://example.com/feed.json",
-        };
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new SettingsViewModel(settings) { FeedUrl = "http://example.com/feed.json" };
 
+        Assert.NotNull(vm.Message);
+
+        // 警告を出すだけで保存してしまうと、以後の取得が毎回失敗する
+        Assert.Equal(string.Empty, settings.FeedUrl);
+        Assert.Equal(string.Empty, new AppSettings(test.Workspace.Settings).FeedUrl);
+    }
+
+    [Fact]
+    public void 配信元がURLとして解釈できなければ断る()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new SettingsViewModel(settings) { FeedUrl = "feed.json" };
+
+        Assert.NotNull(vm.Message);
+        Assert.Equal(string.Empty, settings.FeedUrl);
+    }
+
+    [Fact]
+    public void AppSettings側でもhttps以外の配信元は書き込まれない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings) { FeedUrl = "http://example.com/feed.json" };
+
+        Assert.Equal(string.Empty, settings.FeedUrl);
+    }
+
+    [Fact]
+    public void いちばん細くできる幅は数字以外なら断ってそのまま()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings) { MinWidth = 300 };
+        var vm = new SettingsViewModel(settings) { MinWidthText = "abc" };
+
+        Assert.NotNull(vm.Message);
+        Assert.Equal(300, settings.MinWidth);
+        Assert.Equal("300", vm.MinWidthText);
+    }
+
+    [Fact]
+    public void いちばん細くできる幅は全角数字でも読める()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new SettingsViewModel(settings) { MinWidthText = "３００" };
+
+        Assert.Null(vm.Message);
+        Assert.Equal(300, settings.MinWidth);
+    }
+
+    [Fact]
+    public void いちばん細くできる幅は範囲外なら丸めたことを伝える()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new SettingsViewModel(settings) { MinWidthText = "50" };
+
+        Assert.Equal(AppSettings.LowestMinWidth, settings.MinWidth);
         Assert.NotNull(vm.Message);
     }
 

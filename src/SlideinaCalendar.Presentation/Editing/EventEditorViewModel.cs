@@ -34,6 +34,25 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <summary>終了時刻の候補をどこまで出すか。半日ぶんあれば足りる。</summary>
     private const int EndChoiceCount = 48;
 
+    /// <summary>
+    /// タイトル（Google Calendar の <c>summary</c>）の上限。
+    /// <para>
+    /// Google Calendar API のリファレンスには、この項目の文字数上限が明記されていない
+    /// （2026年9月時点で確認）。<b>確認できなかったので、保守的な値として置いた。</b>
+    /// Google Tasks の <c>title</c> の公式な上限（1024文字）に倣っている。
+    /// </para>
+    /// </summary>
+    private const int TitleMaxLength = 1024;
+
+    /// <summary>
+    /// 説明（Google Calendar の <c>description</c>）の上限。
+    /// <para>
+    /// 同上の理由で、Google Tasks の <c>notes</c> の公式な上限（8192文字）に倣った
+    /// 保守的な値。実際の Calendar 側の上限を確認できていない。
+    /// </para>
+    /// </summary>
+    private const int NoteMaxLength = 8192;
+
     private readonly CalendarEvent? _original;
 
     private string _title = string.Empty;
@@ -109,6 +128,26 @@ public sealed class EventEditorViewModel : ObservableObject
 
     /// <summary>画面の見出し。</summary>
     public string HeaderText => IsNew ? "予定の追加" : "予定の編集";
+
+    /// <summary>
+    /// 削除を求めて閉じたか。
+    /// <para>
+    /// 呼び出し側（<see cref="IEditorPresenter"/> の実装）が画面を閉じたあとにこれを見て、
+    /// 実際の削除（確認ダイアログを含む）を行う。編集画面そのものは削除を実行しない。
+    /// </para>
+    /// </summary>
+    public bool Deleted { get; private set; }
+
+    /// <summary>
+    /// 削除して閉じることを求める。既存の予定を編集しているときだけ効く。
+    /// <para>新規作成の途中では消すものが無いので、呼んでも何もしない。</para>
+    /// </summary>
+    public void RequestDelete()
+    {
+        if (IsNew) return;
+
+        Deleted = true;
+    }
 
     /// <summary>選べるカレンダー。ひとつも無ければ欄を出さない。</summary>
     public IReadOnlyList<SourceChoice> Calendars { get; }
@@ -283,7 +322,8 @@ public sealed class EventEditorViewModel : ObservableObject
     public string? Note
     {
         get => _note;
-        set => Set(ref _note, value);
+        // 長さの上限に引っかかるかで保存できるかが変わるので、出し直す
+        set => SetAndRevalidate(ref _note, value);
     }
 
     public string? CalendarId
@@ -314,6 +354,12 @@ public sealed class EventEditorViewModel : ObservableObject
         get
         {
             if (string.IsNullOrWhiteSpace(_title)) return "タイトルを入れてください。";
+
+            // 長すぎるタイトルは Google 側で断られる。入口で止めておく
+            if (_title.Length > TitleMaxLength) return $"タイトルは{TitleMaxLength}文字以内にしてください。";
+
+            if (_note is { Length: > 0 } && _note.Length > NoteMaxLength)
+                return $"説明は{NoteMaxLength}文字以内にしてください。";
 
             if (!_isAllDay)
             {

@@ -22,6 +22,18 @@ public sealed record DuePreset(string Label, DateOnly Date);
 /// </summary>
 public sealed class TaskEditorViewModel : ObservableObject
 {
+    /// <summary>
+    /// タイトル（Google Tasks の <c>title</c>）の上限。
+    /// <para>Google Tasks API の公式リファレンスに明記されている値（1024文字）。</para>
+    /// </summary>
+    private const int TitleMaxLength = 1024;
+
+    /// <summary>
+    /// 詳細（Google Tasks の <c>notes</c>）の上限。
+    /// <para>Google Tasks API の公式リファレンスに明記されている値（8192文字）。</para>
+    /// </summary>
+    private const int NoteMaxLength = 8192;
+
     private readonly TaskItem? _original;
     private readonly DateOnly _today;
 
@@ -71,6 +83,26 @@ public sealed class TaskEditorViewModel : ObservableObject
 
     public string HeaderText => IsNew ? "タスクの追加" : "タスクの編集";
 
+    /// <summary>
+    /// 削除を求めて閉じたか。
+    /// <para>
+    /// 呼び出し側（<see cref="IEditorPresenter"/> の実装）が画面を閉じたあとにこれを見て、
+    /// 実際の削除（確認ダイアログを含む）を行う。編集画面そのものは削除を実行しない。
+    /// </para>
+    /// </summary>
+    public bool Deleted { get; private set; }
+
+    /// <summary>
+    /// 削除して閉じることを求める。既存のタスクを編集しているときだけ効く。
+    /// <para>新規作成の途中では消すものが無いので、呼んでも何もしない。</para>
+    /// </summary>
+    public void RequestDelete()
+    {
+        if (IsNew) return;
+
+        Deleted = true;
+    }
+
     /// <summary>選べるタスクリスト。</summary>
     public IReadOnlyList<SourceChoice> TaskLists { get; }
 
@@ -113,7 +145,11 @@ public sealed class TaskEditorViewModel : ObservableObject
     public string? Note
     {
         get => _note;
-        set => Set(ref _note, value);
+        set
+        {
+            // 長さの上限に引っかかるかで保存できるかが変わるので、出し直す
+            if (Set(ref _note, value)) Raise(nameof(CanSave), nameof(ValidationMessage));
+        }
     }
 
     public string? TaskListId
@@ -124,8 +160,21 @@ public sealed class TaskEditorViewModel : ObservableObject
 
     public bool CanSave => ValidationMessage is null;
 
-    public string? ValidationMessage =>
-        string.IsNullOrWhiteSpace(_title) ? "タイトルを入れてください。" : null;
+    public string? ValidationMessage
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_title)) return "タイトルを入れてください。";
+
+            // 長すぎるタイトルはそのタスクリスト全体の同期を止める原因になる。入口で止める
+            if (_title.Length > TitleMaxLength) return $"タイトルは{TitleMaxLength}文字以内にしてください。";
+
+            if (_note is { Length: > 0 } && _note.Length > NoteMaxLength)
+                return $"詳細は{NoteMaxLength}文字以内にしてください。";
+
+            return null;
+        }
+    }
 
     /// <summary>入力からタスクを組み立てる。</summary>
     public TaskItem ToModel()

@@ -409,4 +409,46 @@ public class EventEditorViewModelTests
         Assert.Equal("09:00", vm.StartTimeText);
         Assert.Equal("10:00", vm.EndTimeText);
     }
+
+    [Fact]
+    public void 長すぎるタイトルは保存できない()
+    {
+        var vm = New();
+        vm.Title = new string('あ', 1025);
+
+        Assert.False(vm.CanSave);
+        Assert.Contains("タイトル", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 長すぎる説明は保存できない()
+    {
+        var vm = New();
+        vm.Title = "会議";
+        vm.Note = new string('あ', 8193);
+
+        Assert.False(vm.CanSave);
+        Assert.Contains("説明", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void 新規作成では削除を求めても効かない()
+    {
+        var vm = New();
+        vm.RequestDelete();
+
+        Assert.False(vm.Deleted);
+    }
+
+    [Fact]
+    public void 既存の予定は削除を求められる()
+    {
+        var source = new CalendarEvent { Id = "e1", Title = "定例", Date = D(2026, 9, 24) };
+        var vm = new EventEditorViewModel(source, Calendars);
+
+        Assert.False(vm.Deleted);
+        vm.RequestDelete();
+
+        Assert.True(vm.Deleted);
+    }
 }
