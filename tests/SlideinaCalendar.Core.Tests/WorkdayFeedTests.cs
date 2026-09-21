@@ -60,6 +60,54 @@ public class WorkdayFeedTests
     }
 
     [Fact]
+    public void 型が違う要素は例外にせず読み飛ばす()
+    {
+        // 数値要素に GetValue<string>() をそのまま使うと例外になる。1件おかしいだけで
+        // 取り込み全体を止めないことを確かめる
+        var result = WorkdayFeed.Read("""
+            { "type": "workingdays", "workingDays": ["2026-09-01", 20260902, null, true] }
+            """);
+
+        Assert.Single(result.WorkingDays);
+        Assert.Equal(new DateOnly(2026, 9, 1), result.WorkingDays[0]);
+        Assert.NotEmpty(result.Warnings);
+    }
+
+    [Fact]
+    public void マイルストーンの名前が長すぎると読み飛ばす()
+    {
+        var longName = new string('あ', 300);
+        var json = $$"""
+            {
+              "type": "workingdays", "workingDays": ["2026-09-01"],
+              "milestones": [
+                { "date": "2026-09-14", "name": "{{longName}}" },
+                { "date": "2026-09-15", "name": "短い名前" }
+              ]
+            }
+            """;
+
+        var result = WorkdayFeed.Read(json);
+
+        Assert.Single(result.Milestones);
+        Assert.Equal("短い名前", result.Milestones[0].Name);
+        Assert.Contains(result.Warnings, w => w.Contains("長すぎる"));
+    }
+
+    [Fact]
+    public void 稼働日の件数が上限を超えたぶんは読み飛ばす()
+    {
+        var days = string.Join(",", Enumerable.Range(1, 10_050)
+            .Select(i => $"\"{new DateOnly(2020, 1, 1).AddDays(i):yyyy-MM-dd}\""));
+        var json = $$"""{ "type": "workingdays", "workingDays": [{{days}}] }""";
+
+        var result = WorkdayFeed.Read(json);
+
+        Assert.Equal(10_000, result.WorkingDays.Count);
+        Assert.Contains(result.Warnings, w => w.Contains("上限"));
+    }
+
+    [Fact]
     public void 稼働日が無ければ受け取らない()
     {
         // 稼働日が皆無のファイルは実働日データとして成立しない

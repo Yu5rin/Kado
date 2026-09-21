@@ -57,6 +57,7 @@ public sealed class AppSettings
     private const string SlimShareKey = "ui.slim_calendar_share";
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
+    private const string CheckForUpdateOnStartupKey = "update.check_on_startup";
 
     /// <summary>
     /// 表示時間帯の既定。
@@ -91,6 +92,7 @@ public sealed class AppSettings
     private bool _summaryEnabled;
     private TimeOnly _summaryTime;
     private bool _notifySound;
+    private bool _checkForUpdateOnStartup;
 
     public AppSettings(SettingsRepository store)
     {
@@ -120,6 +122,8 @@ public sealed class AppSettings
             _store.Get(SummaryTimeKey), "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
             ? at
             : DefaultSummaryTime;
+        _checkForUpdateOnStartup =
+            !string.Equals(_store.Get(CheckForUpdateOnStartupKey), "false", StringComparison.Ordinal);
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -518,6 +522,27 @@ public sealed class AppSettings
 
             _slideOutOnLeave = value;
             _store.Set(SlideOutOnLeaveKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 起動のたびに新しい版が無いか確かめるか。
+    /// <para>
+    /// 既定はオン（今までどおり）。立っていると起動のたびに <c>api.github.com</c> へ
+    /// アクセスする。止めたい人のための設定で、⚙メニューからの手動の確認
+    /// （「更新を確認…」）はこの設定に関わらず動く。
+    /// </para>
+    /// </summary>
+    public bool CheckForUpdateOnStartup
+    {
+        get => _checkForUpdateOnStartup;
+        set
+        {
+            if (_checkForUpdateOnStartup == value) return;
+
+            _checkForUpdateOnStartup = value;
+            _store.Set(CheckForUpdateOnStartupKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

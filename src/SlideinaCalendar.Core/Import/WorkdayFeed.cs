@@ -28,6 +28,20 @@ public static class WorkdayFeed
     /// <summary>この形式だと名乗る文字。</summary>
     public const string Kind = "workingdays";
 
+    /// <summary>
+    /// マイルストーンの名前の長さの上限。
+    /// <para>これを超える名前は、その要素ごと読み飛ばす。8MB のファイルなら任意の長さの
+    /// 名前が入りうるが、DB にも画面にもそのまま流れるので上限を設けている。</para>
+    /// </summary>
+    private const int MaxNameLength = 256;
+
+    /// <summary>
+    /// 稼働日・マイルストーンそれぞれの件数の上限。
+    /// <para>これを超えたぶんは読み飛ばす。何件読み飛ばしたかは <see cref="ImportResult.Warnings"/>
+    /// に足す。</para>
+    /// </summary>
+    private const int MaxItems = 10_000;
+
     /// <summary>読み込む。形として成り立っていなければ例外。</summary>
     /// <param name="json">feed.json の中身。</param>
     public static ImportResult Read(string json)
@@ -54,34 +68,89 @@ public static class WorkdayFeed
         }
 
         var days = new List<DateOnly>();
+        var droppedDaysForCount = 0;
         if (body["workingDays"] is JsonArray list)
         {
             foreach (var item in list)
             {
-                if (ParseDate(item?.GetValue<string>()) is { } date) days.Add(date);
-                else warnings.Add($"日付として読めない値がありました: {item}");
+                // 要素が数値などだと GetValue<string>() は例外を投げる。1件おかしいだけで
+                // 全体を止めないよう、型が違うものは値を読まずに読み飛ばす
+                var text = AsString(item);
+
+                if (text is null || ParseDate(text) is not { } date)
+                {
+                    warnings.Add($"日付として読めない値がありました: {item}");
+                    continue;
+                }
+
+                if (days.Count >= MaxItems)
+                {
+                    droppedDaysForCount++;
+                    continue;
+                }
+
+                days.Add(date);
             }
         }
 
         days = days.Distinct().Order().ToList();
         if (days.Count == 0) throw new InvalidDataException("稼働日が1件も入っていません。");
 
+        if (droppedDaysForCount > 0)
+        {
+            warnings.Add($"稼働日が上限（{MaxItems}件）を超えたため、{droppedDaysForCount}件を読み飛ばしました。");
+        }
+
         var milestones = new List<Milestone>();
+        var droppedMilestonesForCount = 0;
+        var droppedMilestonesForNameLength = 0;
         if (body["milestones"] is JsonArray marks)
         {
             foreach (var item in marks)
             {
-                if (item is not JsonObject mark) continue;
+                if (item is not JsonObject mark)
+                {
+                    warnings.Add($"マイルストーンとして読めない要素がありました: {item}");
+                    continue;
+                }
 
                 var date = ParseDate(Text(mark, "date"));
                 var name = Text(mark, "name");
 
-                if (date is { } at && name is { Length: > 0 }) milestones.Add(new Milestone(at, name, Text(body, "updatedAt")));
-                else warnings.Add($"マイルストーンとして読めない要素がありました: {item}");
+                if (date is not { } at || name is not { Length: > 0 })
+                {
+                    warnings.Add($"マイルストーンとして読めない要素がありました: {item}");
+                    continue;
+                }
+
+                if (name.Length > MaxNameLength)
+                {
+                    droppedMilestonesForNameLength++;
+                    continue;
+                }
+
+                if (milestones.Count >= MaxItems)
+                {
+                    droppedMilestonesForCount++;
+                    continue;
+                }
+
+                milestones.Add(new Milestone(at, name, Text(body, "updatedAt")));
             }
         }
 
         milestones = milestones.OrderBy(m => m.Date).ToList();
+
+        if (droppedMilestonesForNameLength > 0)
+        {
+            warnings.Add(
+                $"名前が長すぎる（{MaxNameLength}文字超）マイルストーンを{droppedMilestonesForNameLength}件読み飛ばしました。");
+        }
+
+        if (droppedMilestonesForCount > 0)
+        {
+            warnings.Add($"マイルストーンが上限（{MaxItems}件）を超えたため、{droppedMilestonesForCount}件を読み飛ばしました。");
+        }
 
         return new ImportResult(
             Text(body, "updatedAt") ?? string.Empty,
@@ -131,6 +200,14 @@ public static class WorkdayFeed
 
     private static string? Text(JsonObject body, string name) =>
         body[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+    /// <summary>
+    /// 配列の要素を文字列として読む。
+    /// <para>数値など文字列以外の要素だと <c>null</c>。<c>JsonNode.GetValue&lt;string&gt;()</c>
+    /// は型が違うと例外を投げるので、それを避けるために <c>TryGetValue</c> を使う。</para>
+    /// </summary>
+    private static string? AsString(JsonNode? item) =>
+        item is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     private static DateOnly? ParseDate(string? text) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)

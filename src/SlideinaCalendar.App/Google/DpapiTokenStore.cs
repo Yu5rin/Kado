@@ -28,6 +28,17 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
 
     private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
 
+    /// <summary>
+    /// 直前の <see cref="Load"/> が、保存されていた控えを復号できずに終わったか。
+    /// <para>
+    /// Windows パスワードの強制リセットやプロファイル移行のあとは、保存していたトークンが
+    /// 二度と復号できなくなる。<see cref="ITokenStore"/> の形は変えず（<c>Load</c> が
+    /// <c>null</c> を返すのは「未接続」と区別しない）、この具象型だけにこの印を持たせて、
+    /// 呼び出し側（<c>App.xaml.cs</c>）が理由を説明できるようにする。
+    /// </para>
+    /// </summary>
+    public bool DecryptionFailed { get; private set; }
+
     public OAuthTokens? Load()
     {
         try
@@ -41,7 +52,11 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         }
         catch (CryptographicException)
         {
-            // 別のユーザーや別の PC の控え。読めないものは無いものとして扱い、繋ぎ直させる
+            // 別のユーザーや別の PC の控え。読めないものは無いものとして扱い、繋ぎ直させる。
+            // 理由は DecryptionFailed で一度だけ伝える。ファイルは消しておかないと、
+            // 次に起動したときも同じ失敗を繰り返し、毎回この印が立ってしまう
+            DecryptionFailed = true;
+            TryDelete();
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -65,7 +80,9 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         File.Move(temporary, _path, overwrite: true);
     }
 
-    public void Clear()
+    public void Clear() => TryDelete();
+
+    private void TryDelete()
     {
         try
         {
@@ -73,7 +90,8 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // 消せなくても、呼び出し側は接続を切ったつもりでいる。握り潰さず次へ進める
+            // 消せなくても、呼び出し側は接続を切った（あるいは読めないと知った）つもりでいる。
+            // 握り潰さず次へ進める
         }
     }
 }

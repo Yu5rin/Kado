@@ -88,6 +88,11 @@ public sealed class CalendarDatabase
         connection.Execute("PRAGMA journal_mode = WAL;");
         connection.Execute("PRAGMA synchronous = NORMAL;");
 
+        // WAL でも書き込みは同時に1つしか通らない。UI 用と Google 同期用で接続を
+        // 分けているので、双方が同時に書こうとすると SQLITE_BUSY になりうる。
+        // 待たせて順番に通すことで、即座に例外にしない
+        connection.Execute("PRAGMA busy_timeout = 5000;");
+
         return connection;
     }
 
