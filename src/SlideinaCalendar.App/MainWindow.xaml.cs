@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using SlideinaCalendar.App.Shell;
 using SlideinaCalendar.Presentation.Settings;
 using SlideinaCalendar.Presentation.ViewModels;
 
@@ -15,8 +16,13 @@ namespace SlideinaCalendar.App;
 /// ここに書いてあるのはダブルクリックの受け口だけ。<c>InputBinding</c> は視覚ツリーに
 /// 居ないため <c>RelativeSource</c> で祖先をたどれず、XAML だけでは繋げられない。
 /// </para>
+/// <para>
+/// <see cref="ISlideRevealHost"/> も実装する。<c>ShellController</c> は <c>Window</c>
+/// 型で窓を受け取っているので、開く演出（滑り出し）のあいだ中身（<c>Root</c>）を
+/// 固定する役目はこちらに持たせ、そちら越しに頼んでもらう。
+/// </para>
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : Window, ISlideRevealHost
 {
     /// <summary>現在時刻の線を動かす時計。1分ごとで足りる。</summary>
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMinutes(1) };
@@ -480,6 +486,30 @@ public partial class MainWindow : Window
         if (ViewModel is not { } vm) return;
 
         vm.Shell.LayoutWidth = Root.ActualWidth > 0 ? Root.ActualWidth : ActualWidth;
+    }
+
+    // ------------------------------------------------------------------
+    // 開く演出（滑り出し）のあいだ、中身の幅を固定する
+    //
+    // ShellController から Root へ直接触るのは筋が悪いので、ISlideRevealHost 越しに
+    // ここへ頼んでもらう。窓の Width が演出で動いても、Root の幅を定位置に固定して
+    // 寄せている辺へ寄せておけば、中身のレイアウト（月・年ビューなど）は
+    // 組み直されない。演出が終わったら、忘れずに元（Stretch・Auto幅）へ戻す。
+    // 戻し忘れると、そのあと利用者が幅をつまんで変えても中身が追従しなくなる。
+    // ------------------------------------------------------------------
+
+    void ISlideRevealHost.BeginSlideReveal(double restingWidth, DockEdge edge)
+    {
+        Root.Width = restingWidth;
+        Root.HorizontalAlignment = edge == DockEdge.Left
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+    }
+
+    void ISlideRevealHost.EndSlideReveal()
+    {
+        Root.Width = double.NaN;
+        Root.HorizontalAlignment = HorizontalAlignment.Stretch;
     }
 
     /// <summary>検索の結果を押したら、その日へ移って開く。</summary>

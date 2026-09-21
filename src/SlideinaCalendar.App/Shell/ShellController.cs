@@ -7,6 +7,38 @@ using SlideinaCalendar.Presentation.ViewModels;
 namespace SlideinaCalendar.App.Shell;
 
 /// <summary>
+/// 開く演出（滑り出し）のあいだ、窓の中身側に触れるための小さな窓口。
+/// <para>
+/// <see cref="ShellController"/> は <c>Window</c> 型で窓を受け取っているので、
+/// 中身（<c>Root</c> グリッドなど）へ直接触るのは筋が悪い。<c>MainWindow</c>
+/// （<c>.xaml.cs</c>）側にこの実装を持たせ、ここ越しに頼む。
+/// </para>
+/// </summary>
+internal interface ISlideRevealHost
+{
+    /// <summary>
+    /// 演出のあいだだけ、中身の幅を定位置の幅に固定し、寄せている辺へ寄せる。
+    /// <para>
+    /// 窓の <c>Width</c> が動いても中身のレイアウトが組み直されないようにする。
+    /// 組み直されると、幅が変わるたびに月・年ビューが測り直されて重くなる
+    /// （過去に実際に踏んだ重さの問題）。
+    /// </para>
+    /// </summary>
+    /// <param name="restingWidth">定位置（このあと変わらない）の幅。</param>
+    /// <param name="edge">寄せている辺。中身を寄せる向きに使う。</param>
+    void BeginSlideReveal(double restingWidth, DockEdge edge);
+
+    /// <summary>
+    /// 固定を解く。中身の幅を自動（画面いっぱい）に戻す。
+    /// <para>
+    /// 呼び忘れると、そのあと利用者が幅をつまんで変えても中身が追従しなくなる
+    /// （過去に実際に踏んだ形の不具合）。
+    /// </para>
+    /// </summary>
+    void EndSlideReveal();
+}
+
+/// <summary>
 /// 居かたの切り替えを実際に画面へ効かせる（要件書 2章）。
 /// <para>
 /// <see cref="ShellViewModel"/> が持つのは「どうしたいか」だけ。ここが AppBar の
@@ -36,12 +68,37 @@ public sealed class ShellController : IDisposable
     /// <summary>引っ込む時間。出るときより短くする。用が済んだものを見送らない。</summary>
     private static readonly Duration SlideOutTime = new(TimeSpan.FromMilliseconds(160));
 
+    /// <summary>
+    /// 開く演出のイージング。<see cref="SlideInTime"/> と合わせて1か所にまとめておく。
+    /// 実機で見て調整が要るかもしれない。
+    /// </summary>
+    private static readonly QuinticEase SlideRevealEasing = new() { EasingMode = EasingMode.EaseOut };
+
+    /// <summary>
+    /// 開く演出の開始幅。
+    /// <para>
+    /// 0 だと WPF が嫌がる場面があるので 1 にする。<c>Window.MinWidth</c>
+    /// （既定 220px）がそのままだとここで頭打ちになるので、演出のあいだだけ
+    /// <see cref="SlideIn"/> 側で下げる。
+    /// </para>
+    /// </summary>
+    private const double SlideRevealStartWidth = 1.0;
+
     private readonly Window _window;
     private readonly ShellViewModel _shell;
     private readonly DockPlacementStore _store;
     private readonly AppBarHost _appBar;
     private readonly EdgeHotZone _hotZone;
     private readonly DispatcherTimer _resizeSettle;
+
+    /// <summary>
+    /// 開く演出のあいだ、窓の中身側（<c>MainWindow</c>）に触れるための窓口。
+    /// <para>
+    /// 実装している型（<c>MainWindow</c>）でなければ <c>null</c> になり、そのときは
+    /// 中身の固定を諦めて窓の <c>Width</c> だけ動かす。
+    /// </para>
+    /// </summary>
+    private readonly ISlideRevealHost? _revealHost;
 
     /// <summary>ウィンドウモードに戻すときの姿。端へ寄せる前に控える。</summary>
     private WindowPlacement? _windowed;
@@ -61,6 +118,15 @@ public sealed class ShellController : IDisposable
     /// <summary>いま引っ込んでいる最中。終わるまで重ねて呼ばない。</summary>
     private bool _slidingOut;
 
+    /// <summary>いま開く演出（Width を広げているところ）の最中。</summary>
+    private bool _revealing;
+
+    /// <summary>
+    /// 開く演出のあいだだけ下げる <c>Window.MinWidth</c>。演出前の値をここへ控えておき、
+    /// 演出が終わる・打ち切られるときに戻す。
+    /// </summary>
+    private double _minWidthBeforeReveal;
+
     /// <summary>
     /// スライドから、カーソルが外れたら引っ込めるか。
     /// <para>
@@ -78,6 +144,10 @@ public sealed class ShellController : IDisposable
 
         _appBar = new AppBarHost(window, store);
         _hotZone = new EdgeHotZone();
+
+        // 開く演出のあいだ、中身の幅を固定してもらう窓口。MainWindow でなければ
+        // null になり、そのときは窓の Width だけ動かして中身の固定は諦める
+        _revealHost = window as ISlideRevealHost;
 
         _resizeSettle = new DispatcherTimer { Interval = ResizeSettle };
         _resizeSettle.Tick += (_, _) =>
@@ -124,8 +194,13 @@ public sealed class ShellController : IDisposable
         _hotZone.Triggered += (_, _) => SlideIn();
 
         // 窓から外れたら引っ込める。押そうとしたボタンが逃げないよう、外れてから
-        // 少し置いてから来る
-        _hotZone.Left += (_, _) => SlideOutIfIdle();
+        // 少し置いてから来る。CancelReveal は、開く演出の途中に割り込まれたときの
+        // 後始末（下記 Deactivated の配線と同じ理由）
+        _hotZone.Left += (_, _) =>
+        {
+            CancelReveal();
+            SlideOutIfIdle();
+        };
 
         // 他のアプリへ移ったら引っ込める。スライドは「用があるときだけ出る」もので、
         // 出しっぱなしにしたいならピンで留める。
@@ -140,6 +215,10 @@ public sealed class ShellController : IDisposable
             _window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
                 if (_window.IsActive) return;   // すぐ戻ってきた
+
+                // 開く演出（220ms）の途中で他のアプリへ切り替えられることがある。
+                // 引っ込み自体（SlideOutIfIdle）は変えず、その手前で演出だけ打ち切る
+                CancelReveal();
                 SlideOutIfIdle();
             }));
 
@@ -150,8 +229,13 @@ public sealed class ShellController : IDisposable
         };
 
         // Esc などキー操作での引っ込め（要件書外だが実機の使い勝手として足した）。
-        // マウスが外れたときと同じ経路（SlideOutIfIdle）を通す。独自の経路は作らない
-        _shell.RetractRequested += (_, _) => SlideOutIfIdle();
+        // マウスが外れたときと同じ経路（SlideOutIfIdle）を通す。独自の経路は作らない。
+        // 開いた直後に Esc を打たれることもあるので、CancelReveal を挟む
+        _shell.RetractRequested += (_, _) =>
+        {
+            CancelReveal();
+            SlideOutIfIdle();
+        };
 
         // 起動時に1回、モニタ構成を shell.log へ残す（不具合1の切り分け用）
         LogStartupScreens();
@@ -179,7 +263,16 @@ public sealed class ShellController : IDisposable
     }
 
     /// <summary>
-    /// スライドさせて出す。
+    /// 滑り出させて出す。
+    /// <para>
+    /// <b>窓は最初から定位置（寄せている辺）にあり、<c>Width</c> を広げて
+    /// 「めくれるように」見せる。</b>画面の外から <c>Left</c> を動かして
+    /// 滑り込ませていた前の作りは、窓の右端（寄せている辺と逆側）が先に画面へ
+    /// 入ってしまい、いちばん先に読みたい左端の中身が最後に到着するうえ、
+    /// 中身が横に流れて落ち着かなかった。中身（<see cref="ISlideRevealHost"/>）の
+    /// 幅は定位置に固定して端へ寄せておくので、窓の <c>Width</c> が動いても中身の
+    /// レイアウトは組み直されない（月・年ビューの重さの問題を防ぐ）。
+    /// </para>
     /// <para>位置を決めてから出す。出してから動かすと、一度別の場所に見えて飛ぶ。</para>
     /// <para>
     /// <b>アニメーションの開始は、出したのと同じフレームではしない。</b>
@@ -194,7 +287,7 @@ public sealed class ShellController : IDisposable
     {
         if (_shell.Mode != ShellMode.Overlay) return;
 
-        // もう出ている。飛ばして滑り直さない（不具合1）。
+        // もう出ている。飛ばして開き直さない（不具合1）。
         //
         // 出たあとも帯を見張り続けていて（Apply(Overlay) が WatchLeaving を呼んで
         // いなかった）、カーソルが帯に留まるたびにここへ入り、見えている窓を
@@ -204,17 +297,30 @@ public sealed class ShellController : IDisposable
 
         ApplyOverlayBounds();
 
-        var resting = _window.Left;
+        // 定位置（このあと動かさない値）を、Width を縮める前に確定しておく
+        var restingLeft = _window.Left;
+        var restingWidth = _window.Width;
 
-        // 見張る矩形は「落ち着いたあとの居場所」で取る。
-        // いまの Left はこれから画面の外へ動かす値なので、そのまま渡すと
-        // 画面外の矩形を見張ることになり、カーソルがどこにあっても「外れている」
-        // と判定されて、出たそばから引っ込む
-        var shown = WindowRectAt(resting);
-        var offScreen = OffScreenLeft(resting);
+        // 見張る矩形は「定位置」の矩形で取る。縮めたあとの値で取ると、出た直後に
+        // カーソルが窓の外と判定されて引っ込む（過去に踏んだ不具合）
+        var shown = WindowRectAt(restingLeft);
 
-        // 画面の外から滑り込ませる。位置を決めてから出す
-        _window.Left = offScreen;
+        // 中身の幅を定位置ぶんに固定し、寄せている辺へ寄せておく。窓の Width が
+        // 動いても中身のレイアウトが組み直されないようにする。.xaml には触れないので
+        // MainWindow 側の窓口（ISlideRevealHost）越しに頼む
+        _revealHost?.BeginSlideReveal(restingWidth, _shell.Edge);
+        _revealing = true;
+
+        // 窓をいったん畳んでおく。0 だと WPF が嫌がる場面があるので 1 にする。
+        // MinWidth がそのままだとそこで頭打ちになるので、演出のあいだだけ下げる
+        _minWidthBeforeReveal = _window.MinWidth;
+        _window.MinWidth = SlideRevealStartWidth;
+        _window.Width = SlideRevealStartWidth;
+
+        // 右に寄せているときは、右端を定位置のまま保つよう Left も詰める。
+        // 左に寄せているときは Left はもう動かさない（ShellGeometry.RevealLeft）
+        _window.Left = ShellGeometry.RevealLeft(_shell.Edge, restingLeft, restingWidth, SlideRevealStartWidth);
+
         Show();
         LogWindowRect("Show直後");
 
@@ -223,18 +329,30 @@ public sealed class ShellController : IDisposable
         _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
             // 待っているあいだに引っ込め始めた・出しかたが変わったなら、もう動かさない
-            if (_shell.Mode != ShellMode.Overlay || !_window.IsVisible || _slidingOut) return;
+            if (_shell.Mode != ShellMode.Overlay || !_window.IsVisible || _slidingOut)
+            {
+                CancelReveal();
+                return;
+            }
 
-            // Show() のあとで Left が画面外からずれていないか確かめ、ずれていたら
-            // 戻す。ここで戻さないと「一瞬だけ最終位置に見えてから飛ぶ」、あるいは
+            // Show() のあとで畳んだ値からずれていないか確かめ、ずれていたら戻す。
+            // ここで戻さないと「一瞬だけ最終位置に見えてから飛ぶ」、あるいは
             // 動かないまま最終位置に出る、という形で症状が出る
-            if (Math.Abs(_window.Left - offScreen) > 0.5) _window.Left = offScreen;
+            var startWidth = Math.Max(SlideRevealStartWidth, _window.MinWidth);
+            if (Math.Abs(_window.Width - startWidth) > 0.5) _window.Width = startWidth;
+
+            var expectedLeft = ShellGeometry.RevealLeft(_shell.Edge, restingLeft, restingWidth, startWidth);
+            if (Math.Abs(_window.Left - expectedLeft) > 0.5) _window.Left = expectedLeft;
 
             LogWindowRect("アニメーション開始直前");
 
-            // 開始値は現在値まかせにせず、画面外の位置を明示して渡す
-            Animate(offScreen, resting, SlideInTime, new QuinticEase { EasingMode = EasingMode.EaseOut },
-                () => LogWindowRect("Animate完了"));
+            // 開始値は現在値まかせにせず、畳んだ幅と定位置の左端を明示して渡す
+            AnimateReveal(startWidth, restingWidth, restingLeft,
+                () =>
+                {
+                    _revealHost?.EndSlideReveal();
+                    LogWindowRect("Animate完了");
+                });
         }));
 
         // 出たあとは、外れるのを見張る番
@@ -290,12 +408,16 @@ public sealed class ShellController : IDisposable
     {
         var scale = Scale();
         var screen = ScreenOfWindow();
-        var width = _window.Width;
+
+        // 実測（_window.Width）ではなく定位置の幅（DockWidth）を使う。開く演出の
+        // あいだは Width が途中の値を取るので、それを拾うと画面外へ出す距離を
+        // 取り違える（引っ込みは Width を動かさないので普段は同じ値になる）
+        var width = _shell.DockWidth;
 
         var offScreen = ShellGeometry.OffScreenLeft(_shell.Edge, resting, width, screen, scale);
 
         ShellDiagnosticsLog.Write(
-            $"OffScreenLeft edge={_shell.Edge} dockWidth={_shell.DockWidth:F1} windowWidth={width:F1} " +
+            $"OffScreenLeft edge={_shell.Edge} dockWidth={width:F1} windowWidth={_window.Width:F1} " +
             $"screen=({screen.left},{screen.top},{screen.right},{screen.bottom}) scale={scale:F2} " +
             $"resting={resting:F1} offScreen={offScreen:F1}");
 
@@ -366,15 +488,15 @@ public sealed class ShellController : IDisposable
     }
 
     /// <summary>
-    /// 横に滑らせる。
+    /// 横に滑らせる。<c>SlideOutIfIdle</c>（引っ込み）が使う。この動きは利用者が
+    /// 「完璧」と言っている挙動なので変えていない。
     /// <para>
     /// <b>終わったらアニメーションを外す。</b>掛けたままだと、そのあと
     /// <c>Left</c> に入れた値が効かなくなる（アニメーションが値を握り続ける）。
     /// </para>
     /// <para>
-    /// <paramref name="from"/> を渡さなければ、これまでどおり呼んだ時点の現在値を
-    /// 開始値にする（引っ込み側はこちら）。渡せば、その値を開始値として明示する
-    /// （滑り出し側はこちら。現在値まかせだと、窓が出る処理と競合して拾えないことがある）。
+    /// <paramref name="from"/> を渡さなければ、呼んだ時点の現在値を開始値にする
+    /// （引っ込み側はこちら）。渡せば、その値を開始値として明示する。
     /// </para>
     /// </summary>
     private void Animate(double? from, double to, Duration time, IEasingFunction easing, Action? done = null)
@@ -393,11 +515,95 @@ public sealed class ShellController : IDisposable
         _window.BeginAnimation(Window.LeftProperty, animation);
     }
 
+    /// <summary>
+    /// 幅を「めくれるように」広げる（開く演出）。
+    /// <para>
+    /// 中身は <see cref="ISlideRevealHost.BeginSlideReveal"/> で固定してあるので、
+    /// ここは窓の <c>Width</c>（右に寄せているときは <c>Left</c> も）を動かすだけでよい。
+    /// </para>
+    /// <para>
+    /// <b>終わったらアニメーションを外す。</b>掛けたままだと、そのあと <c>Width</c>／
+    /// <c>Left</c> へ入れた値が効かなくなる（<see cref="Animate"/> と同じ理由）。
+    /// </para>
+    /// </summary>
+    private void AnimateReveal(double fromWidth, double toWidth, double restingLeft, Action? done)
+    {
+        ShellDiagnosticsLog.Write(
+            $"SlideIn 開く演出 edge={_shell.Edge} widthFrom={fromWidth:F1} widthTo={toWidth:F1} " +
+            $"dockWidth={_shell.DockWidth:F1} restingLeft={restingLeft:F1}");
+
+        // 右に寄せているときは、右端（restingLeft + toWidth）を定位置のまま固定する。
+        // 窓が左へ伸びるぶん、Left を Width と同時に動かして追従させる
+        // （ShellGeometry.RevealLeft。左に寄せているときは動かさないので、
+        // アニメーションそのものを掛けない）
+        if (_shell.Edge == DockEdge.Right)
+        {
+            var fromLeft = ShellGeometry.RevealLeft(_shell.Edge, restingLeft, toWidth, fromWidth);
+            var leftAnimation = new DoubleAnimation(fromLeft, restingLeft, SlideInTime)
+            {
+                EasingFunction = SlideRevealEasing,
+            };
+
+            leftAnimation.Completed += (_, _) =>
+            {
+                _window.BeginAnimation(Window.LeftProperty, null);
+                _window.Left = restingLeft;
+            };
+
+            _window.BeginAnimation(Window.LeftProperty, leftAnimation);
+        }
+
+        var widthAnimation = new DoubleAnimation(fromWidth, toWidth, SlideInTime)
+        {
+            EasingFunction = SlideRevealEasing,
+        };
+
+        widthAnimation.Completed += (_, _) =>
+        {
+            _window.BeginAnimation(Window.WidthProperty, null);
+            _window.Width = toWidth;
+            EndReveal();
+            done?.Invoke();
+        };
+
+        _window.BeginAnimation(Window.WidthProperty, widthAnimation);
+    }
+
+    /// <summary>
+    /// 開く演出を打ち切る。演出中でなければ何もしない。
+    /// <para>
+    /// <see cref="SlideOutIfIdle"/> 自体は変えない（引っ込みは完璧に動いている）。
+    /// 呼び出し側でここを先に呼ぶことで、<see cref="SlideInTime"/>（220ms）より
+    /// 短い間隔で引っ込みが割り込んでも、広がる演出と画面外へ動く演出が重ならない
+    /// ようにする。
+    /// </para>
+    /// </summary>
+    private void CancelReveal()
+    {
+        if (!_revealing) return;
+
+        EndReveal();
+        _window.BeginAnimation(Window.WidthProperty, null);
+        _window.BeginAnimation(Window.LeftProperty, null);
+        _revealHost?.EndSlideReveal();
+    }
+
+    /// <summary>演出中フラグを下ろし、演出向けに下げていた <c>MinWidth</c> を元に戻す。</summary>
+    private void EndReveal()
+    {
+        _revealing = false;
+        _window.MinWidth = _minWidthBeforeReveal;
+    }
+
     /// <summary>滑りを止めて、位置を自分の手に戻す。</summary>
     private void StopSliding()
     {
         _slidingOut = false;
         _window.BeginAnimation(Window.LeftProperty, null);
+
+        // 開く演出（Width、右寄せなら Left も）が残っていたら、ここで打ち切る。
+        // 掛けたままだと、このあと Width へ入れる値が効かなくなる
+        CancelReveal();
     }
 
     /// <summary>

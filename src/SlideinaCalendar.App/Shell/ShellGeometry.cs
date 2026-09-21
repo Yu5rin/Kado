@@ -31,6 +31,19 @@ internal static class ShellGeometry
     internal static bool ShouldMove(double value, double current) => Math.Abs(value - current) >= 1;
 
     /// <summary>
+    /// 開く演出（滑り出し）のあいだ、いまの <paramref name="width"/> に対応する
+    /// <c>Left</c>。
+    /// <para>
+    /// 左に寄せているときは <paramref name="restingLeft"/> のまま動かさない。右に
+    /// 寄せているときは、右端（<paramref name="restingLeft"/> + <paramref name="restingWidth"/>）
+    /// を定位置のまま固定し、<paramref name="width"/> が変わるぶん <c>Left</c> を
+    /// 追従させる。窓が左へ伸びる形になる。
+    /// </para>
+    /// </summary>
+    internal static double RevealLeft(DockEdge edge, double restingLeft, double restingWidth, double width) =>
+        edge == DockEdge.Left ? restingLeft : restingLeft + restingWidth - width;
+
+    /// <summary>
     /// AppBar へ提案する矩形。上下は作業領域、左右はモニタ全体から取る（不具合2）。
     /// <para>
     /// 上下までモニタ全体を提案すると、タスクバー分の切り詰めを Windows 任せにする
