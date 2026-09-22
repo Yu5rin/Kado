@@ -187,6 +187,39 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
+    public void 旧い名前のものがあれば新しく作らずそこへ入れる()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        const string id = "ina@group.calendar.google.com";
+        AddGoogleCalendar(test, id, CalendarWorkspace.LegacyWorkingDayCalendarName);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        // ここで「Kado」を新しく作ると、同期が Google 側にも空の「Kado」を起こし、
+        // 入れ先が2つに割れる。実際にそうなった
+        Assert.DoesNotContain(test.Workspace.Sources.Calendars(),
+            c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        Assert.All(Milestones(test), e => Assert.Equal(id, e.CalendarId));
+    }
+
+    [Fact]
+    public void 旧い名前も無ければ新しく作る()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        var calendar = test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        Assert.True(CalendarWorkspace.IsLocal(calendar));
+    }
+
+    [Fact]
     public void 両方あれば_Google_のほうを選ぶ()
     {
         using var test = TestWorkspace.Create(withWorkingDays: false);
