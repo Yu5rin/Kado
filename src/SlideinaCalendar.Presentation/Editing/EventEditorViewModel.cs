@@ -186,13 +186,31 @@ public sealed class EventEditorViewModel : ObservableObject
     /// 「カレンダーに従う」「知らせる」「知らせない」の3つ。既定は従う。
     /// ふつうはカレンダー側（左パネルのベル）で決め、例外だけここで指す。
     /// </para>
+    /// <para>
+    /// <b>「カレンダーに従う」はどちらになるかを添えて出す。</b>左パネルのベルを
+    /// 開かないと結果が分からず、選んでいるカレンダーによって変わる（実機の報告）。
+    /// <see cref="CalendarId"/> を選び直すたびに知らせて追従させる。
+    /// </para>
     /// </summary>
-    public IReadOnlyList<NotifyChoice> NotifyOptions { get; } =
+    public IReadOnlyList<NotifyChoice> NotifyOptions =>
     [
-        new(null, "カレンダーに従う"),
+        new(null, $"カレンダーに従う（{FollowsCalendarLabel}）"),
         new(true, "知らせる"),
         new(false, "知らせない"),
     ];
+
+    /// <summary>
+    /// 「カレンダーに従う」を選んだとき、実際に知らせるかどうか。
+    /// <para>
+    /// いま選んでいるカレンダー（<see cref="CalendarId"/>）の既定に従う。
+    /// 一覧に見つからなければ（読み込み中など）、カレンダー側の既定と同じ
+    /// 「知らせる」に合わせておく。
+    /// </para>
+    /// </summary>
+    private string FollowsCalendarLabel =>
+        Calendars.FirstOrDefault(c => string.Equals(c.Id, _calendarId, StringComparison.Ordinal)) is { } chosen
+            ? (chosen.Notifies ? "知らせる" : "知らせない")
+            : "知らせる";
 
     /// <summary>選ばれている通知の指定。</summary>
     public bool? Notify
@@ -329,7 +347,13 @@ public sealed class EventEditorViewModel : ObservableObject
     public string? CalendarId
     {
         get => _calendarId;
-        set => Set(ref _calendarId, value);
+        set
+        {
+            if (!Set(ref _calendarId, value)) return;
+
+            // 「カレンダーに従う」の結果はカレンダーごとに変わる。選び直したら文言も追従させる
+            Raise(nameof(NotifyOptions));
+        }
     }
 
     /// <summary>

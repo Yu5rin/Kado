@@ -38,6 +38,8 @@
     <Compile Include="..\..\src\SlideinaCalendar.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
     <Compile Include="..\..\src\SlideinaCalendar.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
     <Compile Include="..\..\src\SlideinaCalendar.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
+    <!-- 編集ウィンドウを帯の隣へ置く位置計算。Window/Win32 に依存しないので同じ手が使える -->
+    <Compile Include="..\..\src\SlideinaCalendar.App\Editing\EditorWindowPlacement.cs" Link="Editing\EditorWindowPlacement.cs" />
   </ItemGroup>
 
   <ItemGroup>

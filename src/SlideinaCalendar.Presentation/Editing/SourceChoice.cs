@@ -10,7 +10,16 @@ namespace SlideinaCalendar.Presentation.Editing;
 /// </summary>
 /// <param name="Id">保存する値。カレンダー ID またはタスクリスト ID。</param>
 /// <param name="Name">画面に出す名前。</param>
-public sealed record SourceChoice(string Id, string Name)
+/// <param name="Notifies">
+/// このカレンダーは既定で知らせるか（左パネルのベルの状態）。
+/// <para>
+/// タスクリストは通知の対象にしていないので常に既定値（true）のまま。予定の編集画面が
+/// 「カレンダーに従う」の結果（知らせる／知らせない）を添えて出すのに使う。
+/// 既定値つきの任意引数にしてあるのは、通知に関係しない呼び出し側（タスクリスト欄など）
+/// を直さずに済ませるため。
+/// </para>
+/// </param>
+public sealed record SourceChoice(string Id, string Name, bool Notifies = true)
 {
     /// <summary>コンボの選択中の表示はこれが使われる。レコードの既定表現を出さない。</summary>
     public override string ToString() => Name;
