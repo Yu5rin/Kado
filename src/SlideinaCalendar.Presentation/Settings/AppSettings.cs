@@ -57,6 +57,7 @@ public sealed class AppSettings
     private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
     private const string MinWidthKey = "shell.min_width";
     private const string SlimShareKey = "ui.slim_calendar_share";
+    private const string SlimCalendarCollapsedKey = "ui.slim_calendar_collapsed";
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
     private const string CheckForUpdateOnStartupKey = "update.check_on_startup";
@@ -83,6 +84,7 @@ public sealed class AppSettings
     private YearLayout _yearLayout;
     private bool _closeToTray = true;
     private bool _slideOutOnLeave = true;
+    private bool _slimCalendarCollapsed;
     private int _minWidth = DefaultMinWidth;
     private int _dayStartHour;
     private int _dayEndHour;
@@ -113,6 +115,7 @@ public sealed class AppSettings
         _hasSlimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
             CultureInfo.InvariantCulture, out var share);
         _slimShare = _hasSlimShare ? Math.Clamp(share, 0.2, 0.8) : DefaultSlimShare;
+        _slimCalendarCollapsed = string.Equals(_store.Get(SlimCalendarCollapsedKey), "true", StringComparison.Ordinal);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -437,6 +440,26 @@ public sealed class AppSettings
     /// </para>
     /// </summary>
     public const double DefaultSlimShare = 0.3;
+
+    /// <summary>
+    /// スリムパネルの月カレンダーを畳んでいるか（項目2）。
+    /// <para>
+    /// 一覧を追いたいときにカレンダーぶんの高さを一覧へ回せるよう、月の見出しの
+    /// 山形（▾／▸）で畳み・開きを切り替えられる。畳んだ状態は覚えて次回も引き継ぐ。
+    /// </para>
+    /// </summary>
+    public bool IsSlimCalendarCollapsed
+    {
+        get => _slimCalendarCollapsed;
+        set
+        {
+            if (_slimCalendarCollapsed == value) return;
+
+            _slimCalendarCollapsed = value;
+            _store.Set(SlimCalendarCollapsedKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// いちばん細くできる幅の既定。

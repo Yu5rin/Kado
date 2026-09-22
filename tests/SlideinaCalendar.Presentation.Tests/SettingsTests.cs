@@ -604,4 +604,50 @@ public class SettingsTests
         settings.SlimCalendarShare = 0.95;
         Assert.Equal(0.8, settings.SlimCalendarShare, 3);
     }
+
+    /// <summary>スリムパネルの月カレンダーの畳み・開き（項目2）。次に開いたときも残る。</summary>
+    [Fact]
+    public void スリムパネルの月カレンダーの畳みは既定で開いており控えて次に開いても残る()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        Assert.False(settings.IsSlimCalendarCollapsed);
+
+        settings.IsSlimCalendarCollapsed = true;
+        Assert.True(settings.IsSlimCalendarCollapsed);
+
+        var next = new AppSettings(test.Workspace.Settings);
+        Assert.True(next.IsSlimCalendarCollapsed);
+
+        settings.IsSlimCalendarCollapsed = false;
+        var reopened = new AppSettings(test.Workspace.Settings);
+        Assert.False(reopened.IsSlimCalendarCollapsed);
+    }
+
+    /// <summary>
+    /// MainViewModel.IsSlimCalendarCollapsed は AppSettings への薄い窓口（項目2）。
+    /// 設定を持たない組み立て方（テストなど）では常に false で、書き込みも無視される。
+    /// </summary>
+    [Fact]
+    public void スリムパネルの月カレンダーの畳みはMainViewModel経由でも控わる()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var vm = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        Assert.False(vm.IsSlimCalendarCollapsed);
+
+        vm.IsSlimCalendarCollapsed = true;
+
+        Assert.True(vm.IsSlimCalendarCollapsed);
+        Assert.True(settings.IsSlimCalendarCollapsed);
+
+        // 設定を持たない組み立て方では、常に false のまま書き込みも無視する
+        var noSettings = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24));
+        Assert.False(noSettings.IsSlimCalendarCollapsed);
+
+        noSettings.IsSlimCalendarCollapsed = true;
+        Assert.False(noSettings.IsSlimCalendarCollapsed);
+    }
 }
