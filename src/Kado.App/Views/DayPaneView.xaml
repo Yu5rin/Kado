@@ -140,8 +140,9 @@
         </DataTemplate>
 
         <!--
-            タスクの行（.tk）。完了の切り替え・ホバーでゴミ箱・ダブルクリックで
-            編集・ホバー中は Delete キーでも消せる。遅れて済ませたものだけ色を変える
+            タスクの行（.tk）。ゴミ箱以外のどこを1回押しても済みの印が付き、
+            2回押すと編集が開く（2回押しでは印は付かない）。ホバーでゴミ箱、
+            ホバー中は Delete キーでも消せる。遅れて済ませたものだけ色を変える
         -->
         <DataTemplate x:Key="TaskRowTemplate">
             <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
@@ -156,12 +157,14 @@
                     Drop="OnTaskRowDropped"
                     MouseEnter="OnRowPointerEntered" MouseLeave="OnRowPointerExited">
                 <DockPanel>
+                    <!--
+                        印だけ。押す相手は行そのもの（OnTaskClicked）にした。
+                        ここにも押す口を持たせると、行と二重に効いて素通りしてしまう
+                    -->
                     <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
                               Style="{StaticResource TaskCheckBoxStyle}"
                               IsChecked="{Binding IsDone, Mode=OneWay}"
-                              Command="{Binding DataContext.ToggleTaskDoneCommand,
-                                        RelativeSource={RelativeSource AncestorType={x:Type views:DayPaneView}}}"
-                              CommandParameter="{Binding}" />
+                              IsHitTestVisible="False" Focusable="False" />
 
                     <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
                             Style="{StaticResource RowDeleteButtonStyle}"
