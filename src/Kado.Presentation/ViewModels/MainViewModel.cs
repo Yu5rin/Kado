@@ -232,11 +232,10 @@ public sealed class MainViewModel : ObservableObject
         EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
         DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
         ToggleTaskChipDoneCommand = new RelayCommand<TaskItem?>(ToggleTaskChipDone);
-        EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(EditBlock);
+        EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(block => EditEventBy(block?.Id));
         EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
         DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
-        DeleteBlockCommand = new RelayCommand<TimeBlockViewModel?>(
-            block => DeleteEventBy(block?.IsWorkBlock == false ? block.Id : null));
+        DeleteBlockCommand = new RelayCommand<TimeBlockViewModel?>(block => DeleteEventBy(block?.Id));
         DeleteEventCommand = new RelayCommand<DayEventViewModel?>(DeleteEvent);
         EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
@@ -1442,10 +1441,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>日付の行のラベルを消す。</summary>
     public RelayCommand<MilestoneViewModel?> DeleteMilestoneCommand { get; }
 
-    /// <summary>週ビュー・日ビューの時間軸に置かれた1件を開く。</summary>
+    /// <summary>週ビュー・日ビューの時間軸に置かれた予定を開く。</summary>
     public RelayCommand<TimeBlockViewModel?> EditBlockCommand { get; }
 
-    /// <summary>週ビュー・日ビューの時間軸に置かれた予定を消す。作業時間ブロックは対象外。</summary>
+    /// <summary>週ビュー・日ビューの時間軸に置かれた予定を消す。</summary>
     public RelayCommand<TimeBlockViewModel?> DeleteBlockCommand { get; }
     public RelayCommand<DayEventViewModel?> DeleteEventCommand { get; }
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
@@ -2522,21 +2521,6 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = _workspace.DeleteEvent(id)
             ? isRecurring ? "繰り返しの予定をすべての回、削除しました" : "予定を削除しました"
             : "予定が見つかりませんでした";
-    }
-
-    /// <summary>
-    /// 時間軸の1件を開く。
-    /// <para>
-    /// 作業時間ブロックは予定ではないので、もとになったタスクのほうを開く。
-    /// ブロック自身の識別子で予定を探しても見つからない。
-    /// </para>
-    /// </summary>
-    private void EditBlock(TimeBlockViewModel? target)
-    {
-        if (target is null) return;
-
-        if (target.IsWorkBlock) EditTaskBy(target.TaskId);
-        else EditEventBy(target.Id);
     }
 
     /// <inheritdoc cref="EditEventBy"/>

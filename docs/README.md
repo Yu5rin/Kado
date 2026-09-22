@@ -727,33 +727,38 @@ XAML の読み込みで落ちるかどうかは `XamlResourceTests` が静的に
 Google Calendar のイベントは `reminders` を持つので、項目としては揃っていない。
 ただ、欄だけ先に付けると「設定したのに鳴らない」状態になる。欄が無いより悪い。
 
-## 作業時間ブロック（`work_blocks`）は、まだ作る導線が無い
+## 作業時間ブロック（`work_blocks`）は実装しないと決めた
 
-要件書 5.4「タスクを時間軸へドラッグするとブロックが確保される」が未達。
-利用者と相談し、**いま作るのは見送り、揃っているところまでを残す**ことにした。
+要件書 5.4「タスクを時間軸へドラッグするとブロックが確保される」について。
+テーブル・モデル・リポジトリのメソッド・描画の分岐まで一通り揃っていたが、
+**作る導線（タスクを時間軸へドラッグする操作）が最後までひとつも実装されなかった**。
+利用者と相談し、**この機能は実装しないと決定**。導線が無いぶんの画面側・
+ViewModel 側・リポジトリ側のコードは落とした。
 
-### 揃っているもの
+### 落としたもの
 
-- **テーブル**（`work_blocks`）。`task_id` / `date` / `start_time` /
-  `duration_minutes` を持つ（`SchemaMigrations`）
-- **モデルとリポジトリ**。`Data.Models.WorkBlock`、
-  `TaskRepository.BlocksOf` / `BlocksInRange` / `UpsertBlock`
-- **Undo の控え**。`DeleteTaskEdit` はタスクを消すとき、連鎖して消える
-  作業時間ブロックも控えておき、元に戻すときに一緒に入れ直す（`Editing/Edits.cs`）
-- **時間軸の点線描画**。`TimelineBuilder` が `WorkBlock` を
-  `TimeBlockViewModel { IsWorkBlock = true }` として並べ、週・日ビューは
-  これを予定と区別して点線枠で描く（要件書 5.4）
-- **開く操作**。時間軸のブロックをダブルクリックすると、ブロックではなく
-  もとのタスクの編集画面が開く（`MainViewModel.EditBlock`）
+- `Data.Models.WorkBlock` レコード
+- `TaskRepository` の `BlocksOf` / `BlocksInRange` / `UpsertBlock` / `DeleteBlock`
+- `DeleteTaskEdit` が持っていた `blocks` の引数と、Undo での復元処理
+  （タスクの削除・復元だけになった）
+- `TimelineBuilder` の点線描画・ブロックの配置（`Layout` は予定だけを扱う）
+- `TimeBlockViewModel` の `IsWorkBlock` / `TaskId`
+  （予定の描画にも使う型なので、型自体は残した）
+- `MainViewModel` の `EditBlock` / `DeleteBlockCommand` にあったブロック分岐
+  （いまは時間軸の予定を開く・消すだけの単純な配線）
+- `TimelineColumnView.xaml` のブロック用スタイル・コンテキストメニューの分岐
 
-### 無いもの
+### 残したもの
 
-- **ブロックを作る手段そのものが無い。** 右ペイン・スリムパネルのタスクを
-  時間軸へドラッグしても、いまは何も起きない（そもそもドラッグ元として
-  扱っていない）
-- 時間軸の空きにタスクを**落とした**場合の受け口も無い
+- **テーブル定義**（`work_blocks`）。`SchemaMigrations` の V1 にそのまま残して
+  ある。マイグレーションを増やしたくないため。読み書きするコードはもう無い
+  ので、これ以上行が増えることは無いが、**過去の版で動いていた時期に作られた
+  行が既存のデータベースには残っている可能性がある**
+- `tests/Kado.Data.Tests/MigrationTests.cs` の `work_blocks` テーブルが
+  作られることを確かめるテストと、外部キー制約のテスト（テーブルが残っている
+  ことが仕様になったので、コメントを添えたうえでそのまま残した）
 
-### 将来作るときの手がかり
+### 将来また作るなら
 
 タスクを時間軸（週・日ビューの時間軸の列）へ落としたときの受け口は、
 [`src/Kado.App/Views/TimelineColumnView.xaml.cs`](../src/Kado.App/Views/TimelineColumnView.xaml.cs)
@@ -770,7 +775,9 @@ case TaskItem task:
     break;
 ```
 
-ブロックを作るなら、ここを分けて「終日レーンへは期限を変える／時間軸の列へは
+作るときは、まず `Data.Models` に `WorkBlock` を作り直し、`work_blocks`
+テーブル（V1 に残したまま）に合わせてリポジトリの読み書きを用意する。そのうえで
+`OnColumnDropped` を分け、「終日レーンへは期限を変える／時間軸の列へは
 `WorkBlock` を確保する」にする。落とした Y 座標から時刻を割り出す
 `TimeAt(...)` は同じファイルに既にある（予定の追加 `AddEventAt` が使っている）ので、
 そのまま使える。所要時間は既定を決め打ちするか（例：30分）、編集画面で

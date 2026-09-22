@@ -38,6 +38,9 @@ public class MigrationTests
     [Theory]
     [InlineData("events")]
     [InlineData("tasks")]
+    // work_blocks（作業時間ブロック）は実装しないと決まったが、テーブル定義は
+    // SchemaMigrations の V1 に残したままにしてある。このテストも「残っていること」
+    // が仕様になったので、そのまま残す
     [InlineData("work_blocks")]
     [InlineData("working_days")]
     [InlineData("data_ranges")]
@@ -79,7 +82,9 @@ public class MigrationTests
     {
         using var db = TestDatabase.Create();
 
-        // 存在しないタスクに作業時間ブロックをぶら下げようとすると弾かれる
+        // 存在しないタスクに作業時間ブロックをぶら下げようとすると弾かれる。
+        // work_blocks は実装しないと決まったが、テーブル定義（外部キーを含む）は
+        // 残っているので、この制約もそのまま生きている
         Assert.Throws<SqliteException>(() => db.Connection.Execute(
             """
             INSERT INTO work_blocks (id, task_id, date, start_time, duration_minutes)

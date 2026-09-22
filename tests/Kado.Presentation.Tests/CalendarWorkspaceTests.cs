@@ -166,29 +166,6 @@ public class CalendarWorkspaceTests
         Assert.Equal("タスクの変更", ws.Undo.UndoDescription);
     }
 
-    [Fact]
-    public void タスクを消すと作業時間ブロックも戻る()
-    {
-        using var test = TestWorkspace.Create();
-        var ws = test.Workspace;
-
-        ws.AddTask(new TaskItem { Id = "t1", Title = "作業のあるタスク" });
-        ws.Tasks.UpsertBlock(new WorkBlock
-        {
-            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24),
-            StartTime = new TimeOnly(9, 0), DurationMinutes = 90,
-        });
-
-        ws.DeleteTask("t1");
-        Assert.Empty(ws.Tasks.BlocksOf("t1"));
-
-        ws.UndoLast();
-
-        // 連鎖で消えたぶんを控えていないと、ここで失われる
-        var block = Assert.Single(ws.Tasks.BlocksOf("t1"));
-        Assert.Equal(90, block.DurationMinutes);
-    }
-
     // ------------------------------------------------------------------
     // 通知と履歴
     // ------------------------------------------------------------------

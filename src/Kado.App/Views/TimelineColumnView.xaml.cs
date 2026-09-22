@@ -128,9 +128,9 @@ public partial class TimelineColumnView : UserControl
     /// <summary>
     /// 空いている時間帯をダブルクリックすると、その時刻で予定を足す。
     /// <para>
-    /// 1回押しは月ビューと同じくドラッグの始まりを兼ねる。予定・作業時間ブロックの
-    /// 上で押されたときは、そちら（<see cref="OnBlockClicked"/>）が先に <c>Handled</c>
-    /// にするので、ここまでは届かない。
+    /// 1回押しは月ビューと同じくドラッグの始まりを兼ねる。予定の上で押されたときは、
+    /// そちら（<see cref="OnBlockClicked"/>）が先に <c>Handled</c> にするので、
+    /// ここまでは届かない。
     /// </para>
     /// </summary>
     private void OnColumnPressed(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -170,8 +170,7 @@ public partial class TimelineColumnView : UserControl
                 main.MoveEventToTime(chip.Id, column.Date, at, copy);
                 break;
 
-            // 作業時間ブロックはタスクのもの。動かすのは予定だけ
-            case TimeBlockViewModel { IsWorkBlock: false } block:
+            case TimeBlockViewModel block:
                 main.MoveEventToTime(block.Id, column.Date, at, copy);
                 break;
 
@@ -187,10 +186,7 @@ public partial class TimelineColumnView : UserControl
         }
     }
 
-    /// <summary>
-    /// 時間軸の1件を2回押すと開く。
-    /// <para>作業時間ブロックは予定ではないので、もとになったタスクのほうが開く。</para>
-    /// </summary>
+    /// <summary>時間軸の1件を2回押すと開く。</summary>
     private void OnBlockClicked(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         // 1回押しはドラッグの始まり

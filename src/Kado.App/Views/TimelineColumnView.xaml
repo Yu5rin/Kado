@@ -3,7 +3,6 @@
 
       .hcell  1時間ぶんの高さ（週 44px ／ 日 56px）/ 下に 1px の罫線
       .eblk   左に 3px の帯 / radius 3 / padding 2 5 / 時刻は 9.5px
-      .eblk.task  点線枠。予定ではなくタスクの作業時間（要件書 5.4）
 
     ブロックは Canvas ではなく余白で置く。横に伸ばしたいため。
 -->
@@ -17,7 +16,6 @@
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EventColorFaceConverter x:Key="EventColorFace" />
-        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVisibility" />
 
         <!--
@@ -31,15 +29,8 @@
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-
-            <!-- 作業時間ブロックは予定ではないので、ここからは消せない -->
-            <Separator Visibility="{Binding PlacementTarget.DataContext.IsWorkBlock,
-                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                    Converter={StaticResource InverseBoolToVisibility}}" />
+            <Separator />
             <MenuItem Header="削除"
-                      Visibility="{Binding PlacementTarget.DataContext.IsWorkBlock,
-                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                   Converter={StaticResource InverseBoolToVisibility}}"
                       Command="{Binding PlacementTarget.Tag.DeleteBlockCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
@@ -55,7 +46,7 @@
         <Grid>
             <!--
                 ホバー中の15分幅の帯（項目2）。ダブルクリックで何が起きるかを、
-                押す前に分かるようにする。予定・作業時間ブロックの上に出しても
+                押す前に分かるようにする。予定の上に出しても
                 実害は無いので、いちばん下（罫線のすぐ上）に置く
             -->
             <Border x:Name="HoverBand"
@@ -93,7 +84,7 @@
                          HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-5,0,0,0" />
             </Grid>
 
-            <!-- 予定と作業時間ブロック。重ねて置くので入れ物は Grid -->
+            <!-- 予定。重ねて置くので入れ物は Grid -->
             <ItemsControl ItemsSource="{Binding Blocks}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><Grid /></ItemsPanelTemplate>
@@ -122,17 +113,6 @@
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Border>
-
-                        <DataTemplate.Triggers>
-                            <!-- 作業時間ブロックは点線枠。予定に変換されたわけではない -->
-                            <DataTrigger Binding="{Binding IsWorkBlock}" Value="True">
-                                <Setter TargetName="Block" Property="Background"
-                                        Value="{DynamicResource PanelBrush}" />
-                                <Setter TargetName="Block" Property="BorderThickness" Value="1" />
-                                <Setter TargetName="Block" Property="ToolTip"
-                                        Value="タスクの作業時間。予定ではありません" />
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

@@ -126,7 +126,7 @@ public partial class WeekView : UserControl
             case EventChipViewModel chip:
                 main.MoveEventToAllDay(chip.Id, date, copy);
                 break;
-            case TimeBlockViewModel { IsWorkBlock: false } block:
+            case TimeBlockViewModel block:
                 main.MoveEventToAllDay(block.Id, date, copy);
                 break;
             case MilestoneViewModel milestone:
