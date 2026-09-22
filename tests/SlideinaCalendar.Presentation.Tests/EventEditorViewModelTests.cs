@@ -451,4 +451,73 @@ public class EventEditorViewModelTests
 
         Assert.True(vm.Deleted);
     }
+
+    // ------------------------------------------------------------------
+    // 「カレンダーに従う」の文言（実機の報告：従うとどちらになるか画面から分からない）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 通知ONのカレンダーなら従うの結果は知らせる()
+    {
+        SourceChoice[] calendars = [new("local:shigoto", "仕事", Notifies: true)];
+        var vm = new EventEditorViewModel(D(2026, 9, 24), calendars);
+        vm.CalendarId = "local:shigoto";
+
+        var follow = vm.NotifyOptions.Single(o => o.Value is null);
+
+        Assert.Equal("カレンダーに従う（知らせる）", follow.Label);
+    }
+
+    [Fact]
+    public void 通知OFFのカレンダーなら従うの結果は知らせない()
+    {
+        SourceChoice[] calendars = [new("local:private", "プライベート", Notifies: false)];
+        var vm = new EventEditorViewModel(D(2026, 9, 24), calendars);
+        vm.CalendarId = "local:private";
+
+        var follow = vm.NotifyOptions.Single(o => o.Value is null);
+
+        Assert.Equal("カレンダーに従う（知らせない）", follow.Label);
+    }
+
+    [Fact]
+    public void カレンダーを選び直すと従うの文言も追従する()
+    {
+        SourceChoice[] calendars =
+        [
+            new("local:shigoto", "仕事", Notifies: true),
+            new("local:private", "プライベート", Notifies: false),
+        ];
+        var vm = new EventEditorViewModel(D(2026, 9, 24), calendars, defaultCalendarId: "local:shigoto");
+
+        Assert.Equal("カレンダーに従う（知らせる）",
+            vm.NotifyOptions.Single(o => o.Value is null).Label);
+
+        vm.CalendarId = "local:private";
+
+        Assert.Equal("カレンダーに従う（知らせない）",
+            vm.NotifyOptions.Single(o => o.Value is null).Label);
+    }
+
+    [Fact]
+    public void 一覧に無いカレンダーIDのときは既定の知らせるに揃える()
+    {
+        var vm = New();
+        vm.CalendarId = "存在しないID";
+
+        var follow = vm.NotifyOptions.Single(o => o.Value is null);
+
+        Assert.Equal("カレンダーに従う（知らせる）", follow.Label);
+    }
+
+    [Fact]
+    public void 知らせる知らせないの選択肢はカレンダーによらず変わらない()
+    {
+        SourceChoice[] calendars = [new("local:private", "プライベート", Notifies: false)];
+        var vm = new EventEditorViewModel(D(2026, 9, 24), calendars);
+        vm.CalendarId = "local:private";
+
+        Assert.Equal("知らせる", vm.NotifyOptions.Single(o => o.Value == true).Label);
+        Assert.Equal("知らせない", vm.NotifyOptions.Single(o => o.Value == false).Label);
+    }
 }

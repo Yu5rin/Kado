@@ -2572,9 +2572,15 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
     }
 
-    /// <summary>編集画面に出すカレンダーの候補。名前で選ばせ、保存するのは ID。</summary>
+    /// <summary>
+    /// 編集画面に出すカレンダーの候補。名前で選ばせ、保存するのは ID。
+    /// <para>
+    /// 通知の既定（<see cref="SourceListItemViewModel.Notifies"/>）も添える。予定の編集画面が
+    /// 「カレンダーに従う（知らせる／知らせない）」を出すのに使う（実機の報告）。
+    /// </para>
+    /// </summary>
     private IReadOnlyList<SourceChoice> CalendarNames =>
-        SourceLists.Calendars.Select(c => new SourceChoice(c.Id, c.Name)).ToArray();
+        SourceLists.Calendars.Select(c => new SourceChoice(c.Id, c.Name, c.Notifies)).ToArray();
 
     private IReadOnlyList<SourceChoice> TaskListNames =>
         SourceLists.TaskLists.Select(t => new SourceChoice(t.Id, t.Name)).ToArray();

@@ -152,7 +152,11 @@
 
             <StackPanel Margin="0,0,0,12">
                 <TextBlock Text="通知" Style="{StaticResource FieldLabelStyle}" />
-                <ComboBox Width="176" HorizontalAlignment="Left"
+                <!--
+                    「カレンダーに従う（知らせない）」のように結果を添えるぶん長くなるので、
+                    他の欄（176px）より広く取る。切れて読めないと元の不具合と同じになる
+                -->
+                <ComboBox Width="260" HorizontalAlignment="Left"
                           Style="{StaticResource FieldComboBoxStyle}"
                           ItemsSource="{Binding NotifyOptions}"
                           SelectedValuePath="Value" SelectedValue="{Binding Notify}"

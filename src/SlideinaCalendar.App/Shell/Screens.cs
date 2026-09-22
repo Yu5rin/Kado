@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using static SlideinaCalendar.App.Shell.NativeMethods;
 
 namespace SlideinaCalendar.App.Shell;
@@ -63,6 +64,26 @@ internal static class Screens
         }
 
         return PrimaryWork(scale);
+    }
+
+    /// <summary>
+    /// 指定した窓が乗っているモニタの作業領域（DIP）。
+    /// <para>
+    /// 編集ウィンドウを帯の隣に出すとき、画面や他のモニタからはみ出させないための
+    /// 下ごしらえ（不具合1：編集ウィンドウが帯に重なる）。複数モニタの環境では、
+    /// <b>帯が乗っているモニタの中に収める。</b>メインディスプレイ固定の
+    /// <c>SystemParameters.WorkArea</c> は使わない（会社のような複数モニタで
+    /// メイン以外へ寄せて使うと、はみ出す判定がまるごと別の画面の値になる）。
+    /// </para>
+    /// </summary>
+    /// <param name="window">帯として出ている本体ウィンドウ。</param>
+    internal static Rect WorkAreaDips(Window window)
+    {
+        var scale = PresentationSource.FromVisual(window)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        var handle = new WindowInteropHelper(window).Handle;
+        var work = WorkOf(handle, scale);
+
+        return new Rect(work.left / scale, work.top / scale, work.Width / scale, work.Height / scale);
     }
 
     /// <summary>プライマリ画面。モニタを引けなかったときの代用。</summary>
