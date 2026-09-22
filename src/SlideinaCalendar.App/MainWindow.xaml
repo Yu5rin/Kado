@@ -35,6 +35,7 @@
         <conv:SyncStateBrushConverter x:Key="SyncStateBrush" />
         <conv:SyncStateIsAlertConverter x:Key="SyncStateIsAlert" />
         <conv:ShrinkWidthConverter x:Key="ShrinkWidth" />
+        <conv:EdgePaddingConverter x:Key="EdgePadding" />
 
         <!--
             操作の結果を一時的に出す帯（項目1）。Opacity を DataTrigger の
@@ -328,34 +329,44 @@
     <DockPanel>
         <!--
             ドックグリップ（下の DockGrip）とぶつからないよう、内側の辺に8pxぶん
-            余白を空ける。中身に直書きせず Style のトリガーで与える（下の DockGrip
-            と同じ理由。タグの直書きはトリガーに勝ってしまう）。
+            余地を空ける。
 
-            右端に寄せていれば内側は左（既定のまま）。左端に寄せていれば内側は右
-            なので、DockGrip 側と同じ条件で上書きする。ドックしていないときは
-            余白を空けない（ふつうの窓に OS の掴みしろがある）。
+            以前はここ（DockPanel 全体）に Margin を掛けていたが、それだと
+            マージンぶんは何も塗らない素通しの領域になり、窓の背景
+            （BackgroundBrush、暗い色）がそのまま透けて見えていた。ツールバーや
+            パネルの色（PanelBrush など）と地続きに見えず、「隙間」に見える
+            不具合として実機で見つかった。
+
+            塗り残しを作らないよう、余地は「色を塗っている入れ物」自身ではなく
+            その中身に対して与える（ツールバーの Padding、各パネルの
+            Padding／Margin。EdgePaddingConverter）。入れ物は常に窓の端まで
+            自分の色で塗り切ったうえで、中の要素だけが8px内側で止まる。
+
+            右端に寄せていれば内側は左、左端に寄せていれば内側は右。
+            ドックしていないときは余地を空けない（ふつうの窓に OS の
+            掴みしろがある）。EdgePaddingConverter がこの3条件をまとめて見る。
         -->
-        <DockPanel.Style>
-            <Style TargetType="DockPanel">
-                <Setter Property="Margin" Value="0" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding Shell.IsAtEdge}" Value="True">
-                        <Setter Property="Margin" Value="8,0,0,0" />
-                    </DataTrigger>
-                    <MultiDataTrigger>
-                        <MultiDataTrigger.Conditions>
-                            <Condition Binding="{Binding Shell.IsAtEdge}" Value="True" />
-                            <Condition Binding="{Binding Shell.IsAtLeft}" Value="True" />
-                        </MultiDataTrigger.Conditions>
-                        <Setter Property="Margin" Value="0,0,8,0" />
-                    </MultiDataTrigger>
-                </Style.Triggers>
-            </Style>
-        </DockPanel.Style>
 
         <!-- ツールバー（.tbar） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}"
                 BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <!--
+                DockGrip の掴みしろぶんの余地（8px）。Background はこの Border が
+                窓の端まで塗り切ったうえで、Padding で中身（下の Grid）だけを
+                内側へ寄せる。ツールバーはパネルの出し分けに関わらず窓いっぱいの
+                1本の帯なので、出ているパネルは見ない（EdgePaddingConverter に
+                ConverterParameter="Toolbar" で伝える）。
+            -->
+            <Border.Padding>
+                <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Toolbar">
+                    <Binding Path="Shell.IsAtEdge" />
+                    <Binding Path="Shell.IsAtLeft" />
+                    <Binding Path="IsSlimPanelOpen" />
+                    <Binding Path="IsSidePanelOpen" />
+                    <Binding Path="IsMainViewOpen" />
+                    <Binding Path="IsDetailPaneOpen" />
+                </MultiBinding>
+            </Border.Padding>
             <!--
                 左（年月・送り・ビュー切り替え・実働日）と右（検索・同期・ピン・設定）を
                 別の列に分ける。
@@ -978,10 +989,29 @@
                 <ColumnDefinition x:Name="DetailColumn" Width="296" MinWidth="200" MaxWidth="640" />
             </Grid.ColumnDefinitions>
 
-            <!-- スリムパネル。ひと月の並びと、選んだ日の予定・タスクだけ -->
-            <views:SidebarLayout x:Name="Sidebar" Grid.Column="0"
-                                 Visibility="{Binding IsSlimPanelOpen,
-                                              Converter={StaticResource BoolToVisibility}}" />
+            <!--
+                スリムパネル。ひと月の並びと、選んだ日の予定・タスクだけ。
+
+                SidebarLayout 自身は BackgroundBrush で自分の背景を塗るが、
+                Padding を持たないので、DockGrip の掴みしろぶんの余地は
+                外側に足したこの Border（同じ BackgroundBrush）で与える。
+                Border が窓の端まで塗り切り、Padding で中身だけを内側へ寄せる
+            -->
+            <Border Grid.Column="0" Background="{DynamicResource BackgroundBrush}"
+                    Visibility="{Binding IsSlimPanelOpen,
+                                 Converter={StaticResource BoolToVisibility}}">
+                <Border.Padding>
+                    <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Slim">
+                        <Binding Path="Shell.IsAtEdge" />
+                        <Binding Path="Shell.IsAtLeft" />
+                        <Binding Path="IsSlimPanelOpen" />
+                        <Binding Path="IsSidePanelOpen" />
+                        <Binding Path="IsMainViewOpen" />
+                        <Binding Path="IsDetailPaneOpen" />
+                    </MultiBinding>
+                </Border.Padding>
+                <views:SidebarLayout x:Name="Sidebar" />
+            </Border>
 
             <GridSplitter Grid.Column="1" x:Name="SlimSplitter"
                           Style="{StaticResource PaneSplitterStyle}"
@@ -991,6 +1021,20 @@
             <Border Grid.Column="2" Background="{DynamicResource PanelBrush}"
                     BorderThickness="0,0,1,0" BorderBrush="{DynamicResource LineBrush}"
                     Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}">
+                <!--
+                    DockGrip の掴みしろぶんの余地。この Border が窓の端まで
+                    PanelBrush で塗り切ったうえで、Padding で中身だけを内側へ寄せる
+                -->
+                <Border.Padding>
+                    <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Side">
+                        <Binding Path="Shell.IsAtEdge" />
+                        <Binding Path="Shell.IsAtLeft" />
+                        <Binding Path="IsSlimPanelOpen" />
+                        <Binding Path="IsSidePanelOpen" />
+                        <Binding Path="IsMainViewOpen" />
+                        <Binding Path="IsDetailPaneOpen" />
+                    </MultiBinding>
+                </Border.Padding>
                 <DockPanel>
                     <!-- 実働日計算（.wdbox）。パネルの下端に貼り付ける -->
                     <Border DockPanel.Dock="Bottom" Padding="12,10">
@@ -1149,8 +1193,24 @@
             <DockPanel Grid.Column="4" x:Name="MainPane"
                        Background="{DynamicResource BackgroundBrush}"
                        Visibility="{Binding IsMainViewOpen, Converter={StaticResource BoolToVisibility}}">
-                <!-- 出しているビューだけを置く。畳んだビューは計算もしない -->
+                <!--
+                    出しているビューだけを置く。畳んだビューは計算もしない。
+
+                    DockGrip の掴みしろぶんの余地は、この DockPanel（Padding を
+                    持たない）自身ではなく中身の Grid に Margin として与える。
+                    DockPanel の Background はそのまま窓の端まで塗り切られる
+                -->
                 <Grid>
+                    <Grid.Margin>
+                        <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Main">
+                            <Binding Path="Shell.IsAtEdge" />
+                            <Binding Path="Shell.IsAtLeft" />
+                            <Binding Path="IsSlimPanelOpen" />
+                            <Binding Path="IsSidePanelOpen" />
+                            <Binding Path="IsMainViewOpen" />
+                            <Binding Path="IsDetailPaneOpen" />
+                        </MultiBinding>
+                    </Grid.Margin>
                     <views:MonthView DataContext="{Binding Month}"
                                      Visibility="{Binding DataContext.IsMonthView,
                                                   RelativeSource={RelativeSource AncestorType=Window},
@@ -1189,6 +1249,27 @@
                     Background="{DynamicResource PanelBrush}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
                     DataContext="{Binding SelectedDay}">
+                <!--
+                    DockGrip の掴みしろぶんの余地。この Border が窓の端まで
+                    PanelBrush で塗り切ったうえで、Padding で中身だけを内側へ寄せる。
+
+                    この Border 自身が DataContext を SelectedDay に差し替えている
+                    ので、同じタグの上の Binding は（Visibility も含めて）SelectedDay
+                    を見に行く。Shell や IsMainViewOpen などは MainViewModel 側にしか
+                    無いため、ここだけは他の3つのパネルと違い、AncestorType=Window で
+                    窓の DataContext まで明示的に登る（すぐ下の日送りボタンの
+                    Command が RelativeSource=Window を使っているのと同じ理由）
+                -->
+                <Border.Padding>
+                    <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Detail">
+                        <Binding Path="DataContext.Shell.IsAtEdge" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        <Binding Path="DataContext.Shell.IsAtLeft" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        <Binding Path="DataContext.IsSlimPanelOpen" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        <Binding Path="DataContext.IsSidePanelOpen" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        <Binding Path="DataContext.IsMainViewOpen" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        <Binding Path="DataContext.IsDetailPaneOpen" RelativeSource="{RelativeSource AncestorType=Window}" />
+                    </MultiBinding>
+                </Border.Padding>
                 <Grid>
                     <!--
                         予定とタスクは上下に並べ、まとめてひとつのスクロールにする。
