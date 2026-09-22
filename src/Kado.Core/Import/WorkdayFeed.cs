@@ -175,6 +175,9 @@ public static class WorkdayFeed
 
         var body = new JsonObject
         {
+            // アプリ名は Kado に変わったが、ここは変えない。feed.json は旧 inaCalendar と
+            // 同じ形式を保つ配信フォーマットで、"app" はその形式の識別子。書き換えると
+            // 旧い道具や、この値を見て読み分けている先で読めなくなる
             ["app"] = "inaCalendar",
             ["type"] = Kind,
             ["updatedAt"] = Format(updatedAt),

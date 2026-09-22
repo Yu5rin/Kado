@@ -560,7 +560,7 @@ public sealed class AppSettings
     /// <summary>
     /// 新しい予定を入れる先のカレンダー。
     /// <para>
-    /// 左の一覧から選ぶ。決めていなければ、一覧の先頭（「inaCalendar」を除く）になる。
+    /// 左の一覧から選ぶ。決めていなければ、一覧の先頭（「Kado」を除く）になる。
     /// </para>
     /// </summary>
     public string? DefaultCalendarId

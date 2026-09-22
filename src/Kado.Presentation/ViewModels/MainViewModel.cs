@@ -310,7 +310,7 @@ public sealed class MainViewModel : ObservableObject
         {
             _workspace.EnsureSources();
 
-            // 「inaCalendar」の印も同期で増減する。実働日を組み立て直さないと、
+            // 「Kado」の印も同期で増減する。実働日を組み立て直さないと、
             // 他の端末で取り込んだ分がこちらでは「未登録」のままになる。
             // この中から DataChanged が飛ぶので、画面はそれで引き直される
             _workspace.ReloadWorkingDays();
@@ -1235,7 +1235,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// 新しい予定を入れる先のカレンダー。
     /// <para>
-    /// 左の一覧で選ばれているもの。選んでいなければ一覧の先頭で、「inaCalendar」は
+    /// 左の一覧で選ばれているもの。選んでいなければ一覧の先頭で、「Kado」は
     /// 避ける。入れてしまうと、次の取り込みで消える場所に置くことになる。
     /// </para>
     /// </summary>
@@ -1774,7 +1774,7 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
 
         var isTaskList = IsTaskList(target);
-        // 「inaCalendar」は名前で見分けて日付の行に出している。変えられると黙って止まる
+        // 「Kado」は名前で見分けて日付の行に出している。変えられると黙って止まる
         var locked = !isTaskList && string.Equals(
             target.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
 

@@ -25,7 +25,7 @@ public sealed class MilestoneViewModel(string id, string name)
 /// 実働日データから直に引いていて、左パネルのチェックが効かなかった。
 /// </para>
 /// <para>
-/// 材料は<b>予定</b>。実働日 Excel を取り込むと、マイルストーンは「inaCalendar」の予定
+/// 材料は<b>予定</b>。実働日 Excel を取り込むと、マイルストーンは「Kado」の予定
 /// としても書き出される。予定から作れば、所属カレンダーのチェックがそのまま効く。
 /// </para>
 /// </summary>
@@ -52,7 +52,7 @@ public static class MilestoneRow
             // Google カレンダー側では今までどおり文字で見える
             if (IsDayMark(scheduled.Source.Title)) continue;
 
-            // 実働日 Excel と Google の inaCalendar に同じものが入っていることがある。
+            // 実働日 Excel と Google の Kado に同じものが入っていることがある。
             // 旧 inaCalendar が Google 側にも書き込んでいたため。同じ名前は1つにする
             if (!seen.Add(scheduled.Source.Title)) continue;
 

@@ -129,7 +129,7 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
     /// <summary>
     /// カレンダーを作る。
     /// <para>
-    /// 実働日データの入れ先（inaCalendar）が Google 側に無いときに使う。要求している
+    /// 実働日データの入れ先（Kado）が Google 側に無いときに使う。要求している
     /// 権限のうち <c>calendar.app.created</c> が、このアプリが作ったカレンダーの
     /// 作成と管理を許している。他人のカレンダーには触れない。
     /// </para>
@@ -144,6 +144,32 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
         return await SendAsync(
             HttpMethod.Post,
             $"{Root}/calendars",
+            new JsonObject { ["summary"] = summary },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// カレンダーそのものの名前を変える。
+    /// <para>
+    /// <c>calendarList</c>（<see cref="PatchCalendarListAsync"/>）ではなく、この
+    /// カレンダーの実体（<c>calendars</c>）を叩く。ここの <c>summary</c> は
+    /// カレンダーの本当の名前で、共有している全員に見える。書き換えておけば、
+    /// 次に一覧を取り込んだときの <c>summary</c> もこれに変わり、同期のたびに
+    /// 名前が戻ることもない。
+    /// </para>
+    /// <para>
+    /// 持ち主でない・共有されているだけのカレンダーは、権限が無くて断られる
+    /// （<see cref="GoogleApiException"/>）。呼ぶ側で拾うこと。
+    /// </para>
+    /// </summary>
+    public async Task<JsonElement> RenameCalendarAsync(
+        string calendarId, string summary, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        return await SendAsync(
+            HttpMethod.Patch,
+            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}",
             new JsonObject { ["summary"] = summary },
             cancellationToken).ConfigureAwait(false);
     }

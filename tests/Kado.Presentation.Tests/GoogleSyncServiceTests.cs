@@ -1,4 +1,5 @@
 using System.Net;
+using Kado.Data.Models;
 using Kado.Google.Sync;
 using Kado.Presentation.Sync;
 
@@ -30,6 +31,12 @@ public class GoogleSyncServiceTests : IDisposable
         /// <summary>書き込みに行った先。送っていないことを確かめるのに使う。</summary>
         public List<string> Wrote { get; } = [];
 
+        /// <summary>
+        /// 書き込みだけ、既定の応答より先に割り込ませたいとき。
+        /// <para>null を返せば既定の応答（作成・イベント更新）にそのまま任せる。</para>
+        /// </summary>
+        public Func<HttpRequestMessage, (HttpStatusCode Status, string Body)?>? WriteRoute { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -42,13 +49,21 @@ public class GoogleSyncServiceTests : IDisposable
             {
                 Wrote.Add(url);
 
+                if (WriteRoute?.Invoke(request) is { } routed)
+                {
+                    return new HttpResponseMessage(routed.Status)
+                    {
+                        Content = new StringContent(routed.Body, System.Text.Encoding.UTF8, "application/json"),
+                    };
+                }
+
                 // カレンダーを作ったときの応答。イベントとは形が違う
                 if (url.EndsWith("/calendars", StringComparison.Ordinal))
                 {
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
                         Content = new StringContent(
-                            """{"id":"created-cal","summary":"inaCalendar","accessRole":"owner"}""",
+                            """{"id":"created-cal","summary":"Kado","accessRole":"owner"}""",
                             System.Text.Encoding.UTF8, "application/json"),
                     };
                 }
@@ -322,5 +337,209 @@ public class GoogleSyncServiceTests : IDisposable
 
         // ほかのカレンダーは今までどおり出す
         Assert.True(_test.Workspace.Sources.Calendars().Single(c => c.DisplayName == "仕事").IsVisible);
+    }
+
+    // ------------------------------------------------------------------
+    // 実働日カレンダーの旧い名前「inaCalendar」を「Kado」へ引っ越す
+    //
+    // ユーザーの Google アカウントには「inaCalendar」という名前のカレンダーが
+    // 実データ入りで残っている。名前を差し替えるだけでなく、Google 側の本体の
+    // 名前も変え、同期で名前が戻らないようにする
+    // ------------------------------------------------------------------
+
+    private const string LegacyCalendarId = "ina@group.calendar.google.com";
+
+    /// <summary>「inaCalendar」が Google 側にある状態を作る。</summary>
+    private CalendarSource SeedLegacyGoogleCalendar(string accessRole = "owner")
+    {
+        var value = new CalendarSource
+        {
+            Id = LegacyCalendarId,
+            Summary = CalendarWorkspace.LegacyWorkingDayCalendarName,
+            GoogleRaw = $$"""
+                {"id":"{{LegacyCalendarId}}","summary":"inaCalendar","accessRole":"{{accessRole}}"}
+                """,
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        _test.Workspace.Sources.Upsert(value);
+        return value;
+    }
+
+    /// <summary>「inaCalendar」の一覧・色・イベント一覧に答える。書き込みは呼ぶ側が足す。</summary>
+    private static (HttpStatusCode, string) RouteLegacy(string url, string accessRole = "owner") => url switch
+    {
+        _ when url.Contains("calendarList", StringComparison.Ordinal) => (HttpStatusCode.OK, $$"""
+            {"items":[{"id":"{{LegacyCalendarId}}","summary":"inaCalendar","accessRole":"{{accessRole}}"}]}
+            """),
+        _ when url.Contains("/colors", StringComparison.Ordinal) => (HttpStatusCode.OK, """{"calendar":{}}"""),
+        _ => (HttpStatusCode.OK, """{"items":[]}"""),
+    };
+
+    /// <summary>カレンダー本体（<c>calendars/{id}</c>）への PATCH か。一覧側の設定とは別物。</summary>
+    private static bool IsRenameRequest(HttpRequestMessage request) =>
+        request.Method == HttpMethod.Patch &&
+        request.RequestUri!.ToString().Contains("/calendars/", StringComparison.Ordinal) &&
+        !request.RequestUri!.ToString().Contains("calendarList", StringComparison.Ordinal) &&
+        !request.RequestUri!.ToString().Contains("/events", StringComparison.Ordinal);
+
+    /// <summary>一覧側の個人設定（<c>calendarList</c>）への PATCH か。</summary>
+    private static bool IsCalendarListPatch(HttpRequestMessage request) =>
+        request.Method == HttpMethod.Patch &&
+        request.RequestUri!.ToString().Contains("calendarList", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task inaCalendarしか無い状態から引っ越してKadoになる_中の予定も残る()
+    {
+        SeedLegacyGoogleCalendar();
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "workingday:20260924:仕様期限", Title = "仕様期限",
+            Date = new DateOnly(2026, 9, 24), CalendarId = LegacyCalendarId,
+            Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var handler = new RoutingHandler(url => RouteLegacy(url))
+        {
+            WriteRoute = request => IsRenameRequest(request)
+                ? (HttpStatusCode.OK, $$"""{"id":"{{LegacyCalendarId}}","summary":"Kado","accessRole":"owner"}""")
+                : null,
+        };
+
+        using var service = Create(handler);
+        var report = await service.SyncAsync();
+
+        // 本体（calendars）を patch している。一覧側の付け替えだけでは足りない
+        Assert.Contains(handler.Wrote, url =>
+            url.Contains("/calendars/ina%40group.calendar.google.com", StringComparison.Ordinal) &&
+            !url.Contains("/events", StringComparison.Ordinal));
+
+        var moved = Assert.Single(_test.Workspace.WorkingDayCalendars());
+        Assert.Equal("Kado", moved.DisplayName);
+        Assert.False(CalendarWorkspace.IsLocal(moved));
+
+        // カレンダー ID は変わっていない。中の予定を失わずに名前だけ変わった
+        Assert.Equal(LegacyCalendarId, _test.Workspace.Events.Find("workingday:20260924:仕様期限")!.CalendarId);
+
+        Assert.Contains(report!.Warnings,
+            w => w.Contains("Google の「Kado」に移しました", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 引っ越したあと同期しても名前がinaCalendarに戻らない()
+    {
+        // すでに Google 側の本体も「Kado」に変わっている（前回の同期で改名済み）
+        var migrated = new CalendarSource
+        {
+            Id = LegacyCalendarId,
+            Summary = CalendarWorkspace.WorkingDayCalendarName,
+            GoogleRaw = $$"""{"id":"{{LegacyCalendarId}}","summary":"Kado","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        };
+        _test.Workspace.Sources.Upsert(migrated);
+
+        var handler = new RoutingHandler(url => url.Contains("calendarList", StringComparison.Ordinal)
+            ? (HttpStatusCode.OK, $$"""
+                {"items":[{"id":"{{LegacyCalendarId}}","summary":"Kado","accessRole":"owner"}]}
+                """)
+            : RouteLegacy(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        // 一覧の取り込みが Google の本当の名前をそのまま反映する。改名済みなので「Kado」のまま
+        var after = _test.Workspace.Sources.Calendars().Single(c => c.Id == LegacyCalendarId);
+        Assert.Equal("Kado", after.DisplayName);
+
+        // すでに「Kado」があるので、改名をやり直しに行っていない
+        Assert.DoesNotContain(handler.Wrote, url =>
+            url.Contains("/calendars/ina%40group.calendar.google.com", StringComparison.Ordinal) &&
+            !url.Contains("/events", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Google側の改名に失敗しても実働日は読める_次の同期でまた試す()
+    {
+        // 共有されているだけで持ち主ではない、という想定
+        SeedLegacyGoogleCalendar(accessRole: "reader");
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "workingday:20260924:仕様期限", Title = "仕様期限",
+            Date = new DateOnly(2026, 9, 24), CalendarId = LegacyCalendarId,
+            Source = CalendarWorkspace.WorkingDaySource,
+        });
+
+        var handler = new RoutingHandler(url => RouteLegacy(url, "reader"))
+        {
+            WriteRoute = request =>
+            {
+                if (IsRenameRequest(request))
+                {
+                    // 持ち主でないので本体の改名は断られる
+                    return (HttpStatusCode.Forbidden,
+                        """{"error":{"errors":[{"reason":"insufficientPermissions"}]}}""");
+                }
+
+                if (IsCalendarListPatch(request))
+                {
+                    // 一覧側の個人設定はたいてい通る
+                    return (HttpStatusCode.OK, """{"summaryOverride":"Kado"}""");
+                }
+
+                return null;
+            },
+        };
+
+        using var service = Create(handler);
+        var report = await service.SyncAsync();
+
+        // 見え方は「Kado」になり、実働日とマイルストーンが見えなくならない
+        var visible = Assert.Single(_test.Workspace.WorkingDayCalendars());
+        Assert.Equal("Kado", visible.DisplayName);
+        Assert.Equal(LegacyCalendarId, _test.Workspace.Events.Find("workingday:20260924:仕様期限")!.CalendarId);
+
+        Assert.Contains(report!.Warnings, w =>
+            w.Contains("改名できませんでした", StringComparison.Ordinal) &&
+            w.Contains("次の同期でまた試します", StringComparison.Ordinal));
+
+        // 本体の名前はまだ「inaCalendar」のまま控えている。次の同期でまた本当の改名を試すため
+        var stored = _test.Workspace.Sources.Calendars().Single(c => c.Id == LegacyCalendarId);
+        Assert.Equal(CalendarWorkspace.LegacyWorkingDayCalendarName, stored.Summary);
+
+        // 次の同期でまた本体の改名を試している
+        handler.Wrote.Clear();
+        await service.SyncAsync();
+
+        Assert.Contains(handler.Wrote, url =>
+            url.Contains("/calendars/ina%40group.calendar.google.com", StringComparison.Ordinal) &&
+            !url.Contains("/events", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task すでにKadoがあれば引っ越しも改名もしない()
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = LegacyCalendarId,
+            Summary = CalendarWorkspace.WorkingDayCalendarName,
+            GoogleRaw = $$"""{"id":"{{LegacyCalendarId}}","summary":"Kado","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(url => url.Contains("calendarList", StringComparison.Ordinal)
+            ? (HttpStatusCode.OK, $$"""
+                {"items":[{"id":"{{LegacyCalendarId}}","summary":"Kado","accessRole":"owner"}]}
+                """)
+            : RouteLegacy(url));
+
+        using var service = Create(handler);
+        var report = await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Wrote, url =>
+            url.Contains("/calendars/ina%40group.calendar.google.com", StringComparison.Ordinal) &&
+            !url.Contains("/events", StringComparison.Ordinal));
+
+        Assert.Single(_test.Workspace.WorkingDayCalendars());
+        Assert.DoesNotContain(report!.Warnings, w => w.Contains("改名", StringComparison.Ordinal));
     }
 }

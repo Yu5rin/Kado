@@ -19,7 +19,7 @@ public enum YearLayout
 /// 年ビューのマスに重ねる印1件。
 /// <para>
 /// 仕様期限・1次GO のような日付の行の印は、<b>名前ごとに色が決まっている</b>
-/// （月ビューと同じ決まり）。カレンダーの色で塗ると、inaCalendar のものが
+/// （月ビューと同じ決まり）。カレンダーの色で塗ると、Kado のものが
 /// 全部同じ色になってしまい、何の区切りなのか分からない。
 /// </para>
 /// </summary>
@@ -75,7 +75,7 @@ public sealed class YearDayViewModel : ObservableObject
     public bool IsToday { get; }
 
     /// <summary>
-    /// 日付の<b>上</b>に重ねる色。「inaCalendar」に入っているものだけ。
+    /// 日付の<b>上</b>に重ねる色。「Kado」に入っているものだけ。
     /// <para>
     /// 仕様期限などの区切りは、自分の予定とは意味が違う。混ぜて並べると、どれが
     /// 会社の決めた日でどれが自分の用事なのか見分けられない。上下に分けて置く。
@@ -84,7 +84,7 @@ public sealed class YearDayViewModel : ObservableObject
     /// </summary>
     public IReadOnlyList<DayMark> TopMarks { get; }
 
-    /// <summary>日付の<b>下</b>に重ねる色。「inaCalendar」以外の予定。</summary>
+    /// <summary>日付の<b>下</b>に重ねる色。「Kado」以外の予定。</summary>
     public IReadOnlyList<DayMark> BottomMarks { get; }
 
     /// <summary>この日に入っている予定の数。</summary>
@@ -532,7 +532,7 @@ public sealed class YearViewModel : ObservableObject
         // 1年ぶんまとめて引く。月ごとに引くと同じ表を12回なめることになる
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
 
-        // 「inaCalendar」の予定は日付の上、それ以外は下に置く
+        // 「Kado」の予定は日付の上、それ以外は下に置く
         var workingDayCalendars = _workspace.WorkingDayCalendars()
             .Select(c => c.Id)
             .ToHashSet(StringComparer.Ordinal);
@@ -624,7 +624,7 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>
     /// その日に重ねる印の色。
     /// <para>
-    /// <paramref name="inside"/> が true なら「inaCalendar」に入っているものだけ、
+    /// <paramref name="inside"/> が true なら「Kado」に入っているものだけ、
     /// false ならそれ以外。仕様期限などの区切りと自分の用事は意味が違うので、
     /// 日付の上下に分けて置く。
     /// </para>
@@ -641,7 +641,7 @@ public sealed class YearViewModel : ObservableObject
             .Where(e => IsWorkingDayCalendar(e.Source.CalendarId, workingDayCalendars) == inside)
             .Where(Shown)
             .Take(MaxMarksPerSide)
-            // inaCalendar のものは名前ごとに色を決める。仕様期限は黄、1次GO は赤…と、
+            // Kado のものは名前ごとに色を決める。仕様期限は黄、1次GO は赤…と、
             // 月ビューの日付の行と同じ色になる。カレンダーの色で塗ると全部同じ色に
             // なってしまい、何の区切りなのか分からない
             .Select(e => new DayMark(

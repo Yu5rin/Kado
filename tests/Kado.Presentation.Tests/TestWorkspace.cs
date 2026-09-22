@@ -23,7 +23,7 @@ internal sealed class TestWorkspace : IDisposable
     /// 実働日まわりの期待値をそろえられる。
     /// </summary>
     /// <param name="withMilestones">
-    /// マイルストーンも入れるか。入れると起動時に「inaCalendar」が作られ、その予定も
+    /// マイルストーンも入れるか。入れると起動時に「Kado」が作られ、その予定も
     /// 1件増える（日付の行は予定から組み立てるため）。要るテストだけが頼むようにする。
     /// </param>
     public static TestWorkspace Create(
