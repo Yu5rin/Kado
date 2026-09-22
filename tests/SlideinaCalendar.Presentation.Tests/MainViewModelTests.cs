@@ -533,9 +533,10 @@ public class MainViewModelTests
     }
 
     /// <summary>
-    /// 右列を「…」に畳む（項目5）。320px を切ると 🔍・▥・⚙ を1個にまとめる。
-    /// 📌 だけは戻り口として ShowsWorkdayBadges 等とは別に常に出るので、ここでは扱わない
-    /// （MainWindow.xaml で Visibility を結ばず常時表示にしてある）。
+    /// 右列を「…」に畳む（項目5）。OverflowFloor（350px）を切ると 🔍・▥・⚙ を
+    /// 1個にまとめる。📌 と出しかた（ウィンドウ⇔スライド）は戻り口として
+    /// ShowsWorkdayBadges 等とは別に常に出るので、ここでは扱わない（項目4。
+    /// MainWindow.xaml で Visibility を結ばず常時表示にしてある）。
     /// </summary>
     [Fact]
     public void とても狭いと右列を畳みボタン1個にまとめる()
@@ -543,17 +544,17 @@ public class MainViewModelTests
         using var test = TestWorkspace.Create();
         var vm = Create(test);
 
-        Fit(vm, 340);
+        Fit(vm, 370);
         Assert.False(vm.UsesOverflowMenu);
         Assert.True(vm.ShowsCompactSearchIcon);
 
-        Fit(vm, 319);
+        Fit(vm, 349);
         Assert.True(vm.UsesOverflowMenu);
 
         // 検索も「…」へ集約するので、畳んだ虫めがねは出さない
         Assert.False(vm.ShowsCompactSearchIcon);
 
-        Fit(vm, 320);
+        Fit(vm, 350);
         Assert.False(vm.UsesOverflowMenu);
     }
 

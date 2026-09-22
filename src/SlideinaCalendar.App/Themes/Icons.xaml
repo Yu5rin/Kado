@@ -77,4 +77,19 @@
     <PathGeometry x:Key="IconCalc"
                   Figures="M6 3h12v18H6zM9 7h6M9 11h.01M12 11h.01M15 11h.01M9 15h.01M12 15h.01M15 15h.01" />
 
+    <!--
+        クイック入力の「＋予定」（項目2）。カレンダーの箱を左上に小さく描き、
+        右下に＋を重ねる。IconToday（同じカレンダーの絵）と対で覚えやすいよう、
+        同じ形を縮めて使う
+    -->
+    <PathGeometry x:Key="IconEventAdd"
+                  Figures="M2 5h12v12H2zM5 3v4M11 3v4M2 9h12M18 14.5v7M14.5 18h7" />
+
+    <!--
+        クイック入力の「＋タスク」（項目2）。チェック（IconCheck と同じ意匠）を
+        左上に小さく描き、右下に＋を重ねる。＋予定と絵で見分けが付くようにする
+    -->
+    <PathGeometry x:Key="IconTaskAdd"
+                  Figures="M3 10.5l4 4L14 5M18 14.5v7M14.5 18h7" />
+
 </ResourceDictionary>

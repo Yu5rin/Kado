@@ -219,7 +219,14 @@ public sealed class ShellController : IDisposable
                 // 開く演出（220ms）の途中で他のアプリへ切り替えられることがある。
                 // 引っ込み自体（SlideOutIfIdle）は変えず、その手前で演出だけ打ち切る
                 CancelReveal();
-                SlideOutIfIdle();
+
+                // メニュー・ポップアップの「開いている数」を保険として無視する
+                // （項目3）。数え漏れて0に戻らなかったときの保険で、ここまで
+                // 塞ぐと二度と引っ込まなくなる。他アプリへ本当に切り替わった
+                // なら、開いていたメニュー・ポップアップは自然に閉じているはず
+                // （WPF は非活性になった窓の ContextMenu／Popup を自動で閉じる）
+                // なので、ここだけは無視しても実害が無い
+                SlideOutIfIdle(ignorePopups: true);
             }));
 
         // 全画面アプリなどで外れたら、見た目も合わせる
@@ -365,7 +372,18 @@ public sealed class ShellController : IDisposable
     /// スライド中だけ。ピンで留めているあいだは、他のアプリへ移っても出したままにする。
     /// </para>
     /// </summary>
-    private void SlideOutIfIdle()
+    /// <param name="ignorePopups">
+    /// <c>true</c> なら、メニュー・ポップアップが開いていても構わず引っ込める。
+    /// <para>
+    /// 他アプリへ実際に切り替わったとき（<see cref="Window.Deactivated"/> 経由）だけ
+    /// 渡す保険（項目3）。<see cref="PopupActivityHooks"/> の数え漏れ（Opened は
+    /// 拾えたのに何らかの理由で Closed が来なかった場合）で
+    /// <see cref="PopupActivityHooks.Tracker"/> が0に戻らなくなっても、この経路は
+    /// 塞がれずに残る。数え漏れの逆側（「二度と引っ込まない」）を起こさないための
+    /// 保険で、既定は <c>false</c>（開いていれば引っ込めない）。
+    /// </para>
+    /// </param>
+    private void SlideOutIfIdle(bool ignorePopups = false)
     {
         if (_shell.Mode != ShellMode.Overlay) return;
 
@@ -373,6 +391,11 @@ public sealed class ShellController : IDisposable
 
         // 幅をつまんでいる最中。手が窓の外に出ていても引っ込めない
         if (_shell.IsResizing) return;
+
+        // 自分が出したメニュー・ポップアップが開いている最中。狭いスライドでは
+        // メニューが窓の右端をはみ出し、その上へカーソルを動かすとホットゾーンが
+        // 「窓から外れた」と判定していた。開いているあいだは引っ込めない（項目3）
+        if (!ignorePopups && PopupActivityHooks.Tracker.IsAnyOpen) return;
 
         // 自分が出した窓（編集画面など）に移っただけなら、引っ込めない。
         // 予定を書いている最中に本体が消えると、書き終わって戻る先が無くなる

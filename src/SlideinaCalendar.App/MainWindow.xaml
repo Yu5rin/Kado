@@ -579,13 +579,16 @@
                     役目を2つに分ける。こちらは出しかた（ウィンドウ⇔スライド）だけを
                     左クリックで切り替える。絵はモードで変える
                     （ウィンドウ：画面＋帯 IconLayout ／ スライド：帯だけ IconSlideOnly）
+
+                    幅が狭くても畳まない（項目4）。帯として細く使っているときこそ
+                    「ウィンドウに戻したい」ので、📌 と同じく「…」の畳み込みの対象から
+                    外し、戻り口として常に残す（Visibility を付けない）
                 -->
                 <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
                               Margin="0,0,2,0"
                               IsChecked="{Binding Shell.IsAtEdge, Mode=OneWay}"
                               Command="{Binding Shell.ToggleSlideCommand}"
-                              ToolTip="{Binding Shell.SlideActionLabel}"
-                              Visibility="{Binding UsesOverflowMenu, Converter={StaticResource InverseBoolToVisibility}}">
+                              ToolTip="{Binding Shell.SlideActionLabel}">
                     <Path Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
@@ -650,8 +653,9 @@
                 </Button>
 
                 <!--
-                    「…」畳みボタン（項目5）。窓が320px を切ると、🔍・▥・⚙ を
-                    ここ1つにまとめる。📌 だけは戻り口として別に残す
+                    「…」畳みボタン（項目5）。窓が OverflowFloor を切ると、
+                    🔍・▥・⚙ をここ1つにまとめる。📌 と出しかた（ウィンドウ⇔
+                    スライド）は戻り口として別に残す（項目4）
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         Margin="0,0,2,0" ToolTip="検索・パネル・設定" Click="OnOverflowClicked"
@@ -667,8 +671,11 @@
                             <MenuItem Header="予定とタスクを検索"
                                       Command="{Binding OpenSearchCommand}" />
                             <Separator />
-                            <MenuItem Header="ウィンドウ⇔スライドを切替"
-                                      Command="{Binding Shell.ToggleSlideCommand}" />
+                            <!--
+                                「ウィンドウ⇔スライドを切替」はここには置かない（項目4）。
+                                出しかたのボタンが常に出るようになったので、同じことをする
+                                道が2つあると迷う
+                            -->
                             <MenuItem Header="左端から出す"
                                       Command="{Binding Shell.EdgeLeftCommand}"
                                       IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
