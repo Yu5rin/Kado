@@ -82,6 +82,7 @@
                         <DataTemplate>
                             <RadioButton GroupName="Color" Margin="0,0,8,8" ToolTip="{Binding Name}"
                                          Cursor="Hand"
+                                         FocusVisualStyle="{StaticResource FocusRingStyle}"
                                          IsChecked="{Binding Value, Mode=OneWay,
                                                      Converter={StaticResource ColorChoiceIsSelected}}"
                                          Command="{Binding DataContext.PickColorCommand,

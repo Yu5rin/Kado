@@ -53,7 +53,8 @@
     <Color x:Key="CategoryGreenColor">#5FB08A</Color>
     <Color x:Key="CategoryAmberColor">#D59A55</Color>
 
-    <Color x:Key="DoneColor">#6E7686</Color>
+    <!-- 完了したタスクの文字色。取り消し線が「済み」を担うため、Ink3 と同値でよい -->
+    <Color x:Key="DoneColor">#8A93A3</Color>
 
     <Color x:Key="MilestoneSpecFaceColor">#4A3A14</Color>
     <Color x:Key="MilestoneSpecTextColor">#E8CD7E</Color>

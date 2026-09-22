@@ -92,7 +92,7 @@
 
         <!-- 終日レーンのタスク。点線の丸印で予定と区別する -->
         <DataTemplate x:Key="AllDayTaskTemplate">
-            <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
+            <Border x:Name="Box" CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
                     Background="{DynamicResource AccentSoftBrush}"
                     BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
                     ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します"
@@ -101,13 +101,22 @@
                     MouseLeftButtonDown="OnAllDayTaskClicked"
                     MouseMove="OnAllDayDragging">
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
+                    <Ellipse x:Name="Dot" Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
+                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
                                Foreground="{DynamicResource InkBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Border>
+
+            <!-- 済みタスクは右パネル・一覧と同じ見た目に揃える（項目4） -->
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
+                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource DoneBrush}" />
+                    <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource DoneBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <DataTemplate x:Key="AllDayEventTemplate">
@@ -134,10 +143,14 @@
                     ContextMenu="{StaticResource DayHeaderMenu}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
-                    <!-- 曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える） -->
+                    <!--
+                        曜日だけ。祝日名は日付の下に赤で添える（月ビューと揃える）。
+                        Head は休業日の面（OffDayBrush）で塗られることがあるため、
+                        Ink3Brush では 4.5:1 を割るテーマがあった。Ink2Brush に寄せる
+                    -->
                     <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="DayName" Text="{Binding DayName}"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource Ink3Brush}" />
+                               Foreground="{DynamicResource Ink2Brush}" />
 
                     <Border x:Name="NumberFace" CornerRadius="13" Width="26" Height="26"
                             Background="Transparent" HorizontalAlignment="Center">
