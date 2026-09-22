@@ -705,11 +705,32 @@ public sealed class CalendarWorkspace
         var named = WorkingDayCalendars();
 
         // Google に同じ名前のものがあればそちらへ入れる。旧 inaCalendar と同じ場所に
-        // 集まり、他の端末やブラウザからも見える。無ければこのアプリの中に持つ
-        return named.FirstOrDefault(c => !IsLocal(c))
-            ?? named.FirstOrDefault()
-            ?? CreateCalendar(WorkingDayCalendarName);
+        // 集まり、他の端末やブラウザからも見える
+        if (named.FirstOrDefault(c => !IsLocal(c)) is { } remote) return remote;
+        if (named.FirstOrDefault() is { } local) return local;
+
+        // 「Kado」が無くても、旧い名前のものがあればそこへ入れる。
+        //
+        // <b>ここで新しく作ると、実働日の入れ先が2つに割れる。</b>アプリ名を Kado に
+        // 改めた版では、前の道具が作った「inaCalendar」は名前が合わず見つからない。
+        // そのまま作ってしまうと、同期が Google 側にも空の「Kado」を起こし、
+        // 「Kado」が2つ並ぶ。実際にそうなった。
+        //
+        // 入れ先として使うだけで、実働日として<b>画面に出すのは「Kado」だけ</b>という
+        // 決まりは変えない。名前を変えてもらう案内は同期のたびに出る
+        // （GoogleSyncService.WarnAboutLegacyWorkingDayCalendar）
+        if (LegacyWorkingDayCalendars().FirstOrDefault() is { } legacy) return legacy;
+
+        return CreateCalendar(WorkingDayCalendarName);
     }
+
+    /// <summary>旧い名前「inaCalendar」のカレンダー。Google のものを先に返す。</summary>
+    private IReadOnlyList<CalendarSource> LegacyWorkingDayCalendars() =>
+        Sources.Calendars()
+            .Where(c => string.Equals(
+                c.DisplayName, LegacyWorkingDayCalendarName, StringComparison.Ordinal))
+            .OrderBy(IsLocal)
+            .ToArray();
 
     /// <summary>
     /// この予定を知らせるか。
