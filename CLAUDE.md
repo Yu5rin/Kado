@@ -18,7 +18,7 @@
 ```powershell
 cd $HOME
 Remove-Item -Recurse -Force kado-tag -ErrorAction SilentlyContinue
-git clone https://github.com/Yu5rin/SlideinaCalendar.git kado-tag
+git clone https://github.com/Yu5rin/Kado.git kado-tag
 cd kado-tag
 git checkout dev
 
@@ -26,14 +26,20 @@ git tag -a vX.Y.Z -m "Kado X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-## リポジトリの名前
+## 旧い名前（SlideinaCalendar）
 
-アプリの名前は Kado だが、**リポジトリはまだ `Yu5rin/SlideinaCalendar`**。
-更新の確認先（`api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest`）、
-clone の URL、README のバッジは、この名前のまま据え置いてある。
+アプリもリポジトリも Kado に改めた。ただし次の2つは**旧い名前のまま**で、
+変えてはいけない。
 
-リポジトリを Kado へ改名したら、それらを書き換えること。GitHub は旧名から
-転送してくれるので急がなくてよいが、転送に頼り続けると分かりにくい。
+1. データの保存先の引っ越し元。`CalendarDatabase.LegacyFolderName` が
+   `%LOCALAPPDATA%\SlideinaCalendar` を指している。0.9.15 より前から使って
+   いる人の予定・タスク・設定・Google のトークンはそこに入っている。
+2. 公開ページの置き場所 `Yu5rin/slideinacalendar-site`。この URL は Google の
+   OAuth 同意画面にホームページ・プライバシーポリシーとして登録してある。
+   リポジトリ名を変えると URL が変わり、同意画面の審査が通らなくなる。
+
+Google の同意画面に出るアプリ名は Google Cloud のブランディング欄にあり、
+こちらのコードとは別に持っている。変えるならそちらで直す。
 
 ## 実機で確かめること
 

@@ -501,8 +501,8 @@ public class SettingsTests
     }
 
     [Theory]
-    [InlineData("https://github.com/Yu5rin/SlideinaCalendar", true)]
-    [InlineData("http://github.com/Yu5rin/SlideinaCalendar", false)]
+    [InlineData("https://github.com/Yu5rin/Kado", true)]
+    [InlineData("http://github.com/Yu5rin/Kado", false)]
     [InlineData("https://evil.example.com/github.com", false)]
     [InlineData("https://github.com.evil.example.com", false)]
     [InlineData("file:///etc/passwd", false)]

@@ -56,7 +56,7 @@ public partial class App : Application
     /// </para>
     /// </summary>
     private const string UpdateApiUrl =
-        "https://api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest";
+        "https://api.github.com/repos/Yu5rin/Kado/releases/latest";
 
     private AppSettings? _settings;
     private Shell.ShellController? _shellController;

@@ -694,7 +694,7 @@ HTTPS で、GitHub の配信先であることを確かめてから取りに行�
 
 ### リポジトリが非公開のうちは動かない
 
-見に行く先は `api.github.com/repos/Yu5rin/SlideinaCalendar/releases/latest`。
+見に行く先は `api.github.com/repos/Yu5rin/Kado/releases/latest`。
 **公開されていないと認証なしでは読めない。** 非公開のうちは何も返らず、更新の確認は
 黙って見送られる。アプリの動きには差し支えない。
 

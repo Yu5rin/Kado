@@ -23,7 +23,7 @@ GitHub の Secrets に入れておき、配布を作るワークフローが組�
 | `%LocalAppData%\Kado\google-client.json` | 使う側が自分のプロジェクトに差し替えたいとき（任意） |
 
 登録先は
-[Settings → Secrets and variables → Actions](https://github.com/Yu5rin/SlideinaCalendar/settings/secrets/actions)。
+[Settings → Secrets and variables → Actions](https://github.com/Yu5rin/Kado/settings/secrets/actions)。
 **未登録でも配布物は作れる**が、受け取った人が自分で設定を入れることになる。
 
 ### 配布物から読めてしまうが、それでよい
@@ -169,7 +169,7 @@ client_secret_123456789012-abcdefghijklmnop.apps.googleusercontent.com.json
 ### 5-2. GitHub の Secrets に登録する
 
 落とした JSON をテキストエディタで開き、`client_id` と `client_secret` の値を
-[Secrets の登録画面](https://github.com/Yu5rin/SlideinaCalendar/settings/secrets/actions)へ。
+[Secrets の登録画面](https://github.com/Yu5rin/Kado/settings/secrets/actions)へ。
 
 | 名前 | 中身 |
 |---|---|

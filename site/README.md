@@ -19,7 +19,7 @@ public にすると要件書・モック・実働日の Excel・旧バックア�
 
 ```
 Yu5rin/slideinacalendar-site   ← 公開。ここに index.html と privacy.html
-Yu5rin/SlideinaCalendar        ← private。中身はそのまま
+Yu5rin/Kado        ← private。中身はそのまま
 ```
 
 その後の手順。

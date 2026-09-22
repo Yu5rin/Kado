@@ -8,7 +8,7 @@ CI は Linux で回しているので、確認できるのは**コンパイル�
 
 ## 0. 手に入れる
 
-**[Releases](https://github.com/Yu5rin/SlideinaCalendar/releases/latest) から落とす**
+**[Releases](https://github.com/Yu5rin/Kado/releases/latest) から落とす**
 のがいちばん早い。`.exe` をそのまま叩けば動く（.NET を入れなくてよい）。
 `.zip` は展開先を自分で決めたいとき用。170MB ほどあるのは .NET のランタイムを
 同梱しているため。
@@ -19,7 +19,7 @@ Releases なので、Actions の Artifacts だけでは新しい版に気づか�
 **自分でビルドする**（.NET 8 SDK が要る）
 
 ```
-git clone https://github.com/Yu5rin/SlideinaCalendar.git
+git clone https://github.com/Yu5rin/Kado.git
 cd Kado
 dotnet run --project src/Kado.App
 ```
