@@ -388,6 +388,36 @@ public class EventSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 未送信の変更を捨てたら警告を残す()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        // どちらも変わった。方針どおり相手を採るが、黙って消してはいけない
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { Title = "こちらの変更" });
+        _remote.Edit("g1", "相手の変更");
+
+        var report = await Engine.SyncAsync("primary", "local:shigoto");
+
+        Assert.Equal("相手の変更", Events.All().Single().Title);
+        Assert.Contains(report.Warnings, w => w.Contains("こちらの変更", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 送っていない変更が無ければ警告を残さない()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        // こちらは何も変えていない。相手だけが変わった、ふつうの取り込み
+        _remote.Edit("g1", "棚卸し（相手で変更）");
+        var report = await Engine.SyncAsync("primary", "local:shigoto");
+
+        Assert.Empty(report.Warnings);
+    }
+
+    [Fact]
     public async Task 相手の変更を取り込める()
     {
         _remote.Add("g1", "棚卸し", "2026-09-24");

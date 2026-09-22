@@ -128,6 +128,7 @@ public sealed class TaskSyncEngine(
         var created = 0;
         var updated = 0;
         var deleted = 0;
+        var overwritten = new List<string>();
 
         foreach (var item in items)
         {
@@ -151,6 +152,13 @@ public sealed class TaskSyncEngine(
                 GoogleJson.SameContent(existing.GoogleRaw, GoogleJson.Normalize(item)))
             {
                 continue;
+            }
+
+            // Google を採る方針は変えないが、こちらにまだ送れていない編集があるなら
+            // それを黙って捨てることになる。気づけるよう警告に残す（EventSyncEngine と同じ）
+            if (existing is not null && TaskMapper.NeedsPush(existing))
+            {
+                overwritten.Add(existing.Title is { Length: > 0 } title ? title : "(無題)");
             }
 
             var mapped = TaskMapper.FromGoogle(item, taskListId, localListId, existing, startedAt);
@@ -179,7 +187,31 @@ public sealed class TaskSyncEngine(
 
         settings.SetSyncState(SinceKey(taskListId), startedAt.ToString("O"));
 
-        return new SyncReport { CreatedLocal = created, UpdatedLocal = updated, DeletedLocal = deleted };
+        return new SyncReport
+        {
+            CreatedLocal = created,
+            UpdatedLocal = updated,
+            DeletedLocal = deleted,
+            Warnings = SummarizeOverwritten(overwritten),
+        };
+    }
+
+    /// <summary>
+    /// 未送信の編集を捨てて Google 側を採ったタスクを、警告文にまとめる。
+    /// <para>まとめ方は EventSyncEngine と揃える。</para>
+    /// </summary>
+    private static IReadOnlyList<string> SummarizeOverwritten(IReadOnlyList<string> titles)
+    {
+        if (titles.Count == 0) return [];
+
+        const int maxNamed = 3;
+        var named = string.Concat(titles.Take(maxNamed).Select(title => $"「{title}」"));
+
+        var message = titles.Count > maxNamed
+            ? $"{named}ほか{titles.Count - maxNamed}件は、こちらの変更を捨てて Google 側を採りました"
+            : $"{named}は、こちらの変更を捨てて Google 側を採りました";
+
+        return [message];
     }
 
     private DateTimeOffset? ReadSince(string taskListId) =>

@@ -218,9 +218,24 @@ public class TaskSyncEngineTests : IDisposable
         Tasks.Upsert(stored with { Title = "こちらの変更" });
         _remote.Edit("g1", "相手の変更");
 
-        await Engine.SyncAsync("@default", "local:mytasks");
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
 
         Assert.Equal("相手の変更", Tasks.All().Single().Title);
+
+        // 未送信の変更を黙って捨てていないか（EventSyncEngine と同じ理由）
+        Assert.Contains(report.Warnings, w => w.Contains("こちらの変更", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 送っていない変更が無ければ警告を残さない()
+    {
+        _remote.Add("g1", "集計", due: "2026-09-24");
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        _remote.Edit("g1", "集計（相手で変更）");
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        Assert.Empty(report.Warnings);
     }
 
     [Fact]

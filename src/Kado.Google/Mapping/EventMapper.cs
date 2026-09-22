@@ -144,13 +144,58 @@ public static class EventMapper
             ? new JsonObject { ["url"] = url, ["title"] = value.SourceTitle ?? value.Title }
             : null;
 
-        // 空の配列は「繰り返しを外す」。null だと「触らない」になってしまう
-        var recurrence = RecurrenceConverter.ToGoogle(value.Recurrence);
-        var lines = new JsonArray();
-        foreach (var line in recurrence) lines.Add(line);
-        body["recurrence"] = lines;
+        // 空の配列は「繰り返しを外す」。ただし、RDATE・EXRULE など<b>こちらで表せない
+        // 繰り返しを控えているだけ</b>の場合に空の配列を送ると、Google 側の繰り返しが
+        // 消えてしまう（FromGoogle が Recurrence に null を入れるのは「外れている」時と
+        // 「表せない」時の両方で、CalendarEvent 単体では区別できない）。そのときは
+        // recurrence キー自体を入れず、PATCH で触らないようにする
+        if (value.Recurrence is not null || !HoldsUnrepresentableRecurrence(value))
+        {
+            var recurrence = RecurrenceConverter.ToGoogle(value.Recurrence);
+            var lines = new JsonArray();
+            foreach (var line in recurrence) lines.Add(line);
+            body["recurrence"] = lines;
+        }
 
         return body;
+    }
+
+    /// <summary>
+    /// <see cref="CalendarEvent.Recurrence"/> が null なのは、こちらで本当に繰り返しを
+    /// 外したからではなく、<b>表せない繰り返しを生データのまま預かっているだけ</b>か。
+    /// <para>
+    /// 控えた <see cref="CalendarEvent.GoogleRaw"/> の <c>recurrence</c> を
+    /// <see cref="RecurrenceConverter.FromGoogle"/> にもう一度通してみて判断する。
+    /// 読み取れるなら（＝本当に外した）false、読み取れない（RDATE・EXRULE・RRULE
+    /// 2本以上など）なら true。
+    /// </para>
+    /// </summary>
+    private static bool HoldsUnrepresentableRecurrence(CalendarEvent value)
+    {
+        if (value.Recurrence is not null) return false;
+        if (value.GoogleRaw is not { Length: > 0 } raw) return false;
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonObject original) return false;
+            if (original["recurrence"] is not JsonArray array || array.Count == 0) return false;
+
+            var lines = new List<string>();
+            foreach (var item in array)
+            {
+                if (item is JsonValue text && text.TryGetValue<string>(out var line) && line.Length > 0)
+                {
+                    lines.Add(line);
+                }
+            }
+
+            return RecurrenceConverter.FromGoogle(lines) is null;
+        }
+        catch (JsonException)
+        {
+            // 控えが壊れていたら、これまでどおり空の配列で外す側に倒す
+            return false;
+        }
     }
 
     /// <summary>
