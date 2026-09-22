@@ -146,6 +146,31 @@ public sealed class SourceRepository(SqliteConnection connection)
         return moved;
     }
 
+    /// <summary>
+    /// Google から消えたカレンダーを、中の予定ごと片付ける。
+    /// <para>
+    /// <see cref="DeleteCalendar"/> と違い、<b>予定も一緒に消す</b>。あちらは
+    /// 「分類を消したい」ときのもので、中身は別のカレンダーへ移す。こちらは
+    /// 向こうでカレンダーごと無くなった場合なので、移す先が無い。残すと
+    /// どのカレンダーにも属さない予定になり、画面から消せなくなる。
+    /// </para>
+    /// </summary>
+    /// <returns>消した予定の件数。</returns>
+    public int DropRemovedCalendar(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        using var transaction = _connection.BeginTransaction();
+
+        var removed = _connection.Execute(
+            "DELETE FROM events WHERE calendar_id = @id;", new { id }, transaction);
+
+        _connection.Execute("DELETE FROM calendars WHERE id = @id;", new { id }, transaction);
+        transaction.Commit();
+
+        return removed;
+    }
+
     /// <summary>タスクリストを消し、そこに入っていたタスクを別のリストへ移す。</summary>
     /// <returns>移したタスクの件数。</returns>
     public int DeleteTaskList(string id, string? moveTasksTo)
