@@ -131,19 +131,28 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>実働日を配信用に書き出す（feed.json）。⚙メニューからここへ移した。</summary>
     public Infrastructure.RelayCommand? ExportWorkingDayFeedCommand { get; }
 
-    /// <summary>重複した予定を整理する。元に戻せないので「データ」節の末尾に置く。⚙メニューからここへ移した。</summary>
+    /// <summary>
+    /// 重複した予定を整理する。⚙メニューからここへ移した。
+    /// <para>
+    /// Ctrl＋Z でまとめて戻せるので、「元に戻せません」の枠には入れない
+    /// （枠に入れると、その確認文と矛盾する）。「データ」節の、バックアップの下に置く。
+    /// </para>
+    /// </summary>
     public Infrastructure.RelayCommand? RemoveDuplicatesCommand { get; }
 
     /// <summary>バックアップを保存する。⚙メニューからここへ移した。</summary>
     public Infrastructure.RelayCommand? BackupCommand { get; }
 
-    /// <summary>バックアップから復元する。いまの内容が置き換わるので「データ」節の末尾に置く。⚙メニューからここへ移した。</summary>
+    /// <summary>
+    /// バックアップから復元する。⚙メニューからここへ移した。
+    /// <para>いまの内容が置き換わり、元に戻せないので「元に戻せません」の枠の中に置く。</para>
+    /// </summary>
     public Infrastructure.RelayCommand? RestoreCommand { get; }
 
     /// <summary>自分の Google Cloud プロジェクトのクライアント設定を使う（上級者向け）。⚙メニューの「詳細」からここへ移した。</summary>
     public Infrastructure.RelayCommand? ImportGoogleClientCommand { get; }
 
-    /// <summary>更新を確かめる。⚙メニューから「バージョン情報」節へ移した。</summary>
+    /// <summary>更新を確かめる。⚙メニューから「Kado について」節へ移した。</summary>
     public Infrastructure.AsyncRelayCommand? CheckForUpdateCommand { get; }
 
     /// <summary>
@@ -184,9 +193,18 @@ public sealed class SettingsViewModel : ObservableObject
         new(DayOfWeek.Saturday, "土曜"),
     ];
 
-    /// <summary>起動したときに開くビューの選択肢。</summary>
+    /// <summary>
+    /// 起動したときに開くビューの選択肢。
+    /// <para>
+    /// ツールバーのビュー切替と同じ並び（一覧・年・月・週・日、
+    /// <c>MainViewModel</c> の <c>ZoomOrder</c> を参照）。以前は月・週・日の3つしか
+    /// 無かったが、一覧や年から一日を始めたい使い方もあるため足した。
+    /// </para>
+    /// </summary>
     public IReadOnlyList<SettingChoice<CalendarView>> StartupViews { get; } =
     [
+        new(CalendarView.Agenda, "一覧"),
+        new(CalendarView.Year, "年"),
         new(CalendarView.Month, "月"),
         new(CalendarView.Week, "週"),
         new(CalendarView.Day, "日"),
@@ -198,14 +216,21 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>時間軸の下端に選べる時刻。</summary>
     public IReadOnlyList<SettingChoice<int>> EndHours { get; } = Hours(1, 24);
 
-    /// <summary>1時間の高さの選び方。</summary>
+    /// <summary>
+    /// 1時間の高さの選び方。
+    /// <para>
+    /// 画面に出す文言から px 数は外した（使う人には px の大小より段階のほうが
+    /// 分かりやすいため）。内部で持つ値（<see cref="HourHeight"/> に書く数）は
+    /// 変えていない。
+    /// </para>
+    /// </summary>
     public IReadOnlyList<SettingChoice<int>> HourHeights { get; } =
     [
-        new(0, "自動（縦いっぱいに割り付ける）"),
-        new(28, "28px（詰めて出す）"),
-        new(36, "36px"),
-        new(44, "44px"),
-        new(56, "56px（ゆったり）"),
+        new(0, "自動（縦いっぱい）"),
+        new(28, "詰める"),
+        new(36, "やや詰める"),
+        new(44, "標準"),
+        new(56, "ゆったり"),
     ];
 
     /// <summary>1時間の高さ。0 なら画面に合わせる。</summary>
@@ -271,11 +296,11 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>日数の数え方。実働日か暦日か。</summary>
+    /// <summary>残り日数の数え方。実働日か暦日か。</summary>
     public IReadOnlyList<SettingChoice<bool>> DayCounts { get; } =
     [
-        new(false, "実働日で数える"),
-        new(true, "暦日で数える"),
+        new(false, "実働日で数える（土日・休みを飛ばす）"),
+        new(true, "暦日で数える（土日・休みも数える）"),
     ];
 
     /// <summary>暦日で数えるか。</summary>
@@ -319,9 +344,6 @@ public sealed class SettingsViewModel : ObservableObject
         Enumerable.Range(5, 14)
             .Select(h => new SettingChoice<int>(h, $"{h.ToString(CultureInfo.InvariantCulture)}:00"))
             .ToArray();
-
-    /// <summary>知らせられる環境か。出せないなら欄ごと隠す。</summary>
-    public bool CanNotify { get; } = true;
 
     /// <summary>予定の前に知らせるか。</summary>
     public bool NotifyEnabled
@@ -626,9 +648,6 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>アプリ名。画面にそのまま出す。</summary>
     public string AppName => "Kado";
 
-    /// <summary>使っている主なもの。決め打ちの表示なので、大きく変えたときだけ直す。</summary>
-    public string TechStack => ".NET 8 ／ WPF ／ SQLite";
-
     /// <summary>
     /// 画面に出すバージョン。
     /// <para>
@@ -698,7 +717,7 @@ public sealed class SettingsViewModel : ObservableObject
         // 渡さない流儀は更新の確認（ReleaseFeed.IsAllowedDownloadUrl）と揃える
         if (!IsAllowedExternalUrl(RepositoryUrl))
         {
-            Message = "リポジトリのページを開けませんでした。";
+            Message = "Kado のページを開けませんでした。";
             Raise(nameof(Message));
             return;
         }
@@ -710,7 +729,7 @@ public sealed class SettingsViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is Win32Exception or IOException or PlatformNotSupportedException)
         {
-            Message = $"リポジトリのページを開けませんでした（{ex.Message}）";
+            Message = $"Kado のページを開けませんでした（{ex.Message}）";
             Raise(nameof(Message));
         }
     }

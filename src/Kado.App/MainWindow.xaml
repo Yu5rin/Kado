@@ -1236,8 +1236,8 @@
                     </DockPanel>
 
                     <!--
-                        初回起動だけの案内（項目7）。出しかたの違い（▥ でスライド、
-                        📌 で固定）と最初の一歩（マスをダブルクリック）を、
+                        初回起動だけの案内（項目7）。出しかたの違い（出しかたのボタンで
+                        スライド、ピンで固定）と最初の一歩（マスをダブルクリック）を、
                         ここでしか教えていなかった。ステータス行の帯を流用する
                     -->
                     <DockPanel LastChildFill="False"
@@ -1251,7 +1251,7 @@
                                 ToolTip="スライドに切り替えます" />
                         <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
                                    TextWrapping="Wrap" MaxWidth="360"
-                                   Text="画面の端に寄せて使えます：▥ でスライド、📌 で固定 ／ 予定はマスをダブルクリック" />
+                                   Text="画面の端に寄せて使えます：出しかたのボタンでスライド、ピンで固定 ／ 予定はマスをダブルクリック" />
                     </DockPanel>
                 </Grid>
             </Border>
