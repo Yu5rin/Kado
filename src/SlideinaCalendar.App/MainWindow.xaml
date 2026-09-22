@@ -269,7 +269,6 @@
                 <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Toolbar">
                     <Binding Path="Shell.IsAtEdge" />
                     <Binding Path="Shell.IsAtLeft" />
-                    <Binding Path="IsSlimPanelOpen" />
                     <Binding Path="IsSidePanelOpen" />
                     <Binding Path="IsMainViewOpen" />
                     <Binding Path="IsDetailPaneOpen" />
@@ -524,10 +523,6 @@
                                       IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
                                       IsCheckable="True" />
                             <Separator />
-                            <MenuItem Header="スリムパネル"
-                                      Command="{Binding ToggleSlimPanelCommand}"
-                                      IsChecked="{Binding IsSlimPanelOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
                             <MenuItem Header="左パネル"
                                       Command="{Binding ToggleSidePanelCommand}"
                                       IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
@@ -580,10 +575,6 @@
                                       ToolTip="画面の右端にマウスを留めると出てきます" />
                             <Separator />
                             <MenuItem Header="表示するパネル" IsEnabled="False" Focusable="False" />
-                            <MenuItem Header="スリムパネル（ひと月と、その日の予定）"
-                                      Command="{Binding ToggleSlimPanelCommand}"
-                                      IsChecked="{Binding IsSlimPanelOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
                             <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
                                       Command="{Binding ToggleSidePanelCommand}"
                                       IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
@@ -592,7 +583,7 @@
                                       Command="{Binding ToggleMainViewCommand}"
                                       IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
                                       IsCheckable="True" />
-                            <MenuItem Header="右パネル（予定・タスク）"
+                            <MenuItem Header="右パネル（月カレンダー・予定・タスク）"
                                       Command="{Binding ToggleDetailPaneCommand}"
                                       IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
                                       IsCheckable="True" />
@@ -878,7 +869,8 @@
         <!-- 本体（.body） -->
         <Grid x:Name="WindowLayout">
             <!--
-                4つのパネルを横に並べる。スリム・左・中央・右。
+                3つのパネルを横に並べる。左・中央・右（旧版の「スリムパネル」は
+                右パネルへ統合済み）。
 
                 <b>幅では切り替えない。</b>狭いときに別の形へ化ける作りにしていたが、
                 同じ操作を探し直すことになる。出すかどうかは手で選ぶ。
@@ -888,8 +880,6 @@
                 （閉じているあいだは 0 にするため）。
             -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SlimColumn" Width="264" MinWidth="200" MaxWidth="420" />
-                <ColumnDefinition x:Name="SlimSplitColumn" Width="Auto" />
                 <ColumnDefinition x:Name="SideColumn" Width="216" MinWidth="160" MaxWidth="480" />
                 <ColumnDefinition x:Name="SideSplitColumn" Width="Auto" />
                 <ColumnDefinition x:Name="MainColumn" Width="*" MinWidth="360" />
@@ -897,36 +887,8 @@
                 <ColumnDefinition x:Name="DetailColumn" Width="296" MinWidth="200" MaxWidth="640" />
             </Grid.ColumnDefinitions>
 
-            <!--
-                スリムパネル。ひと月の並びと、選んだ日の予定・タスクだけ。
-
-                SidebarLayout 自身は BackgroundBrush で自分の背景を塗るが、
-                Padding を持たないので、DockGrip の掴みしろぶんの余地は
-                外側に足したこの Border（同じ BackgroundBrush）で与える。
-                Border が窓の端まで塗り切り、Padding で中身だけを内側へ寄せる
-            -->
-            <Border Grid.Column="0" Background="{DynamicResource BackgroundBrush}"
-                    Visibility="{Binding IsSlimPanelOpen,
-                                 Converter={StaticResource BoolToVisibility}}">
-                <Border.Padding>
-                    <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Slim">
-                        <Binding Path="Shell.IsAtEdge" />
-                        <Binding Path="Shell.IsAtLeft" />
-                        <Binding Path="IsSlimPanelOpen" />
-                        <Binding Path="IsSidePanelOpen" />
-                        <Binding Path="IsMainViewOpen" />
-                        <Binding Path="IsDetailPaneOpen" />
-                    </MultiBinding>
-                </Border.Padding>
-                <views:SidebarLayout x:Name="Sidebar" />
-            </Border>
-
-            <GridSplitter Grid.Column="1" x:Name="SlimSplitter"
-                          Style="{StaticResource PaneSplitterStyle}"
-                          PreviewMouseUp="OnPaneResized" />
-
             <!-- 左パネル（.side 216px） -->
-            <Border Grid.Column="2" Background="{DynamicResource PanelBrush}"
+            <Border Grid.Column="0" Background="{DynamicResource PanelBrush}"
                     BorderThickness="0,0,1,0" BorderBrush="{DynamicResource LineBrush}"
                     Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}">
                 <!--
@@ -937,7 +899,6 @@
                     <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Side">
                         <Binding Path="Shell.IsAtEdge" />
                         <Binding Path="Shell.IsAtLeft" />
-                        <Binding Path="IsSlimPanelOpen" />
                         <Binding Path="IsSidePanelOpen" />
                         <Binding Path="IsMainViewOpen" />
                         <Binding Path="IsDetailPaneOpen" />
@@ -1092,13 +1053,13 @@
             </Border>
 
             <!-- 左パネルと中央の境目。閉じているあいだは出さない -->
-            <GridSplitter Grid.Column="3" x:Name="SideSplitter"
+            <GridSplitter Grid.Column="1" x:Name="SideSplitter"
                           Style="{StaticResource PaneSplitterStyle}"
                           Visibility="{Binding IsSidePanelOpen, Converter={StaticResource BoolToVisibility}}"
                           PreviewMouseUp="OnPaneResized" />
 
             <!-- 中央（.main） -->
-            <DockPanel Grid.Column="4" x:Name="MainPane"
+            <DockPanel Grid.Column="2" x:Name="MainPane"
                        Background="{DynamicResource BackgroundBrush}"
                        Visibility="{Binding IsMainViewOpen, Converter={StaticResource BoolToVisibility}}">
                 <!--
@@ -1113,7 +1074,6 @@
                         <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Main">
                             <Binding Path="Shell.IsAtEdge" />
                             <Binding Path="Shell.IsAtLeft" />
-                            <Binding Path="IsSlimPanelOpen" />
                             <Binding Path="IsSidePanelOpen" />
                             <Binding Path="IsMainViewOpen" />
                             <Binding Path="IsDetailPaneOpen" />
@@ -1142,8 +1102,8 @@
                 </Grid>
             </DockPanel>
 
-            <!-- 中央と右ペインの境目 -->
-            <GridSplitter Grid.Column="5" x:Name="DetailSplitter"
+            <!-- 中央と右パネルの境目 -->
+            <GridSplitter Grid.Column="3" x:Name="DetailSplitter"
                           Style="{StaticResource PaneSplitterStyle}"
                           PreviewMouseUp="OnPaneResized" />
             <!--
@@ -1152,16 +1112,18 @@
             -->
 
             <!--
-                右ペイン（.detail 296px、項目1）。中身はスリムパネルと共有する
-                部品（Views/DayPaneView.xaml）をそのまま置くだけにした。
+                右パネル（.detail 296px、項目1）。中身は旧版の「スリムパネル」と
+                統合し、月の見出し行＋折りたためる月カレンダー＋仕切り＋
+                DayPaneView（Views/SidebarLayout.xaml）をそのまま置く。
+                パネルは 左・中央・右 の3つになった。
 
                 この Border 自身はもう DataContext を差し替えない（差し替えは
-                DayPaneView が自分の中で行う）ので、Padding の MultiBinding も
-                他の3つのパネル（Slim・Side・Main）と同じ、素直な Binding に戻せる。
+                中の DayPaneView が自分の中で行う）ので、Padding の MultiBinding も
+                他の2つのパネル（Side・Main）と同じ、素直な Binding に戻せる。
                 AncestorType=Window へ明示的に登る必要が無くなった
                 （旧コードで DetailPane だけが特別扱いだった理由がそのままなくなる）
             -->
-            <Border Grid.Column="6" x:Name="DetailPane"
+            <Border Grid.Column="4" x:Name="DetailPane"
                     Visibility="{Binding IsDetailPaneOpen, Converter={StaticResource BoolToVisibility}}"
                     Background="{DynamicResource PanelBrush}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
@@ -1170,13 +1132,12 @@
                     <MultiBinding Converter="{StaticResource EdgePadding}" ConverterParameter="Detail">
                         <Binding Path="Shell.IsAtEdge" />
                         <Binding Path="Shell.IsAtLeft" />
-                        <Binding Path="IsSlimPanelOpen" />
                         <Binding Path="IsSidePanelOpen" />
                         <Binding Path="IsMainViewOpen" />
                         <Binding Path="IsDetailPaneOpen" />
                     </MultiBinding>
                 </Border.Padding>
-                <views:DayPaneView x:Name="Detail" ShowsDayNav="{Binding ShowsDayNav}" />
+                <views:SidebarLayout x:Name="Detail" />
             </Border>
         </Grid>
     </DockPanel>

@@ -238,8 +238,7 @@ public partial class MainWindow : Window, ISlideRevealHost
         {
             if (args.PropertyName is nameof(MainViewModel.IsSidePanelOpen)
                 or nameof(MainViewModel.IsMainViewOpen)
-                or nameof(MainViewModel.IsDetailPaneOpen)
-                or nameof(MainViewModel.IsSlimPanelOpen))
+                or nameof(MainViewModel.IsDetailPaneOpen))
             {
                 ApplyPanes(vm);
             }
@@ -252,15 +251,14 @@ public partial class MainWindow : Window, ISlideRevealHost
         Main,
         Detail,
         Side,
-        Slim,
     }
 
     /// <summary>
     /// パネルの出し分けと幅。
     /// <para>
-    /// <b>残りを受け取るのは1つだけ。</b>中央 → 右 → 左 → スリム の順で決める。
+    /// <b>残りを受け取るのは1つだけ。</b>中央 → 右 → 左 の順で決める。
     /// どれも「*」でないと、窓を広げたぶんが誰にも行き渡らず、黒いまま余る。
-    /// パネルごとに別々の条件で決めていたら、スリムパネルだけを出したときに
+    /// パネルごとに別々の条件で決めていたら、右パネルだけを出したときに
     /// 受け取り手がいなくなっていた。
     /// </para>
     /// <para>
@@ -270,18 +268,13 @@ public partial class MainWindow : Window, ISlideRevealHost
     private void ApplyPanes(MainViewModel vm)
     {
         // 手で決めた幅を控える。畳んで開き直したとき、そこへ戻す
-        if (vm.IsSlimPanelOpen && SlimColumn.ActualWidth > 0) _slimWidth = SlimColumn.ActualWidth;
         if (vm.IsSidePanelOpen && SideColumn.ActualWidth > 0) _sideWidth = SideColumn.ActualWidth;
         if (vm.IsDetailPaneOpen && DetailColumn.ActualWidth > 0) _detailWidth = DetailColumn.ActualWidth;
 
         var filler =
             vm.IsMainViewOpen ? Filler.Main
             : vm.IsDetailPaneOpen ? Filler.Detail
-            : vm.IsSidePanelOpen ? Filler.Side
-            : Filler.Slim;
-
-        Fit(SlimColumn, vm.IsSlimPanelOpen, filler == Filler.Slim, _slimWidth,
-            MainViewModel.MinSlimPanelWidth, MainViewModel.MaxSlimPanelWidth);
+            : Filler.Side;
 
         Fit(SideColumn, vm.IsSidePanelOpen, filler == Filler.Side, _sideWidth,
             MainViewModel.MinSidePanelWidth, MainViewModel.MaxSidePanelWidth);
@@ -293,8 +286,6 @@ public partial class MainWindow : Window, ISlideRevealHost
             MainViewModel.MinDetailPaneWidth, MainViewModel.MaxDetailPaneWidth);
 
         // 掴みしろは、つまんで動かす相手がいるときだけ出す
-        SlimSplitter.Visibility = Between(
-            vm.IsSlimPanelOpen, vm.IsSidePanelOpen || vm.IsMainViewOpen || vm.IsDetailPaneOpen);
         SideSplitter.Visibility = Between(
             vm.IsSidePanelOpen, vm.IsMainViewOpen || vm.IsDetailPaneOpen);
         DetailSplitter.Visibility = Between(vm.IsDetailPaneOpen, vm.IsMainViewOpen);
@@ -320,11 +311,8 @@ public partial class MainWindow : Window, ISlideRevealHost
     private static Visibility Between(bool left, bool right) =>
         left && right ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>右ペインを畳むあいだ、戻す幅をここに控える。</summary>
+    /// <summary>右パネルを畳むあいだ、戻す幅をここに控える。</summary>
     private double _detailWidth = MainViewModel.DefaultDetailPaneWidth;
-
-    /// <summary>スリムパネルを畳むあいだ、戻す幅をここに控える。</summary>
-    private double _slimWidth = MainViewModel.DefaultSlimPanelWidth;
 
     /// <summary>大きさが落ち着いてから、幅を伝える。</summary>
     private readonly Views.Settle _settle;
@@ -660,14 +648,13 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>
     /// マウスが指している行を消す（項目8）。何も指していなければ何もしない。
     /// <para>
-    /// 予定・タスクの行は <see cref="Views.DayPaneView"/> の中にあり、右パネル用
-    /// （<c>Detail</c>）とスリムパネル用（<c>Sidebar.DayPane</c>）の2つが同時に
-    /// 画面に出ていることがある。マウスは1つしか指せないので、両方に聞いて
-    /// 消せたほうを採る。
+    /// 予定・タスクの行は右パネル（<c>Detail</c>、中身は <see cref="Views.SidebarLayout"/>
+    /// 経由の <see cref="Views.DayPaneView"/>）の中にある。パネルは1つに統合済みなので、
+    /// ここへそのまま聞く。
     /// </para>
     /// </summary>
     private bool DeletePointedRow(MainViewModel vm) =>
-        Detail.DeleteHoveredRow(vm) || Sidebar.DayPane.DeleteHoveredRow(vm);
+        Detail.DayPane.DeleteHoveredRow(vm);
 
     /// <summary>InputBindings に登録してある、修飾キー無しの単独キー。</summary>
     private static bool IsBareShortcutKey(Key key) => key is
@@ -675,10 +662,7 @@ public partial class MainWindow : Window, ISlideRevealHost
 
     /// <summary>
     /// クイック入力へフォーカスする（項目4）。
-    /// <para>
-    /// 右ペインが開いていればそちらへ、閉じていてスリムパネルが開いていればそちらへ。
-    /// どちらも閉じていれば右ペインを開いてから当てる。
-    /// </para>
+    /// <para>右パネルが閉じていれば開いてから当てる。</para>
     /// <para>
     /// トレイの Ctrl＋Alt＋N（<c>App.xaml.cs</c>）と、本体の Ctrl＋L・/ の両方から呼ぶ。
     /// </para>
@@ -687,21 +671,11 @@ public partial class MainWindow : Window, ISlideRevealHost
     {
         if (ViewModel is not { } vm) return;
 
-        if (!vm.IsDetailPaneOpen && !vm.IsSlimPanelOpen) vm.IsDetailPaneOpen = true;
+        if (!vm.IsDetailPaneOpen) vm.IsDetailPaneOpen = true;
 
         // パネルの開閉直後は、まだ幅が 0 のままでフォーカスを受け取れないことがある。
         // レイアウトが一段落してから当てる
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (vm.IsDetailPaneOpen)
-            {
-                Detail.FocusQuickInput();
-            }
-            else if (vm.IsSlimPanelOpen)
-            {
-                Sidebar.FocusQuickInput();
-            }
-        }, DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(() => Detail.FocusQuickInput(), DispatcherPriority.Input);
     }
 
     /// <summary>

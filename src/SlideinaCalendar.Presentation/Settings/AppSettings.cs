@@ -56,8 +56,10 @@ public sealed class AppSettings
     private const string CloseToTrayKey = "ui.close_to_tray";
     private const string SlideOutOnLeaveKey = "shell.slide_out_on_leave";
     private const string MinWidthKey = "shell.min_width";
-    private const string SlimShareKey = "ui.slim_calendar_share";
-    private const string SlimCalendarCollapsedKey = "ui.slim_calendar_collapsed";
+    // キー名は据え置き（保存済みの設定を読めなくしないため）。中身は右パネルの
+    // 月カレンダーのものになった（旧・スリムパネル専用の月カレンダー）
+    private const string PaneShareKey = "ui.slim_calendar_share";
+    private const string PaneCalendarCollapsedKey = "ui.slim_calendar_collapsed";
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
     private const string CheckForUpdateOnStartupKey = "update.check_on_startup";
@@ -84,7 +86,7 @@ public sealed class AppSettings
     private YearLayout _yearLayout;
     private bool _closeToTray = true;
     private bool _slideOutOnLeave = true;
-    private bool _slimCalendarCollapsed;
+    private bool _paneCalendarCollapsed = true;
     private int _minWidth = DefaultMinWidth;
     private int _dayStartHour;
     private int _dayEndHour;
@@ -112,10 +114,15 @@ public sealed class AppSettings
         _slideOutOnLeave =
             !string.Equals(_store.Get(SlideOutOnLeaveKey), "false", StringComparison.Ordinal);
         _minWidth = ReadNumber(MinWidthKey, DefaultMinWidth, LowestMinWidth, HighestMinWidth);
-        _hasSlimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
+        _hasPaneShare = double.TryParse(_store.Get(PaneShareKey), NumberStyles.Float,
             CultureInfo.InvariantCulture, out var share);
-        _slimShare = _hasSlimShare ? Math.Clamp(share, 0.2, 0.8) : DefaultSlimShare;
-        _slimCalendarCollapsed = string.Equals(_store.Get(SlimCalendarCollapsedKey), "true", StringComparison.Ordinal);
+        _paneShare = _hasPaneShare ? Math.Clamp(share, 0.2, 0.8) : DefaultPaneShare;
+
+        // 既定は畳んだ状態（項目4）。値が無ければ畳む。以前の右パネル利用者には
+        // 月カレンダーが無かったので、見た目を変えないための既定。明示的に
+        // "false"（開いた状態）が控えてあるときだけ開く
+        _paneCalendarCollapsed =
+            !string.Equals(_store.Get(PaneCalendarCollapsedKey), "false", StringComparison.Ordinal);
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -386,77 +393,87 @@ public sealed class AppSettings
     }
 
     /// <summary>
-    /// スリムパネルで、カレンダーに割く高さの割合。
+    /// 右パネルで、月カレンダーに割く高さの割合。
     /// <para>
     /// 仕切りをつまんで変えたぶんを覚える。カレンダーを広く見たい人と、予定の一覧を
     /// 長く出したい人がいる。0.2〜0.8 の範囲に収める。
     /// </para>
+    /// <para>
+    /// 旧スリムパネルの設定だったもの（キー名は据え置き）。統合後は右パネルの
+    /// 月カレンダーがこれを使う。
+    /// </para>
     /// </summary>
-    public double SlimCalendarShare
+    public double PaneCalendarShare
     {
-        get => _slimShare;
+        get => _paneShare;
         set
         {
             var share = Math.Clamp(value, 0.2, 0.8);
 
-            if (_hasSlimShare && Math.Abs(_slimShare - share) < 0.005) return;
+            if (_hasPaneShare && Math.Abs(_paneShare - share) < 0.005) return;
 
-            _slimShare = share;
-            _hasSlimShare = true;
-            _store.Set(SlimShareKey, share.ToString("R", CultureInfo.InvariantCulture));
+            _paneShare = share;
+            _hasPaneShare = true;
+            _store.Set(PaneShareKey, share.ToString("R", CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
-    private double _slimShare = DefaultSlimShare;
+    private double _paneShare = DefaultPaneShare;
 
     /// <summary>
-    /// <see cref="SlimCalendarShare"/> をつまんで変え、控えたことがあるか。
+    /// <see cref="PaneCalendarShare"/> をつまんで変え、控えたことがあるか。
     /// <para>
     /// まだ一度も変えていない（＝設定に値が無い）なら、既定の固定割合ではなく
     /// 月カレンダーの中身が要る高さを初期値にする（項目5）。<c>SidebarLayout</c>
     /// が起動時にこれを見て、初回だけ中身基準の高さで組む。
     /// </para>
     /// </summary>
-    public bool HasSlimCalendarShare => _hasSlimShare;
+    public bool HasPaneCalendarShare => _hasPaneShare;
 
-    private bool _hasSlimShare;
+    private bool _hasPaneShare;
 
     /// <summary>
     /// 一度もつまんで変えていないときの、保険としての既定値。
     /// <para>
-    /// 実際の初期表示は <see cref="HasSlimCalendarShare"/> が false のあいだ
+    /// 実際の初期表示は <see cref="HasPaneCalendarShare"/> が false のあいだ
     /// <c>SidebarLayout.xaml</c> の <c>CalendarRow</c> を <c>Height="Auto"</c>
     /// のまま使い、月カレンダーの中身（曜日の見出し＋6週ぶん）が要る高さに
     /// 任せる（項目5）。これのほうが、固定の割合よりも画面の高さが変わったときに
     /// 「余白が余る」「6週目が切れる」を起こさない。
     /// </para>
     /// <para>
-    /// この定数が使われるのは、その仕組みを経ずに <see cref="SlimCalendarShare"/>
+    /// この定数が使われるのは、その仕組みを経ずに <see cref="PaneCalendarShare"/>
     /// を読む場面（<c>_settings</c> が null のときの <c>MainViewModel</c> の
-    /// フォールバックなど）だけ。実測（スリムパネル幅244px・高さ約1030pxで、
+    /// フォールバックなど）だけ。実測（旧スリムパネル幅244px・高さ約1030pxで、
     /// 曜日の見出し＋6週ぶんが画面の約28〜30%だった）に合わせ、以前の 0.6 から
     /// 0.3 へ下げてある。
     /// </para>
     /// </summary>
-    public const double DefaultSlimShare = 0.3;
+    public const double DefaultPaneShare = 0.3;
 
     /// <summary>
-    /// スリムパネルの月カレンダーを畳んでいるか（項目2）。
+    /// 右パネルの月カレンダーを畳んでいるか（項目2、統合後は右パネルのもの）。
     /// <para>
     /// 一覧を追いたいときにカレンダーぶんの高さを一覧へ回せるよう、月の見出しの
     /// 山形（▾／▸）で畳み・開きを切り替えられる。畳んだ状態は覚えて次回も引き継ぐ。
     /// </para>
+    /// <para>
+    /// <b>既定は畳んだ状態。</b>統合前の右パネル利用者には月カレンダーが無かったので、
+    /// 見た目を変えないための既定にしてある。旧スリムパネル利用者（月カレンダーを
+    /// 出して使っていた側）は、パネル組の移行（<c>MainViewModel.PaneSet.Parse</c>）で
+    /// この既定を上書きし、開いた状態を引き継ぐ。
+    /// </para>
     /// </summary>
-    public bool IsSlimCalendarCollapsed
+    public bool IsPaneCalendarCollapsed
     {
-        get => _slimCalendarCollapsed;
+        get => _paneCalendarCollapsed;
         set
         {
-            if (_slimCalendarCollapsed == value) return;
+            if (_paneCalendarCollapsed == value) return;
 
-            _slimCalendarCollapsed = value;
-            _store.Set(SlimCalendarCollapsedKey, value ? "true" : "false");
+            _paneCalendarCollapsed = value;
+            _store.Set(PaneCalendarCollapsedKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

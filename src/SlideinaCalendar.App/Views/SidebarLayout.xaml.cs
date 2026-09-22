@@ -6,7 +6,13 @@ using SlideinaCalendar.Presentation.ViewModels;
 namespace SlideinaCalendar.App.Views;
 
 /// <summary>
-/// サイドバーモードの中身。
+/// 右パネルの中身。
+/// <para>
+/// 月の見出し行＋折りたためる月カレンダー＋仕切り＋<see cref="DayPaneView"/>
+/// （選んだ日の予定・タスク）を縦に並べる。旧版では「スリムパネル」という
+/// 独立したパネルだったが、右パネルへ統合し、パネルは 左・中央・右 の3つになった
+/// （<c>MainWindow.xaml</c> の Grid.Column=6 に置く）。
+/// </para>
 /// <para>データの出どころは3ペインと同じ <c>MainViewModel</c>。形だけを変えている。</para>
 /// </summary>
 public partial class SidebarLayout : UserControl
@@ -25,7 +31,7 @@ public partial class SidebarLayout : UserControl
     /// <summary>
     /// 控えてある割り振りに戻す（項目5）。
     /// <para>
-    /// 一度もつまんで変えていない（<see cref="MainViewModel.HasSlimCalendarShare"/>
+    /// 一度もつまんで変えていない（<see cref="MainViewModel.HasPaneCalendarShare"/>
     /// が false の）あいだは <c>CalendarRow</c> を <c>Height="Auto"</c> に戻す。
     /// 月カレンダーが必要とする高さ（曜日の見出し＋6週ぶん。MonthView.xaml.cs の
     /// FitCells が MinHeight に持つ）が、そのまま初期値になる。固定の割合だと
@@ -39,7 +45,7 @@ public partial class SidebarLayout : UserControl
     /// <para>
     /// <see cref="ApplyCollapsedState"/> が畳んだとき Height／MinHeight を 0 に
     /// 書き換えるので、開いたときはここで両方とも書き戻す（項目2）。以前は
-    /// <c>HasSlimCalendarShare</c> が false のとき何もしなかったが、それだと
+    /// <c>HasPaneCalendarShare</c> が false のとき何もしなかったが、それだと
     /// 畳んで開いたときに 0 のまま戻らない
     /// </para>
     /// </summary>
@@ -49,13 +55,13 @@ public partial class SidebarLayout : UserControl
 
         CalendarRow.MinHeight = 120;
 
-        if (!vm.HasSlimCalendarShare)
+        if (!vm.HasPaneCalendarShare)
         {
             CalendarRow.Height = GridLength.Auto;
             return;
         }
 
-        var share = vm.SlimCalendarShare;
+        var share = vm.PaneCalendarShare;
 
         CalendarRow.Height = new GridLength(share, GridUnitType.Star);
         ListRow.Height = new GridLength(1 - share, GridUnitType.Star);
@@ -69,7 +75,7 @@ public partial class SidebarLayout : UserControl
     {
         if (DataContext is not MainViewModel vm) return;
 
-        vm.IsSlimCalendarCollapsed = !vm.IsSlimCalendarCollapsed;
+        vm.IsPaneCalendarCollapsed = !vm.IsPaneCalendarCollapsed;
         ApplyCollapsedState();
         e.Handled = true;
     }
@@ -92,17 +98,17 @@ public partial class SidebarLayout : UserControl
     {
         if (DataContext is not MainViewModel vm) return;
 
-        if (vm.IsSlimCalendarCollapsed)
+        if (vm.IsPaneCalendarCollapsed)
         {
             CalendarRow.Height = new GridLength(0);
             CalendarRow.MinHeight = 0;
-            SlimMonthView.Visibility = Visibility.Collapsed;
+            PaneMonthView.Visibility = Visibility.Collapsed;
             Split.Visibility = Visibility.Collapsed;
             Split.IsEnabled = false;
         }
         else
         {
-            SlimMonthView.Visibility = Visibility.Visible;
+            PaneMonthView.Visibility = Visibility.Visible;
             Split.Visibility = Visibility.Visible;
             Split.IsEnabled = true;
             RestoreShare();
@@ -118,7 +124,7 @@ public partial class SidebarLayout : UserControl
 
         if (total <= 0) return;
 
-        vm.SlimCalendarShare = CalendarRow.ActualHeight / total;
+        vm.PaneCalendarShare = CalendarRow.ActualHeight / total;
     }
 
     /// <summary>
