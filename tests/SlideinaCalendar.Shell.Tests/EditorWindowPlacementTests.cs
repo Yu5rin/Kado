@@ -8,6 +8,8 @@ namespace SlideinaCalendar.Shell.Tests;
 /// <para>
 /// 実機の報告：スライド／ピン留めのときに編集ウィンドウが帯へ重なって出ていた。
 /// 帯の外側の隣・上端を揃えて出すはずが、正しく計算できているかをここで確かめる。
+/// さらに追加の要望で「隙間なく・上をぴったり揃える」ことになったので、
+/// 帯にぴったりくっつくこと・上端が一致することを確かめる形にしている。
 /// </para>
 /// </summary>
 public class EditorWindowPlacementTests
@@ -16,7 +18,7 @@ public class EditorWindowPlacementTests
     private static readonly EditorWindowPlacement.Rect Screen = new(0, 0, 1920, 1080);
 
     [Fact]
-    public void 左に寄せた帯の右隣に上端を揃えて出す()
+    public void 左に寄せた帯の右隣に隙間なく上端を揃えて出す()
     {
         // 画面左端（x=0）に幅270pxの帯
         var band = new EditorWindowPlacement.Rect(0, 0, 270, 1080);
@@ -24,14 +26,14 @@ public class EditorWindowPlacementTests
         var (left, top) = EditorWindowPlacement.NextToBand(
             Screen, band, DockEdge.Left, editorWidth: 440, editorHeight: 300);
 
-        // 帯の右端（270）＋隙間（10）
-        Assert.Equal(280, left);
-        // 帯の上端（0）＋わずかな下げ（6）
-        Assert.Equal(6, top);
+        // 帯の右端（270）にぴったりくっつく（隙間なし）
+        Assert.Equal(band.Right, left);
+        // 帯の上端（0）にぴったり揃う
+        Assert.Equal(band.Top, top);
     }
 
     [Fact]
-    public void 右に寄せた帯の左隣に上端を揃えて出す()
+    public void 右に寄せた帯の左隣に隙間なく上端を揃えて出す()
     {
         // 画面右端に幅270pxの帯（左端は 1920-270=1650）
         var band = new EditorWindowPlacement.Rect(1650, 0, 270, 1080);
@@ -39,14 +41,14 @@ public class EditorWindowPlacementTests
         var (left, top) = EditorWindowPlacement.NextToBand(
             Screen, band, DockEdge.Right, editorWidth: 440, editorHeight: 300);
 
-        // 編集ウィンドウの右端が「帯の左端（1650）－隙間（10）」に来る
-        // ＝ 左端は 1650 - 10 - 440 = 1200
-        Assert.Equal(1200, left);
-        Assert.Equal(6, top);
+        // 編集ウィンドウの右端が帯の左端（1650）にぴったりくっつく
+        // ＝ 左端は 1650 - 440 = 1210
+        Assert.Equal(1210, left);
+        Assert.Equal(band.Top, top);
     }
 
     [Fact]
-    public void 帯が上端0でなくても帯の上端に揃える()
+    public void 帯が上端0でなくても帯の上端にぴったり揃える()
     {
         // 複数モニタでモニタの原点が0でない・帯が画面の途中から始まる場合
         var band = new EditorWindowPlacement.Rect(2000, 120, 270, 900);
@@ -55,7 +57,7 @@ public class EditorWindowPlacementTests
         var (_, top) = EditorWindowPlacement.NextToBand(
             screen, band, DockEdge.Left, editorWidth: 440, editorHeight: 300);
 
-        Assert.Equal(126, top);
+        Assert.Equal(band.Top, top);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public class EditorWindowPlacementTests
         var (left, _) = EditorWindowPlacement.NextToBand(
             Screen, band, DockEdge.Left, editorWidth: 440, editorHeight: 300);
 
-        // 本来なら 1700+270+10=1980 だが、画面幅1920に収める
+        // 本来なら 1700+270=1970 だが、画面幅1920に収める
         // ＝ 右端が画面右端に一致する位置（1920-440=1480）
         Assert.Equal(1480, left);
         Assert.True(left + 440 <= Screen.Right, "画面の右へはみ出してはいけない");
@@ -82,7 +84,7 @@ public class EditorWindowPlacementTests
         var (_, top) = EditorWindowPlacement.NextToBand(
             Screen, band, DockEdge.Left, editorWidth: 440, editorHeight: 300);
 
-        // 本来なら 900+6=906 だが、画面高さ1080に収める（1080-300=780）
+        // 本来なら帯の上端（900）に揃うが、画面高さ1080に収める（1080-300=780）
         Assert.Equal(780, top);
         Assert.True(top + 300 <= Screen.Bottom, "画面の下へはみ出してはいけない");
     }

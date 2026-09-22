@@ -21,19 +21,21 @@ internal static class EditorWindowPlacement
 {
     /// <summary>
     /// 帯と編集ウィンドウの隙間（DIP）。
-    /// <para>実機の報告は「8〜12px程度」。その中間を採る。</para>
+    /// <para>
+    /// 実機の追加の要望で「隙間なく帯にぴったりくっつけてほしい」とのことなので 0
+    /// にしている（調整しやすいよう定数自体は残す）。
+    /// </para>
     /// </summary>
-    internal const double Gap = 10;
+    internal const double Gap = 0;
 
     /// <summary>
     /// 上端を帯の上端からわずかに下げる量（DIP）。
     /// <para>
-    /// 実機の画像では帯の上端ぴったりではなく数pxだけ下にずれた位置が「望む位置」
-    /// として示されていた（「揃えるか 4〜8px 下げる程度」でよいとのこと）。その
-    /// 範囲の中間を採る。
+    /// 実機の追加の要望で「上をぴったり揃えてほしい」とのことなので 0 にしている
+    /// （調整しやすいよう定数自体は残す）。
     /// </para>
     /// </summary>
-    internal const double TopOffset = 6;
+    internal const double TopOffset = 0;
 
     /// <summary>画面や帯の矩形（左・上・幅・高さ、DIP）。</summary>
     internal readonly record struct Rect(double Left, double Top, double Width, double Height)
