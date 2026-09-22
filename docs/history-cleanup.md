@@ -49,7 +49,7 @@ Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force Kado -ErrorAction SilentlyContinue
 
 # 3. まっさらに取ってくる（この中では二度と clone しない）
-git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
+git clone https://github.com/Yu5rin/Kado.git cleanup
 cd cleanup
 
 # 4. 履歴から消す
@@ -62,7 +62,7 @@ git log --all --oneline -- "$Path"
 git log --all --oneline -- "tests/Kado.Core.Tests/TestData/実働日サンプル.xlsx"
 
 # 7. 押し戻す
-git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
+git remote add origin https://github.com/Yu5rin/Kado.git
 git push --force --all origin
 git push --force --tags origin
 ```
@@ -111,7 +111,7 @@ $Into = "（置き換え後の語）"
 
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
-git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
+git clone https://github.com/Yu5rin/Kado.git cleanup
 cd cleanup
 
 git filter-repo --replace-text "$HOME\replacements.txt"
@@ -119,7 +119,7 @@ git filter-repo --replace-text "$HOME\replacements.txt"
 # 消えたか（何も出なければ成功）
 git grep -l "$Word" $(git rev-list --all)
 
-git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git
+git remote add origin https://github.com/Yu5rin/Kado.git
 git push --force --all origin
 ```
 
@@ -140,7 +140,7 @@ git push --force --all origin
 作業フォルダは消して、clone し直す。
 
 ```
-git clone https://github.com/Yu5rin/SlideinaCalendar.git
+git clone https://github.com/Yu5rin/Kado.git
 ```
 
 ### GitHub に残る分について

@@ -14,7 +14,7 @@ public class ReleaseFeedTests
     private const string Typical = """
         {
           "tag_name": "v0.5.0",
-          "html_url": "https://github.com/Yu5rin/SlideinaCalendar/releases/tag/v0.5.0",
+          "html_url": "https://github.com/Yu5rin/Kado/releases/tag/v0.5.0",
           "body": "同期を直しました",
           "draft": false,
           "prerelease": false,
@@ -24,7 +24,7 @@ public class ReleaseFeedTests
               "size": 71662439,
               "digest": "sha256:ABCDEF0123456789",
               "browser_download_url":
-                "https://github.com/Yu5rin/SlideinaCalendar/releases/download/v0.5.0/Kado.exe"
+                "https://github.com/Yu5rin/Kado/releases/download/v0.5.0/Kado.exe"
             }
           ]
         }
@@ -124,7 +124,7 @@ public class ReleaseFeedTests
     public void 行き先が許されない応答は丸ごと断る()
     {
         var tampered = Typical.Replace(
-            "https://github.com/Yu5rin/SlideinaCalendar/releases/download/v0.5.0/Kado.exe",
+            "https://github.com/Yu5rin/Kado/releases/download/v0.5.0/Kado.exe",
             "https://evil.example.com/Kado.exe");
 
         Assert.Null(ReleaseFeed.Parse(tampered));

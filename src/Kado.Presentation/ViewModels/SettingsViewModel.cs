@@ -667,7 +667,7 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     /// <summary>リポジトリのページ。固定の URL なので定数で持つ。</summary>
-    private const string RepositoryUrl = "https://github.com/Yu5rin/SlideinaCalendar";
+    private const string RepositoryUrl = "https://github.com/Yu5rin/Kado";
 
     /// <summary>データの保存先を開く。</summary>
     public Infrastructure.RelayCommand OpenDataFolderCommand { get; }

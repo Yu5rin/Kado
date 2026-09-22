@@ -1,6 +1,6 @@
 # Kado
 
-[![CI](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml/badge.svg)](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml)
+[![CI](https://github.com/Yu5rin/Kado/actions/workflows/ci.yml/badge.svg)](https://github.com/Yu5rin/Kado/actions/workflows/ci.yml)
 
 Windows デスクトップ向けの予定・タスク管理アプリ。画面端に常駐させて一日中使うツールで、
 Google カレンダー／Google タスクと同期しつつ、**会社の実働日（稼働日）を軸に日数を数えられる**
