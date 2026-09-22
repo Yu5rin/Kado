@@ -100,14 +100,10 @@ public sealed class UpdateTaskEdit(TaskRepository repository, TaskItem before, T
     public void Revert() => repository.Upsert(before);
 }
 
-/// <summary>
-/// タスクを削除する。
-/// <para>作業時間ブロックも連鎖して消えるので、元に戻すときに入れ直す。</para>
-/// </summary>
+/// <summary>タスクを削除する。元に戻すときは同じ内容で作り直す。</summary>
 public sealed class DeleteTaskEdit(
     TaskRepository repository,
     TaskItem value,
-    IReadOnlyList<WorkBlock> blocks,
     TombstoneRepository? tombstones = null)
     : IUndoableEdit
 {
@@ -129,8 +125,6 @@ public sealed class DeleteTaskEdit(
     public void Revert()
     {
         repository.Upsert(value);
-        foreach (var block in blocks) repository.UpsertBlock(block);
-
         tombstones?.Clear(value.Id, TombstoneRepository.TaskKind);
     }
 }

@@ -151,7 +151,7 @@ public partial class MonthView : UserControl
             // 週ビューの時間軸から持ってきたもの。月ビューは時刻を持たないので、
             // 日だけを変えて時刻はそのままにする
             case TimeBlockViewModel block:
-                main.MoveEventTo(block.IsWorkBlock ? null : block.Id, cell.Date, copy);
+                main.MoveEventTo(block.Id, cell.Date, copy);
                 break;
             case TaskItem task:
                 main.MoveTaskTo(task.Id, cell.Date, copy);

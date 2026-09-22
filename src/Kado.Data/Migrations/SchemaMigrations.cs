@@ -52,7 +52,14 @@ public static class SchemaMigrations
         CREATE INDEX ix_tasks_due ON tasks (due) WHERE due IS NOT NULL;
         CREATE UNIQUE INDEX ux_tasks_google ON tasks (google_task_id) WHERE google_task_id IS NOT NULL;
 
-        -- 作業時間ブロック。タスク側の属性であり、予定には変換しない（要件書 5.4）
+        -- 作業時間ブロック（要件書 5.4「タスクを時間軸へドラッグすると作業時間が
+        -- 確保される」の受け皿として V1 で用意した）。
+        --
+        -- この版では使っていない。作る導線（時間軸へのドラッグ）が最後まで実装
+        -- されないまま、作業時間ブロックは実装しないと決まったため。マイグレーション
+        -- を増やしたくないので、テーブル定義そのものは残す。過去の版で動いていた
+        -- 時期に作られた行が、既存のデータベースには残っている可能性がある
+        -- （読み書きするコードはもう無いので、増えることはない）。
         CREATE TABLE work_blocks (
             id               TEXT    NOT NULL PRIMARY KEY,
             task_id          TEXT    NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,

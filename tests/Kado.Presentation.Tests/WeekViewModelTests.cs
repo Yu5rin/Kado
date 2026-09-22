@@ -164,27 +164,6 @@ public class WeekViewModelTests
     }
 
     [Fact]
-    public void 作業時間ブロックは予定と区別できる()
-    {
-        using var test = TestWorkspace.Create();
-        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "治具の発注手配", Due = D(2026, 9, 24) });
-        test.Workspace.Tasks.UpsertBlock(new WorkBlock
-        {
-            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24), StartTime = T(15, 30), DurationMinutes = 90,
-        });
-
-        var day = Create(test).Days.Single(d => d.Date == D(2026, 9, 24));
-        var block = Assert.Single(day.Blocks);
-
-        // 予定には変換しない（要件書 5.4）。表示でも点線枠で分ける
-        Assert.True(block.IsWorkBlock);
-        Assert.Equal("治具の発注手配", block.Title);
-
-        // 期限付きタスクは終日レーンにも並ぶ。ここから時間帯へドラッグする
-        Assert.Single(day.Tasks);
-    }
-
-    [Fact]
     public void 時間軸の見出しは表示時間帯のぶんだけ出る()
     {
         using var test = TestWorkspace.Create();

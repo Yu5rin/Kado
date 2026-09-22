@@ -179,34 +179,6 @@ public class TaskRepositoryTests
     }
 
     [Fact]
-    public void 作業時間ブロックを持てる()
-    {
-        using var db = TestDatabase.Create();
-        var repo = new TaskRepository(db.Connection);
-
-        repo.Upsert(new TaskItem { Id = "t1", Title = "作業のあるタスク" });
-        repo.UpsertBlock(new WorkBlock { Id = "b1", TaskId = "t1", Date = D(2026, 9, 24), StartTime = new TimeOnly(9, 0), DurationMinutes = 90 });
-
-        var block = Assert.Single(repo.BlocksOf("t1"));
-        Assert.Equal(new TimeOnly(10, 30), block.EndTime);
-        Assert.Single(repo.BlocksInRange(D(2026, 9, 24), D(2026, 9, 24)));
-    }
-
-    [Fact]
-    public void タスクを消すと作業時間ブロックも消える()
-    {
-        using var db = TestDatabase.Create();
-        var repo = new TaskRepository(db.Connection);
-
-        repo.Upsert(new TaskItem { Id = "t1", Title = "作業のあるタスク" });
-        repo.UpsertBlock(new WorkBlock { Id = "b1", TaskId = "t1", Date = D(2026, 9, 24), StartTime = new TimeOnly(9, 0), DurationMinutes = 60 });
-
-        repo.Delete("t1");
-
-        Assert.Empty(repo.BlocksOf("t1"));
-    }
-
-    [Fact]
     public void 同じ期限日ならSortOrder作成日時識別子の順に並ぶ()
     {
         using var db = TestDatabase.Create();

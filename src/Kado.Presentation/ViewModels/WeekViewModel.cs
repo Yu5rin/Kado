@@ -7,7 +7,7 @@ using Kado.Presentation.Infrastructure;
 namespace Kado.Presentation.ViewModels;
 
 /// <summary>
-/// 時間軸に置く1件。予定と作業時間ブロックの両方を同じ形で扱う。
+/// 時間軸に置く、時刻付きの予定1件。
 /// <para>
 /// 位置は分ではなく<b>高さそのもの</b>で持つ。モックの1時間 44px に対して
 /// 開始・長さを何度も掛け算するより、置き場所を1か所で決めるほうが崩れにくい。
@@ -16,18 +16,15 @@ namespace Kado.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, string? color, bool isWorkBlock, string? location,
-        string? taskId = null)
+        double top, double height, string? color, string? location)
     {
         Id = id;
-        TaskId = taskId;
         Title = title;
         Start = start;
         End = end;
         Top = top;
         Height = height;
         Color = color;
-        IsWorkBlock = isWorkBlock;
         Location = location;
     }
 
@@ -47,18 +44,6 @@ public sealed class TimeBlockViewModel
 
     /// <summary>帯の色（<c>#rrggbb</c>）。所属カレンダーで決まる。null なら既定のアクセント色。</summary>
     public string? Color { get; }
-
-    /// <summary>
-    /// タスクの作業時間ブロックか。
-    /// <para>予定には変換しないので、点線枠で見分けられるようにする（要件書 5.4）。</para>
-    /// </summary>
-    public bool IsWorkBlock { get; }
-
-    /// <summary>
-    /// 作業時間ブロックなら、そのもとになったタスク。予定なら null。
-    /// <para>ブロック自身の識別子とは別物。押したときに開くのはタスクのほう。</para>
-    /// </summary>
-    public string? TaskId { get; }
 
     public string? Location { get; }
 
@@ -158,23 +143,17 @@ public sealed class WeekDayColumnViewModel : ObservableObject
     /// <summary>終日レーンに並べる予定。</summary>
     public IReadOnlyList<EventChipViewModel> AllDayEvents { get; }
 
-    /// <summary>終日レーンに並べる期限付きタスク。ここから時間帯へドラッグする（要件書 5.4）。</summary>
+    /// <summary>終日レーンに並べる期限付きタスク。</summary>
     public IReadOnlyList<TaskItem> Tasks { get; }
 
-    /// <summary>時間軸に置く予定と作業時間ブロック。</summary>
+    /// <summary>時間軸に置く、時刻付きの予定。</summary>
     public IReadOnlyList<TimeBlockViewModel> Blocks { get; }
 
     /// <summary>終日レーンに何か入っているか。</summary>
     public bool HasAllDayItems => AllDayEvents.Count > 0 || Tasks.Count > 0;
 }
 
-/// <summary>
-/// 週ビュー（要件書 5.1）。
-/// <para>
-/// 上に終日レーン、下に時間軸。タスクを時間軸へ置くと作業時間ブロックになるが、
-/// データとしてはタスクのまま扱う（要件書 5.4）。
-/// </para>
-/// </summary>
+/// <summary>週ビュー（要件書 5.1）。上に終日レーン、下に時間軸。</summary>
 public sealed class WeekViewModel : ObservableObject
 {
     private TimelineBuilder _timeline;

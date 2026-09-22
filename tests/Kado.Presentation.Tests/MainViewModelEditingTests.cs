@@ -501,49 +501,6 @@ public class MainViewModelEditingTests
         Assert.Null(test.Workspace.Events.Find("e1"));
     }
 
-    [Fact]
-    public void 作業時間ブロックはもとのタスクが開く()
-    {
-        using var test = TestWorkspace.Create();
-
-        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
-        test.Workspace.Tasks.UpsertBlock(new WorkBlock
-        {
-            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24),
-            StartTime = new TimeOnly(13, 0), DurationMinutes = 60,
-        });
-
-        var (vm, editors) = Create(test);
-        var block = Block(vm, "b1");
-        Assert.True(block.IsWorkBlock);
-
-        // ブロック自身の識別子で予定を探しても見つからない
-        editors.OnTask = editor => { editor.Title = "提出（変更）"; return true; };
-        vm.EditBlockCommand.Execute(block);
-
-        Assert.Equal("提出（変更）", test.Workspace.Tasks.Find("t1")!.Title);
-    }
-
-    [Fact]
-    public void 作業時間ブロックは消せない()
-    {
-        using var test = TestWorkspace.Create();
-
-        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
-        test.Workspace.Tasks.UpsertBlock(new WorkBlock
-        {
-            Id = "b1", TaskId = "t1", Date = D(2026, 9, 24),
-            StartTime = new TimeOnly(13, 0), DurationMinutes = 60,
-        });
-
-        var (vm, _) = Create(test);
-
-        // 予定ではないので、予定の削除は動かない。タスクも消えない
-        vm.DeleteBlockCommand.Execute(Block(vm, "b1"));
-
-        Assert.NotNull(test.Workspace.Tasks.Find("t1"));
-    }
-
     // ------------------------------------------------------------------
     // 項目6: エディタの「削除」ボタンを受ける配線
     // ------------------------------------------------------------------

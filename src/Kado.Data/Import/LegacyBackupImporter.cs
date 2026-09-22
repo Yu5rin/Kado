@@ -189,7 +189,7 @@ public sealed class LegacyBackupImporter
         var start = GetString(item, "start");
         if (start is not null)
         {
-            // タスクに開始時刻は無い。作業時間ブロックへ移すべき情報だが、
+            // タスクに開始時刻は無いので持って来られない。仮に持てたとしても、
             // 旧データの時刻が「作業予定」なのか「予定の時刻」なのか判別できないため捨てる
             Warn("タスク変換", $"開始時刻 {start} は引き継げないため落としました。", id);
         }

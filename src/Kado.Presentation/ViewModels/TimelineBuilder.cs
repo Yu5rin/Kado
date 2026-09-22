@@ -1,4 +1,3 @@
-using Kado.Data.Models;
 using Kado.Data.Repositories;
 
 namespace Kado.Presentation.ViewModels;
@@ -99,12 +98,6 @@ public sealed class TimelineBuilder
     {
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
         var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
-        var blocksByDate = _workspace.Tasks.BlocksInRange(from, to)
-            .GroupBy(b => b.Date)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkBlock>)g.ToArray());
-
-        // 作業時間ブロックはタスクの題を持たない。引くために一度だけ読む
-        var titles = _workspace.Tasks.All().ToDictionary(t => t.Id, t => t.Title, StringComparer.Ordinal);
 
         var columns = new List<WeekDayColumnViewModel>();
         for (var date = from; date <= to; date = date.AddDays(1))
@@ -113,14 +106,13 @@ public sealed class TimelineBuilder
             var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
             var tasks = tasksByDue.TryGetValue(date, out var t)
                 ? t.Where(_sources.IncludesTask).ToArray() : [];
-            var blocks = blocksByDate.TryGetValue(date, out var b) ? b : [];
 
             columns.Add(new WeekDayColumnViewModel(
                 date, today, _workspace.WorkingDays, _workspace.Holidays.NameOf(date),
                 // 終日はレーン、時刻付きは時間軸と、置き場所が違う
                 events.Where(x => x.Source.IsAllDay).ToArray(),
                 tasks,
-                Layout(events, blocks, titles),
+                Layout(events),
                 _sources,
                 MilestoneRow.For(date, all, _sources)));
         }
@@ -128,10 +120,8 @@ public sealed class TimelineBuilder
         return columns;
     }
 
-    /// <summary>時刻付きの予定と作業時間ブロックを、時間軸の座標に置き換える。</summary>
-    private IReadOnlyList<TimeBlockViewModel> Layout(
-        IReadOnlyList<ScheduledEvent> events, IReadOnlyList<WorkBlock> blocks,
-        IReadOnlyDictionary<string, string> taskTitles)
+    /// <summary>時刻付きの予定を、時間軸の座標に置き換える。</summary>
+    private IReadOnlyList<TimeBlockViewModel> Layout(IReadOnlyList<ScheduledEvent> events)
     {
         var result = new List<TimeBlockViewModel>();
 
@@ -147,18 +137,7 @@ public sealed class TimelineBuilder
                 scheduled.Source.Id, scheduled.Source.Title, start, end,
                 placed.Top, placed.Height,
                 _sources.ColorOf(scheduled.Source.CalendarId),
-                isWorkBlock: false, scheduled.Source.Location));
-        }
-
-        foreach (var block in blocks)
-        {
-            if (Place(block.StartTime, block.EndTime) is not { } placed) continue;
-
-            result.Add(new TimeBlockViewModel(
-                block.Id, taskTitles.GetValueOrDefault(block.TaskId, "（削除されたタスク）"),
-                block.StartTime, block.EndTime, placed.Top, placed.Height,
-                // 作業時間ブロックはタスクのもの。カレンダーの色は使わず既定に寄せる
-                color: null, isWorkBlock: true, location: null, taskId: block.TaskId));
+                scheduled.Source.Location));
         }
 
         return result.OrderBy(b => b.Start).ToArray();

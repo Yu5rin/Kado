@@ -5,7 +5,7 @@ using Kado.Data.Models;
 namespace Kado.Data.Repositories;
 
 /// <summary>
-/// タスクと作業時間ブロックの読み書き。
+/// タスクの読み書き。
 /// <para>予定とは独立した経路で扱う（要件書 3.1）。</para>
 /// </summary>
 public sealed class TaskRepository(SqliteConnection connection)
@@ -173,50 +173,7 @@ public sealed class TaskRepository(SqliteConnection connection)
         transaction.Commit();
     }
 
-    /// <summary>削除する。作業時間ブロックも連鎖して消える。</summary>
+    /// <summary>削除する。</summary>
     public bool Delete(string id, SqliteTransaction? transaction = null) =>
         _connection.Execute("DELETE FROM tasks WHERE id = @id;", new { id }, transaction) > 0;
-
-    // ------------------------------------------------------------------
-    // 作業時間ブロック
-    // ------------------------------------------------------------------
-
-    /// <summary>指定タスクの作業時間ブロック。</summary>
-    public IReadOnlyList<WorkBlock> BlocksOf(string taskId) =>
-        _connection.Query<WorkBlock>(
-            """
-            SELECT id AS Id, task_id AS TaskId, date AS Date,
-                   start_time AS StartTime, duration_minutes AS DurationMinutes
-            FROM work_blocks WHERE task_id = @taskId ORDER BY date, start_time;
-            """, new { taskId }).ToArray();
-
-    /// <summary>期間内の作業時間ブロック。週・日ビューの時間軸に並べる。</summary>
-    public IReadOnlyList<WorkBlock> BlocksInRange(DateOnly from, DateOnly to) =>
-        _connection.Query<WorkBlock>(
-            """
-            SELECT id AS Id, task_id AS TaskId, date AS Date,
-                   start_time AS StartTime, duration_minutes AS DurationMinutes
-            FROM work_blocks WHERE date BETWEEN @from AND @to ORDER BY date, start_time;
-            """,
-            new { from = SqliteTypeHandlers.ToText(from), to = SqliteTypeHandlers.ToText(to) }).ToArray();
-
-    /// <summary>作業時間ブロックを登録または更新する。</summary>
-    public void UpsertBlock(WorkBlock value, SqliteTransaction? transaction = null)
-    {
-        ArgumentNullException.ThrowIfNull(value);
-
-        _connection.Execute(
-            """
-            INSERT INTO work_blocks (id, task_id, date, start_time, duration_minutes)
-            VALUES (@Id, @TaskId, @Date, @StartTime, @DurationMinutes)
-            ON CONFLICT (id) DO UPDATE SET
-                task_id = excluded.task_id, date = excluded.date,
-                start_time = excluded.start_time, duration_minutes = excluded.duration_minutes;
-            """,
-            value, transaction);
-    }
-
-    /// <summary>作業時間ブロックを削除する。</summary>
-    public bool DeleteBlock(string id, SqliteTransaction? transaction = null) =>
-        _connection.Execute("DELETE FROM work_blocks WHERE id = @id;", new { id }, transaction) > 0;
 }

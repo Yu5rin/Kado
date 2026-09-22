@@ -1005,16 +1005,13 @@ public sealed class CalendarWorkspace
         return true;
     }
 
-    /// <summary>タスクを削除する。作業時間ブロックも一緒に消える。</summary>
+    /// <summary>タスクを削除する。</summary>
     /// <returns>対象が見つかって削除したら true。</returns>
     public bool DeleteTask(string id)
     {
         if (Tasks.Find(id) is not { } value) return false;
 
-        // 連鎖で消える作業時間ブロックを控えておかないと、元に戻したときに失われる
-        var blocks = Tasks.BlocksOf(id);
-
-        Run(new DeleteTaskEdit(Tasks, value, blocks, Tombstones));
+        Run(new DeleteTaskEdit(Tasks, value, Tombstones));
         return true;
     }
 
