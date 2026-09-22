@@ -6,7 +6,7 @@ CI は Linux なので、画面と Windows の仕組みと Google との実際�
 
 | ファイル | 位置づけ |
 |---|---|
-| `SlideinaCalendar-requirements-v1.0.md` | **仕様の正。** 迷ったらこれに従う |
+| `Kado-requirements-v1.0.md` | **仕様の正。** 迷ったらこれに従う |
 | `mock-window.html` | ウィンドウモードの UI モック（参考） |
 | `mock-sidebar.html` | サイドバーモードの UI モック（参考） |
 | `google-field-gap.md` | Google 側の入力項目と、この実装との差分。Phase 4 の計画に使う |
@@ -253,12 +253,12 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
 - **閉じたあとの `RestoreBounds` は当てにならない。** 窓のハンドルがもう無い。
   元に戻したときの大きさが要るなら、閉じる前に控えておく
 
-`tests/SlideinaCalendar.App.Tests` が1つ目を静的に検査する。2つ目と3つ目は
+`tests/Kado.App.Tests` が1つ目を静的に検査する。2つ目と3つ目は
 検査できていないので、同じ書き方をしないよう上に残した。
 
 ## シェル統合（Phase 5）
 
-要件書 2章の最重要要件。実装は `src/SlideinaCalendar.App/Shell/`。
+要件書 2章の最重要要件。実装は `src/Kado.App/Shell/`。
 
 ### 3つの出しかた
 
@@ -568,7 +568,7 @@ Calendar は `status=cancelled`、Tasks は `deleted: true`。Tasks の `hidden`
 
 ### トークンの守り方
 
-`%LocalAppData%\SlideinaCalendar\google-tokens.dat` に、Windows の DPAPI
+`%LocalAppData%\Kado\google-tokens.dat` に、Windows の DPAPI
 （`CurrentUser`）で暗号化して置く。**同じ PC の同じ Windows ユーザーでしか復号できない。**
 ファイルごと別の PC へ写しても読めない。
 
@@ -756,7 +756,7 @@ Google Calendar のイベントは `reminders` を持つので、項目として
 ### 将来作るときの手がかり
 
 タスクを時間軸（週・日ビューの時間軸の列）へ落としたときの受け口は、
-[`src/SlideinaCalendar.App/Views/TimelineColumnView.xaml.cs`](../src/SlideinaCalendar.App/Views/TimelineColumnView.xaml.cs)
+[`src/Kado.App/Views/TimelineColumnView.xaml.cs`](../src/Kado.App/Views/TimelineColumnView.xaml.cs)
 の `OnColumnDropped` にある。いまはここに来た `TaskItem` を、終日レーンに
 落としたとき（`DayView.xaml.cs` / `WeekView.xaml.cs` の `OnAllDayDropped`）と
 同じ `MainViewModel.MoveTaskTo` へ流し、**期限を変えるだけ**にしている

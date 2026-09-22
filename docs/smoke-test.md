@@ -20,8 +20,8 @@ Releases なので、Actions の Artifacts だけでは新しい版に気づか�
 
 ```
 git clone https://github.com/Yu5rin/SlideinaCalendar.git
-cd SlideinaCalendar
-dotnet run --project src/SlideinaCalendar.App
+cd Kado
+dotnet run --project src/Kado.App
 ```
 
 ---
@@ -36,7 +36,7 @@ dotnet run --project src/SlideinaCalendar.App
    押すと画面端へ寄り、そのまま画面を分割する
 2. 別のアプリ（メモ帳・ブラウザなど）を開いて**最大化**する
 
-**期待**：最大化したウィンドウが SlideinaCalendar の手前まででとまり、**重ならない**。
+**期待**：最大化したウィンドウが Kado の手前まででとまり、**重ならない**。
 
 もう一度ピンを押すと、留める前の出しかた（ウィンドウ）に戻る。
 
@@ -47,7 +47,7 @@ dotnet run --project src/SlideinaCalendar.App
 ### B. 強制終了してもデスクトップが壊れないか
 
 1. Aの状態（ピン留め中）のまま
-2. **タスクマネージャーで SlideinaCalendar を強制終了**する
+2. **タスクマネージャーで Kado を強制終了**する
 3. もう一度起動する
 
 **期待**：起動したあと、他のウィンドウを最大化すると画面いっぱいになる。
@@ -66,7 +66,7 @@ dotnet run --project src/SlideinaCalendar.App
 **だめなとき**：「動作を停止しました」だけが出たら、記録を見る。
 
 ```
-%LocalAppData%\SlideinaCalendar\crash.log
+%LocalAppData%\Kado\crash.log
 ```
 
 読み込み時にだけ落ちる XAML の書き方は過去に2度やっている。`crash.log` の中身を
@@ -377,7 +377,7 @@ Google カレンダーで繰り返しの予定を作り、そのうち**1回だ�
 
 ## 22. 自動バックアップ
 
-`%LocalAppData%\SlideinaCalendar\backups\` を開いておく。
+`%LocalAppData%\Kado\backups\` を開いておく。
 
 **期待**
 

@@ -20,7 +20,7 @@ GitHub の Secrets に入れておき、配布を作るワークフローが組�
 | 置き場所 | 何のため |
 |---|---|
 | GitHub の Secrets（`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`） | 配布物に焼き込む |
-| `%LocalAppData%\SlideinaCalendar\google-client.json` | 使う側が自分のプロジェクトに差し替えたいとき（任意） |
+| `%LocalAppData%\Kado\google-client.json` | 使う側が自分のプロジェクトに差し替えたいとき（任意） |
 
 登録先は
 [Settings → Secrets and variables → Actions](https://github.com/Yu5rin/SlideinaCalendar/settings/secrets/actions)。
@@ -132,7 +132,7 @@ https://console.cloud.google.com/auth/clients
 「OAuth クライアント ID」）を押す。
 
 - **アプリケーションの種類** … **デスクトップ アプリ** を選ぶ
-- **名前** … 何でもよい（例：`SlideinaCalendar`）
+- **名前** … 何でもよい（例：`Kado`）
 
 「作成」を押すと、クライアント ID とシークレットが表示される。**この画面で書き写す
 必要はない。** 次の手順でファイルごと落とす。
@@ -187,7 +187,7 @@ client_secret_123456789012-abcdefghijklmnop.apps.googleusercontent.com.json
 焼き込んで組み立てる。
 
 ```
-dotnet run --project src/SlideinaCalendar.App -p:GoogleClientId=... -p:GoogleClientSecret=...
+dotnet run --project src/Kado.App -p:GoogleClientId=... -p:GoogleClientSecret=...
 ```
 
 渡さずに組み立てると焼き込まれない。そのときは ⚙ →「詳細」→

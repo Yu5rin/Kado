@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Kado.Presentation</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kado.Core\Kado.Core.csproj" />
+    <ProjectReference Include="..\Kado.Data\Kado.Data.csproj" />
+    <ProjectReference Include="..\Kado.Google\Kado.Google.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kado.Presentation.Tests" />
+  </ItemGroup>
+
+</Project>

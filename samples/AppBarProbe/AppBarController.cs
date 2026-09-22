@@ -25,7 +25,7 @@ internal sealed class AppBarController : IDisposable
     /// <c>RegisterWindowMessage</c> で確保するとシステム全体で一意になる。
     /// </summary>
     private static readonly uint CallbackMessage =
-        NativeMethods.RegisterWindowMessage("SlideinaCalendar.AppBarProbe.Callback");
+        NativeMethods.RegisterWindowMessage("Kado.AppBarProbe.Callback");
 
     private readonly Window _window;
     private HwndSource? _source;

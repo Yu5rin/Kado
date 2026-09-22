@@ -1,0 +1,171 @@
+<!--
+    右パネルの中身（左・中央・右の3パネル構成。旧版の「スリムパネル」は
+    ここへ統合した）。
+
+    上にひと月の並び（折りたためる月カレンダー）、下に選んだ日の予定とタスク。
+    仕切りはドラッグで高さを変えられる。細いので月だけにしてある（週や日は
+    時間軸が要るぶん、この幅では読めない）。マスには予定の名前を出さず、
+    入っていることを色で示す。
+-->
+<UserControl x:Class="Kado.App.Views.SidebarLayout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Kado.App.Converters"
+             xmlns:views="clr-namespace:Kado.App.Views"
+             Background="{DynamicResource BackgroundBrush}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!--
+            選んでいる日と送り。ここは月だけを出すので、ビューの切り替えは置かない。
+            実働日の通し番号は下の欄に出るので、ここでは繰り返さない
+        -->
+        <!--
+            「ビュー見出し」の Padding を他ビューと揃える（項目20）。ただし文字サイズは
+            14px のまま残す。ここは「今日」「◀」「▶」の3つのボタンと1行に同居しており、
+            パネルは160〜200px まで細くなる。16px に上げるとボタンを押しのけて
+            見出しが欠ける恐れがあり、WPF は Linux では確かめられないので寄せない
+            （項目19の「判断に迷ったら寄せない」に倣う）
+        -->
+        <!--
+            月カレンダーの折りたたみ（項目2）。見出しの行そのものを押せるようにする。
+            「実働日計算」「◀ ▶」は Button なので、押したときのクリックは
+            ButtonBase が自分で処理済みにしてここまで来ない（バブリングしない）。
+            残りの余白か、下の年月の文字を押したときだけ切り替わる。
+
+            「今日」はここに置かない。ツールバーの「今日」は幅が無くても消さない
+            （docs/README.md 項目10）ので、パネルの状態に関わらず常に出ている。
+            ここにも置くと同じものが2か所に出ることになる
+        -->
+        <Border DockPanel.Dock="Top" Padding="12,8"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}"
+                Cursor="Hand" MouseLeftButtonDown="OnMonthHeaderClicked"
+                ToolTip="月カレンダーの折りたたみを切り替え">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <!--
+                        実働日計算（項目10）。「＋予定／＋タスク」は、予定・タスクそれぞれの
+                        節の見出しのすぐ下（一覧の上）に行として置いてある（項目1）
+                    -->
+                    <Button Style="{StaticResource SmallIconButtonStyle}" Margin="0,0,6,0"
+                            Command="{Binding OpenWorkingDayCalculatorCommand}"
+                            ToolTip="実働日計算を開く（Ctrl＋K）">
+                        <Path Data="{StaticResource IconCalc}" Stretch="Uniform"
+                              Width="12" Height="12"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+
+                    <!-- アイコンの粒度を12px@1.5に揃える（項目11） -->
+                    <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="前の月"
+                            Command="{Binding PaneMonthPreviousCommand}">
+                        <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
+                              Width="12" Height="12"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                    <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="次の月"
+                            Command="{Binding PaneMonthNextCommand}">
+                        <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                              Width="12" Height="12"
+                              Stroke="{Binding Foreground,
+                                       RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 開＝▾・畳＝▸。畳んだ状態は AppSettings に覚える（MainViewModel.IsPaneCalendarCollapsed） -->
+                    <Path Data="{StaticResource IconChevronDown}" Stretch="Uniform"
+                          Width="10" Height="10" Margin="0,0,6,0"
+                          Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.7"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="{Binding IsPaneCalendarCollapsed,
+                                       Converter={StaticResource InverseBoolToVisibility}}" />
+                    <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                          Width="10" Height="10" Margin="0,0,6,0"
+                          Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.7"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="{Binding IsPaneCalendarCollapsed,
+                                       Converter={StaticResource BoolToVisibility}}" />
+
+                    <TextBlock Style="{StaticResource BodyTextStyle}" FontSize="14" FontWeight="SemiBold"
+                               Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource InkBrush}">
+                        <Run Text="{Binding PaneTitleYear, Mode=OneWay}" FontSize="11" FontWeight="Medium"
+                             Foreground="{DynamicResource Ink3Brush}" /><Run Text=" " /><Run
+                             Text="{Binding PaneTitleMonth, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!--
+                    上下の割り振りは手で変えられる。まだ一度もつまんで変えていない
+                    （AppSettings.HasPaneCalendarShare が false の）あいだは、既定を
+                    固定割合にせず Height="Auto" のまま使う（項目5）。MonthView は
+                    詰めた形のとき、曜日の見出し＋6週ぶんがちょうど収まる高さを
+                    自分で MinHeight に持つ（MonthView.xaml.cs の FitCells）ので、
+                    Auto 行はそれをそのまま初期の高さにする。固定割合だと画面の高さが
+                    変わったとき「下に余白が余る」「6週目が切れる」が起きるが、Auto なら
+                    幅が変わらない限り常にちょうど収まる。一度つまんで変えたら
+                    SidebarLayout.xaml.cs の SaveShare がその割合を控え、次回からは
+                    RestoreShare が Star 比で組む（ここでの Height 指定は初回だけの話）。
+
+                    畳んでいる（IsPaneCalendarCollapsed）あいだは、SidebarLayout.xaml.cs の
+                    ApplyCollapsedState が CalendarRow の Height／MinHeight を 0 にし、
+                    MonthView と GridSplitter を Collapsed にする（項目2）。既定は畳んだ
+                    状態（旧・右パネル利用者から見て見た目を変えないため）。開いたときは
+                    同じ場所から RestoreShare を呼び直すので、つまんで変えた高さ・
+                    まだ変えていない Auto の高さのどちらも、畳む前と同じに戻る
+                -->
+                <RowDefinition x:Name="CalendarRow" Height="Auto" MinHeight="120" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition x:Name="ListRow" Height="*" MinHeight="120" />
+            </Grid.RowDefinitions>
+
+            <!--
+                上：ひと月の並び。中央のカレンダーが何を出していても、ここは月。
+                ここだけ別の月暦を持つので、中央とは独立して送れる
+            -->
+            <views:MonthView x:Name="PaneMonthView" Grid.Row="0" DataContext="{Binding PaneMonth}" />
+
+            <!--
+                畳んでいる間、仕切りが掴めてしまわないこと（項目2）。Visibility を
+                Collapsed にするだけで当たり判定ごと消える（IsHitTestVisible を別に
+                切る必要が無い）。IsEnabled も併せて落とし、フォーカスやキー操作からも外す
+            -->
+            <GridSplitter Grid.Row="1" x:Name="Split" Height="5" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource LineBrush}"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
+                          Cursor="SizeNS" />
+
+            <!--
+                下：選んだ日の予定とタスク（項目1）。右パネル（旧版の右パネル・
+                スリムパネルの両方）が共有する部品（Views/DayPaneView.xaml）を
+                そのまま置くだけにした。
+
+                DataContext はここでは MainViewModel のまま渡す（DayPaneView
+                が自分の中で SelectedDay へ差し替える）。日送りを出す条件
+                （ShowsDayNav）は MainViewModel 側のコメントを参照。統合後は
+                この部品を使うホストが1つだけなので、条件も1つで足りる
+            -->
+            <views:DayPaneView x:Name="DayPaneHost" Grid.Row="2"
+                                ShowsDayNav="{Binding ShowsDayNav}" />
+        </Grid>
+    </DockPanel>
+</UserControl>

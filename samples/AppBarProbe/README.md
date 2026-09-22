@@ -98,7 +98,7 @@ dotnet run --project samples/AppBarProbe
 > 基準に再計算し、設定した値を即座に上書きしてしまう。そのため書き戻しは、通知ありで
 > 効かなければ通知なしで試し直し、結果をログに出すようにしてある。
 
-控えは `%LOCALAPPDATA%\SlideinaCalendar\appbar-probe.state.json` に置かれる。
+控えは `%LOCALAPPDATA%\Kado\appbar-probe.state.json` に置かれる。
 ピン留め中だけ存在し、正常に解除すると消える。
 
 **二重起動が止まること（安全装置 2）**
@@ -140,7 +140,7 @@ dotnet run --project samples/AppBarProbe
 
 ## 本番への移植
 
-ここで確かめた実装は Phase 5 で `SlideinaCalendar.Shell` に移す。
+ここで確かめた実装は Phase 5 で `Kado.Shell` に移す。
 その際は次を追加する（要件書 2.2）。
 
 - ドック幅のドラッグ変更と `ABM_SETPOS` の再交渉（ドラッグ中は間引く）

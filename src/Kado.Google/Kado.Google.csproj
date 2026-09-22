@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Kado.Google</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kado.Google.Tests" />
+  </ItemGroup>
+
+  <!--
+    既定のクライアント設定を組み立てのときに焼き込む。
+
+      dotnet build -p:GoogleClientId=... -p:GoogleClientSecret=...
+
+    ソースには書かない。リポジトリを公開しても出ないようにするため。値は配布を作る
+    ワークフローが GitHub の Secrets から渡す。
+
+    渡さずに組み立てても構わない。そのときは焼き込まれず、利用者が自分で
+    client_secret_*.json を読み込ませる従来の形で動く。
+  -->
+  <ItemGroup Condition="'$(GoogleClientId)' != '' and '$(GoogleClientSecret)' != ''">
+    <AssemblyMetadata Include="GoogleClientId" Value="$(GoogleClientId)" />
+    <AssemblyMetadata Include="GoogleClientSecret" Value="$(GoogleClientSecret)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kado.Core\Kado.Core.csproj" />
+    <ProjectReference Include="..\Kado.Data\Kado.Data.csproj" />
+  </ItemGroup>
+
+</Project>

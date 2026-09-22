@@ -1,4 +1,4 @@
-# SlideinaCalendar
+# Kado
 
 [![CI](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml/badge.svg)](https://github.com/Yu5rin/SlideinaCalendar/actions/workflows/ci.yml)
 
@@ -6,7 +6,7 @@ Windows デスクトップ向けの予定・タスク管理アプリ。画面端
 Google カレンダー／Google タスクと同期しつつ、**会社の実働日（稼働日）を軸に日数を数えられる**
 ことが他製品との差になる。
 
-仕様の正は `docs/SlideinaCalendar-requirements-v1.0.md`。
+仕様の正は `docs/Kado-requirements-v1.0.md`。
 
 | 項目 | 選定 |
 |---|---|
@@ -19,21 +19,21 @@ Google カレンダー／Google タスクと同期しつつ、**会社の実働�
 ## 構成
 
 ```
-SlideinaCalendar.sln
+Kado.sln
 ├ src/
-│  ├ SlideinaCalendar.Core/          … 繰り返し・実働日・日付計算・クイック入力の解釈。UI 非依存
-│  ├ SlideinaCalendar.Data/          … SQLite・旧データ移行・バックアップ
-│  ├ SlideinaCalendar.Google/        … Calendar / Tasks 同期
-│  ├ SlideinaCalendar.Presentation/  … ViewModel・Undo・通知（WPF 非依存、UI から差し替え可能）
-│  ├ SlideinaCalendar.Shell/         … AppBar・トレイ・通知の Win32 部分
-│  └ SlideinaCalendar.App/           … WPF 本体・画面
+│  ├ Kado.Core/          … 繰り返し・実働日・日付計算・クイック入力の解釈。UI 非依存
+│  ├ Kado.Data/          … SQLite・旧データ移行・バックアップ
+│  ├ Kado.Google/        … Calendar / Tasks 同期
+│  ├ Kado.Presentation/  … ViewModel・Undo・通知（WPF 非依存、UI から差し替え可能）
+│  ├ Kado.Shell/         … AppBar・トレイ・通知の Win32 部分
+│  └ Kado.App/           … WPF 本体・画面
 ├ tests/                             … 上の6プロジェクトに対応する xUnit プロジェクトが6つ
-│  ├ SlideinaCalendar.Core.Tests/
-│  ├ SlideinaCalendar.Data.Tests/
-│  ├ SlideinaCalendar.Google.Tests/
-│  ├ SlideinaCalendar.Presentation.Tests/
-│  ├ SlideinaCalendar.Shell.Tests/
-│  └ SlideinaCalendar.App.Tests/
+│  ├ Kado.Core.Tests/
+│  ├ Kado.Data.Tests/
+│  ├ Kado.Google.Tests/
+│  ├ Kado.Presentation.Tests/
+│  ├ Kado.Shell.Tests/
+│  └ Kado.App.Tests/
 └ samples/
    └ AppBarProbe/                … AppBar 成立性の検証用プロトタイプ
 ```
@@ -47,7 +47,7 @@ dotnet build
 dotnet test
 ```
 
-WPF プロジェクト（`SlideinaCalendar.App` / `AppBarProbe`）は `net8.0-windows` だが、
+WPF プロジェクト（`Kado.App` / `AppBarProbe`）は `net8.0-windows` だが、
 `Directory.Build.props` で `EnableWindowsTargeting` を立てているため Linux の CI でもビルドできる。
 **実行は Windows が必要。**
 
@@ -64,7 +64,7 @@ Linux で確認するのはコンパイルが通ることとテストが通る�
 
 ## Phase 1 の実装範囲
 
-`SlideinaCalendar.Core` の 5 クラスと、その単体テスト。UI はまだ作らない。
+`Kado.Core` の 5 クラスと、その単体テスト。UI はまだ作らない。
 日付は `DateOnly` / `TimeOnly` を使い、`DateTime` は使わない。
 
 ### WorkingDayCalendar
@@ -156,7 +156,7 @@ D 列に現れた文字列をそのまま種類として登録するので、将
 
 ## Phase 2 の実装範囲
 
-`SlideinaCalendar.Data`。SQLite（Microsoft.Data.Sqlite + Dapper）でデータを保持し、
+`Kado.Data`。SQLite（Microsoft.Data.Sqlite + Dapper）でデータを保持し、
 旧 Edge 拡張 inaCalendar のバックアップ JSON を取り込む。
 
 ### スキーマ

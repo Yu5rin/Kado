@@ -25,7 +25,7 @@ internal static class WorkAreaRecovery
 {
     private static readonly string StateDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SlideinaCalendar");
+        "Kado");
 
     private static readonly string StateFile = Path.Combine(StateDirectory, "appbar-probe.state.json");
 

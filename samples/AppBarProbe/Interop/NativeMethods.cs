@@ -47,7 +47,7 @@ internal enum AppBarEdge : uint
 
 /// <summary>
 /// AppBar の検証に必要な Win32 API。
-/// <para>本番では SlideinaCalendar.Shell に集約するが、プロトタイプでは単体で完結させる。</para>
+/// <para>本番では Kado.Shell に集約するが、プロトタイプでは単体で完結させる。</para>
 /// </summary>
 internal static class NativeMethods
 {
