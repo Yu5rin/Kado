@@ -34,9 +34,12 @@ git push origin vX.Y.Z
 1. データの保存先の引っ越し元。`CalendarDatabase.LegacyFolderName` が
    `%LOCALAPPDATA%\SlideinaCalendar` を指している。0.9.15 より前から使って
    いる人の予定・タスク・設定・Google のトークンはそこに入っている。
-2. 公開ページの置き場所 `Yu5rin/slideinacalendar-site`。この URL は Google の
-   OAuth 同意画面にホームページ・プライバシーポリシーとして登録してある。
-   リポジトリ名を変えると URL が変わり、同意画面の審査が通らなくなる。
+2. `WorkdayFeed` が書き出す `"app": "inaCalendar"`。配信ファイル（feed.json）の
+   形式を旧い道具と共有しているため。
+
+公開ページの置き場所は `Yu5rin/kado-site` に改めた。ここを変えると GitHub Pages の
+URL が変わるので、Google のブランディング欄（ホームページ・プライバシーポリシー）と
+Search Console の所有確認も一緒に直すこと。詳しくは `site/README.md`。
 
 Google の同意画面に出るアプリ名は Google Cloud のブランディング欄にあり、
 こちらのコードとは別に持っている。変えるならそちらで直す。
