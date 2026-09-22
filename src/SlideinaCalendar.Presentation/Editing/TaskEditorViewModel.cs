@@ -207,6 +207,12 @@ public sealed class TaskEditorViewModel : ObservableObject
             GoogleUpdated = _original?.GoogleUpdated,
             Source = _original?.Source,
             UpdatedAt = DateTimeOffset.Now,
+
+            // 作成日時と並び順は編集画面で触らない。新規作成（_original が無い）ぶんは
+            // CreatedAt が既定値のまま返る。CalendarWorkspace.AddTask がそこを見て
+            // 「新規だから今の時刻・末尾の並び順を振る」と判断する
+            CreatedAt = _original?.CreatedAt ?? default,
+            SortOrder = _original?.SortOrder ?? default,
         };
     }
 

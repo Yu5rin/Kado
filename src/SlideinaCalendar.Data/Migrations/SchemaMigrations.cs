@@ -210,6 +210,30 @@ public static class SchemaMigrations
         ALTER TABLE tombstones ADD COLUMN source_id TEXT;
         """;
 
+    /// <summary>
+    /// タスクの並び順と作成日時を持つ。
+    /// <para>
+    /// これまでタスクは「期限日順・同じ日なら題名順」で並んでいた。あとから足した
+    /// タスクが題名の並びで上に割り込むのが不便なため、既定を「期限日順・登録が
+    /// 古い順」に変える。そのための作成日時と、手で並べ替えたときの並び順を持つ。
+    /// </para>
+    /// <para>
+    /// <c>created_at</c> は既存行には無いので、<c>updated_at</c> の値で埋める。
+    /// 本当の作成日時ではないが、これまでその情報自体を持っていなかったので
+    /// 分からない。並びの当て推量として使う分には支障が無い。
+    /// </para>
+    /// <para>
+    /// <c>sort_order</c> は既定 0。同じ期限日（期限なしなら期限なしどうし）の中でだけ
+    /// 意味を持ち、期限日をまたいだ比較はしない（並びは期限日が先に決める）。
+    /// </para>
+    /// </summary>
+    private const string V6 = """
+        ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+
+        ALTER TABLE tasks ADD COLUMN created_at INTEGER;
+        UPDATE tasks SET created_at = updated_at;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -218,6 +242,7 @@ public static class SchemaMigrations
         new(3, "同期の受け皿（差分判定用の生データ、カレンダー一覧、タスクリスト）", V3),
         new(4, "通知するかどうかを予定ごと・カレンダーごとに持つ", V4),
         new(5, "削除の記録に持ち主（カレンダー／タスクリスト）を持つ", V5),
+        new(6, "タスクの並び順と作成日時を持つ", V6),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

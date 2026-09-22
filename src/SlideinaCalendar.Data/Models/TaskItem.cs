@@ -61,6 +61,25 @@ public sealed record TaskItem
     /// <summary>ローカルでの更新時刻。</summary>
     public DateTimeOffset UpdatedAt { get; init; }
 
+    /// <summary>
+    /// 作成日時。並びの既定（期限日順・登録が古い順）の基準になる。
+    /// <para>
+    /// 既存のデータベース（V6 より前）には無かったので、更新日時で埋めてある
+    /// （<see cref="Migrations.SchemaMigrations"/> の V6 を参照）。本当の作成日時
+    /// ではないが、無いよりはましという位置づけ。
+    /// </para>
+    /// </summary>
+    public DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>
+    /// 同じ期限日のタスクどうしの並び順。手で並べ替えたときだけ動く（既定は 0）。
+    /// <para>
+    /// 期限日をまたいだ比較はしない。並びはまず期限日（<see cref="Due"/>）が決め、
+    /// 同じ期限日の中でだけこの値が効く。
+    /// </para>
+    /// </summary>
+    public int SortOrder { get; init; }
+
     /// <summary>期限が決まっているか。</summary>
     public bool HasDue => Due is not null;
 }

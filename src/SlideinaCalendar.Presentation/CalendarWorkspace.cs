@@ -793,8 +793,28 @@ public sealed class CalendarWorkspace
         return true;
     }
 
-    /// <summary>タスクを追加する。</summary>
-    public void AddTask(TaskItem value) => Run(new AddTaskEdit(Tasks, value));
+    /// <summary>
+    /// タスクを追加する。
+    /// <para>
+    /// 作成日時と並び順はここで決める。クイック入力・編集画面・複製のどれから
+    /// 来ても新規追加は必ずここを通るので、一箇所にまとめられる。作成日時は
+    /// 呼び出し側が入れていなければ（既定値のままなら）今の時刻にする。並び順は
+    /// 同じ期限日（期限なしなら期限なしどうし）の末尾に置く。あとから足したタスクが
+    /// 下に付くようにするため（要件どおり）。
+    /// </para>
+    /// </summary>
+    public void AddTask(TaskItem value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var prepared = value with
+        {
+            CreatedAt = value.CreatedAt == default ? DateTimeOffset.Now : value.CreatedAt,
+            SortOrder = Tasks.NextSortOrder(value.Due),
+        };
+
+        Run(new AddTaskEdit(Tasks, prepared));
+    }
 
     /// <summary>タスクを書き換える。</summary>
     /// <returns>対象が見つかって書き換えたら true。</returns>

@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using SlideinaCalendar.Presentation.ViewModels;
 
 namespace SlideinaCalendar.App.Views;
@@ -31,12 +33,9 @@ public partial class DayPaneView : UserControl
     /// <summary>
     /// 日送り（◀ ▶）を出すか。
     /// <para>
-    /// 右パネルは <c>MainViewModel.ShowsDayNav</c>、スリムパネルは
-    /// <c>ShowsSlimDayNav</c> と、ホストごとに見る条件が違う
-    /// （中央のカレンダーを畳んでいるときだけ出す点は同じだが、右パネルは
-    /// さらに「右パネル自身が開いている」ことも見る）。ViewModel 側を変えずに
-    /// 済むよう、この部品はどちらの条件か知らない依存関係プロパティとして持ち、
-    /// ホスト側の XAML がどちらのプロパティを繋ぐかだけを決める。
+    /// 右パネル・スリムパネルのどちらも <c>MainViewModel.ShowsDayNav</c> を見るが、
+    /// この部品自身はその条件を知らない依存関係プロパティとして持ち、ホスト側の
+    /// XAML がどちらもこのプロパティへ同じ値を繋ぐ形にしてある。
     /// </para>
     /// </summary>
     public static readonly DependencyProperty ShowsDayNavProperty = DependencyProperty.Register(
@@ -180,5 +179,105 @@ public partial class DayPaneView : UserControl
 
         open(main, item);
         e.Handled = true;
+    }
+
+    // ------------------------------------------------------------------
+    // タスクの並べ替え（ドラッグ）
+    //
+    // タスクの行そのものを掴んで上下に落とす。押した点を控えて、しきい値を超えて
+    // 動いてから DragDrop を始める（DragSession と同じ手口だが、こちらは独立して
+    // 持つ。行の中にチェックボックス・ゴミ箱ボタンがあり、それらを押したときは
+    // ドラッグの候補にしない）。ペイロードの型は TaskListItemViewModel にして、
+    // 月・週ビューの DragSession（TaskItem を運ぶ）とは混ざらないようにしている。
+    //
+    // 落とせるのは同じ期限日（期限なしなら期限なしどうし）のタスクの上だけ
+    // （MainViewModel.CanMoveTask）。しきい値に届かないうちはこれまでどおり
+    // OnTaskClicked のクリック・ダブルクリックとして通る
+    // ------------------------------------------------------------------
+
+    private Point _taskDragOrigin;
+    private TaskListItemViewModel? _taskDragCandidate;
+
+    /// <summary>押した点と行を控える。チェックボックス・ゴミ箱ボタンの上では控えない。</summary>
+    private void OnTaskRowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 1) return;
+        if (IsInteractiveControl(e.OriginalSource as DependencyObject, sender as DependencyObject)) return;
+        if ((sender as FrameworkElement)?.DataContext is not TaskListItemViewModel task) return;
+
+        _taskDragOrigin = e.GetPosition(null);
+        _taskDragCandidate = task;
+    }
+
+    /// <summary>押したまま動かしたらドラッグを始める。しきい値に届かなければ何もしない＝クリックとして通る。</summary>
+    private void OnTaskRowDragging(object sender, MouseEventArgs e)
+    {
+        if (_taskDragCandidate is not { } candidate) return;
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _taskDragCandidate = null;
+            return;
+        }
+
+        if (sender is not UIElement source) return;
+
+        var now = e.GetPosition(null);
+        if (Math.Abs(now.X - _taskDragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(now.Y - _taskDragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _taskDragCandidate = null;
+        DragDrop.DoDragDrop(source, candidate, DragDropEffects.Move);
+    }
+
+    /// <summary>タスクの行の上を通っているあいだ。落とせるかどうかをカーソルで示す。</summary>
+    private void OnTaskRowDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = CanDropTask(sender, e) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>落とされたら、その位置（上半分／下半分）へ入れる。</summary>
+    private void OnTaskRowDropped(object sender, DragEventArgs e)
+    {
+        if (!CanDropTask(sender, e)) return;
+        if (DataContext is not MainViewModel main) return;
+
+        var moved = DraggedTask(e);
+        var target = (sender as FrameworkElement)?.DataContext as TaskListItemViewModel;
+
+        main.MoveTask(moved, target, IsUpperHalf(sender, e));
+        e.Handled = true;
+    }
+
+    private bool CanDropTask(object sender, DragEventArgs e) =>
+        DataContext is MainViewModel main &&
+        main.CanMoveTask(DraggedTask(e), (sender as FrameworkElement)?.DataContext as TaskListItemViewModel);
+
+    private static TaskListItemViewModel? DraggedTask(DragEventArgs e) =>
+        e.Data.GetDataPresent(typeof(TaskListItemViewModel))
+            ? e.Data.GetData(typeof(TaskListItemViewModel)) as TaskListItemViewModel
+            : null;
+
+    /// <summary>行の上半分にいるか。上半分ならその行の上、下半分なら下に入る。</summary>
+    private static bool IsUpperHalf(object sender, DragEventArgs e) =>
+        sender is not FrameworkElement row || e.GetPosition(row).Y < row.ActualHeight / 2;
+
+    /// <summary>
+    /// <paramref name="from"/> が、チェックボックスやボタンなどの操作できる部品か
+    /// （その子孫か）を、<paramref name="stopAt"/>（行自身）まで遡って見る。
+    /// </summary>
+    private static bool IsInteractiveControl(DependencyObject? from, DependencyObject? stopAt)
+    {
+        for (var node = from; node is not null && !ReferenceEquals(node, stopAt);
+             node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ButtonBase) return true;
+        }
+
+        return false;
     }
 }

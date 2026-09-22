@@ -212,6 +212,119 @@ public class MainViewModelEditingTests
         Assert.Single(vm.SelectedDay.Tasks);
     }
 
+    // ------------------------------------------------------------------
+    // タスクの並べ替え
+    //
+    // 同じ期限日（期限なしなら期限なしどうし）の中だけで入れ替えられる。
+    // 期限日をまたぐ移動は認めない
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 右クリックメニューで上へ下へ動かせる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(new TaskItem { Id = "t1", Title = "A", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "B", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "C", Due = D(2026, 9, 24) });
+
+        var (vm, _) = Create(test);
+        Assert.Equal(["A", "B", "C"], vm.SelectedDay.Tasks.Select(t => t.Title));
+
+        var b = vm.SelectedDay.Tasks.Single(t => t.Id == "t2");
+        vm.MoveTaskUpCommand.Execute(b);
+
+        Assert.Equal(["B", "A", "C"], vm.SelectedDay.Tasks.Select(t => t.Title));
+
+        var a = vm.SelectedDay.Tasks.Single(t => t.Id == "t1");
+        vm.MoveTaskDownCommand.Execute(a);
+
+        Assert.Equal(["B", "C", "A"], vm.SelectedDay.Tasks.Select(t => t.Title));
+
+        // SortOrder はそのグループの中で 0 から振り直されている
+        Assert.Equal(
+            [0, 1, 2],
+            new[] { "t2", "t3", "t1" }.Select(id => test.Workspace.Tasks.Find(id)!.SortOrder));
+    }
+
+    [Fact]
+    public void グループの端では上へ下へが無効になる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(new TaskItem { Id = "t1", Title = "先頭", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "末尾", Due = D(2026, 9, 24) });
+
+        var (vm, _) = Create(test);
+        var first = vm.SelectedDay.Tasks.Single(t => t.Id == "t1");
+        var last = vm.SelectedDay.Tasks.Single(t => t.Id == "t2");
+
+        Assert.False(vm.MoveTaskUpCommand.CanExecute(first));
+        Assert.True(vm.MoveTaskDownCommand.CanExecute(first));
+        Assert.True(vm.MoveTaskUpCommand.CanExecute(last));
+        Assert.False(vm.MoveTaskDownCommand.CanExecute(last));
+
+        // 実行しても動かない（先頭のまま）
+        vm.MoveTaskUpCommand.Execute(first);
+        Assert.Equal(["先頭", "末尾"], vm.SelectedDay.Tasks.Select(t => t.Title));
+    }
+
+    [Fact]
+    public void ドラッグで同じ期限日の中を入れ替えられる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(new TaskItem { Id = "t1", Title = "A", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "B", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "C", Due = D(2026, 9, 24) });
+
+        var (vm, _) = Create(test);
+        var a = vm.SelectedDay.Tasks.Single(t => t.Id == "t1");
+        var c = vm.SelectedDay.Tasks.Single(t => t.Id == "t3");
+
+        // A を C の下へ落とす
+        var moved = vm.MoveTask(a, c, above: false);
+
+        Assert.True(moved);
+        Assert.Equal(["B", "C", "A"], vm.SelectedDay.Tasks.Select(t => t.Title));
+    }
+
+    [Fact]
+    public void 期限日をまたぐ移動はできない()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(new TaskItem { Id = "t1", Title = "今日", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "来月", Due = D(2026, 10, 1) });
+
+        var (vm, _) = Create(test);
+        var today = vm.SelectedDay.Tasks.Single(t => t.Id == "t1");
+        var nextMonth = vm.SelectedDay.Tasks.Single(t => t.Id == "t2");
+
+        Assert.False(vm.CanMoveTask(today, nextMonth));
+        Assert.False(vm.MoveTask(today, nextMonth, above: true));
+
+        // 期限日は変わっていない
+        Assert.Equal(D(2026, 9, 24), test.Workspace.Tasks.Find("t1")!.Due);
+        Assert.Equal(D(2026, 10, 1), test.Workspace.Tasks.Find("t2")!.Due);
+    }
+
+    [Fact]
+    public void 期限なしタスクどうしも並べ替えられる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(new TaskItem { Id = "t1", Title = "先に登録" });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "あとから登録" });
+
+        var (vm, _) = Create(test);
+        var first = vm.SelectedDay.NoDueTasks.Single(t => t.Id == "t1");
+
+        vm.MoveTaskDownCommand.Execute(first);
+
+        Assert.Equal(["あとから登録", "先に登録"], vm.SelectedDay.NoDueTasks.Select(t => t.Title));
+    }
+
     [Fact]
     public void 編集画面には保存されている内容を渡す()
     {

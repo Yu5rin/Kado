@@ -241,6 +241,10 @@ public sealed class MainViewModel : ObservableObject
         EditTaskCommand = new RelayCommand<TaskListItemViewModel?>(EditTask);
         DeleteTaskCommand = new RelayCommand<TaskListItemViewModel?>(DeleteTask);
         ToggleTaskDoneCommand = new RelayCommand<TaskListItemViewModel?>(ToggleTaskDone);
+        MoveTaskUpCommand = new RelayCommand<TaskListItemViewModel?>(
+            t => MoveTaskInGroup(t, up: true), t => CanMoveTaskInGroup(t, up: true));
+        MoveTaskDownCommand = new RelayCommand<TaskListItemViewModel?>(
+            t => MoveTaskInGroup(t, up: false), t => CanMoveTaskInGroup(t, up: false));
 
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(ShowWorkdayCalculator);
@@ -1447,6 +1451,15 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<TaskListItemViewModel?> EditTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> DeleteTaskCommand { get; }
     public RelayCommand<TaskListItemViewModel?> ToggleTaskDoneCommand { get; }
+
+    /// <summary>
+    /// タスクを1つ上（同じ期限日の中で）へ動かす。右クリックメニューから。
+    /// <para>グループの先頭にいるときは実行できない（<see cref="RelayCommand{T}.CanExecute"/>）。</para>
+    /// </summary>
+    public RelayCommand<TaskListItemViewModel?> MoveTaskUpCommand { get; }
+
+    /// <summary>タスクを1つ下へ動かす。グループの末尾では実行できない。</summary>
+    public RelayCommand<TaskListItemViewModel?> MoveTaskDownCommand { get; }
     /// <summary>その日を選んで月ビューへ。</summary>
     public RelayCommand<DateOnly?> ShowMonthOfCommand { get; }
 
@@ -2613,6 +2626,93 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
     }
 
+    // ------------------------------------------------------------------
+    // タスクの並べ替え（項目「タスクの並び替え」）
+    //
+    // 同じ期限日（期限なしなら期限なしどうし）のタスクどうしでだけ入れ替えられる。
+    // 期限日をまたぐ移動はしない。期限日が並びを決めているので、またぐと話が
+    // 合わなくなる（期限日を書き換えたいなら編集画面から）。
+    //
+    // Google へは送らない。Google Tasks の並びは move API でしか変えられず、
+    // こちらの都合の並びを向こうへ押し付ける話でもないため（要件どおり）。
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// ドラッグで、<paramref name="moved"/> を <paramref name="target"/> の位置へ入れる。
+    /// <para>並び順は左パネルの <see cref="MoveSource"/> と同じ考え方（抜いてから挿す）。</para>
+    /// </summary>
+    /// <param name="above">true なら target の上、false なら下に入れる。</param>
+    /// <returns>実際に動いたら true。</returns>
+    public bool MoveTask(TaskListItemViewModel? moved, TaskListItemViewModel? target, bool above = true)
+    {
+        if (!CanMoveTask(moved, target)) return false;
+
+        var ids = TaskGroupIds(moved!.Task.Due);
+        if (!ids.Remove(moved.Id)) return false;
+
+        var to = ids.IndexOf(target!.Id);
+        if (to < 0) return false;
+
+        ids.Insert(above ? to : to + 1, moved.Id);
+
+        _workspace.Tasks.SetOrder(ids);
+        RefreshViews();
+
+        StatusMessage = $"「{moved.Title}」の位置を変えました";
+        return true;
+    }
+
+    /// <summary>並べ替えとして成り立つ組み合わせか。期限日をまたぐ移動は認めない。</summary>
+    public bool CanMoveTask(TaskListItemViewModel? moved, TaskListItemViewModel? target) =>
+        moved is not null && target is not null &&
+        !ReferenceEquals(moved, target) &&
+        moved.Task.Due == target.Task.Due;
+
+    /// <summary>右クリックメニューの「上へ／下へ移動」。隣（同じ期限日）と入れ替える。</summary>
+    private void MoveTaskInGroup(TaskListItemViewModel? target, bool up)
+    {
+        if (target is null) return;
+
+        var ids = TaskGroupIds(target.Task.Due);
+        var index = ids.IndexOf(target.Id);
+        var neighbor = up ? index - 1 : index + 1;
+
+        if (index < 0 || neighbor < 0 || neighbor >= ids.Count) return;
+
+        (ids[index], ids[neighbor]) = (ids[neighbor], ids[index]);
+
+        _workspace.Tasks.SetOrder(ids);
+        RefreshViews();
+
+        StatusMessage = up ? $"「{target.Title}」を上へ動かしました" : $"「{target.Title}」を下へ動かしました";
+    }
+
+    /// <summary>グループの端にいて動かせないときは、メニューを無効にする。</summary>
+    private bool CanMoveTaskInGroup(TaskListItemViewModel? target, bool up)
+    {
+        if (target is null) return false;
+
+        var ids = TaskGroupIds(target.Task.Due);
+        var index = ids.IndexOf(target.Id);
+
+        return index >= 0 && (up ? index > 0 : index < ids.Count - 1);
+    }
+
+    /// <summary>
+    /// 同じ期限日（<paramref name="due"/> が null なら期限なしどうし）のタスクの識別子を、
+    /// いまの並び順のまま返す。
+    /// <para>
+    /// 右ペインにいま出ている並び（<see cref="SelectedDayViewModel.Tasks"/> ／
+    /// <see cref="SelectedDayViewModel.NoDueTasks"/>）を基準にする。完了済みで他の日にしか
+    /// 出てこないタスク（<see cref="SelectedDayViewModel.Tasks"/> の絞り込みを見よ）は
+    /// 対象に入らないが、それらは並び替えの操作自体からも見えないので実害は無い。
+    /// </para>
+    /// </summary>
+    private List<string> TaskGroupIds(DateOnly? due) =>
+        (due is null ? SelectedDay.NoDueTasks : SelectedDay.Tasks.Where(t => t.Task.Due == due))
+            .Select(t => t.Id)
+            .ToList();
+
     /// <summary>
     /// 編集画面に出すカレンダーの候補。名前で選ばせ、保存するのは ID。
     /// <para>
@@ -2679,6 +2779,13 @@ public sealed class MainViewModel : ObservableObject
         RefreshHeavyIfShown();
 
         RaiseHeader();
+
+        // タスクの並びが変わりうるたびに、右クリックメニューの有効・無効を引き直す
+        // （UndoCommand・RedoCommand と同じ理由）。null 許容なのは、コンストラクタの
+        // 途中（LoadPanes → RebuildViews）でまだこのコマンドを作る前に一度
+        // RefreshViews が呼ばれるため
+        MoveTaskUpCommand?.RaiseCanExecuteChanged();
+        MoveTaskDownCommand?.RaiseCanExecuteChanged();
     }
 
     /// <summary>

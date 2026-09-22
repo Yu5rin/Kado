@@ -86,4 +86,36 @@ public class MigrationTests
             VALUES ('b1', 'いないタスク', '2026-09-24', '09:00', 60);
             """));
     }
+
+    /// <summary>
+    /// V6（タスクの並び順と作成日時）が、V5 までしか当たっていない既存のデータベースにも
+    /// 当たり、既存行の <c>created_at</c> が <c>updated_at</c> で埋まることを確かめる。
+    /// </summary>
+    [Fact]
+    public void V6は既存のタスクのcreated_atをupdated_atで埋める()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        // V6 より前の状態を再現する
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 6).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO tasks (id, title, updated_at) VALUES ('t1', '既存のタスク', 1758500000000);");
+
+        var applied = DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Contains(applied, m => m.Version == 6);
+        Assert.Equal(SchemaMigrations.LatestVersion, DatabaseMigrator.GetVersion(db.Connection));
+
+        Assert.Equal(
+            1758500000000L,
+            db.Connection.ExecuteScalar<long>("SELECT created_at FROM tasks WHERE id = 't1';"));
+        Assert.Equal(
+            0L,
+            db.Connection.ExecuteScalar<long>("SELECT sort_order FROM tasks WHERE id = 't1';"));
+    }
 }

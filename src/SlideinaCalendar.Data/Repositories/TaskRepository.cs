@@ -19,7 +19,8 @@ public sealed class TaskRepository(SqliteConnection connection)
         completed_at AS CompletedAt, parent_id AS ParentId, position AS Position,
         google_raw AS GoogleRaw,
         google_task_id AS GoogleTaskId, google_task_list_id AS GoogleTaskListId,
-        google_updated AS GoogleUpdated, source AS Source, updated_at AS UpdatedAt
+        google_updated AS GoogleUpdated, source AS Source, updated_at AS UpdatedAt,
+        created_at AS CreatedAt, sort_order AS SortOrder
         """;
 
     /// <summary>1件取得する。無ければ null。</summary>
@@ -27,10 +28,13 @@ public sealed class TaskRepository(SqliteConnection connection)
         _connection.QuerySingleOrDefault<TaskItem>(
             $"SELECT {Columns} FROM tasks WHERE id = @id;", new { id });
 
-    /// <summary>全件。期限なしが後ろに来るよう並べる。</summary>
+    /// <summary>
+    /// 全件。期限なしが後ろに来るよう並べる。
+    /// <para>期限日→並び順→作成日時→識別子の順（要件の既定「期限日順・登録が古い順」）。</para>
+    /// </summary>
     public IReadOnlyList<TaskItem> All() =>
         _connection.Query<TaskItem>(
-            $"SELECT {Columns} FROM tasks ORDER BY due IS NULL, due, title;").ToArray();
+            $"SELECT {Columns} FROM tasks ORDER BY due IS NULL, due, sort_order, created_at, id;").ToArray();
 
     /// <summary>
     /// 使われているタスクリスト ID を重複なく返す。
@@ -67,14 +71,14 @@ public sealed class TaskRepository(SqliteConnection connection)
             $"""
             SELECT {Columns} FROM tasks
             WHERE due IS NOT NULL AND due BETWEEN @from AND @to
-            ORDER BY due, title;
+            ORDER BY due, sort_order, created_at, id;
             """,
             new { from = SqliteTypeHandlers.ToText(from), to = SqliteTypeHandlers.ToText(to) }).ToArray();
 
-    /// <summary>期限が決まっていないタスク。</summary>
+    /// <summary>期限が決まっていないタスク。並び順→作成日時→識別子の順（登録順）。</summary>
     public IReadOnlyList<TaskItem> WithoutDue() =>
         _connection.Query<TaskItem>(
-            $"SELECT {Columns} FROM tasks WHERE due IS NULL ORDER BY title;").ToArray();
+            $"SELECT {Columns} FROM tasks WHERE due IS NULL ORDER BY sort_order, created_at, id;").ToArray();
 
     /// <summary>Google Tasks 側の ID で引く。</summary>
     public TaskItem? FindByGoogleId(string googleTaskId) =>
@@ -97,11 +101,13 @@ public sealed class TaskRepository(SqliteConnection connection)
             INSERT INTO tasks (
                 id, title, due, is_done, note, task_list_id,
                 completed_at, parent_id, position, google_raw,
-                google_task_id, google_task_list_id, google_updated, source, updated_at
+                google_task_id, google_task_list_id, google_updated, source, updated_at,
+                created_at, sort_order
             ) VALUES (
                 @Id, @Title, @Due, @IsDone, @Note, @TaskListId,
                 @CompletedAt, @ParentId, @Position, @GoogleRaw,
-                @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @Source, @UpdatedAt
+                @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @Source, @UpdatedAt,
+                @CreatedAt, @SortOrder
             )
             ON CONFLICT (id) DO UPDATE SET
                 title = excluded.title, due = excluded.due, is_done = excluded.is_done,
@@ -111,9 +117,50 @@ public sealed class TaskRepository(SqliteConnection connection)
                 google_task_id = excluded.google_task_id,
                 google_task_list_id = excluded.google_task_list_id,
                 google_updated = excluded.google_updated,
-                source = excluded.source, updated_at = excluded.updated_at;
+                source = excluded.source, updated_at = excluded.updated_at,
+                created_at = excluded.created_at, sort_order = excluded.sort_order;
             """,
             value, transaction);
+    }
+
+    /// <summary>
+    /// 新しく足すタスクの並び順。同じ期限日（期限なしなら期限なしどうし）の末尾に置く。
+    /// <para>あとから足したタスクが下に付くようにするため（要件どおり）。</para>
+    /// </summary>
+    public int NextSortOrder(DateOnly? due)
+    {
+        var max = due is { } d
+            ? _connection.ExecuteScalar<int?>(
+                "SELECT MAX(sort_order) FROM tasks WHERE due = @due;",
+                new { due = SqliteTypeHandlers.ToText(d) })
+            : _connection.ExecuteScalar<int?>("SELECT MAX(sort_order) FROM tasks WHERE due IS NULL;");
+
+        return (max ?? -1) + 1;
+    }
+
+    /// <summary>
+    /// 渡した順に並び順を 0 から振り直す。
+    /// <para>
+    /// 手での並べ替え（ドラッグ・右クリックの「上へ／下へ移動」）専用。呼び出し側が
+    /// 同じ期限日（期限なしなら期限なしどうし）のタスクだけを渡す前提で、ここでは
+    /// 期限日を見ない。<see cref="SourceRepository.SetCalendarOrder"/> と同じ作り。
+    /// </para>
+    /// <para>Undo には積まない（左パネルのカレンダー・タスクリストの並べ替えと同じ扱い）。</para>
+    /// </summary>
+    public void SetOrder(IReadOnlyList<string> idsInOrder)
+    {
+        ArgumentNullException.ThrowIfNull(idsInOrder);
+
+        using var transaction = _connection.BeginTransaction();
+
+        for (var i = 0; i < idsInOrder.Count; i++)
+        {
+            _connection.Execute(
+                "UPDATE tasks SET sort_order = @order WHERE id = @id;",
+                new { id = idsInOrder[i], order = i }, transaction);
+        }
+
+        transaction.Commit();
     }
 
     /// <summary>まとめて登録する。</summary>
