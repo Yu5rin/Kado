@@ -90,6 +90,17 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern IntPtr MonitorFromPoint(POINT pt, int dwFlags);
 
+    /// <summary>
+    /// 2回押しと見なす間隔（ミリ秒）。既定は 500。
+    /// <para>
+    /// 「1回押しで済み、2回押しで編集」を両立させるのに要る。1回目を押した時点では
+    /// 2回目が来るか分からないので、この時間だけ待ってから1回押しの扱いにする。
+    /// 人が設定で変えられる値なので、決め打ちにせず OS に訊く。
+    /// </para>
+    /// </summary>
+    [DllImport("user32.dll")]
+    internal static extern uint GetDoubleClickTime();
+
     internal const int MONITOR_DEFAULTTOPRIMARY = 0x00000001;
     internal const int MONITOR_DEFAULTTONEAREST = 0x00000002;
 
