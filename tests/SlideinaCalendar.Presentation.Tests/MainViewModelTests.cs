@@ -509,12 +509,12 @@ public class MainViewModelTests
         Assert.False(vm.ShowsWorkdayBadges);
         Assert.True(vm.ShowsSyncStatus);
 
-        Fit(vm, 850);
+        Fit(vm, 890);
         Assert.False(vm.ShowsSyncStatus);
         Assert.False(vm.UsesCompactSearch);
 
         // 検索は消さずに虫めがねへ畳む
-        Fit(vm, 780);
+        Fit(vm, 800);
         Assert.True(vm.UsesCompactSearch);
         Assert.False(vm.ShowsSearchBox);
 
@@ -523,7 +523,7 @@ public class MainViewModelTests
         vm.ClearSearch();
         Assert.False(vm.ShowsSearchBox);
 
-        Fit(vm, 660);
+        Fit(vm, 700);
         Assert.False(vm.ShowsViewSwitcher);
         Assert.False(vm.UsesCompactTodayButton);
 

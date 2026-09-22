@@ -56,14 +56,26 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due, DoneText?
     public bool IsEarly => done is { Kind: DoneKind.Early };
 
     /// <summary>
-    /// 期限の右に添える文字。モックは期限日そのものかタスクリスト名を出している。
-    /// 「残り 5実働日」だけでは何日なのか分からないため。
+    /// 期限の右に添える期限日。「残り 5実働日」だけでは何日なのか分からないため。
+    /// <para>
+    /// <b>期限が無いとき・今日のときは出さない。</b>ここは以前
+    /// <see cref="TaskItem.TaskListId"/> に倒れており、期限が今日のタスクを足すと
+    /// 「今日まで MDA2MTA2…」とタスクリストの識別子がそのまま並んでいた。
+    /// 識別子は Google が振った不透明な文字列で、読めるものではない。
+    /// 今日のぶんは <c>DueText</c> の「今日まで」で足りるので、何も添えない。
+    /// </para>
     /// </summary>
-    public string? DueSubText => Task.Due is { } d && due is { Kind: not DueKind.Today }
-        ? d.ToString("yyyy/M/d", CultureInfo.InvariantCulture) is var full && d.Year == DateTime.Today.Year
-            ? d.ToString("M/d", CultureInfo.InvariantCulture)
-            : full
-        : Task.TaskListId;
+    public string? DueSubText
+    {
+        get
+        {
+            if (Task.Due is not { } d || due is { Kind: DueKind.Today }) return null;
+
+            return d.Year == DateTime.Today.Year
+                ? d.ToString("M/d", CultureInfo.InvariantCulture)
+                : d.ToString("yyyy/M/d", CultureInfo.InvariantCulture);
+        }
+    }
 
     /// <summary>期限の強調度。</summary>
     public DueEmphasis Emphasis => due?.Kind switch

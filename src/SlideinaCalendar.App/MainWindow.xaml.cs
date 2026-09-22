@@ -101,6 +101,17 @@ public partial class MainWindow : Window, ISlideRevealHost
 
         SizeChanged += (_, _) =>
         {
+            // 幅は待たずに流す。ここを _settle に預けていたので、掴んで動かしている
+            // あいだツールバーはずっと前の幅のまま組まれていた。掴みっぱなしでは
+            // タイマーが毎回振り出しに戻るので、手を止めるまで一度も詰め直さない。
+            // 狭めると「日」や検索のアイコンが重なったまま、広げてもしばらく
+            // 畳んだ姿のまま、という見え方になっていた。
+            //
+            // 流すのは PropertyChanged だけで、動くのはツールバー1本ぶん。
+            // 月のマスや年の12か月を組み直すのは各ビューが自分の SizeChanged で
+            // やるので、ここが増えても重くならない
+            PublishLayoutWidth();
+
             _settle.Poke();
             _persist.Poke();
         };
