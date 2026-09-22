@@ -457,18 +457,110 @@ public class MainViewModelTests
         Assert.False(vm.IsMainViewOpen);
         Assert.True(vm.IsDetailPaneOpen);
 
-        vm.ToggleSlimPanelCommand.Execute(null);
+        // 端の組でも左パネルを開いてみる
+        vm.ToggleSidePanelCommand.Execute(null);
 
         // ウィンドウへ戻すと、さっきの組が戻る
         vm.Shell.ToggleSlideCommand.Execute(null);
         Assert.False(vm.IsSidePanelOpen);
         Assert.True(vm.IsMainViewOpen);
-        Assert.False(vm.IsSlimPanelOpen);
 
-        // もう一度寄せれば、帯のほうの組
+        // もう一度寄せれば、帯のほうの組（端で開いた左パネルが戻る）
         vm.Shell.ToggleSlideCommand.Execute(null);
         Assert.False(vm.IsMainViewOpen);
-        Assert.True(vm.IsSlimPanelOpen);
+        Assert.True(vm.IsSidePanelOpen);
+    }
+
+    // ------------------------------------------------------------------
+    // パネル組の移行（旧4文字「左・中央・右・スリム」→ 新3文字「左・中央・右」）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 旧スリム利用者（4文字目が '1'）は、右パネルを開いた状態に畳み込み、
+    /// 月カレンダーの「畳んだ」既定も上書きして開いた状態にする（ウィンドウの組）。
+    /// </summary>
+    [Fact]
+    public void 旧4文字でスリムが開いていたらウィンドウの組は右パネルを開いて月カレンダーも開く()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+
+        // 旧スリム利用者：左パネルは閉じ、中央は開き、右パネルは閉じ、スリムは開いていた
+        settings.WindowPanes = "0101";
+
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings);
+
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+
+        // 右パネルは畳み込みで開く（スリムの中身がそのまま移ったことになる）
+        Assert.True(vm.IsDetailPaneOpen);
+
+        // 既定（畳んだ状態）を上書きし、開いた状態にする
+        Assert.False(vm.IsPaneCalendarCollapsed);
+
+        // 3文字の新しい形へ保存し直してある
+        Assert.Equal("011", settings.WindowPanes);
+    }
+
+    /// <summary>端に寄せているときの組（EdgePanes）にも同じ移行が効く。</summary>
+    [Fact]
+    public void 旧4文字でスリムが開いていたら端の組も右パネルを開いて月カレンダーも開く()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+
+        settings.EdgePanes = "0011";
+
+        var atEdge = new SlideinaCalendar.Presentation.Settings.DockPlacement(
+            SlideinaCalendar.Presentation.Settings.ShellMode.Overlay,
+            SlideinaCalendar.Presentation.Settings.DockEdge.Left, 300, null);
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings, shell: atEdge);
+
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.False(vm.IsMainViewOpen);
+        Assert.True(vm.IsDetailPaneOpen);
+        Assert.False(vm.IsPaneCalendarCollapsed);
+        Assert.Equal("001", settings.EdgePanes);
+    }
+
+    /// <summary>
+    /// 旧4文字でもスリムが閉じていた（4文字目が '0'）なら、右パネルへの畳み込みも
+    /// 月カレンダーの上書きも起きない。左・中央・右の3つをそのまま引き継ぐだけ。
+    /// </summary>
+    [Fact]
+    public void 旧4文字でもスリムが閉じていたら普通に3つを引き継ぐ()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+
+        settings.WindowPanes = "1100";
+
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings);
+
+        Assert.True(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.False(vm.IsDetailPaneOpen);
+
+        // 移行していないので、月カレンダーの既定（畳んだ状態）はそのまま
+        Assert.True(vm.IsPaneCalendarCollapsed);
+    }
+
+    /// <summary>新しい3文字の形はそのまま読める。</summary>
+    [Fact]
+    public void 新3文字の組はそのまま読める()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new SlideinaCalendar.Presentation.Settings.AppSettings(test.Workspace.Settings);
+
+        settings.WindowPanes = "010";
+
+        var vm = new MainViewModel(test.Workspace, today: D(2026, 9, 24), settings: settings);
+
+        Assert.False(vm.IsSidePanelOpen);
+        Assert.True(vm.IsMainViewOpen);
+        Assert.False(vm.IsDetailPaneOpen);
+        Assert.True(vm.IsPaneCalendarCollapsed);
     }
 
     [Fact]
@@ -579,19 +671,19 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void 前後の月を選ぶとスリムパネルもその月へ移る()
+    public void 前後の月を選ぶと右パネルの月カレンダーもその月へ移る()
     {
         using var test = TestWorkspace.Create();
         var vm = Create(test);
 
-        Assert.Equal(9, vm.SlimMonth.Month.Month);
+        Assert.Equal(9, vm.PaneMonth.Month.Month);
 
         // 月ビューは前後の月のマスも出す。そこを押したのに9月のままでは、
         // どこを選んだのか分からない
         vm.SelectDateCommand.Execute(D(2026, 10, 1));
 
-        Assert.Equal(10, vm.SlimMonth.Month.Month);
-        Assert.Equal("10月", vm.SlimTitleMonth);
+        Assert.Equal(10, vm.PaneMonth.Month.Month);
+        Assert.Equal("10月", vm.PaneTitleMonth);
     }
 
     [Fact]

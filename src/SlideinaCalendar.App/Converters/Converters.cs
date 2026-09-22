@@ -412,7 +412,7 @@ public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
 /// </para>
 /// <para>
 /// どのパネルが窓の内側の辺に触れているかは、開いているパネルの並び
-/// （スリム・左・中央・右）のうち先頭／末尾で決まる。ここは4つの
+/// （左・中央・右）のうち先頭／末尾で決まる。ここは3つの
 /// <c>bool</c> を見るだけの分岐で、<c>Style</c> の中の
 /// <c>MultiDataTrigger</c> を何本も重ねるより確実（<see cref="AllTrueToVisibilityConverter"/>
 /// と同じ理由）。
@@ -420,15 +420,16 @@ public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
 /// <para>
 /// <c>ConverterParameter</c> は対象を表す文字列。<c>"Toolbar"</c> は
 /// どのパネルが出ていても関係なく常に対象（ツールバーは常に窓いっぱいの帯
-/// なので）。<c>"Slim"</c>／<c>"Side"</c>／<c>"Main"</c>／<c>"Detail"</c> は、
-/// それぞれのパネルが実際に窓の内側の辺に触れているときだけ余地を返す。
+/// なので）。<c>"Side"</c>／<c>"Main"</c>／<c>"Detail"</c> は、それぞれの
+/// パネルが実際に窓の内側の辺に触れているときだけ余地を返す（旧「スリム」
+/// パネルは右パネルへ統合済み）。
 /// </para>
 /// </summary>
 public sealed class EdgePaddingConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        if (values is not [bool isAtEdge, bool isAtLeft, bool slim, bool side, bool main, bool detail])
+        if (values is not [bool isAtEdge, bool isAtLeft, bool side, bool main, bool detail])
             return new Thickness(0);
 
         // 端に寄せていないときは窓自身の掴みしろがあるので余地を空けない
@@ -445,14 +446,14 @@ public sealed class EdgePaddingConverter : IMultiValueConverter
         if (isAtLeft)
         {
             // 左端に寄せていれば内側は右。開いている中でいちばん右（列の並びは
-            // スリム・左・中央・右の順）のパネルだけが窓の右の辺に触れる
-            var trailing = detail ? "Detail" : main ? "Main" : side ? "Side" : slim ? "Slim" : null;
+            // 左・中央・右の順）のパネルだけが窓の右の辺に触れる
+            var trailing = detail ? "Detail" : main ? "Main" : side ? "Side" : null;
             return pane == trailing ? innerRight : none;
         }
 
         // 右端に寄せていれば内側は左。開いている中でいちばん左のパネルだけが
         // 窓の左の辺に触れる
-        var leading = slim ? "Slim" : side ? "Side" : main ? "Main" : detail ? "Detail" : null;
+        var leading = side ? "Side" : main ? "Main" : detail ? "Detail" : null;
         return pane == leading ? innerLeft : none;
     }
 
