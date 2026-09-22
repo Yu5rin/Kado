@@ -37,6 +37,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\SlideinaCalendar.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
     <Compile Include="..\..\src\SlideinaCalendar.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
+    <Compile Include="..\..\src\SlideinaCalendar.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
   </ItemGroup>
 
   <ItemGroup>

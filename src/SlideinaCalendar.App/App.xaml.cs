@@ -603,6 +603,11 @@ public partial class App : Application
     {
         if (window.DataContext is not MainViewModel main || _dockStore is null) return;
 
+        // メニュー・ポップアップの開閉をまとめて数え始める（項目3）。
+        // ShellController より前でよい。ContextMenu/Popup がまだ1つも開いて
+        // いない起動直後に呼ぶので、順序そのものは問わない
+        Shell.PopupActivityHooks.Install();
+
         _shellController = new Shell.ShellController(window, main.Shell, _dockStore);
 
         // スライドの引っ込め方と、いちばん細くできる幅は設定から。

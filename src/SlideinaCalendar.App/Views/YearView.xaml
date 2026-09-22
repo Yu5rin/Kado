@@ -299,20 +299,23 @@
                                         ContextMenu="{StaticResource YearDayMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
                                     <!--
-                                        スリムパネルの月カレンダーと同じ並び。
-                                        1) いちばん上に inaCalendar の印の枠を固定の高さで
-                                           置く（印が無い日も高さを取るので、日付の位置が揃う）
+                                        スリムパネルの月カレンダー（MonthView.xaml の
+                                        Compact）と縦の積み方・寸法をそろえる（項目1）。
+                                        1) いちばん上に inaCalendar の印の枠を固定の高さ
+                                           4px（帯1本ぶん）で置く（印が無い日も高さを取る
+                                           ので、日付の位置が揃う。Compact も1本ぶんしか
+                                           確保していないので、それに合わせる）
                                         2) その下に日付の数字
                                         3) その下にそれ以外の予定の印
                                         仕様期限や1次GOが上、自分の予定が下に付く。
 
-                                        <b>帯は日付に寄せ、余白はマスの上下に逃がす。</b>
-                                        上下の端に貼り付けていたら、下の帯が次の週の
-                                        日付とくっついて見えた。ひとまとまりにすれば、
-                                        どの日のものかが離れて見て分かる
+                                        StackPanel 全体は VerticalAlignment="Top" で上に
+                                        寄せる。以前は Center だったため、マスの高さが
+                                        MinHeight を超えて伸びる月ほど、日付が下にずれて
+                                        並びが崩れていた
                                     -->
-                                    <StackPanel VerticalAlignment="Center" Margin="1,3,1,3">
-                                        <Border Height="8" ClipToBounds="True">
+                                    <StackPanel VerticalAlignment="Top" Margin="1,3,1,3">
+                                        <Border Height="4" ClipToBounds="True">
                                             <ItemsControl ItemsSource="{Binding TopMarks}"
                                                           VerticalAlignment="Bottom"
                                                           ItemTemplate="{StaticResource GridMarkTemplate}">
