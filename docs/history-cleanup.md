@@ -21,7 +21,7 @@
 社内情報なし）。
 
 ```
-tests/SlideinaCalendar.Core.Tests/TestData/（会社配布 Excel）.xlsx
+tests/Kado.Core.Tests/TestData/（会社配布 Excel）.xlsx
 ```
 
 **この手順書に実際のファイル名を書かない。** 書けば、消したはずの名前が
@@ -41,12 +41,12 @@ Windows なら PowerShell、Mac／Linux なら端末で。**5分ほど。**
 pip install git-filter-repo
 
 # 消したいファイルの、リポジトリ内での位置。ここだけ書き換えて使う
-$Path = "tests/SlideinaCalendar.Core.Tests/TestData/（実際のファイル名）.xlsx"
+$Path = "tests/Kado.Core.Tests/TestData/（実際のファイル名）.xlsx"
 
 # 2. 前に試したものが残っていれば片付ける
 cd $HOME
 Remove-Item -Recurse -Force cleanup -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force SlideinaCalendar -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force Kado -ErrorAction SilentlyContinue
 
 # 3. まっさらに取ってくる（この中では二度と clone しない）
 git clone https://github.com/Yu5rin/SlideinaCalendar.git cleanup
@@ -59,7 +59,7 @@ git filter-repo --invert-paths --path "$Path"
 git log --all --oneline -- "$Path"
 
 # 6. 差し替えた合成版は残っているか（1行出れば正しい）
-git log --all --oneline -- "tests/SlideinaCalendar.Core.Tests/TestData/実働日サンプル.xlsx"
+git log --all --oneline -- "tests/Kado.Core.Tests/TestData/実働日サンプル.xlsx"
 
 # 7. 押し戻す
 git remote add origin https://github.com/Yu5rin/SlideinaCalendar.git

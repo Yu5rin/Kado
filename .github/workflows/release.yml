@@ -98,7 +98,7 @@ jobs:
         shell: pwsh
         run: |
           $args = @(
-            'publish', 'src/SlideinaCalendar.App/SlideinaCalendar.App.csproj',
+            'publish', 'src/Kado.App/Kado.App.csproj',
             '--configuration', 'Release',
             '--runtime', 'win-x64',
             '--self-contained', 'true',
@@ -121,7 +121,7 @@ jobs:
         if: github.ref_type == 'tag'
         shell: pwsh
         run: |
-          $name = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.zip"
+          $name = "Kado-${{ steps.version.outputs.value }}-win-x64.zip"
           Compress-Archive -Path publish/* -DestinationPath $name
           "asset=$name" >> $env:GITHUB_OUTPUT
 
@@ -134,11 +134,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $exe = "SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64.exe"
-          Copy-Item publish/SlideinaCalendar.App.exe $exe
+          $exe = "Kado-${{ steps.version.outputs.value }}-win-x64.exe"
+          Copy-Item publish/Kado.App.exe $exe
 
           gh release create '${{ github.ref_name }}' $exe '${{ steps.package.outputs.asset }}' `
-            --title 'SlideinaCalendar ${{ steps.version.outputs.value }}' `
+            --title 'Kado ${{ steps.version.outputs.value }}' `
             --generate-notes
 
       # 手動実行でも受け取れるようにしておく。
@@ -149,6 +149,6 @@ jobs:
       - name: 成果物として残す
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: SlideinaCalendar-${{ steps.version.outputs.value }}-win-x64
+          name: Kado-${{ steps.version.outputs.value }}-win-x64
           path: publish/
           retention-days: 14

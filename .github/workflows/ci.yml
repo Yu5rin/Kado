@@ -1,6 +1,6 @@
 # ビルドと単体テストを自動で回す。
 #
-# WPF プロジェクト（SlideinaCalendar.App / AppBarProbe）は net8.0-windows だが、
+# WPF プロジェクト（Kado.App / AppBarProbe）は net8.0-windows だが、
 # Directory.Build.props で EnableWindowsTargeting を立てているため Linux でもビルドできる。
 # 実行は Windows が必要なので、ここで確認するのはコンパイルが通ることまで。
 name: CI

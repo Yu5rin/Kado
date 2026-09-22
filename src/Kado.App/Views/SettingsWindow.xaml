@@ -1,0 +1,518 @@
+<!--
+    設定。
+    項目が増えて縦に長くなったので、左に分類・右に中身という一般的な形にした。
+    残す項目は要件書 5.5 で決まっている。ビュー別の表示項目 ON/OFF のような、
+    レイアウトで解くべきものは置かない。
+
+    ⚙メニューは日常的に押すものだけを残し、たまにしか使わないものはここへ
+    移してある（旧データの取り込み・配信用の書き出し・重複整理・バックアップ・
+    更新確認・Google の接続／切断・上級者向けのクライアント設定）。
+
+    保存ボタンは置かない。変えたその場で効き、そのまま保存される。
+-->
+<Window x:Class="Kado.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:Kado.App.Converters"
+        Title="設定" Width="720" Height="560" MinWidth="620" MinHeight="420"
+        Icon="/Assets/app.png"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource InkBrush}">
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:SyncStateBrushConverter x:Key="SyncStateBrush" />
+
+        <!--
+            選択肢の出し方。
+            項目のどれを出すかを名前で指すやり方は、このアプリの ComboBox の
+            テンプレートでは効かず、型の名前がそのまま出てしまう。決め打ちにする
+        -->
+        <DataTemplate x:Key="ChoiceTemplate">
+            <TextBlock Text="{Binding Label}" />
+        </DataTemplate>
+
+        <!-- 左の分類 -->
+        <Style x:Key="SectionTabStyle" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root" CornerRadius="5" Padding="12,8"
+                                Background="Transparent">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background"
+                                        Value="{DynamicResource SunkenBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background"
+                                        Value="{DynamicResource AccentSoftBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 右の見出し -->
+        <Style x:Key="PageHeadStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+
+        <!-- 節の中の小見出し。1つの節に複数のまとまりを収めるときに挟む -->
+        <Style x:Key="SubHeadStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,2,0,10" />
+        </Style>
+
+        <!-- 項目の説明。何が変わるのかを一行で添える。10.5px は Ink3 の 4.5:1 基準を
+             割るため 11px（CaptionTextStyle 相当）に上げる -->
+        <Style x:Key="FieldNoteStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- 元に戻せない操作の説明。文字色だけ変えて、読み流されないようにする -->
+        <Style x:Key="DangerNoteStyle" TargetType="TextBlock" BasedOn="{StaticResource FieldNoteStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
+        </Style>
+
+        <!-- 項目どうしの間 -->
+        <Style x:Key="FieldGroupStyle" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,0,18" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- 下：閉じるだけ。変えたその場で効く -->
+        <Border DockPanel.Dock="Bottom" Padding="16,11"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="閉じる"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        IsCancel="True" />
+
+                <TextBlock Text="{Binding Message}" FontSize="11" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,10,0"
+                           Foreground="{DynamicResource SundayBrush}"
+                           Visibility="{Binding Message, Converter={StaticResource NullToVisibility}}" />
+            </DockPanel>
+        </Border>
+
+        <!-- 左：分類 -->
+        <Border DockPanel.Dock="Left" Width="176" Padding="10"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="0,0,1,0" BorderBrush="{DynamicResource LineBrush}">
+            <StackPanel>
+                <RadioButton x:Name="TabGeneral" Content="一般" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" IsChecked="True" />
+                <RadioButton x:Name="TabDisplay" Content="見え方" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabCalendar" Content="カレンダー" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabNotify" Content="通知" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabWorkday" Content="実働日データ" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabSync" Content="同期（Google）" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabData" Content="データ" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+                <RadioButton x:Name="TabAbout" Content="バージョン情報" GroupName="Section"
+                             Style="{StaticResource SectionTabStyle}" />
+            </StackPanel>
+        </Border>
+
+        <!-- 右：中身。選ばれている分類だけを出す -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,18">
+            <Grid>
+                <!-- 一般。旧「起動」節の中身をここに集めた -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabGeneral,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="一般" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="起動したときに開くビュー" Style="{StaticResource FieldLabelStyle}" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  ItemsSource="{Binding StartupViews}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding StartupView}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}"
+                                Visibility="{Binding CanRunAtLogon, Converter={StaticResource BoolToVisibility}}">
+                        <CheckBox Content="Windows にログオンしたときに起動する"
+                                  IsChecked="{Binding RunAtLogon}" Cursor="Hand" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="閉じるボタンでトレイに入れる（終了しない）"
+                                  IsChecked="{Binding CloseToTray}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切ると、閉じるボタンでそのまま終わります。裏で動いていないあいだは通知も出ません。&#10;トレイのアイコンからは、入れていてもいなくても終了できます。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                   Text="いちばん細くできる幅" />
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                                       Margin="8,0,0,0" Text="px"
+                                       Foreground="{DynamicResource Ink3Brush}" />
+                            <TextBox Width="80" HorizontalAlignment="Left"
+                                     Style="{StaticResource FieldTextBoxStyle}"
+                                     Text="{Binding MinWidthText, UpdateSourceTrigger=LostFocus}" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="帯として使うときに、どこまで詰められるようにするか。160〜640px。&#10;細くすると場所を取りませんが、ツールバーの中身は順に切れていきます。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="スライドは、カーソルが外れたら引っ込める"
+                                  IsChecked="{Binding SlideOutOnLeave}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切ると、他のウィンドウを触るまで出したままになります。カーソルを外に出しながら見比べたいときに。&#10;出しっぱなしにしたいときは、ピンで留めてください（Ctrl＋Alt＋P）。" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 見え方 -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabDisplay,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="見え方" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="配色" Style="{StaticResource FieldLabelStyle}" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  ItemsSource="{Binding Themes}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding Theme}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="週の始まり" Style="{StaticResource FieldLabelStyle}" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  ItemsSource="{Binding WeekStarts}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding WeekStart}" />
+                        <TextBlock Text="月ビューの列の並びと、ミニ月暦に効きます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- カレンダー。日数の数え方と、週ビュー・日ビューの見せ方をまとめた -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabCalendar,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="カレンダー" Style="{StaticResource PageHeadStyle}" />
+
+                    <TextBlock Text="日数の数え方" Style="{StaticResource SubHeadStyle}" />
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  ItemsSource="{Binding DayCounts}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding CountInCalendarDays}" />
+                        <TextBlock Text="期限までの残り・遅れ・済んだタスクの結果に効きます。今月の実働日数と実働日計算は、いつも実働日で数えます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <TextBlock Text="週ビュー・日ビューの表示" Style="{StaticResource SubHeadStyle}" />
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="表示時間帯" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="110" Style="{StaticResource FieldComboBoxStyle}"
+                                      ItemsSource="{Binding StartHours}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                      SelectedValuePath="Value" SelectedValue="{Binding DayStartHour}" />
+                            <TextBlock Text="〜" VerticalAlignment="Center" Margin="8,0" />
+                            <ComboBox Width="110" Style="{StaticResource FieldComboBoxStyle}"
+                                      ItemsSource="{Binding EndHours}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                      SelectedValuePath="Value" SelectedValue="{Binding DayEndHour}" />
+                        </StackPanel>
+                        <TextBlock Text="この範囲を縦いっぱいに割り付けます。狭めるほど1時間が高くなります。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="1時間の高さ" Style="{StaticResource FieldLabelStyle}" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  ItemsSource="{Binding HourHeights}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding HourHeight}" />
+                        <TextBlock Text="決め打ちにすると、入りきらないぶんはスクロールになります。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 通知 -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabNotify,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="通知" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="予定の前に知らせる" IsChecked="{Binding NotifyEnabled}" Cursor="Hand" />
+                        <Border Height="8" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  IsEnabled="{Binding NotifyEnabled}"
+                                  ItemsSource="{Binding Leads}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding NotifyLeadMinutes}" />
+                        <TextBlock Text="どのカレンダーを知らせるかは、左パネルのベルで決めます。予定ごとの指定はその予定の画面から。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="知らせるときに音を鳴らす" IsChecked="{Binding NotifySound}" Cursor="Hand" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="朝にその日の予定をまとめて知らせる"
+                                  IsChecked="{Binding SummaryEnabled}" Cursor="Hand" />
+                        <Border Height="8" />
+                        <ComboBox Width="300" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldComboBoxStyle}"
+                                  IsEnabled="{Binding SummaryEnabled}"
+                                  ItemsSource="{Binding SummaryHours}" ItemTemplate="{StaticResource ChoiceTemplate}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding SummaryHour}" />
+                        <TextBlock Text="アプリを開いているあいだだけ知らせます。閉じていると出ません。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <Button Content="試しに知らせる" HorizontalAlignment="Left"
+                            Style="{StaticResource GhostButtonStyle}"
+                            Command="{Binding TestNotifyCommand}"
+                            ToolTip="この形で予定の前にお知らせします" />
+
+                    <!--
+                        カレンダーごとの通知。左パネルのベルと同じ一覧なので、ここで
+                        切り替えると左パネルにもそのまま反映される。渡されていない
+                        （MainViewModel 側の配線待ち）ときは節ごと出さない
+                    -->
+                    <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,10,0,0"
+                                Visibility="{Binding HasCalendarNotifyList,
+                                             Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="カレンダーごとの通知" Style="{StaticResource FieldLabelStyle}" />
+                        <ItemsControl ItemsSource="{Binding NotifiableCalendars}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding Notifies}"
+                                              Cursor="Hand" Margin="0,3" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="ここでの指定は既定です。予定ごとの指定があれば、そちらが勝ちます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 実働日データ -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabWorkday,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="実働日データ" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="配信元（feed.json の URL）" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                 Text="{Binding FeedUrl, UpdateSourceTrigger=LostFocus}" />
+                        <TextBlock Text="1か所に置いたファイルを取りに行きます。https:// のみ。空なら取りに行きません。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="1日に1回、自動で取りに行く" IsChecked="{Binding FeedAuto}" Cursor="Hand" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="取り込み" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="配信元から取り込む" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding FetchWorkingDayFeedCommand}"
+                                    ToolTip="上の配信元（feed.json）から取りに行きます" />
+                            <Border Width="8" />
+                            <Button Content="Excel から取り込む…" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding ImportWorkingDaysCommand}" />
+                        </StackPanel>
+                        <TextBlock Text="どちらも⚙メニューからいつでも行えます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="書き出し" Style="{StaticResource FieldLabelStyle}" />
+                        <Button Content="配信用に書き出す…" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding ExportWorkingDayFeedCommand}" />
+                        <TextBlock Text="いまの実働日データを、配る側のファイル（feed.json）として書き出します。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 同期（Google） -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabSync,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="同期（Google）" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="接続の状態" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+                                     Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
+                            <TextBlock Text="{Binding Sync.StatusText}" FontSize="12.5" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Google に接続…" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding Sync.ConnectCommand}"
+                                    ToolTip="ブラウザが開きます。許可するとカレンダーとタスクの同期が始まります" />
+                            <Border Width="8" />
+                            <Button Content="接続を切る" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding Sync.DisconnectCommand}"
+                                    ToolTip="こちらのデータは消えません。Google 側の許可を取り消します" />
+                        </StackPanel>
+                        <TextBlock Text="接続は最初の1回だけです。日々の同期は⚙メニューの「今すぐ同期」（F5）から行えます。"
+                                   Style="{StaticResource FieldNoteStyle}" />
+                    </StackPanel>
+
+                    <!--
+                        自分の Google Cloud プロジェクトで使いたい人だけの項目。
+                        ふつうは触らせない。アプリに焼き込んだ設定で繋がるので、
+                        上のほうに並べず控えめに出す
+                    -->
+                    <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,8,0,0">
+                        <TextBlock Text="詳細" Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink3Brush}"
+                                   Margin="0,0,0,6" />
+                        <Button Content="自分のクライアント設定を使う…（JSON）" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}" FontSize="11"
+                                Command="{Binding ImportGoogleClientCommand}"
+                                ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- データ -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabData,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="データ" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="バックアップ" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="バックアップを保存…" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding BackupCommand}"
+                                    ToolTip="予定・タスク・設定・実働日データを1つのファイルに書き出します" />
+                            <Border Width="8" />
+                            <Button Content="バックアップから復元…" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding RestoreCommand}"
+                                    ToolTip="いまの内容はすべて置き換わります。復元後にアプリを立ち上げ直します" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="保存はいつでも安全に行えます。復元は、いまの内容をすべてファイルの中身に置き換えます（元に戻せません）。" />
+                    </StackPanel>
+
+                    <!--
+                        押し間違えると困る操作を、ここから下にまとめて置く。
+                        枠で区切り、見出しを赤系の色にして他と見分けやすくする
+                    -->
+                    <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}"
+                            Margin="0,0,0,18" Padding="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Text="ここから下は元に戻せません" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SundayBrush}" Margin="0,0,0,12" />
+
+                            <StackPanel Style="{StaticResource FieldGroupStyle}">
+                                <Button Content="旧 inaCalendar のバックアップを取り込む…（JSON）"
+                                        HorizontalAlignment="Left"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Command="{Binding ImportLegacyBackupCommand}" />
+                                <TextBlock Style="{StaticResource DangerNoteStyle}"
+                                           Text="旧データからの移行時に1回だけ使います。同じ識別子の予定とタスクは上書きされます。" />
+                            </StackPanel>
+
+                            <StackPanel Margin="0,0,0,0">
+                                <Button Content="重複した予定を整理…" HorizontalAlignment="Left"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Command="{Binding RemoveDuplicatesCommand}" />
+                                <TextBlock Style="{StaticResource DangerNoteStyle}"
+                                           Text="同じ日・同じ時刻・同じ名前の予定を1つにまとめます。" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,0,0,0">
+                        <TextBlock Text="エラーの記録" Style="{StaticResource FieldLabelStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="エラーの記録を開く" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding OpenCrashLogCommand}" />
+                            <Border Width="8" />
+                            <Button Content="エラーの記録を消す" Style="{StaticResource GhostButtonStyle}"
+                                    Command="{Binding ClearCrashLogCommand}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="予期しないエラーで終了したときの記録（crash.log）です。記録が無いときは押せません。" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- バージョン情報 -->
+                <StackPanel Visibility="{Binding IsChecked, ElementName=TabAbout,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="バージョン情報" Style="{StaticResource PageHeadStyle}" />
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="{Binding AppName}" Style="{StaticResource HeadingTextStyle}" />
+                        <TextBlock FontSize="12.5" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}">
+                            <Run Text="バージョン " /><Run Text="{Binding AppVersion, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <Button Content="更新を確認…" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding CheckForUpdateCommand}"
+                                ToolTip="新しい版があれば知らせます" />
+                        <Border Height="10" />
+                        <CheckBox Content="起動したときに新しい版が無いか確かめる"
+                                  IsChecked="{Binding CheckForUpdateOnStartup}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="切っても、上の「更新を確認…」はいつでも使えます。" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="データの保存先" Style="{StaticResource FieldLabelStyle}" />
+                        <Button Content="保存先のフォルダを開く" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding OpenDataFolderCommand}" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="%LocalAppData%\Kado" />
+                    </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <Button Content="リポジトリのページを開く" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding OpenRepositoryCommand}" />
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,0">
+                        <TextBlock Text="使っている主なもの" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Text="{Binding TechStack}" FontSize="11"
+                                   Foreground="{DynamicResource Ink3Brush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

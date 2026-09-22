@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+      Shell/ 配下の「純粋な計算」だけをテストする。
+
+      App プロジェクト（src/Kado.App）は net8.0-windows（UseWPF）で、
+      net8.0 のテストプロジェクトからは ProjectReference できない
+      （tests/Kado.App.Tests の BackupWiringTests と同じ理由。
+      実際に試すと NU1201 で復元が失敗する。net8.0-windows 側を UseWPF のまま
+      参照させようとしても、今度は Windows でないと実行できない
+      "Microsoft.WindowsDesktop.App" が無くてテストの実行自体が失敗する）。
+
+      Win32 の宣言（NativeMethods.cs）や純粋な計算（ShellGeometry.cs）は
+      WPF に一切依存しないので、ソースをファイルとしてリンクし、この
+      net8.0 プロジェクトの一部として直にコンパイルする。実行できるのは
+      Windows API を実際には呼ばない部分だけ（DllImport は宣言できるだけで、
+      呼ばなければ Linux でもコンパイル・実行できる）。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Kado.Shell.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DockEdge・ShellMode など、居かたの型だけを借りる -->
+    <ProjectReference Include="..\..\src\Kado.Presentation\Kado.Presentation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Kado.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
+    <!-- 編集ウィンドウを帯の隣へ置く位置計算。Window/Win32 に依存しないので同じ手が使える -->
+    <Compile Include="..\..\src\Kado.App\Editing\EditorWindowPlacement.cs" Link="Editing\EditorWindowPlacement.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

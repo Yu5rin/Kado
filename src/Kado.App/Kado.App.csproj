@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Kado.App</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- exe 自体の絵。エクスプローラとタスクバーはこれを見る -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ウィンドウの左上に出す用。ico から引くより素直に出る -->
+    <Resource Include="Assets\app.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kado.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kado.Core\Kado.Core.csproj" />
+    <ProjectReference Include="..\Kado.Data\Kado.Data.csproj" />
+    <ProjectReference Include="..\Kado.Google\Kado.Google.csproj" />
+    <ProjectReference Include="..\Kado.Presentation\Kado.Presentation.csproj" />
+    <ProjectReference Include="..\Kado.Shell\Kado.Shell.csproj" />
+  </ItemGroup>
+
+</Project>

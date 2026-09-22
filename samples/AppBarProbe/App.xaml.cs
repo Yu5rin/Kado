@@ -19,7 +19,7 @@ namespace AppBarProbe;
 public partial class App : Application
 {
     /// <summary>二重起動の判定に使う名前。セッション内で一意であればよい。</summary>
-    private const string MutexName = "SlideinaCalendar.AppBarProbe.SingleInstance";
+    private const string MutexName = "Kado.AppBarProbe.SingleInstance";
 
     private Mutex? _mutex;
 
