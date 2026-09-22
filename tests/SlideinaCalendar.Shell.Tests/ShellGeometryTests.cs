@@ -224,4 +224,87 @@ public class ShellGeometryTests
         Assert.Equal(Monitor.right, right.right);
         Assert.Equal(Monitor.right - 320, right.left);
     }
+
+    // ------------------------------------------------------------------
+    // TryGuardWindowPos（ピン留め時に一瞬右へ飛ぶ不具合のBガード）
+    // ------------------------------------------------------------------
+
+    /// <summary>ピン留め済みの窓（左端、幅320×高さ1040）を想定した確定値。</summary>
+    private static readonly RECT Confirmed = new() { left = 0, top = 0, right = 320, bottom = 1040 };
+
+    [Fact]
+    public void 確定値からずれた移動は押し戻す()
+    {
+        // シェルが窓を右へ280（自分の幅ぶん）押し出そうとした形
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 280, y: 0, cx: 320, cy: 1040, flags: 0,
+            out var gx, out var gy, out var gcx, out var gcy);
+
+        Assert.True(changed);
+        Assert.Equal(Confirmed.left, gx);
+        Assert.Equal(Confirmed.top, gy);
+        Assert.Equal(Confirmed.Width, gcx);
+        Assert.Equal(Confirmed.Height, gcy);
+    }
+
+    [Fact]
+    public void 確定値と同じ移動は変えない()
+    {
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 0, y: 0, cx: 320, cy: 1040, flags: 0,
+            out _, out _, out _, out _);
+
+        Assert.False(changed);
+    }
+
+    [Fact]
+    public void SWP_NOMOVEが立っていれば位置がずれていても触らない()
+    {
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 280, y: 0, cx: 320, cy: 1040, flags: SWP_NOMOVE,
+            out var gx, out var gy, out _, out _);
+
+        // 位置は Windows が動かす気が無いので、ガードも触らない
+        Assert.False(changed);
+        Assert.Equal(280, gx);
+        Assert.Equal(0, gy);
+    }
+
+    [Fact]
+    public void SWP_NOSIZEが立っていれば大きさがずれていても触らない()
+    {
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 0, y: 0, cx: 200, cy: 500, flags: SWP_NOSIZE,
+            out _, out _, out var gcx, out var gcy);
+
+        Assert.False(changed);
+        Assert.Equal(200, gcx);
+        Assert.Equal(500, gcy);
+    }
+
+    [Fact]
+    public void 位置だけずれていれば大きさは書き換えない()
+    {
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 280, y: 0, cx: 320, cy: 1040, flags: 0,
+            out _, out _, out var gcx, out var gcy);
+
+        Assert.True(changed);
+        Assert.Equal(320, gcx);
+        Assert.Equal(1040, gcy);
+    }
+
+    [Fact]
+    public void SWP_NOMOVEとSWP_NOSIZEが両方立っていれば何もしない()
+    {
+        var changed = ShellGeometry.TryGuardWindowPos(
+            Confirmed, x: 280, y: 10, cx: 200, cy: 500, flags: SWP_NOMOVE | SWP_NOSIZE,
+            out var gx, out var gy, out var gcx, out var gcy);
+
+        Assert.False(changed);
+        Assert.Equal(280, gx);
+        Assert.Equal(10, gy);
+        Assert.Equal(200, gcx);
+        Assert.Equal(500, gcy);
+    }
 }

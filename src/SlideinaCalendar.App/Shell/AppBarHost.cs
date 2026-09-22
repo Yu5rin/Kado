@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using SlideinaCalendar.Presentation.Settings;
@@ -40,6 +41,33 @@ public sealed class AppBarHost : IDisposable
 
     /// <summary>全画面のアプリが出ているあいだは退避する。</summary>
     private bool _steppedAside;
+
+    /// <summary>
+    /// <c>ABM_SETPOS</c> で確定した矩形（物理ピクセル）。
+    /// <para>
+    /// シェルが窓を押し出そうとしたとき（ピン留め時に一瞬右へ飛ぶ不具合）、
+    /// ここへ押し戻す。<see cref="Reposition"/> で更新し、<see cref="Undock"/> で消す。
+    /// </para>
+    /// </summary>
+    private RECT? _confirmed;
+
+    /// <summary>
+    /// 自分から <see cref="MoveTo"/> で動かしている最中か。
+    /// <para>ガード（<see cref="OnMessage"/>）は、自分の移動には素通りさせる。</para>
+    /// </summary>
+    private bool _selfMove;
+
+    /// <summary>
+    /// ガードを一時的に外すか。
+    /// <para>
+    /// <c>ShellController.ApplyPinnedWidth</c> は、幅をつまんでいるあいだ
+    /// <c>_confirmed</c> より先に窓を動かす（交渉は手が止まってからまとめて行う）。
+    /// ここを外さないと、つまんでいる最中にガードが古い確定値へ押し戻してしまい、
+    /// 「幅をつまんで変えられない」という直したばかりの不具合が再発する。
+    /// <c>ShellController</c> が <c>ShellViewModel.IsResizing</c> と連動させる。
+    /// </para>
+    /// </summary>
+    internal bool SuppressGuard { get; set; }
 
     public AppBarHost(Window window, DockPlacementStore store)
     {
@@ -149,6 +177,7 @@ public sealed class AppBarHost : IDisposable
         // 戻したあとに印を消す。先に消すと、戻す途中で落ちたときに検知できない
         _store.SetWorkAreaReserved(false);
         _steppedAside = false;
+        _confirmed = null;
 
         Undocked?.Invoke(this, EventArgs.Empty);
     }
@@ -217,7 +246,16 @@ public sealed class AppBarHost : IDisposable
         // 調整後の矩形から、改めて自分の幅を切り出す
         data.rc = ShellGeometry.SliceWidth(data.rc, Edge, width);
 
+        // ABM_SETPOS を呼ぶ前に、これから頼む値を確定値として控えておく。シェルが
+        // 窓を押し出す動きは ABM_SETPOS の呼び出し自体の中で起きうるので、呼んだ
+        // あとで控えたのでは間に合わない（そのあいだに来た WM_WINDOWPOSCHANGING を
+        // ガードで拾えない）
+        _confirmed = data.rc;
+
         SHAppBarMessage(ABM_SETPOS, ref data);
+
+        // 呼んだ結果、値が変わっていれば確定値も合わせる
+        _confirmed = data.rc;
 
         var systemWorkArea = SystemParameters.WorkArea;
 
@@ -226,7 +264,26 @@ public sealed class AppBarHost : IDisposable
             $"SystemParameters.WorkArea=({systemWorkArea.Left:F0},{systemWorkArea.Top:F0}," +
             $"{systemWorkArea.Right:F0},{systemWorkArea.Bottom:F0})");
 
-        MoveTo(data.rc);
+        // ABM_SETPOS の直後・MoveTo の前。ここで GetWindowRect を取れば、
+        // ABN_POSCHANGED が来た時点で窓がどこに居たか（シェルに押し出された直後の
+        // 姿）が MoveTo に書き換えられる前に残る
+        if (GetWindowRect(hwnd, out var beforeMove))
+        {
+            ShellDiagnosticsLog.Write(
+                $"Reposition MoveTo前 GetWindowRect=({beforeMove.left},{beforeMove.top}," +
+                $"{beforeMove.right},{beforeMove.bottom}) Left={_window.Left:F1}");
+        }
+
+        // 自分から動かすので、ガードは素通りさせる
+        _selfMove = true;
+        try
+        {
+            MoveTo(data.rc);
+        }
+        finally
+        {
+            _selfMove = false;
+        }
 
         if (GetWindowRect(hwnd, out var actual))
         {
@@ -267,6 +324,21 @@ public sealed class AppBarHost : IDisposable
             return IntPtr.Zero;
         }
 
+        // 窓の移動・大きさ変更は必ずここを通る。AppBar を登録しているあいだだけ、
+        // 誰が・いつ・どこへ動かそうとしたかを記録し（A）、確定した矩形と違えば
+        // 押し戻す（B、ピン留め時に一瞬右へ飛ぶ不具合のガード）
+        if (_registered && (msg == WM_WINDOWPOSCHANGING || msg == WM_WINDOWPOSCHANGED))
+        {
+            HandleWindowPos(msg, lParam);
+            return IntPtr.Zero;
+        }
+
+        if (msg == WM_SETTINGCHANGE && (int)wParam == SPI_SETWORKAREA)
+        {
+            ShellDiagnosticsLog.Write($"OnMessage WM_SETTINGCHANGE SPI_SETWORKAREA registered={_registered}");
+            return IntPtr.Zero;
+        }
+
         if (msg != (int)CallbackMessage) return IntPtr.Zero;
 
         switch ((int)wParam)
@@ -285,6 +357,53 @@ public sealed class AppBarHost : IDisposable
         }
 
         return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// <c>WM_WINDOWPOSCHANGING</c> / <c>WM_WINDOWPOSCHANGED</c> の処理。
+    /// <para>
+    /// <b>記録（A）。</b>毎フレーム書くと重くログも埋もれるが、AppBar を登録している
+    /// あいだだけなので実害は無い。ピンを外せばこの経路自体を通らなくなる。
+    /// </para>
+    /// <para>
+    /// <b>ガード（B）。</b><c>WM_WINDOWPOSCHANGING</c> はまだ確定前なので、
+    /// <paramref name="lParam"/> の <see cref="WINDOWPOS"/> を書き換えれば Windows 側の
+    /// 実際の移動先に反映される。シェルが「削った帯に重なる非 Topmost の窓」を
+    /// 押し出そうとする動きを、確定した矩形（<see cref="_confirmed"/>）へ打ち消す。
+    /// 自分から動かしている最中（<see cref="_selfMove"/>）や、幅をつまんでいる最中
+    /// （<see cref="SuppressGuard"/>）は素通りさせる。
+    /// </para>
+    /// </summary>
+    private void HandleWindowPos(int msg, IntPtr lParam)
+    {
+        var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
+
+        ShellDiagnosticsLog.Write(
+            $"OnMessage {(msg == WM_WINDOWPOSCHANGING ? "WM_WINDOWPOSCHANGING" : "WM_WINDOWPOSCHANGED")} " +
+            $"x={pos.x} y={pos.y} cx={pos.cx} cy={pos.cy} flags=0x{pos.flags:X4} " +
+            $"selfMove={_selfMove} suppressGuard={SuppressGuard}");
+
+        if (msg != WM_WINDOWPOSCHANGING) return;
+        if (_confirmed is not { } confirmed) return;
+        if (_selfMove || SuppressGuard) return;
+
+        if (!ShellGeometry.TryGuardWindowPos(
+                confirmed, pos.x, pos.y, pos.cx, pos.cy, pos.flags,
+                out var guardedX, out var guardedY, out var guardedCx, out var guardedCy))
+        {
+            return;
+        }
+
+        ShellDiagnosticsLog.Write(
+            $"OnMessage ガードで押し戻す x={pos.x}->{guardedX} y={pos.y}->{guardedY} " +
+            $"cx={pos.cx}->{guardedCx} cy={pos.cy}->{guardedCy}");
+
+        pos.x = guardedX;
+        pos.y = guardedY;
+        pos.cx = guardedCx;
+        pos.cy = guardedCy;
+
+        Marshal.StructureToPtr(pos, lParam, false);
     }
 
     /// <summary>

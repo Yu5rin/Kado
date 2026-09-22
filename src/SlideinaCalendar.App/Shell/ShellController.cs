@@ -173,7 +173,14 @@ public sealed class ShellController : IDisposable
 
         _shell.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName != nameof(ShellViewModel.IsResizing) || _shell.IsResizing) return;
+            if (args.PropertyName != nameof(ShellViewModel.IsResizing)) return;
+
+            // つまんでいるあいだは AppBarHost 側のガードを外す。ApplyPinnedWidth は
+            // 交渉前（_confirmed が古いまま）に窓を動かすので、ガードを効かせたままだと
+            // 古い確定値へ押し戻されて「幅をつまんで変えられない」が再発する
+            _appBar.SuppressGuard = _shell.IsResizing;
+
+            if (_shell.IsResizing) return;
 
             // つまみ終えた。留めているなら、待たずに譲る幅を決め直す。
             // 隣のアプリはワークエリアを見て並ぶので、ここで初めて動く
@@ -763,13 +770,23 @@ public sealed class ShellController : IDisposable
 
                 ToEdge();
 
-                // ドックのあいだは最前面にしない。場所を譲ってもらっているので、
-                // 重ねる必要がない。立てたままだと他のアプリの邪魔になる
-                _window.Topmost = false;
+                if (_appBar.Dock(_shell.Edge, _shell.DockWidth))
+                {
+                    // ABM_SETPOS が済んでから最前面を外す（不具合：ピン留め時に一瞬
+                    // 右へ飛ぶ）。Windows のシェルは、作業領域から帯を削るとき、その帯に
+                    // 重なる「非 Topmost の普通の窓」を作業領域の内側へ押し出す。
+                    // ここより前に Topmost=false にすると、ABM_SETPOS の瞬間だけ自分の窓が
+                    // まさにその条件（非 Topmost・削られる帯に重なっている）を満たし、
+                    // 押し出されてから戻る、という一往復が「一瞬右へ飛ぶ」に見えていた。
+                    // ドックのあいだ最前面にしない、という意図そのものは変えない。
+                    // 場所を譲ってもらっているので、重ねる必要がない
+                    _window.Topmost = false;
+                    break;
+                }
 
-                if (_appBar.Dock(_shell.Edge, _shell.DockWidth)) break;
-
-                // 削れなかった。黙って重なったままにせず、理由を伝えてから落とす
+                // 削れなかった。黙って重なったままにせず、理由を伝えてから落とす。
+                // Topmost はここでは触らない。この直後の Mode=Overlay が Apply(Overlay) を
+                // 呼び、その ToEdge() が改めて Topmost=true にする
                 DockFailed?.Invoke(this, _appBar.LastFailure ?? "画面を分割できませんでした。");
                 _shell.Mode = ShellMode.Overlay;
                 break;
