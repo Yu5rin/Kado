@@ -399,3 +399,63 @@ public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// ドックグリップ（<c>DockGrip</c>）の掴みしろぶん、画面の内側の辺にだけ
+/// 8px の余地を作る。
+/// <para>
+/// 以前は <c>DockPanel</c> 全体に <c>Margin</c> を掛けていたが、それだと
+/// マージンぶんが素通りして窓の背景（<c>BackgroundBrush</c>、暗い色）が
+/// そのまま見え、パネルの色との境に隙間があるように見えていた。
+/// ここでは <c>Padding</c>／<c>Margin</c> の対象を「色を塗っている入れ物」
+/// ではなく「その中身」に絞り、入れ物自身は窓の端まで自分の色で塗り切る。
+/// </para>
+/// <para>
+/// どのパネルが窓の内側の辺に触れているかは、開いているパネルの並び
+/// （スリム・左・中央・右）のうち先頭／末尾で決まる。ここは4つの
+/// <c>bool</c> を見るだけの分岐で、<c>Style</c> の中の
+/// <c>MultiDataTrigger</c> を何本も重ねるより確実（<see cref="AllTrueToVisibilityConverter"/>
+/// と同じ理由）。
+/// </para>
+/// <para>
+/// <c>ConverterParameter</c> は対象を表す文字列。<c>"Toolbar"</c> は
+/// どのパネルが出ていても関係なく常に対象（ツールバーは常に窓いっぱいの帯
+/// なので）。<c>"Slim"</c>／<c>"Side"</c>／<c>"Main"</c>／<c>"Detail"</c> は、
+/// それぞれのパネルが実際に窓の内側の辺に触れているときだけ余地を返す。
+/// </para>
+/// </summary>
+public sealed class EdgePaddingConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values is not [bool isAtEdge, bool isAtLeft, bool slim, bool side, bool main, bool detail])
+            return new Thickness(0);
+
+        // 端に寄せていないときは窓自身の掴みしろがあるので余地を空けない
+        if (!isAtEdge) return new Thickness(0);
+
+        var pane = parameter as string;
+        var innerLeft = new Thickness(8, 0, 0, 0);
+        var innerRight = new Thickness(0, 0, 8, 0);
+        var none = new Thickness(0);
+
+        // ツールバーは窓いっぱいの1本の帯。出ているパネルに関わらず内側の辺が対象
+        if (pane == "Toolbar") return isAtLeft ? innerRight : innerLeft;
+
+        if (isAtLeft)
+        {
+            // 左端に寄せていれば内側は右。開いている中でいちばん右（列の並びは
+            // スリム・左・中央・右の順）のパネルだけが窓の右の辺に触れる
+            var trailing = detail ? "Detail" : main ? "Main" : side ? "Side" : slim ? "Slim" : null;
+            return pane == trailing ? innerRight : none;
+        }
+
+        // 右端に寄せていれば内側は左。開いている中でいちばん左のパネルだけが
+        // 窓の左の辺に触れる
+        var leading = slim ? "Slim" : side ? "Side" : main ? "Main" : detail ? "Detail" : null;
+        return pane == leading ? innerLeft : none;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
