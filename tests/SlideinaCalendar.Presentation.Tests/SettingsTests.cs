@@ -560,4 +560,48 @@ public class SettingsTests
         var next = new AppSettings(test.Workspace.Settings);
         Assert.Empty(next.WorkdayOffsetPlans);
     }
+
+    /// <summary>
+    /// スリムパネルの月カレンダーの高さ（項目5）。まだ一度もつまんで変えていない
+    /// あいだは HasSlimCalendarShare が false のままで、SidebarLayout はこれを見て
+    /// 固定割合ではなく月カレンダーの中身が要る高さ（Height="Auto"）を使う。
+    /// </summary>
+    [Fact]
+    public void スリムパネルの高さの割合は一度も変えていなければ控えていない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        Assert.False(settings.HasSlimCalendarShare);
+        Assert.Equal(AppSettings.DefaultSlimShare, settings.SlimCalendarShare);
+    }
+
+    [Fact]
+    public void スリムパネルの高さの割合はつまんで変えたら控えて次に開いても残る()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        settings.SlimCalendarShare = 0.35;
+
+        Assert.True(settings.HasSlimCalendarShare);
+        Assert.Equal(0.35, settings.SlimCalendarShare, 3);
+
+        var next = new AppSettings(test.Workspace.Settings);
+        Assert.True(next.HasSlimCalendarShare);
+        Assert.Equal(0.35, next.SlimCalendarShare, 3);
+    }
+
+    [Fact]
+    public void スリムパネルの高さの割合は範囲の外なら丸める()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        settings.SlimCalendarShare = 0.05;
+        Assert.Equal(0.2, settings.SlimCalendarShare, 3);
+
+        settings.SlimCalendarShare = 0.95;
+        Assert.Equal(0.8, settings.SlimCalendarShare, 3);
+    }
 }

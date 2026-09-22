@@ -655,8 +655,14 @@ public sealed class MainViewModel : ObservableObject
     /// 余白2px）押し出される計算になるので、その差し引きだけ下限を上げて
     /// 「◀ ▶」「今日」が押し出される余裕を元どおりに保つ。
     /// </para>
+    /// <para>
+    /// 項目6で📌と出しかたを沈んだ面（SunkenBrush）の枠に囲んでひとまとめにした
+    /// ぶん、内側の余白と間隔で数px分だけさらに幅を取る（Padding 2px×2＋
+    /// ボタン間 1px）。ボタンそのものの大きさは変わらないので、実機での
+    /// 見え方の差は小さいはずだが、余裕を持たせて10px引き上げてある
+    /// </para>
     /// </summary>
-    public const double OverflowFloor = 350;
+    public const double OverflowFloor = 360;
 
     /// <summary>
     /// スリムパネルで、カレンダーに割く高さの割合。
@@ -672,6 +678,16 @@ public sealed class MainViewModel : ObservableObject
             settings.SlimCalendarShare = value;
         }
     }
+
+    /// <summary>
+    /// <see cref="SlimCalendarShare"/> をつまんで変え、控えたことがあるか（項目5）。
+    /// <para>
+    /// まだ無いなら（初回起動など）<c>SidebarLayout</c> はこの固定割合を使わず、
+    /// 月カレンダーの中身が要る高さ（<c>Height="Auto"</c>）に任せる。つまんで
+    /// 変えた時点で以後はここに載る割合を使う。
+    /// </para>
+    /// </summary>
+    public bool HasSlimCalendarShare => _settings?.HasSlimCalendarShare ?? false;
 
     /// <summary>スリムパネルの既定の幅。</summary>
     public const double DefaultSlimPanelWidth = 264;

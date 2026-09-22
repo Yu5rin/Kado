@@ -113,63 +113,6 @@
 
     <DockPanel>
         <!--
-            フッター（項目10）。クイック入力1行だけにする。
-            「＋予定／＋タスク」＋「実働日計算を開く」の3行ぶん（約130px）が、
-            160〜264px 幅の帯で一覧と同じ背丈を取っていた。
-            「＋予定／＋タスク」はクイック入力の右端の2つのボタンへ、「実働日計算」は
-            見出し行の「今日」の隣（12pxのアイコンボタン）へ移した。約70pxが一覧に戻る
-
-            「＋予定」1つに右クリックでタスクのメニューを出す形は、タスクを作るのに
-            「右クリック→メニューが出る→タスクを選ぶ」の3手かかっていた（項目2）。
-            20pxのアイコンボタンを2つ並べ、それぞれ1クリックで押せるようにする。
-            160px まで細くなる帯でも、入力欄には十分な幅が残る
-        -->
-        <Border DockPanel.Dock="Bottom" Padding="10,8"
-                Background="{DynamicResource PanelBrush}"
-                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-            <StackPanel>
-                <Grid>
-                    <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
-                             Margin="0,0,49,0"
-                             Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
-                             KeyDown="OnQuickKeyDown" />
-
-                    <!--
-                        ＋予定／＋タスク。それぞれ1クリックで押せる別々のボタンにする
-                        （項目2）。絵で区別する：予定＝カレンダーに＋、タスク＝チェックに＋
-                    -->
-                    <Button Width="20" Height="20" Margin="0,0,26,0"
-                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Style="{StaticResource SmallIconButtonStyle}"
-                            Command="{Binding AddEventCommand}"
-                            ToolTip="＋予定">
-                        <Path Data="{StaticResource IconEventAdd}" Stretch="Uniform" Width="12" Height="12"
-                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                              StrokeLineJoin="Round"
-                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                    </Button>
-                    <Button Width="20" Height="20" Margin="0,0,3,0"
-                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Style="{StaticResource SmallIconButtonStyle}"
-                            Command="{Binding AddTaskCommand}"
-                            ToolTip="＋タスク">
-                        <Path Data="{StaticResource IconTaskAdd}" Stretch="Uniform" Width="12" Height="12"
-                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                              StrokeLineJoin="Round"
-                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                    </Button>
-                </Grid>
-
-                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding QuickPreview}" Margin="2,3,0,0"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{DynamicResource Ink3Brush}"
-                           Visibility="{Binding QuickPreview,
-                                        Converter={StaticResource NullToVisibility}}" />
-            </StackPanel>
-        </Border>
-
-        <!--
             選んでいる日と送り。ここは月だけを出すので、ビューの切り替えは置かない。
             実働日の通し番号は下の欄に出るので、ここでは繰り返さない
         -->
@@ -198,8 +141,8 @@
 
                     <!--
                         実働日計算（項目10）。「今日」の隣に12pxのアイコンボタンで置く。
-                        「＋予定／＋タスク」はクイック入力の右端の2つのボタンへ、
-                        フッターはクイック入力1行だけにした
+                        「＋予定／＋タスク」はクイック入力の右端の2つのボタンにある
+                        （項目4でクイック入力ごと日付ヘッダの下・一覧の上へ移した）
                     -->
                     <Button Style="{StaticResource SmallIconButtonStyle}" Margin="0,0,6,0"
                             Command="{Binding OpenWorkingDayCalculatorCommand}"
@@ -245,10 +188,21 @@
 
         <Grid>
             <Grid.RowDefinitions>
-                <!-- 上下の割り振りは手で変えられる。既定はカレンダーを広めに取る -->
-                <RowDefinition x:Name="CalendarRow" Height="3*" MinHeight="120" />
+                <!--
+                    上下の割り振りは手で変えられる。まだ一度もつまんで変えていない
+                    （AppSettings.HasSlimCalendarShare が false の）あいだは、既定を
+                    固定割合にせず Height="Auto" のまま使う（項目5）。MonthView は
+                    詰めた形のとき、曜日の見出し＋6週ぶんがちょうど収まる高さを
+                    自分で MinHeight に持つ（MonthView.xaml.cs の FitCells）ので、
+                    Auto 行はそれをそのまま初期の高さにする。固定割合だと画面の高さが
+                    変わったとき「下に余白が余る」「6週目が切れる」が起きるが、Auto なら
+                    幅が変わらない限り常にちょうど収まる。一度つまんで変えたら
+                    SidebarLayout.xaml.cs の SaveShare がその割合を控え、次回からは
+                    RestoreShare が Star 比で組む（ここでの Height 指定は初回だけの話）
+                -->
+                <RowDefinition x:Name="CalendarRow" Height="Auto" MinHeight="120" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition x:Name="ListRow" Height="2*" MinHeight="120" />
+                <RowDefinition x:Name="ListRow" Height="*" MinHeight="120" />
             </Grid.RowDefinitions>
 
             <!--
@@ -315,6 +269,66 @@
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource InkBrush}" />
                     </DockPanel>
+                </Border>
+
+                <!--
+                    クイック入力（項目4）。以前は最下段のフッターにあり、一覧を挟んで
+                    選んだ日から遠かった（「日を選ぶ→その日に何か足す」という動きに
+                    合わない）。日付ヘッダのすぐ下・一覧の上へ移す。右ペイン
+                    （MainWindow.xaml）とも置き場所を揃える。
+
+                    DockPanel.Dock="Top" で固定するので、下のスクロール領域（一覧）が
+                    伸び縮みしても位置は動かない。下端に罫線を引いて、ここから下が
+                    一覧だとひと目で分かるまとまりにする（Themes/Controls.xaml の
+                    LineBrush を他の見出し境界と同じ使い方で）。
+
+                    「＋予定／＋タスク」は16px＠線幅1.7に上げた（項目1）。以前の
+                    12px＠1.5は実機で小さすぎて絵が読めなかった。当たり判定も
+                    20pxから24pxへ広げる。ボタン2つぶん増えた幅は、入力欄の右余白を
+                    49pxから59pxへ広げて確保した（160px幅でも入力欄は十分に残る）
+                -->
+                <Border DockPanel.Dock="Top" Padding="10,8"
+                        BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+                    <StackPanel>
+                        <Grid>
+                            <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
+                                     Margin="0,0,59,0"
+                                     Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
+                                     KeyDown="OnQuickKeyDown" />
+
+                            <!--
+                                ＋予定／＋タスク。それぞれ1クリックで押せる別々のボタンにする
+                                （項目2）。絵で区別する：予定＝カレンダーに＋、タスク＝チェックに＋
+                            -->
+                            <Button Width="24" Height="24" Margin="0,0,31,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Style="{StaticResource SmallIconButtonStyle}"
+                                    Command="{Binding AddEventCommand}"
+                                    ToolTip="＋予定">
+                                <Path Data="{StaticResource IconEventAdd}" Stretch="Uniform" Width="16" Height="16"
+                                      StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Button>
+                            <Button Width="24" Height="24" Margin="0,0,4,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Style="{StaticResource SmallIconButtonStyle}"
+                                    Command="{Binding AddTaskCommand}"
+                                    ToolTip="＋タスク">
+                                <Path Data="{StaticResource IconTaskAdd}" Stretch="Uniform" Width="16" Height="16"
+                                      StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Button>
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding QuickPreview}" Margin="2,3,0,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource Ink3Brush}"
+                                   Visibility="{Binding QuickPreview,
+                                                Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
                 </Border>
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,2,10,8"
@@ -384,7 +398,7 @@
                         </ItemsControl>
 
                         <!-- 0件のときは無言にしない（項目12） -->
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定はありません。下の欄に1行打つと追加できます" Margin="0,2,0,0" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定はありません。" Margin="0,2,0,0" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding HasNoEvents, Converter={StaticResource BoolToVisibility}}" />
 
@@ -400,7 +414,7 @@
                                       ItemTemplate="{StaticResource SlimTaskRowTemplate}" />
 
                         <!-- 0件のときは無言にしない（項目12） -->
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。下の欄に1行打つと追加できます" Margin="0,2,0,0" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。" Margin="0,2,0,0" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding HasNoTasks, Converter={StaticResource BoolToVisibility}}" />
 

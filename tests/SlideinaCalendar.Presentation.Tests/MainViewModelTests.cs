@@ -533,7 +533,7 @@ public class MainViewModelTests
     }
 
     /// <summary>
-    /// 右列を「…」に畳む（項目5）。OverflowFloor（350px）を切ると 🔍・▥・⚙ を
+    /// 右列を「…」に畳む（項目5）。OverflowFloor（360px）を切ると 🔍・▥・⚙ を
     /// 1個にまとめる。📌 と出しかた（ウィンドウ⇔スライド）は戻り口として
     /// ShowsWorkdayBadges 等とは別に常に出るので、ここでは扱わない（項目4。
     /// MainWindow.xaml で Visibility を結ばず常時表示にしてある）。
@@ -544,17 +544,17 @@ public class MainViewModelTests
         using var test = TestWorkspace.Create();
         var vm = Create(test);
 
-        Fit(vm, 370);
+        Fit(vm, 380);
         Assert.False(vm.UsesOverflowMenu);
         Assert.True(vm.ShowsCompactSearchIcon);
 
-        Fit(vm, 349);
+        Fit(vm, 359);
         Assert.True(vm.UsesOverflowMenu);
 
         // 検索も「…」へ集約するので、畳んだ虫めがねは出さない
         Assert.False(vm.ShowsCompactSearchIcon);
 
-        Fit(vm, 350);
+        Fit(vm, 360);
         Assert.False(vm.UsesOverflowMenu);
     }
 

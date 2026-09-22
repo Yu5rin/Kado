@@ -21,10 +21,25 @@ public partial class SidebarLayout : UserControl
         Split.DragCompleted += (_, _) => SaveShare();
     }
 
-    /// <summary>控えてある割り振りに戻す。</summary>
+    /// <summary>
+    /// 控えてある割り振りに戻す（項目5）。
+    /// <para>
+    /// 一度もつまんで変えていない（<see cref="MainViewModel.HasSlimCalendarShare"/>
+    /// が false の）あいだは何もしない。XAML の既定どおり <c>CalendarRow</c> を
+    /// <c>Height="Auto"</c> のまま使い、月カレンダーが必要とする高さ（曜日の
+    /// 見出し＋6週ぶん。MonthView.xaml.cs の FitCells が MinHeight に持つ）が
+    /// そのまま初期値になる。固定の割合だと画面の高さが変わるたびに
+    /// 「余白が余る」「6週目が切れる」が起きるが、Auto はその心配が無い。
+    /// </para>
+    /// <para>
+    /// つまんで変えたあと（SaveShare が呼ばれたあと）は、控えてある割合を
+    /// Star 比で組み直す。以前からの挙動と同じ。
+    /// </para>
+    /// </summary>
     private void RestoreShare()
     {
         if (DataContext is not MainViewModel vm) return;
+        if (!vm.HasSlimCalendarShare) return;
 
         var share = vm.SlimCalendarShare;
 
