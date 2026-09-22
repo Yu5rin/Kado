@@ -71,4 +71,47 @@ internal static class ShellGeometry
 
         return rect;
     }
+
+    /// <summary>
+    /// <c>WM_WINDOWPOSCHANGING</c> を、AppBar と交渉して確定した矩形（<paramref name="confirmed"/>）
+    /// へ押し戻すかどうかを判定する。
+    /// <para>
+    /// ピン留め中にシェルが「削った帯に重なる非 Topmost の窓」を押し出そうとするのを
+    /// 打ち消すガード（不具合：ピン留め時に一瞬右へ飛ぶ）。Windows からの移動要求
+    /// （<paramref name="x"/>／<paramref name="y"/>／<paramref name="cx"/>／<paramref name="cy"/>）が
+    /// 確定値と違えば、確定値へ書き換える値を返す。
+    /// </para>
+    /// <para>
+    /// <c>SWP_NOMOVE</c> が立っているときは位置を、<c>SWP_NOSIZE</c> が立っているときは
+    /// 大きさを、それぞれ書き換えない（Windows がそもそも動かす気の無い軸には触れない）。
+    /// </para>
+    /// </summary>
+    /// <returns>どこかを書き換えたら true。呼び出し側はこのときだけ <c>lParam</c> へ書き戻す。</returns>
+    internal static bool TryGuardWindowPos(
+        RECT confirmed, int x, int y, int cx, int cy, int flags,
+        out int guardedX, out int guardedY, out int guardedCx, out int guardedCy)
+    {
+        guardedX = x;
+        guardedY = y;
+        guardedCx = cx;
+        guardedCy = cy;
+
+        var changed = false;
+
+        if ((flags & SWP_NOMOVE) == 0 && (x != confirmed.left || y != confirmed.top))
+        {
+            guardedX = confirmed.left;
+            guardedY = confirmed.top;
+            changed = true;
+        }
+
+        if ((flags & SWP_NOSIZE) == 0 && (cx != confirmed.Width || cy != confirmed.Height))
+        {
+            guardedCx = confirmed.Width;
+            guardedCy = confirmed.Height;
+            changed = true;
+        }
+
+        return changed;
+    }
 }

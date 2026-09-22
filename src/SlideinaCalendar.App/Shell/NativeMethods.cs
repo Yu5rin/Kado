@@ -212,6 +212,38 @@ internal static class NativeMethods
     internal const int WM_RBUTTONUP = 0x0205;
     internal const int WM_LBUTTONDBLCLK = 0x0203;
 
+    // ------------------------------------------------------------------
+    // 窓の移動・大きさ変更（ピン留め時に一瞬右へ飛ぶ不具合の切り分け・ガード用）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 窓が動かされる・大きさが変わる直前。<b>窓の移動は必ずこれを通る。</b>
+    /// まだ確定前なので、<c>lParam</c>（<see cref="WINDOWPOS"/>）を書き換えれば
+    /// Windows 側の実際の移動先に反映される。
+    /// </summary>
+    internal const int WM_WINDOWPOSCHANGING = 0x0046;
+
+    /// <summary>窓が動かされた・大きさが変わったあと（確定後、記録専用）。</summary>
+    internal const int WM_WINDOWPOSCHANGED = 0x0047;
+
+    /// <summary>システム設定が変わった。<c>wParam</c> に何が変わったかが入る。</summary>
+    internal const int WM_SETTINGCHANGE = 0x001A;
+
+    internal const int SWP_NOSIZE = 0x0001;
+    internal const int SWP_NOMOVE = 0x0002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public int flags;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     internal static extern uint RegisterWindowMessage(string lpString);
 
