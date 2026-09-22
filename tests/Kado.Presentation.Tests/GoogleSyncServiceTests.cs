@@ -341,6 +341,78 @@ public class GoogleSyncServiceTests : IDisposable
 
 
     [Fact]
+    public async Task Google_から消えたカレンダーは一覧から外す()
+    {
+        // 自分で Google 側のカレンダーを消した状況。控えが残ったままだと、
+        // 同期のたびにそれを読みに行って notFound で返され、
+        // 「一部を伝えられません」が毎回出る
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "kieta@group.calendar.google.com",
+            Summary = "消したカレンダー",
+            GoogleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "消えるはずの予定", Date = new DateOnly(2026, 9, 24),
+            CalendarId = "kieta@group.calendar.google.com",
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        Assert.DoesNotContain(_test.Workspace.Sources.Calendars(),
+            c => c.Id == "kieta@group.calendar.google.com");
+
+        // 中の予定も残さない。どのカレンダーにも属さない予定になると、画面から消せない
+        Assert.Null(_test.Workspace.Events.Find("e1"));
+
+        Assert.Contains(report!.Warnings, w =>
+            w.Contains("消したカレンダー", StringComparison.Ordinal) &&
+            w.Contains("一覧から外しました", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 一覧を取れなかったときは何も外さない()
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "yomeru@group.calendar.google.com",
+            Summary = "仕事",
+            GoogleRaw = """{"id":"yomeru@group.calendar.google.com","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        // 一覧だけ落ちる。読めなかっただけのカレンダーを消してはいけない
+        var handler = new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.InternalServerError, """{"error":{"errors":[{"reason":"backendError"}]}}""")
+                : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        Assert.Contains(_test.Workspace.Sources.Calendars(),
+            c => c.Id == "yomeru@group.calendar.google.com");
+    }
+
+    [Fact]
+    public async Task このアプリの中だけのカレンダーは外さない()
+    {
+        var local = _test.Workspace.CreateCalendar("マイカレンダー");
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        Assert.Contains(_test.Workspace.Sources.Calendars(), c => c.Id == local.Id);
+    }
+
+    [Fact]
     public async Task 旧い名前しか無ければ手で変えるよう知らせる()
     {
         SeedLegacyGoogleCalendar();

@@ -109,6 +109,22 @@ public sealed class TombstoneRepository(SqliteConnection connection)
     public void ClearAll() => _connection.Execute("DELETE FROM tombstones;");
 
     /// <summary>
+    /// もう無いカレンダー／タスクリストに向けた削除の記録を捨てる。
+    /// <para>
+    /// 相手ごと無くなったので、伝える先が無い。残しておくと同期のたびに
+    /// 消えた相手へ投げ、そのたびに notFound で返ってくる。
+    /// </para>
+    /// </summary>
+    /// <returns>捨てた記録の件数。</returns>
+    public int ForgetSource(string sourceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+
+        return _connection.Execute(
+            "DELETE FROM tombstones WHERE source_id = @sourceId;", new { sourceId });
+    }
+
+    /// <summary>
     /// 古い記録を片付ける。
     /// <para>
     /// 伝えられないまま残ったもの（連携を外したあとに消した、など）が溜まり続けるのを防ぐ。

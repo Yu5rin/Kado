@@ -305,6 +305,8 @@ public sealed class GoogleSyncService(
         var updated = 0;
         var pushed = 0;
         var warnings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var listed = false;
 
         try
         {
@@ -318,6 +320,8 @@ public sealed class GoogleSyncService(
                 foreach (var item in page.Items)
                 {
                     if (item.Text("id") is not { } id) continue;
+
+                    seen.Add(id);
 
                     var existing = workspace.Sources.FindCalendar(id);
 
@@ -366,11 +370,42 @@ public sealed class GoogleSyncService(
                 pageToken = page.NextPageToken;
             }
             while (pageToken is { Length: > 0 });
+
+            listed = true;
         }
         catch (GoogleApiException ex)
         {
             // 一覧を取れなくても、すでに知っているカレンダーの同期は続けられる
             warnings.Add($"カレンダー一覧を取れませんでした: {ex.Reason}");
+        }
+
+        // Google から無くなったものを片付ける。
+        //
+        // 消されたカレンダーの控えが残ったままだと、同期のたびにそれを読みに行って
+        // notFound で返され、「一部を伝えられません」が毎回出る。自分で消したのに
+        // 消えないので、直しようも無い。
+        //
+        // <b>一覧を最後まで取れたときだけ見る。</b>途中で切れた一覧を頼りにすると、
+        // 読めなかっただけのカレンダーを消してしまう。1件も返ってこなかったときも
+        // 触らない。応答が壊れていただけで全部消える、という壊れ方を避ける
+        if (listed && seen.Count > 0)
+        {
+            var removed = workspace.Sources.Calendars()
+                .Where(c => IsOnGoogle(c.GoogleRaw) && !seen.Contains(c.Id))
+                .ToArray();
+
+            foreach (var calendar in removed)
+            {
+                workspace.Sources.DropRemovedCalendar(calendar.Id);
+                workspace.Tombstones.ForgetSource(calendar.Id);
+            }
+
+            if (removed.Length > 0)
+            {
+                warnings.Add(removed.Length == 1
+                    ? $"Google から消えた「{removed[0].DisplayName}」を一覧から外しました"
+                    : $"Google から消えたカレンダー {removed.Length} 件を一覧から外しました");
+            }
         }
 
         return new SyncReport
