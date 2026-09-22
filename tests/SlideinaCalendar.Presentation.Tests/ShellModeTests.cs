@@ -132,6 +132,42 @@ public class ShellModeTests
         Assert.True(Create(ShellMode.Dock).IsAtEdge);
     }
 
+    /// <summary>
+    /// <c>MainWindow.TrackPlacement</c>（App側、WPF なので Linux では検査できない）が
+    /// 「端へ寄せている間は控えない」を成り立たせる前提。<c>Mode</c> のセッターは
+    /// <c>_mode</c> を先に書き換えてから <c>ModeChanged</c> を出すので、
+    /// <c>ModeChanged</c> の購読側（<c>ShellController.Apply</c>）が動く時点では
+    /// <c>IsAtEdge</c> はもう行き先の値になっている。
+    /// </summary>
+    [Fact]
+    public void ModeChangedが出る時点でIsAtEdgeは行き先のモードを指している()
+    {
+        var vm = Create();
+
+        // ウィンドウ → オーバーレイ（端へ寄せる向き）。ModeChanged の中で見ても
+        // もう true でなければ、寄せている最中の置き場所を「ウィンドウのとき」と
+        // 誤って控えてしまう
+        bool? atEdgeWhenToldToOverlay = null;
+        vm.ModeChanged += (_, mode) =>
+        {
+            if (mode == ShellMode.Overlay) atEdgeWhenToldToOverlay = vm.IsAtEdge;
+        };
+        vm.ToggleSlideCommand.Execute(null);
+
+        Assert.True(atEdgeWhenToldToOverlay);
+
+        // オーバーレイ → ウィンドウ（戻す向き）。ModeChanged の中ではもう false で
+        // なければ、ウィンドウへ戻ったはずの置き場所が控えられなくなる
+        bool? atEdgeWhenToldToWindow = null;
+        vm.ModeChanged += (_, mode) =>
+        {
+            if (mode == ShellMode.Window) atEdgeWhenToldToWindow = vm.IsAtEdge;
+        };
+        vm.ToggleSlideCommand.Execute(null);
+
+        Assert.False(atEdgeWhenToldToWindow);
+    }
+
     [Fact]
     public void 寄せる辺を切り替えられる()
     {

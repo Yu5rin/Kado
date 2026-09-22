@@ -735,13 +735,17 @@
     <!--
         節の見出しのすぐ下・一覧の上に置く「＋ 予定を追加」「✓＋ タスクを追加」の行（項目1）。
         右パネル・スリムパネルの両方で使う。ボタンらしい枠は持たず、一覧の1行として
-        自然に並ぶ見せ方にする。カーソルを乗せたときだけ面が付く程度（RowDeleteButtonStyle
-        などと同じ SunkenBrush のホバー）。横いっぱいに伸びて、行のどこを押しても効く
+        自然に並ぶ見せ方にする。
+
+        文字とアイコンは常にアクセント色（項目2）。押せる場所だと乗せなくても
+        分かるようにする。地（PanelBrush）に対して 4.5:1 を割るテーマが無いことを
+        確かめてある（Light 7.8:1・Dark 6.1:1・Night 5.0:1）。面（SunkenBrush）は
+        従来どおりカーソルを乗せたときだけ付く
     -->
     <Style x:Key="SectionAddRowStyle" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Padding" Value="14,6" />
-        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -753,7 +757,6 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
-                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                         <!-- 押した手応え（項目8と同じ流儀） -->
                         <Trigger Property="IsPressed" Value="True">
