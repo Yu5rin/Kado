@@ -569,93 +569,13 @@
                 </Button>
 
                 <!--
-                    出しかたのボタン（項目1）。
-
-                    以前はここ1つで「左クリック＝ウィンドウ⇔スライド」「右クリック＝
-                    寄せる辺とパネルの選択」を兼ねていたが、パネルの出し入れが右クリック
-                    メニューにしか無く、ツールバーのボタンを右クリックする習慣は
-                    Windows に無い。絵もモードで変わらず、今どちらか分からなかった。
-
-                    役目を2つに分ける。こちらは出しかた（ウィンドウ⇔スライド）だけを
-                    左クリックで切り替える。絵はモードで変える
-                    （ウィンドウ：画面＋帯 IconLayout ／ スライド：帯だけ IconSlideOnly）
-
-                    幅が狭くても畳まない（項目4）。帯として細く使っているときこそ
-                    「ウィンドウに戻したい」ので、📌 と同じく「…」の畳み込みの対象から
-                    外し、戻り口として常に残す（Visibility を付けない）
-                -->
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
-                              Margin="0,0,2,0"
-                              IsChecked="{Binding Shell.IsAtEdge, Mode=OneWay}"
-                              Command="{Binding Shell.ToggleSlideCommand}"
-                              ToolTip="{Binding Shell.SlideActionLabel}">
-                    <Path Stretch="Uniform" Width="16" Height="16"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
-                        <Path.Style>
-                            <Style TargetType="Path">
-                                <Setter Property="Data" Value="{StaticResource IconLayout}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Shell.IsAtEdge}" Value="True">
-                                        <Setter Property="Data" Value="{StaticResource IconSlideOnly}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Path.Style>
-                    </Path>
-                </ToggleButton>
-
-                <!--
-                    パネルのボタン（項目1）。左クリックでメニューを開く
-                    （OnSettingsClicked と同じ手口。既定は右クリック待ちの ContextMenu を
-                    左クリックで開かせる）。中身は「寄せる辺」と「出すパネル」の2グループ。
-                    寄せる辺を先頭の見出し付きグループにする
-                -->
-                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
-                        Margin="0,0,2,0" ToolTip="表示するパネルを選ぶ" Click="OnPanesClicked"
-                        Visibility="{Binding UsesOverflowMenu, Converter={StaticResource InverseBoolToVisibility}}">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="寄せる辺" IsEnabled="False" Focusable="False" />
-                            <MenuItem Header="左端から出す"
-                                      Command="{Binding Shell.EdgeLeftCommand}"
-                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
-                                      IsCheckable="True"
-                                      ToolTip="画面の左端にマウスを留めると出てきます" />
-                            <MenuItem Header="右端から出す"
-                                      Command="{Binding Shell.EdgeRightCommand}"
-                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
-                                      IsCheckable="True"
-                                      ToolTip="画面の右端にマウスを留めると出てきます" />
-                            <Separator />
-                            <MenuItem Header="表示するパネル" IsEnabled="False" Focusable="False" />
-                            <MenuItem Header="スリムパネル（ひと月と、その日の予定）"
-                                      Command="{Binding ToggleSlimPanelCommand}"
-                                      IsChecked="{Binding IsSlimPanelOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
-                                      Command="{Binding ToggleSidePanelCommand}"
-                                      IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="中央（カレンダー）"
-                                      Command="{Binding ToggleMainViewCommand}"
-                                      IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="右パネル（予定・タスク）"
-                                      Command="{Binding ToggleDetailPaneCommand}"
-                                      IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                    <Path Data="{StaticResource IconPanes}" Stretch="Uniform" Width="16" Height="16"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                </Button>
-
-                <!--
                     「…」畳みボタン（項目5）。窓が OverflowFloor を切ると、
                     🔍・▥・⚙ をここ1つにまとめる。📌 と出しかた（ウィンドウ⇔
-                    スライド）は戻り口として別に残す（項目4）
+                    スライド）は戻り口として別に残す（項目4）。
+
+                    ⚙ と同じ「押すとメニューが開く」役目なので、ドック順もすぐ隣に
+                    置く。⚙ が畳まれて消えたぶんの場所へ、ここが代わりに収まる形に
+                    する（項目2・6）
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
                         Margin="0,0,2,0" ToolTip="検索・パネル・設定" Click="OnOverflowClicked"
@@ -712,24 +632,161 @@
                 </Button>
 
                 <!--
-                    ピン。押すと画面端に寄り、画面を分割する。最大化した他のウィンドウと
-                    重ならなくなる（要件書 2.2）。もう一度押すと元の出しかたに戻る。
+                    パネルのボタン（項目1）。左クリックでメニューを開く
+                    （OnSettingsClicked と同じ手口。既定は右クリック待ちの ContextMenu を
+                    左クリックで開かせる）。中身は「寄せる辺」と「出すパネル」の2グループ。
+                    寄せる辺を先頭の見出し付きグループにする
 
-                    常に出しておく。端へドラッグしてから押す作りにしていたが、Windows の
-                    スナップ（端に寄せると画面の半分に広がる）と取り合いになって、
-                    寄せてもピンが出ないことがあった。
-
-                    ⚙ の左に置く。ドック中は枠が消えるので、ここが唯一の戻り口になる
+                    ⚙ の隣へ置く（項目6）。どちらも「押すとメニューが開く」ボタンで、
+                    出しかた（📌の隣・押すとその場で切り替わる）とは役目が違う。
+                    右に▾を添えて、押すとメニューが開くことを絵でも示す
+                    （IconChevronDown、8px・線幅1.3）。そのぶんボタンは横に伸びるので、
+                    Width を IconButtonStyle の既定28pxから40pxへ上げる
                 -->
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource IconToggleButtonStyle}"
-                              x:Name="PinButton" Margin="0,0,2,0"
-                              IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
-                              Command="{Binding Shell.TogglePinCommand}"
-                              ToolTip="{Binding Shell.PinLabel}">
-                    <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                          StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                </ToggleButton>
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
+                        Width="40" Margin="0,0,2,0" ToolTip="表示するパネルを選ぶ" Click="OnPanesClicked"
+                        Visibility="{Binding UsesOverflowMenu, Converter={StaticResource InverseBoolToVisibility}}">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="寄せる辺" IsEnabled="False" Focusable="False" />
+                            <MenuItem Header="左端から出す"
+                                      Command="{Binding Shell.EdgeLeftCommand}"
+                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
+                                      IsCheckable="True"
+                                      ToolTip="画面の左端にマウスを留めると出てきます" />
+                            <MenuItem Header="右端から出す"
+                                      Command="{Binding Shell.EdgeRightCommand}"
+                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
+                                      IsCheckable="True"
+                                      ToolTip="画面の右端にマウスを留めると出てきます" />
+                            <Separator />
+                            <MenuItem Header="表示するパネル" IsEnabled="False" Focusable="False" />
+                            <MenuItem Header="スリムパネル（ひと月と、その日の予定）"
+                                      Command="{Binding ToggleSlimPanelCommand}"
+                                      IsChecked="{Binding IsSlimPanelOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
+                                      Command="{Binding ToggleSidePanelCommand}"
+                                      IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <MenuItem Header="中央（カレンダー）"
+                                      Command="{Binding ToggleMainViewCommand}"
+                                      IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                            <MenuItem Header="右パネル（予定・タスク）"
+                                      Command="{Binding ToggleDetailPaneCommand}"
+                                      IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
+                                      IsCheckable="True" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource IconPanes}" Stretch="Uniform" Width="16" Height="16"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        <Path Data="{StaticResource IconChevronDown}" Stretch="Uniform" Width="8" Height="8"
+                              Margin="3,0,0,0"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </StackPanel>
+                </Button>
+
+                <!--
+                    出しかた＋ピン（項目6）。以前は出しかた（IconLayout＝四角＋縦線1本）と
+                    パネル（IconPanes＝四角＋縦線2本）が線の本数でしか見分けが付かず、
+                    28pxのボタンの中では区別できなかった（特にウィンドウモードで
+                    出しかたが点いていないとき）。
+
+                    役割で置き場所を分け、この2つ（「この窓をどう出すか」を扱うもの）は
+                    沈んだ面（SunkenBrush）にまとめて1つの操作群に見せる。パネル・⚙
+                    （「押すとメニューが開く」もの）は右端へ寄せた。
+
+                    幅が狭くても畳まない（項目4）。帯として細く使っているときこそ
+                    「ウィンドウに戻したい」ので、「…」の畳み込みの対象から外し、
+                    戻り口として常に残す（Visibility を付けない）
+                -->
+                <Border DockPanel.Dock="Right" Margin="0,0,2,0" Padding="2" CornerRadius="7"
+                        Background="{DynamicResource SunkenBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <!--
+                            ピン。押すと画面端に寄り、画面を分割する。最大化した他のウィンドウと
+                            重ならなくなる（要件書 2.2）。もう一度押すと元の出しかたに戻る。
+
+                            常に出しておく。端へドラッグしてから押す作りにしていたが、Windows の
+                            スナップ（端に寄せると画面の半分に広がる）と取り合いになって、
+                            寄せてもピンが出ないことがあった。
+                        -->
+                        <ToggleButton Style="{StaticResource IconToggleButtonStyle}"
+                                      x:Name="PinButton" Margin="0,0,1,0"
+                                      IsChecked="{Binding Shell.IsPinned, Mode=OneWay}"
+                                      Command="{Binding Shell.TogglePinCommand}"
+                                      ToolTip="{Binding Shell.PinLabel}">
+                            <Path Data="{StaticResource IconPin}" Stretch="Uniform" Width="16" Height="16"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                  StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </ToggleButton>
+
+                        <!--
+                            出しかたのボタン（項目1・6）。
+
+                            以前はここ1つで「左クリック＝ウィンドウ⇔スライド」「右クリック＝
+                            寄せる辺とパネルの選択」を兼ねていたが、パネルの出し入れが右クリック
+                            メニューにしか無く、ツールバーのボタンを右クリックする習慣は
+                            Windows に無い。役目を2つに分け、こちらは出しかた（ウィンドウ⇔
+                            スライド）だけを左クリックで切り替える。
+
+                            絵は3つの状態を描き分ける（項目6）。ウィンドウ中は窓の絵
+                            （IconWindowMode＝四角＋タイトルバーの横線）。スライド・固定中は
+                            画面の枠を薄く（IconEdgeFrame、Opacity=0.45）描いた上に、寄せた辺の
+                            帯を塗りつぶしで重ねる（IconEdgeBandLeft／Right）。帯の位置で
+                            左右どちらの辺に寄せているかも分かる。タグに直接書かず、
+                            Path.Style の Setter で切り替える（docs/README.md の落とし穴：
+                            タグに直書きした値は Style のトリガより強く、上書きできなくなる）
+                        -->
+                        <ToggleButton Style="{StaticResource IconToggleButtonStyle}"
+                                      IsChecked="{Binding Shell.IsAtEdge, Mode=OneWay}"
+                                      Command="{Binding Shell.ToggleSlideCommand}"
+                                      ToolTip="{Binding Shell.SlideActionLabel}">
+                            <Grid Width="16" Height="16">
+                                <!-- ウィンドウのとき：窓の絵 -->
+                                <Path Stretch="Uniform" Data="{StaticResource IconWindowMode}"
+                                      Visibility="{Binding Shell.IsAtEdge,
+                                                   Converter={StaticResource InverseBoolToVisibility}}"
+                                      Stroke="{Binding Foreground,
+                                               RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                      StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+
+                                <!-- スライド／固定のとき：画面の枠（薄く） -->
+                                <Path Stretch="Uniform" Data="{StaticResource IconEdgeFrame}" Opacity="0.45"
+                                      Visibility="{Binding Shell.IsAtEdge,
+                                                   Converter={StaticResource BoolToVisibility}}"
+                                      Stroke="{Binding Foreground,
+                                               RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                      StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+
+                                <!-- スライド／固定のとき：寄せた辺の帯（塗り）。左右で絵を変える -->
+                                <Path Stretch="Uniform"
+                                      Visibility="{Binding Shell.IsAtEdge,
+                                                   Converter={StaticResource BoolToVisibility}}"
+                                      Fill="{Binding Foreground,
+                                             RelativeSource={RelativeSource AncestorType=ToggleButton}}">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Data" Value="{StaticResource IconEdgeBandLeft}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Shell.IsAtRight}" Value="True">
+                                                    <Setter Property="Data"
+                                                            Value="{StaticResource IconEdgeBandRight}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                            </Grid>
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
 
                 <!--
                     押すと同期する。繋いでいなければ押せない（⚙から接続する）。
@@ -1138,11 +1195,17 @@
                         モックは節ごとに独立したスクロール領域だが、WPF で高さを等分すると
                         予定が少ない日に大きな空きができる。節が縦に続く見え方は変えずに、
                         内容に合わせて詰めるほうがモックの画面に近い。
+
+                        クイック入力は日付ヘッダ（Row0）のすぐ下・一覧（Row2）の上（Row1）に
+                        置く（項目4）。3行とも Auto／Auto／* で、一覧の Row だけが伸び縮みする
+                        ＝スクロールする。クイック入力を Auto 行に固定するので、一覧が
+                        伸び縮みしても入力欄の位置は動かない（以前は最下段の Auto 行に
+                        あり、位置そのものは変わらないが、一覧を挟んで選んだ日から遠かった）
                     -->
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
                     <!--
@@ -1218,7 +1281,69 @@
                         </DockPanel>
                     </Border>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <!--
+                        クイック入力（.dfoot、項目4）。以前は最下段（一覧の下）にあり、
+                        「日を選ぶ→その日に何か足す」という動きに対して選んだ日から遠かった。
+                        日付ヘッダのすぐ下・一覧の上へ移す。スリムパネル（SidebarLayout.xaml）
+                        とも置き場所を揃える。下端に罫線を引いて、ここから下が一覧だと
+                        ひと目で分かるまとまりにする（罫線は元々このBorderが持っていたものを
+                        上→下へ向きを変えただけ。LineBrush そのものは変えていない）
+                    -->
+                    <Border Grid.Row="1" Padding="12,9"
+                            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+                        <StackPanel>
+                            <!--
+                                クイック入力。1行打って Enter で入る。
+                                編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
+                            -->
+                            <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
+                                     Text="{Binding DataContext.QuickText,
+                                            RelativeSource={RelativeSource AncestorType=Window},
+                                            UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
+                                     KeyDown="OnQuickKeyDown" />
+
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DataContext.QuickPreview,
+                                              RelativeSource={RelativeSource AncestorType=Window}}" Margin="2,4,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Visibility="{Binding DataContext.QuickPreview,
+                                                    RelativeSource={RelativeSource AncestorType=Window},
+                                                    Converter={StaticResource NullToVisibility}}" />
+
+                            <Border Height="9" />
+
+                            <!--
+                                右ペインの「＋予定」「＋タスク」は文字つきのボタンのまま残す
+                                （項目4）。スリムパネル（幅160pxまで細くなる）は当たり判定を
+                                稼ぐためアイコンだけにしたが、右ペインは296px幅で余裕があり、
+                                文字が読める。作りを無理に揃える必要は無いと判断した
+                            -->
+                            <UniformGrid Rows="1" Columns="2">
+                            <Button Style="{StaticResource AddButtonStyle}" Margin="0,0,3.5,0"
+                                    Command="{Binding DataContext.AddEventCommand,
+                                              RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
+                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="予定" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource AddButtonStyle}" Margin="3.5,0,0,0"
+                                    Command="{Binding DataContext.AddTaskCommand,
+                                              RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
+                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="タスク" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- 予定の見出し（.dsec） -->
                             <DockPanel Margin="14,9,14,4">
@@ -1282,7 +1407,7 @@
                             </ItemsControl>
 
                             <!-- 0件のときは無言にしない（項目12） -->
-                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定はありません。下の欄に1行打つと追加できます" Padding="14,2,14,4" TextWrapping="Wrap"
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定はありません。" Padding="14,2,14,4" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding HasNoEvents, Converter={StaticResource BoolToVisibility}}" />
 
@@ -1299,7 +1424,7 @@
                                           ItemTemplate="{StaticResource TaskRowTemplate}" />
 
                             <!-- 0件のときは無言にしない（項目12） -->
-                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。下の欄に1行打つと追加できます" Padding="14,2,14,4" TextWrapping="Wrap"
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクはありません。" Padding="14,2,14,4" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        Visibility="{Binding HasNoTasks, Converter={StaticResource BoolToVisibility}}" />
 
@@ -1323,55 +1448,6 @@
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
-
-                    <!-- 追加（.dfoot） -->
-                    <Border Grid.Row="2" Padding="12,9"
-                            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
-                        <StackPanel>
-                            <!--
-                                クイック入力。1行打って Enter で入る。
-                                編集画面を開いて欄を埋めるより速い。読んだ内容は下に出す
-                            -->
-                            <TextBox x:Name="QuickInputBox" Style="{StaticResource QuickInputBoxStyle}"
-                                     Text="{Binding DataContext.QuickText,
-                                            RelativeSource={RelativeSource AncestorType=Window},
-                                            UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="1行で予定を追加します（Enter・Esc で打ちかけを消します）&#10;日付を書かなければ、選んでいる日に入ります&#10;（「明日」「来週」「3日後」などの相対語は今日基準）&#10;&#10;例: 明日15時 打合せ @会議室A&#10;　　来週の火曜 10時から11時半 面談&#10;　　来月15日 締切&#10;　　15時 打合せ（日付なし→いま選んでいる日）"
-                                     KeyDown="OnQuickKeyDown" />
-
-                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DataContext.QuickPreview,
-                                              RelativeSource={RelativeSource AncestorType=Window}}" Margin="2,4,0,0" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource Ink3Brush}"
-                                       Visibility="{Binding DataContext.QuickPreview,
-                                                    RelativeSource={RelativeSource AncestorType=Window},
-                                                    Converter={StaticResource NullToVisibility}}" />
-
-                            <Border Height="9" />
-
-                            <UniformGrid Rows="1" Columns="2">
-                            <Button Style="{StaticResource AddButtonStyle}" Margin="0,0,3.5,0"
-                                    Command="{Binding DataContext.AddEventCommand,
-                                              RelativeSource={RelativeSource AncestorType=Window}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
-                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
-                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    <TextBlock Text="予定" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button Style="{StaticResource AddButtonStyle}" Margin="3.5,0,0,0"
-                                    Command="{Binding DataContext.AddTaskCommand,
-                                              RelativeSource={RelativeSource AncestorType=Window}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
-                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
-                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    <TextBlock Text="タスク" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            </UniformGrid>
-                        </StackPanel>
-                    </Border>
                 </Grid>
             </Border>
         </Grid>

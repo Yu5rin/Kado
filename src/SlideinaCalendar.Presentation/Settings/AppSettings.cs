@@ -110,10 +110,9 @@ public sealed class AppSettings
         _slideOutOnLeave =
             !string.Equals(_store.Get(SlideOutOnLeaveKey), "false", StringComparison.Ordinal);
         _minWidth = ReadNumber(MinWidthKey, DefaultMinWidth, LowestMinWidth, HighestMinWidth);
-        _slimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
-            CultureInfo.InvariantCulture, out var share)
-            ? Math.Clamp(share, 0.2, 0.8)
-            : DefaultSlimShare;
+        _hasSlimShare = double.TryParse(_store.Get(SlimShareKey), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var share);
+        _slimShare = _hasSlimShare ? Math.Clamp(share, 0.2, 0.8) : DefaultSlimShare;
         _countInCalendarDays = string.Equals(_store.Get(CountInCalendarDaysKey), "true", StringComparison.Ordinal);
         _hourHeight = ReadNumber(HourHeightKey, 0, 0, 200);
         _feedUrl = _store.Get(FeedUrlKey) ?? string.Empty;
@@ -397,9 +396,10 @@ public sealed class AppSettings
         {
             var share = Math.Clamp(value, 0.2, 0.8);
 
-            if (Math.Abs(_slimShare - share) < 0.005) return;
+            if (_hasSlimShare && Math.Abs(_slimShare - share) < 0.005) return;
 
             _slimShare = share;
+            _hasSlimShare = true;
             _store.Set(SlimShareKey, share.ToString("R", CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
@@ -407,8 +407,36 @@ public sealed class AppSettings
 
     private double _slimShare = DefaultSlimShare;
 
-    /// <summary>カレンダーを広めに取る。日付を引き当てるのが主な使い道。</summary>
-    public const double DefaultSlimShare = 0.6;
+    /// <summary>
+    /// <see cref="SlimCalendarShare"/> をつまんで変え、控えたことがあるか。
+    /// <para>
+    /// まだ一度も変えていない（＝設定に値が無い）なら、既定の固定割合ではなく
+    /// 月カレンダーの中身が要る高さを初期値にする（項目5）。<c>SidebarLayout</c>
+    /// が起動時にこれを見て、初回だけ中身基準の高さで組む。
+    /// </para>
+    /// </summary>
+    public bool HasSlimCalendarShare => _hasSlimShare;
+
+    private bool _hasSlimShare;
+
+    /// <summary>
+    /// 一度もつまんで変えていないときの、保険としての既定値。
+    /// <para>
+    /// 実際の初期表示は <see cref="HasSlimCalendarShare"/> が false のあいだ
+    /// <c>SidebarLayout.xaml</c> の <c>CalendarRow</c> を <c>Height="Auto"</c>
+    /// のまま使い、月カレンダーの中身（曜日の見出し＋6週ぶん）が要る高さに
+    /// 任せる（項目5）。これのほうが、固定の割合よりも画面の高さが変わったときに
+    /// 「余白が余る」「6週目が切れる」を起こさない。
+    /// </para>
+    /// <para>
+    /// この定数が使われるのは、その仕組みを経ずに <see cref="SlimCalendarShare"/>
+    /// を読む場面（<c>_settings</c> が null のときの <c>MainViewModel</c> の
+    /// フォールバックなど）だけ。実測（スリムパネル幅244px・高さ約1030pxで、
+    /// 曜日の見出し＋6週ぶんが画面の約28〜30%だった）に合わせ、以前の 0.6 から
+    /// 0.3 へ下げてある。
+    /// </para>
+    /// </summary>
+    public const double DefaultSlimShare = 0.3;
 
     /// <summary>
     /// いちばん細くできる幅の既定。
