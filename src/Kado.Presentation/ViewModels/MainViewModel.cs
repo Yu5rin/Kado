@@ -45,7 +45,7 @@ public sealed class MainViewModel : ObservableObject
 
     private readonly AppSettings? _settings;
     private readonly IStartupRegistration _startup;
-    private readonly WorkdayFeedClient _feed = new();
+    private readonly WorkdayFeedClient _feed;
 
     /// <summary>予定の前と朝のまとめを知らせる。設定を渡されていなければ持たない。</summary>
     private readonly ReminderService? _reminders;
@@ -91,9 +91,11 @@ public sealed class MainViewModel : ObservableObject
         AppSettings? settings = null,
         IStartupRegistration? startup = null,
         INotifier? notifier = null,
-        DockPlacement? shell = null)
+        DockPlacement? shell = null,
+        WorkdayFeedClient? feed = null)
     {
         _clock = clock ?? TimeProvider.System;
+        _feed = feed ?? new WorkdayFeedClient();
         _googleClient = googleClient;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
@@ -141,11 +143,9 @@ public sealed class MainViewModel : ObservableObject
 
             CurrentView = settings.StartupView;
 
-            // 配信元が決まっていれば、1日1回だけ取りに行く
-            if (settings is { FeedAuto: true, FeedUrl.Length: > 0 } && settings.FeedCheckedOn != today)
-            {
-                _ = FetchFeedAsync(quiet: true);
-            }
+            // 配信元が決まっていれば、1日1回だけ取りに行く。日付をまたいだあとも
+            // 同じことをするので、判断は1か所（FetchFeedIfDue）に寄せてある
+            FetchFeedIfDue();
         }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
@@ -1774,9 +1774,10 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
 
         var isTaskList = IsTaskList(target);
-        // 「Kado」は名前で見分けて日付の行に出している。変えられると黙って止まる
-        var locked = !isTaskList && string.Equals(
-            target.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+
+        // 実働日の入れ先は名前を変えさせない。日付の行に出すかどうかがこれで決まる。
+        // 見分けるのは名前ではなく ID。Google の Web 側で改名されても見失わない
+        var locked = !isTaskList && _workspace.IsWorkingDayCalendarId(target.Id);
 
         var editor = new CalendarEditorViewModel(
             target.Id, target.Name, target.SwatchColor, isTaskList, locked);
@@ -2288,6 +2289,12 @@ public sealed class MainViewModel : ObservableObject
     /// 休業日と特別出勤は動かせない。識別子にその日付が入っていて、取り込んだ実働日
     /// データが決めるものだから。仕様期限などのラベルは動かせる。
     /// </para>
+    /// <para>
+    /// 繰り返しを持つ予定も動かせない。<see cref="CalendarEvent.Recurrence"/> が
+    /// 空でないもの（展開されたどの回でも、開始日は同じ予定を指す）を対象にする。
+    /// 開始日だけを動かすと <c>BYDAY</c> 等の規則がそのまま残り、条件に合わない日へ
+    /// 落とすとその回が出ず、それ以前の回まで消えたように見えるため。
+    /// </para>
     /// </summary>
     /// <returns>動かしたら true。</returns>
     private bool MoveEvent(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy)
@@ -2307,6 +2314,18 @@ public sealed class MainViewModel : ObservableObject
         if (!copy && IsLocked(found))
         {
             StatusMessage = LockedMessage;
+            return false;
+        }
+
+        // 繰り返し予定はドラッグでは動かせない。開始日だけを動かすと BYDAY 等の
+        // 規則がそのまま残り、条件に合わない日へ落とすとその回が出ず、それ以前の
+        // 回まで消えたように見える（要件が固まるまでの最小限の安全策）。
+        // 複製でも規則をそのまま引き継ぐと複製先で同じことが起きるので、
+        // copy かどうかに関わらず止める。「この回だけ／以降／すべて」を選ばせる
+        // 仕組みは次の版で用意する
+        if (found.IsRecurring)
+        {
+            StatusMessage = "繰り返しの予定は編集画面から変えてください";
             return false;
         }
 
@@ -2488,22 +2507,20 @@ public sealed class MainViewModel : ObservableObject
     /// 戻せるので、1クリックごとに尋ねるのは二重の手間になる。
     /// </para>
     /// </summary>
-    private void DeleteEvent(DayEventViewModel? target)
-    {
-        if (target is null) return;
-
-        StatusMessage = _workspace.DeleteEvent(target.Id)
-            ? "予定を削除しました"
-            : "予定が見つかりませんでした";
-    }
+    private void DeleteEvent(DayEventViewModel? target) => DeleteEventBy(target?.Id);
 
     /// <inheritdoc cref="EditEventBy"/>
     private void DeleteEventBy(string? id)
     {
         if (id is not { Length: > 0 }) return;
 
+        // 繰り返しの回を選ばず、系列ごと消える。黙って消えると気づきにくいので、
+        // 「すべての回」を消したことが分かる文言にする（確認ダイアログは増やさない。
+        // Ctrl＋Z で戻せるため）
+        var isRecurring = _workspace.Events.Find(id)?.IsRecurring == true;
+
         StatusMessage = _workspace.DeleteEvent(id)
-            ? "予定を削除しました"
+            ? isRecurring ? "繰り返しの予定をすべての回、削除しました" : "予定を削除しました"
             : "予定が見つかりませんでした";
     }
 
@@ -2751,6 +2768,51 @@ public sealed class MainViewModel : ObservableObject
 
         // 1分ごとに、いま知らせるものがあるかを見る
         _reminders?.Check(now);
+
+        // 日付をまたいだら、その日ぶんの実働日データを取りに行く。
+        //
+        // 以前は起動したときにしか見ていなかった。閉じるボタンでトレイに入る作りが
+        // 既定で、ログオン時に自動で起動もするので、何日も立ち上げっぱなしになる。
+        // そのあいだ会社の実働日カレンダーが更新されても古いままで、設定の
+        // 「1日に1回、自動で取りに行く」が嘘になっていた
+        FetchFeedIfDue();
+    }
+
+    /// <summary>取りに行っている最中か。1本だけ走らせるための札。</summary>
+    private bool _fetchingFeed;
+
+    /// <summary>
+    /// その日まだ取りに行っていなければ、配信元から実働日データを取りに行く。
+    /// <para>
+    /// 起動したときと、日付をまたいだときに呼ばれる。取れても取れなくても
+    /// <c>FeedCheckedOn</c> に今日を控えるので、同じ日に何度も出て行くことはない。
+    /// </para>
+    /// </summary>
+    private void FetchFeedIfDue()
+    {
+        if (_fetchingFeed) return;
+        if (_settings is not { FeedAuto: true, FeedUrl.Length: > 0 } settings) return;
+        if (settings.FeedCheckedOn == _today) return;
+
+        _fetchingFeed = true;
+        _ = FetchFeedAndReleaseAsync();
+    }
+
+    /// <summary>取りに行って、終わったら札を下ろす。取れなくても下ろす。</summary>
+    private async Task FetchFeedAndReleaseAsync()
+    {
+        try
+        {
+            await FetchFeedAsync(quiet: true).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 途中で止めただけ。次に日付が変わったらまた試す
+        }
+        finally
+        {
+            _fetchingFeed = false;
+        }
     }
 
     /// <summary>

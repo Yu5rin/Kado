@@ -286,11 +286,25 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// 新しい予定の入れ先。
     /// <para>決まっていなければ一覧の先頭。「Kado」は実働日データの入れ先なので避ける。</para>
     /// </summary>
-    public SourceListItemViewModel? DefaultCalendar =>
-        _calendars.FirstOrDefault(c => string.Equals(c.Id, DefaultCalendarId, StringComparison.Ordinal))
-        ?? _calendars.FirstOrDefault(c => !string.Equals(
-            c.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal))
-        ?? _calendars.FirstOrDefault();
+    public SourceListItemViewModel? DefaultCalendar
+    {
+        get
+        {
+            if (_calendars.FirstOrDefault(c =>
+                    string.Equals(c.Id, DefaultCalendarId, StringComparison.Ordinal)) is { } chosen)
+            {
+                return chosen;
+            }
+
+            // 実働日の入れ先は ID で避ける。名前で避けていたので、Google の Web 側で
+            // 改名されると、実働日カレンダーが新しい予定の既定の入れ先になっていた
+            var workday = _workspace.WorkingDayCalendarId;
+
+            return _calendars.FirstOrDefault(c =>
+                       !string.Equals(c.Id, workday, StringComparison.Ordinal))
+                ?? _calendars.FirstOrDefault();
+        }
+    }
 
     /// <summary>設定で選ばれている入れ先。設定を持たない組み立て方では null。</summary>
     public string? DefaultCalendarId { get; set; }
@@ -480,9 +494,15 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
         VisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>日付の行に出すカレンダーか。名前で見分ける。</summary>
-    private static bool IsMilestoneCalendar(SourceListItemViewModel item) =>
-        string.Equals(item.Name, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal);
+    /// <summary>
+    /// 日付の行に出すカレンダーか。
+    /// <para>
+    /// 名前ではなく ID で見分ける。名前で見ていたので、Google の Web 側でカレンダー名を
+    /// 変えられると、実働日とマイルストーンが画面から消えていた。
+    /// </para>
+    /// </summary>
+    private bool IsMilestoneCalendar(SourceListItemViewModel item) =>
+        string.Equals(item.Id, _workspace.WorkingDayCalendarId, StringComparison.Ordinal);
 
     /// <summary>いま隠している ID を、一覧の状態から作り直す。絞り込みはこれを見る。</summary>
     private void RebuildHidden()

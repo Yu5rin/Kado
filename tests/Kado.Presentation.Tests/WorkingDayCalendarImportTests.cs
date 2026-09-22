@@ -187,6 +187,47 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
+    public void 一度見つけたら_Google_側で改名されても見失わない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        const string id = "ina@group.calendar.google.com";
+        AddGoogleCalendar(test, id, CalendarWorkspace.WorkingDayCalendarName);
+
+        // ここで ID を控える
+        Assert.Equal(id, test.Workspace.EnsureWorkingDayCalendar().Id);
+
+        // Google の Web 側で名前を変えられた。降りてきた名前をそのまま控えに反映する
+        AddGoogleCalendar(test, id, "予定表");
+
+        // 名前で照合していたころは、ここで実働日もマイルストーンも画面から消えていた
+        var found = Assert.Single(test.Workspace.WorkingDayCalendars());
+        Assert.Equal(id, found.Id);
+        Assert.Equal("予定表", found.DisplayName);
+        Assert.True(test.Workspace.IsWorkingDayCalendarId(id));
+        Assert.Equal(id, test.Workspace.EnsureWorkingDayCalendar().Id);
+    }
+
+    [Fact]
+    public void 控えた入れ先が無くなっていたら名前で探し直す()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        const string gone = "kieta@group.calendar.google.com";
+        AddGoogleCalendar(test, gone, CalendarWorkspace.WorkingDayCalendarName);
+        Assert.Equal(gone, test.Workspace.EnsureWorkingDayCalendar().Id);
+
+        // Google 側で消された。控えだけが残っている
+        test.Workspace.Sources.DropRemovedCalendar(gone);
+
+        const string id = "atarashii@group.calendar.google.com";
+        AddGoogleCalendar(test, id, CalendarWorkspace.WorkingDayCalendarName);
+
+        Assert.Equal(id, test.Workspace.EnsureWorkingDayCalendar().Id);
+        Assert.False(test.Workspace.IsWorkingDayCalendarId(gone));
+    }
+
+    [Fact]
     public void 旧い名前のものがあれば新しく作らずそこへ入れる()
     {
         using var test = TestWorkspace.Create(withWorkingDays: false);
