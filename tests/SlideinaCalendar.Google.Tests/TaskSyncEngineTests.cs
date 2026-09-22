@@ -240,6 +240,40 @@ public class TaskSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 結び付いた既存タスクの作成日時と並び順は消えない()
+    {
+        var createdAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "集計", Due = D(2026, 9, 24), TaskListId = "local:mytasks",
+            CreatedAt = createdAt, SortOrder = 3,
+        });
+        _remote.Add("g1", "集計", due: "2026-09-24");
+
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        var stored = Assert.Single(Tasks.All());
+        Assert.Equal(createdAt, stored.CreatedAt);
+        Assert.Equal(3, stored.SortOrder);
+    }
+
+    [Fact]
+    public async Task 相手にだけある新規タスクは同じ期限日の末尾に並ぶ()
+    {
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "先にあったタスク", Due = D(2026, 9, 24),
+            TaskListId = "local:mytasks", SortOrder = 0,
+        });
+        _remote.Add("g1", "相手から来たタスク", due: "2026-09-24");
+
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        var incoming = Tasks.All().Single(t => t.GoogleTaskId == "g1");
+        Assert.Equal(1, incoming.SortOrder);
+    }
+
+    [Fact]
     public async Task 相手から消えていたら結びを外して作り直す()
     {
         _remote.Add("g1", "集計", due: "2026-09-24");

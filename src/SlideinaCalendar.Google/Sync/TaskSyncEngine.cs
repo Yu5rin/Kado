@@ -159,12 +159,15 @@ public sealed class TaskSyncEngine(
             {
                 if (FindUnlinkedMatch(mapped) is { } orphan)
                 {
-                    tasks.Upsert(mapped with { Id = orphan.Id });
+                    // orphan を existing として渡し直す。作成日時・並び順はローカルにしか
+                    // 無い項目なので、結び付けただけで消してしまわないようにする
+                    tasks.Upsert(TaskMapper.FromGoogle(item, taskListId, localListId, orphan, startedAt));
                     updated++;
                     continue;
                 }
 
-                tasks.Upsert(mapped);
+                // 新規は、この期限日（期限なしなら期限なしどうし）の末尾に置く
+                tasks.Upsert(mapped with { SortOrder = tasks.NextSortOrder(mapped.Due) });
                 created++;
             }
             else

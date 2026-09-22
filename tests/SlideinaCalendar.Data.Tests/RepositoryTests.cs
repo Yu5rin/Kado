@@ -205,6 +205,68 @@ public class TaskRepositoryTests
 
         Assert.Empty(repo.BlocksOf("t1"));
     }
+
+    [Fact]
+    public void 同じ期限日ならSortOrder作成日時識別子の順に並ぶ()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+
+        // 挿入順はわざと乱している。並びは SortOrder → CreatedAt → Id で決まるはず
+        repo.Upsert(new TaskItem
+        {
+            Id = "t2", Title = "2番目", Due = D(2026, 9, 24), SortOrder = 1,
+            CreatedAt = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero),
+        });
+        repo.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "1番目", Due = D(2026, 9, 24), SortOrder = 0,
+            CreatedAt = new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero),
+        });
+        repo.Upsert(new TaskItem
+        {
+            Id = "t3", Title = "3番目（SortOrder同点）", Due = D(2026, 9, 24), SortOrder = 1,
+            CreatedAt = new DateTimeOffset(2026, 9, 22, 0, 0, 0, TimeSpan.Zero),
+        });
+
+        Assert.Equal(["t1", "t2", "t3"], repo.All().Select(t => t.Id));
+    }
+
+    [Fact]
+    public void NextSortOrderは同じ期限日の末尾を返す()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+
+        Assert.Equal(0, repo.NextSortOrder(D(2026, 9, 24)));
+
+        repo.Upsert(new TaskItem { Id = "t1", Title = "先発", Due = D(2026, 9, 24), SortOrder = 0 });
+        repo.Upsert(new TaskItem { Id = "t2", Title = "別の期限日", Due = D(2026, 9, 25), SortOrder = 5 });
+
+        // 別の期限日の並び順には影響されない
+        Assert.Equal(1, repo.NextSortOrder(D(2026, 9, 24)));
+        Assert.Equal(6, repo.NextSortOrder(D(2026, 9, 25)));
+
+        // 期限なしどうしも同じ考え方
+        Assert.Equal(0, repo.NextSortOrder(null));
+        repo.Upsert(new TaskItem { Id = "t3", Title = "期限なし", SortOrder = 0 });
+        Assert.Equal(1, repo.NextSortOrder(null));
+    }
+
+    [Fact]
+    public void SetOrderは渡した順に0から振り直す()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+
+        repo.Upsert(new TaskItem { Id = "t1", Title = "A", Due = D(2026, 9, 24), SortOrder = 0 });
+        repo.Upsert(new TaskItem { Id = "t2", Title = "B", Due = D(2026, 9, 24), SortOrder = 1 });
+        repo.Upsert(new TaskItem { Id = "t3", Title = "C", Due = D(2026, 9, 24), SortOrder = 2 });
+
+        repo.SetOrder(["t3", "t1", "t2"]);
+
+        Assert.Equal(["t3", "t1", "t2"], repo.All().Select(t => t.Id));
+    }
 }
 
 public class WorkingDayRepositoryTests

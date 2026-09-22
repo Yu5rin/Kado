@@ -42,6 +42,39 @@ public class TaskMapperTests
     }
 
     [Fact]
+    public void 新規はこちらで受け取った時刻を作成日時にする()
+    {
+        var now = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+        var value = TaskMapper.FromGoogle(
+            Json("""{"id":"t1","title":"集計","due":"2026-09-24T00:00:00.000Z"}"""),
+            "@default", now: now);
+
+        Assert.Equal(now, value.CreatedAt);
+        Assert.Equal(0, value.SortOrder);
+    }
+
+    [Fact]
+    public void 既存があれば作成日時と並び順を引き継ぐ()
+    {
+        var existing = new TaskItem
+        {
+            Id = "local:t1", Title = "集計",
+            CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            SortOrder = 3,
+        };
+
+        var value = TaskMapper.FromGoogle(
+            Json("""{"id":"g1","title":"集計（変更）","due":"2026-09-24T00:00:00.000Z"}"""),
+            "@default", existing: existing,
+            now: new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));
+
+        // ローカルにしか無い項目は既存の値のまま。Google 側の更新で消えては困る
+        Assert.Equal(existing.CreatedAt, value.CreatedAt);
+        Assert.Equal(3, value.SortOrder);
+    }
+
+    [Fact]
     public void 期限の日付が時差でずれない()
     {
         // 日本時間で解釈すると9月23日になってしまう

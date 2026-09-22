@@ -274,7 +274,11 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// 今日やることは分かっても段取りが組めない（モックの右ペインも 10/1 や
     /// 2027/3/31 期限のタスクを並べている）。
     /// </para>
-    /// <para>並びは<b>期限の近い順</b>。遅れているものが一番上に来る。</para>
+    /// <para>
+    /// 並びは<b>期限の近い順</b>。遅れているものが一番上に来る。同じ期限日の中は
+    /// 並び順（手で並べ替えていなければ登録が古い順）で並べる。あとから足した
+    /// タスクが題名の並びで上に割り込まないようにするため。
+    /// </para>
     /// <para>期限の無いタスクはここには出さない。並べる順番が決まらないため。</para>
     /// </summary>
     public IReadOnlyList<TaskListItemViewModel> Tasks
@@ -345,20 +349,26 @@ public sealed class SelectedDayViewModel : ObservableObject
             .Where(t => t.HasDue)
             // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
             .Where(t => !t.IsDone || t.Due == _date)
-            // 期限の近い順。遅れているものが一番上に来る
+            // 期限の近い順。同じ期限日の中は並び順→作成日時→識別子の順
+            // （既定は登録が古い順。Id まで見るのは、並びが毎回同じになる保証のため）
             .OrderBy(t => t.Due)
-            .ThenBy(t => t.Title, StringComparer.Ordinal)
+            .ThenBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ThenBy(t => t.Id, StringComparer.Ordinal)
             .Select(t => new TaskListItemViewModel(
                 t,
                 t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null,
                 DoneOf(t)))
             .ToArray();
 
-        // 期限を付けていない、未完了のタスク（項目1）。並びは決めようが無いので題名順
+        // 期限を付けていない、未完了のタスク（項目1）。並びは並び順→作成日時→識別子
+        // （既定は登録が古い順）。期限のあるタスクと同じ考え方
         NoDueTasks = _workspace.Tasks.All()
             .Where(_sources.IncludesTask)
             .Where(t => !t.HasDue && !t.IsDone)
-            .OrderBy(t => t.Title, StringComparer.Ordinal)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ThenBy(t => t.Id, StringComparer.Ordinal)
             .Select(t => new TaskListItemViewModel(t, due: null))
             .ToArray();
 

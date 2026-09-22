@@ -49,6 +49,25 @@
         </ContextMenu>
 
         <!--
+            タスクの行の右クリックメニュー。並べ替え（項目「タスクの並び替え」）の
+            逃げ道。ドラッグが実機でうまく動かなかったときのために、こちらは
+            確実に動く作りにしてある。グループ（同じ期限日）の端では無効になる
+            （MainViewModel.CanMoveTaskInGroup／RelayCommand の CanExecute）。
+        -->
+        <ContextMenu x:Key="TaskRowMenu">
+            <MenuItem Header="上へ移動"
+                      Command="{Binding PlacementTarget.Tag.MoveTaskUpCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="下へ移動"
+                      Command="{Binding PlacementTarget.Tag.MoveTaskDownCommand,
+                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <!--
             マイルストーンのラベル（.ms）。日付ヘッダで使う。
             ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う。
         -->
@@ -127,7 +146,14 @@
         <DataTemplate x:Key="TaskRowTemplate">
             <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
                     ToolTip="{Binding DueTooltip}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource TaskRowMenu}"
+                    AllowDrop="True"
+                    PreviewMouseLeftButtonDown="OnTaskRowPreviewMouseDown"
                     MouseLeftButtonDown="OnTaskClicked"
+                    MouseMove="OnTaskRowDragging"
+                    DragOver="OnTaskRowDragOver"
+                    Drop="OnTaskRowDropped"
                     MouseEnter="OnRowPointerEntered" MouseLeave="OnRowPointerExited">
                 <DockPanel>
                     <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"

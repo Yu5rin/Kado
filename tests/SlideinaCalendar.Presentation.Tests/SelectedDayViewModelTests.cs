@@ -235,17 +235,18 @@ public class SelectedDayViewModelTests
     }
 
     [Fact]
-    public void 期限なしタスクは題名順に並ぶ()
+    public void 期限なしタスクは登録順に並ぶ()
     {
         using var test = TestWorkspace.Create();
         var ws = test.Workspace;
 
+        // わざと五十音とは逆の順で足す。並びは題名ではなく登録順のはず
         ws.AddTask(new TaskItem { Id = "t1", Title = "び" });
         ws.AddTask(new TaskItem { Id = "t2", Title = "あ" });
 
         var vm = Create(test, D(2026, 9, 24));
 
-        Assert.Equal(["あ", "び"], vm.NoDueTasks.Select(t => t.Title));
+        Assert.Equal(["び", "あ"], vm.NoDueTasks.Select(t => t.Title));
     }
 
     [Fact]
@@ -293,6 +294,22 @@ public class SelectedDayViewModelTests
 
         // 遅れているものが一番上。先の期限ほど下
         Assert.Equal(["遅れ", "今日まで", "来月", "年度末"], vm.Tasks.Select(t => t.Title));
+    }
+
+    [Fact]
+    public void 同じ期限日に足したタスクは下に付く()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        // わざと五十音とは逆の順で足す。並びは題名ではなく登録順のはず
+        ws.AddTask(new TaskItem { Id = "t1", Title = "先に登録", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "あとから登録", Due = D(2026, 9, 24) });
+        ws.AddTask(new TaskItem { Id = "t3", Title = "さらにあとから登録", Due = D(2026, 9, 24) });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        Assert.Equal(["先に登録", "あとから登録", "さらにあとから登録"], vm.Tasks.Select(t => t.Title));
     }
 
     // ------------------------------------------------------------------

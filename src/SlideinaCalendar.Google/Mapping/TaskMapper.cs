@@ -84,6 +84,12 @@ public static class TaskMapper
             GoogleUpdated = element.Text("updated"),
             Source = SourceName,
             UpdatedAt = now ?? DateTimeOffset.Now,
+
+            // 作成日時・並び順はローカルにしか無い項目。既存があれば引き継ぐ。
+            // 初めて受け取ったタスクは、こちらが受け取った時刻を作成日時にする
+            // （Google Tasks の作成日時は API で取れないため）
+            CreatedAt = existing?.CreatedAt ?? now ?? DateTimeOffset.Now,
+            SortOrder = existing?.SortOrder ?? 0,
         };
     }
 
