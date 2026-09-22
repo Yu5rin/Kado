@@ -174,7 +174,7 @@
                         <ItemsControl ItemsSource="{Binding Day.Tasks}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
+                                    <Border x:Name="Box" CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="SizeAll"
                                             Background="{DynamicResource AccentSoftBrush}"
                                             BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
                                             Tag="{Binding DataContext,
@@ -184,15 +184,24 @@
                                             MouseMove="OnAllDayDragging"
                                             ToolTip="ダブルクリックで編集 ・ ドラッグで別の日へ移動">
                                         <StackPanel Orientation="Horizontal">
-                                            <Ellipse Width="5" Height="5" Margin="0,0,4,0"
+                                            <Ellipse x:Name="Dot" Width="5" Height="5" Margin="0,0,4,0"
                                                      VerticalAlignment="Center"
                                                      Stroke="{DynamicResource AccentBrush}"
                                                      StrokeThickness="1.5" />
-                                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
+                                            <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
                                                        Foreground="{DynamicResource InkBrush}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                     </Border>
+
+                                    <!-- 済みタスクは右パネル・一覧と同じ見た目に揃える（項目4） -->
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsDone}" Value="True">
+                                            <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
+                                            <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource DoneBrush}" />
+                                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource DoneBrush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

@@ -39,6 +39,7 @@
 
         <!-- 左の分類 -->
         <Style x:Key="SectionTabStyle" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
             <Setter Property="Margin" Value="0,1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />

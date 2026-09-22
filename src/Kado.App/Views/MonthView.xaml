@@ -30,11 +30,15 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
         <conv:EventColorFaceConverter x:Key="EventColorFace" />
 
-        <!-- 曜日ヘッダ（.dow）。日曜は赤、土曜は青。週の開始曜日は設定で変わるので位置では決めない -->
+        <!--
+            曜日ヘッダ（.dow）。日曜は赤、土曜は青。週の開始曜日は設定で変わるので位置では決めない。
+            マスの中の補助文字（＋N）と同じく、休業日の面の上でも 4.5:1 を確保できるよう
+            Ink3Brush から Ink2Brush へ寄せる
+        -->
         <DataTemplate x:Key="WeekDayHeaderTemplate">
             <TextBlock Style="{StaticResource CaptionTextStyle}" x:Name="Label" Text="{Binding Name}" Padding="0,5"
                        HorizontalAlignment="Center"
-                       Foreground="{DynamicResource Ink3Brush}" />
+                       Foreground="{DynamicResource Ink2Brush}" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsSunday}" Value="True">
                     <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SundayBrush}" />
@@ -209,13 +213,25 @@
                     MouseLeftButtonDown="OnTaskChipClicked"
                     MouseMove="OnChipDragging">
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
+                    <Ellipse x:Name="Dot" Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}" LineHeight="16"
+                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}" LineHeight="16"
                                Foreground="{DynamicResource Ink2Brush}"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
                 </StackPanel>
             </Border>
+
+            <!--
+                済みタスクは右パネル・一覧と同じ見た目に揃える（項目4）。取り消し線＋
+                DoneBrush。丸印も DoneBrush にして、同じ「済み」だと分かるようにする
+            -->
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
+                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource DoneBrush}" />
+                    <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource DoneBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
 
@@ -323,9 +339,12 @@
                             <ItemsControl ItemsSource="{Binding Tasks}"
                                           ItemTemplate="{StaticResource TaskChipTemplate}" />
 
-                            <!-- 入りきらなかった件数。隠れたまま気づけないのを防ぐ -->
+                            <!--
+                                入りきらなかった件数。隠れたまま気づけないのを防ぐ。
+                                休業日の面の上でも 4.5:1 を確保できるよう Ink2Brush を使う
+                            -->
                             <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding OverflowLabel}" Margin="3,1,0,0"
-                                       Foreground="{DynamicResource Ink3Brush}"
+                                       Foreground="{DynamicResource Ink2Brush}"
                                        Visibility="{Binding OverflowLabel, Converter={StaticResource NullToVisibility}}" />
                         </StackPanel>
 
@@ -411,13 +430,14 @@
                         </DataTrigger>
 
                         <!--
-                            前後の月は面を沈めず、日付の Opacity 0.4 だけで示す（項目3）。
+                            前後の月は面を沈めず、日付の Opacity だけで示す（項目3）。
                             休業日の面（OffDayBrush）と前後の月が同じ調子の灰色だと見分けが
                             付かなかったため、面を分けるのをやめて「灰色の面＝休業日」の
-                            一対一にする。セル全体を薄くすると予定まで読めなくなる
+                            一対一にする。セル全体を薄くすると予定まで読めなくなる。
+                            0.4 だと薄すぎて読みづらかったため 0.6 に上げる
                         -->
                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                            <Setter TargetName="DayNumber" Property="Opacity" Value="0.4" />
+                            <Setter TargetName="DayNumber" Property="Opacity" Value="0.6" />
                         </DataTrigger>
 
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">

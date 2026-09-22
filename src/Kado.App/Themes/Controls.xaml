@@ -70,6 +70,12 @@
         </Setter>
     </Style>
 
+    <!--
+        無効表示の不透明度。0.4〜0.5 だと、既に薄い Ink3 系の文字がさらに沈んで
+        読み取れなくなる箇所があったため、0.55 まで底上げする
+    -->
+    <sys:Double x:Key="DisabledOpacity">0.55</sys:Double>
+
     <!-- アイコンボタン -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
@@ -93,7 +99,7 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource LineStrongBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.4" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -106,6 +112,7 @@
         入っているあいだはアクセント色で、留まっていることが一目で分かるようにする
     -->
     <Style x:Key="IconToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Width" Value="28" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
@@ -131,7 +138,7 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource LineStrongBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.4" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -246,6 +253,30 @@
         </Style.Triggers>
     </Style>
 
+    <!--
+        進捗バー（更新ウィンドウ）。
+        暗黙スタイル（x:Key 無し）にする。既定のテンプレートは Aero の緑い光る
+        アニメ付きで、Dark / Night の上ではそこだけ Windows クラシックのまま浮く。
+        トラック（PART_Track・LineBrush・角丸2）の中に入り（PART_Indicator・
+        AccentBrush・左寄せ）という素直な作りにする。ScrollBar と同じく
+        PART_Track の名前は ProgressBar 自身が幅の計算に使うので変えられない
+    -->
+    <Style TargetType="ProgressBar">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Border x:Name="PART_Track" CornerRadius="2"
+                            Background="{DynamicResource LineBrush}">
+                        <Border x:Name="PART_Indicator" CornerRadius="2"
+                                Background="{DynamicResource AccentBrush}"
+                                HorizontalAlignment="Left" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- 枠線だけのボタン（今日・実働日計算・＋予定） -->
     <Style x:Key="GhostButtonStyle" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
@@ -277,7 +308,7 @@
                             既定へ戻す）に揃える。押せるように見えて何も起きない状態を消す
                         -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -348,7 +379,7 @@
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
-                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -396,6 +427,7 @@
         文字も黒いまま残る。四角も文字もこちらで描く。
     -->
     <Style TargetType="CheckBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
@@ -428,7 +460,7 @@
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -554,10 +586,12 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource LineStrongBrush}" />
                         </Trigger>
 
-                        <!-- 前後の月。薄くするだけで押せるようにはしておく -->
+                        <!--
+                            前後の月。Opacity で薄くすると Ink3 がさらに沈んで読めなく
+                            なるため、Opacity は外し Ink3Brush だけで示す
+                        -->
                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
-                            <Setter Property="Opacity" Value="0.5" />
                         </DataTrigger>
 
                         <DataTrigger Binding="{Binding IsSaturday}" Value="True">
@@ -601,6 +635,7 @@
         色見本そのものが状態を示すほうが行が短く済む。
     -->
     <Style x:Key="SourceListRowStyle" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Cursor" Value="Hand" />
@@ -881,6 +916,7 @@
     </Style>
 
     <Style x:Key="FieldDatePickerStyle" TargetType="DatePicker">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
@@ -900,6 +936,14 @@
             カーソルを既定へ戻す）。通知・期限の付随欄が「押せるのに開かない」ように見える問題への対応
         -->
         <Style.Triggers>
+            <!--
+                キーボードで来たときも枠が変わるようにする。FieldTextBoxStyle は
+                IsFocused、TimeComboBoxStyle は IsKeyboardFocusWithin で枠を変えており、
+                DatePicker はテキスト欄と開閉ボタンの2つを内に持つのでそれに倣う
+            -->
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
@@ -954,6 +998,7 @@
         既定のテンプレートは枠も高さも周りと揃わないので差し替える。
     -->
     <Style x:Key="FieldComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
@@ -1009,6 +1054,14 @@
 
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <!--
+                            キーボードで来たときも枠が変わるようにする。FieldTextBoxStyle は
+                            IsFocused、TimeComboBoxStyle は IsKeyboardFocusWithin で枠を
+                            変えており、こちらはトグルボタン越しに開くのでそれに倣う
+                        -->
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                         <!--
@@ -1102,6 +1155,7 @@
 
     <!-- 保存ボタン。押すべき先がひとつだと分かるようアクセントで塗る -->
     <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="16,0" />
         <Setter Property="FontSize" Value="12.5" />
@@ -1146,6 +1200,7 @@
         ボタンらしく見せすぎると、ツールバーの中で目立ちすぎる。枠は乗せたときだけ出す。
     -->
     <Style x:Key="SyncStatusButtonStyle" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template">
@@ -1357,7 +1412,7 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
