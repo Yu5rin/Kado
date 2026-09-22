@@ -332,6 +332,78 @@ public class DragMoveTests
         Assert.Equal(Today, test.Workspace.Events.Find("closedday:2026-09-24")!.Date);
     }
 
+    /// <summary>毎週月曜の繰り返し予定。</summary>
+    private static CalendarEvent Recurring(string id, DateOnly date) => new()
+    {
+        Id = id, Title = "定例会議", Date = date,
+        StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(11, 0),
+        Recurrence = "FREQ=WEEKLY;BYDAY=MO",
+    };
+
+    [Fact]
+    public void 繰り返しの予定はドラッグで動かせない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Recurring("r1", Today));
+
+        var main = Create(test);
+
+        Assert.False(main.MoveEventTo("r1", Tomorrow));
+        Assert.Equal(Today, test.Workspace.Events.Find("r1")!.Date);
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void 繰り返しの予定は複製もドラッグではできない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Recurring("r1", Today));
+
+        var main = Create(test);
+
+        // 複製でも規則を引き継ぐと複製先で同じ問題が起きるので、こちらも止める
+        Assert.False(main.MoveEventTo("r1", Tomorrow, copy: true));
+        Assert.Single(test.Workspace.Events.All());
+    }
+
+    [Fact]
+    public void 繰り返しの予定は時刻を変えるドラッグも終日にするドラッグも動かせない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Recurring("r1", Today));
+
+        var main = Create(test);
+
+        Assert.False(main.MoveEventToTime("r1", Tomorrow, new TimeOnly(14, 0)));
+        Assert.False(main.MoveEventToAllDay("r1", Tomorrow));
+    }
+
+    [Fact]
+    public void 繰り返しでない予定は今までどおりドラッグで動かせる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        Assert.True(Create(test).MoveEventTo("e1", Tomorrow));
+    }
+
+    [Fact]
+    public void 繰り返しの予定を削除するとすべての回だと分かる文言になる()
+    {
+        // Today（2026-09-24）は木曜なので、月曜始まりの回は同じ月内の月曜（2026-09-21）
+        var monday = new DateOnly(2026, 9, 21);
+
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Recurring("r1", monday));
+
+        var main = Create(test);
+        var chip = main.Month.Cells.Single(c => c.Date == monday).Events.Single();
+        main.DeleteChipCommand.Execute(chip);
+
+        Assert.Null(test.Workspace.Events.Find("r1"));
+        Assert.Contains("すべての回", main.StatusMessage);
+    }
+
     [Fact]
     public void 遅い時刻に移しても画面から消えない()
     {

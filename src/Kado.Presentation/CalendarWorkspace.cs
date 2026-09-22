@@ -177,13 +177,54 @@ public sealed class CalendarWorkspace
     /// <summary>
     /// 実働日カレンダーの旧い名前。
     /// <para>
-    /// <b>引っ越しのためだけに使う。</b>ふだんの照合（<see cref="WorkingDayCalendars"/> など）
-    /// はすべて <see cref="WorkingDayCalendarName"/> だけを見る。ユーザーの Google
-    /// アカウントには、この名前のカレンダーに実働日とマイルストーンが実データとして
-    /// 入っている。<c>GoogleSyncService</c> がこれを見つけて「Kado」へ改名する。
+    /// <b>引っ越しのためだけに使う。</b>ふだんの照合（<see cref="WorkingDayCalendars"/> など）は、
+    /// まず控えた ID（<see cref="WorkingDayCalendarIdKey"/>）を見て、無ければ
+    /// <see cref="WorkingDayCalendarName"/> を見る。この旧い名前はここでは見ない。
+    /// ユーザーの Google アカウントには、この名前のカレンダーに実働日とマイルストーンが
+    /// 実データとして入っている。<c>GoogleSyncService</c> がこれを見つけて「Kado」へ改名する。
     /// </para>
     /// </summary>
     public const string LegacyWorkingDayCalendarName = "inaCalendar";
+
+    /// <summary>
+    /// 実働日カレンダーの ID を控えておく設定キー。
+    /// <para>
+    /// 名前（"Kado"）だけで探すと、Google の Web 側でカレンダー名を変えられたときに
+    /// <c>summary</c>／<c>summaryOverride</c> が降りてきて <see cref="CalendarSource.DisplayName"/>
+    /// が変わり、実働日とマイルストーンが画面から消える（実際に一度事故が起きている）。
+    /// 見つけた・作ったカレンダーの ID をここに控え、次からはまず ID で引く。
+    /// </para>
+    /// <para>
+    /// 値そのものは <see cref="Settings"/>（設定の表）に入る。控えるのも読むのも
+    /// この型の中だけなので、外から触る口は <see cref="WorkingDayCalendarId"/> と
+    /// <see cref="IsWorkingDayCalendarId"/> の2つにしてある。
+    /// </para>
+    /// </summary>
+    public const string WorkingDayCalendarIdKey = "workday.calendar_id";
+
+    /// <summary>控えている実働日カレンダーの ID。無ければ null。</summary>
+    private string? SavedWorkingDayCalendarId
+    {
+        get => Settings.Get(WorkingDayCalendarIdKey) is { Length: > 0 } id ? id : null;
+        set => Settings.Set(WorkingDayCalendarIdKey, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// いま実働日の入れ先にしているカレンダーの ID。決まっていなければ null。
+    /// <para>
+    /// 一覧の行ごとに見分けるところ（日付の行に出すか、入れ先の既定から避けるか）は、
+    /// 1行ずつ引き直さずにこれを1回取ってから比べること。
+    /// </para>
+    /// </summary>
+    public string? WorkingDayCalendarId => WorkingDayCalendars().FirstOrDefault()?.Id;
+
+    /// <summary>
+    /// この ID が、いま実働日カレンダーとして使っているものか。
+    /// <para>アプリ内で改名を禁じている箇所（編集画面など）が、名前ではなくここで見分ける。</para>
+    /// </summary>
+    public bool IsWorkingDayCalendarId(string? id) =>
+        id is { Length: > 0 } &&
+        string.Equals(WorkingDayCalendarId, id, StringComparison.Ordinal);
 
     /// <summary>
     /// マイルストーン由来の予定に付ける印。
@@ -696,18 +737,28 @@ public sealed class CalendarWorkspace
     /// <summary>
     /// 「Kado」を用意する。
     /// <para>
-    /// 名前で探す。Google から取り込んだものがあればそれを使い、無ければこのアプリの
-    /// 中に作る。繋いだあとに同じ名前のものが降りてきたら、そちらへ寄せ直す。
+    /// まず控えた ID で探す。無ければ名前（"Kado"）、それも無ければ旧い名前
+    /// （<see cref="LegacyWorkingDayCalendarName"/>）の順に探し、どれにも無ければ
+    /// このアプリの中に作る。見つかった・作った時点で、その ID を控え直す。
+    /// </para>
+    /// <para>
+    /// 控えていた ID のカレンダーが無くなっていたら（Google 側で消された等）、
+    /// 控えを捨てて名前での探索からやり直す。
     /// </para>
     /// </summary>
     public CalendarSource EnsureWorkingDayCalendar()
     {
+        if (SavedWorkingDayCalendarId is { Length: > 0 } savedId && Sources.FindCalendar(savedId) is null)
+        {
+            SavedWorkingDayCalendarId = null;
+        }
+
         var named = WorkingDayCalendars();
 
         // Google に同じ名前のものがあればそちらへ入れる。旧 inaCalendar と同じ場所に
         // 集まり、他の端末やブラウザからも見える
-        if (named.FirstOrDefault(c => !IsLocal(c)) is { } remote) return remote;
-        if (named.FirstOrDefault() is { } local) return local;
+        if (named.FirstOrDefault(c => !IsLocal(c)) is { } remote) return Remember(remote);
+        if (named.FirstOrDefault() is { } local) return Remember(local);
 
         // 「Kado」が無くても、旧い名前のものがあればそこへ入れる。
         //
@@ -719,9 +770,16 @@ public sealed class CalendarWorkspace
         // 入れ先として使うだけで、実働日として<b>画面に出すのは「Kado」だけ</b>という
         // 決まりは変えない。名前を変えてもらう案内は同期のたびに出る
         // （GoogleSyncService.WarnAboutLegacyWorkingDayCalendar）
-        if (LegacyWorkingDayCalendars().FirstOrDefault() is { } legacy) return legacy;
+        if (LegacyWorkingDayCalendars().FirstOrDefault() is { } legacy) return Remember(legacy);
 
-        return CreateCalendar(WorkingDayCalendarName);
+        return Remember(CreateCalendar(WorkingDayCalendarName));
+    }
+
+    /// <summary>見つけた・作った実働日カレンダーの ID を控えてから返す。</summary>
+    private CalendarSource Remember(CalendarSource value)
+    {
+        SavedWorkingDayCalendarId = value.Id;
+        return value;
     }
 
     /// <summary>旧い名前「inaCalendar」のカレンダー。Google のものを先に返す。</summary>
@@ -773,12 +831,26 @@ public sealed class CalendarWorkspace
         return true;
     }
 
-    /// <summary>「Kado」という名前のカレンダー。Google のものを先に返す。</summary>
-    public IReadOnlyList<CalendarSource> WorkingDayCalendars() =>
-        Sources.Calendars()
+    /// <summary>
+    /// 実働日カレンダー。
+    /// <para>
+    /// 控えた ID があり、それが指すカレンダーがまだあれば、それだけを返す（名前は見ない。
+    /// Google 側で改名されていても見失わないため）。控えが無い・無くなっていれば、
+    /// 従来どおり名前（"Kado"）で探す。Google のものを先に返す。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<CalendarSource> WorkingDayCalendars()
+    {
+        if (SavedWorkingDayCalendarId is { Length: > 0 } id && Sources.FindCalendar(id) is { } byId)
+        {
+            return [byId];
+        }
+
+        return Sources.Calendars()
             .Where(c => string.Equals(c.DisplayName, WorkingDayCalendarName, StringComparison.Ordinal))
             .OrderBy(IsLocal)
             .ToArray();
+    }
 
     /// <summary>旧 inaCalendar のバックアップ（JSON）を取り込む。</summary>
     public LegacyImportResult ImportLegacyBackup(Stream json)
