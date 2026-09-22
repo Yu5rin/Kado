@@ -284,7 +284,7 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 
     /// <summary>
     /// 新しい予定の入れ先。
-    /// <para>決まっていなければ一覧の先頭。「inaCalendar」は実働日データの入れ先なので避ける。</para>
+    /// <para>決まっていなければ一覧の先頭。「Kado」は実働日データの入れ先なので避ける。</para>
     /// </summary>
     public SourceListItemViewModel? DefaultCalendar =>
         _calendars.FirstOrDefault(c => string.Equals(c.Id, DefaultCalendarId, StringComparison.Ordinal))
@@ -394,7 +394,7 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>
     /// 日付の行に出す扱いか。
     /// <para>
-    /// 実働日データから起こしたマイルストーンと、<b>「inaCalendar」という名前の
+    /// 実働日データから起こしたマイルストーンと、<b>「Kado」という名前の
     /// カレンダーに入っている予定</b>。名前で見分けるので、このアプリで作ったものでも
     /// Google から取り込んだものでも同じ扱いになる。
     /// </para>

@@ -43,6 +43,7 @@ public sealed class GoogleSyncService(
         {
             var report = await ImportCalendarListAsync(cancellationToken).ConfigureAwait(false);
             report += await ImportTaskListsAsync(cancellationToken).ConfigureAwait(false);
+            report += await MigrateLegacyWorkingDayCalendarNameAsync(cancellationToken).ConfigureAwait(false);
             report += await MoveWorkingDayCalendarToGoogleAsync(cancellationToken).ConfigureAwait(false);
 
             // 1つが読めないだけで全体を止めない。誕生日のような特殊なカレンダーは
@@ -104,9 +105,132 @@ public sealed class GoogleSyncService(
         workspace.Tombstones.Prune(DateTimeOffset.Now - TombstoneLife);
 
     /// <summary>
+    /// 実働日カレンダーの旧い名前「inaCalendar」を「Kado」へ引っ越す。
+    /// <para>
+    /// アプリ名を Kado に改めたのに合わせた、<b>1回きりの改名</b>。ユーザーの Google
+    /// アカウントには「inaCalendar」という名前のカレンダーが実データ入りで残っている
+    /// ことがあるので、名前を差し替えるだけでなく、その中身ごと「Kado」という名前に
+    /// 引っ越す。すでに「Kado」という名前のものがあれば、もう済んでいるので何もしない。
+    /// </para>
+    /// <para>
+    /// <b>Google 側の本当の名前（<c>calendars</c> の <c>summary</c>）を変える。</b>
+    /// <see cref="ImportCalendarListAsync"/> は毎回の同期でこれをそのまま
+    /// <see cref="Kado.Data.Models.CalendarSource.Summary"/> に取り込むので、ここで
+    /// 本体の名前を変えておかないと、次の同期でまた「inaCalendar」に戻ってしまう。
+    /// </para>
+    /// <para>
+    /// 持ち主でない・共有されているだけで断られたときは、本体の名前は変えられなくても
+    /// <c>summaryOverride</c>（一覧側の個人設定）だけ「Kado」にしておく。実働日が
+    /// 見えなくなるくらいなら、本当の改名が済むまでの間だけ旧い名前のカレンダーを
+    /// この見せかけで凌ぐという判断で、<b>恒久的な二重名にはしない</b>。
+    /// <see cref="Kado.Data.Models.CalendarSource.Summary"/> 自体は「inaCalendar」の
+    /// ままにしておくので、次の同期でもここへまた来て、本当の改名を試し直す。
+    /// </para>
+    /// </summary>
+    private async Task<SyncReport> MigrateLegacyWorkingDayCalendarNameAsync(CancellationToken cancellationToken)
+    {
+        // すでに「Kado」という本物の名前を持つものがある。引っ越しは済んでいる
+        if (workspace.Sources.Calendars().Any(c => string.Equals(
+                c.Summary, CalendarWorkspace.WorkingDayCalendarName, StringComparison.Ordinal)))
+        {
+            return new SyncReport();
+        }
+
+        // 旧い名前の本体を探す。Google 側にあるものを優先する（先に返るのは非ローカル）
+        var legacy = workspace.Sources.Calendars()
+            .Where(c => string.Equals(
+                c.Summary, CalendarWorkspace.LegacyWorkingDayCalendarName, StringComparison.Ordinal))
+            .OrderBy(CalendarWorkspace.IsLocal)
+            .FirstOrDefault();
+
+        // 旧い名前も無ければ、引っ越すものが無い。新規なら EnsureWorkingDayCalendar が
+        // 最初から「Kado」で作る
+        if (legacy is null) return new SyncReport();
+
+        var count = workspace.Events.All()
+            .Count(e => string.Equals(e.CalendarId, legacy.Id, StringComparison.Ordinal));
+
+        if (CalendarWorkspace.IsLocal(legacy))
+        {
+            // このアプリの中だけにあるもの。Google には何も無いので、表示名を
+            // 直すだけでよい。繋いだときは MoveWorkingDayCalendarToGoogleAsync が
+            // 新しい名前でそのまま Google 側に作る
+            workspace.Sources.Upsert(legacy with
+            {
+                Summary = CalendarWorkspace.WorkingDayCalendarName,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+
+            return new SyncReport
+            {
+                Warnings =
+                [
+                    $"実働日の入れ先を「{CalendarWorkspace.WorkingDayCalendarName}」に改名しました（{count} 件）",
+                ],
+            };
+        }
+
+        try
+        {
+            var renamed = await calendars
+                .RenameCalendarAsync(legacy.Id, CalendarWorkspace.WorkingDayCalendarName, cancellationToken)
+                .ConfigureAwait(false);
+
+            // 送った結果をそのまま控える。次の同期で「また変わった」と見ないため
+            workspace.Sources.Upsert(legacy with
+            {
+                Summary = renamed.Text("summary") ?? CalendarWorkspace.WorkingDayCalendarName,
+                GoogleRaw = GoogleJson.Normalize(renamed),
+                UpdatedAt = DateTimeOffset.Now,
+            });
+
+            return new SyncReport
+            {
+                UpdatedRemote = 1,
+                Warnings =
+                [
+                    $"実働日の入れ先を Google の「{CalendarWorkspace.WorkingDayCalendarName}」に移しました（{count} 件）",
+                ],
+            };
+        }
+        catch (GoogleApiException ex)
+        {
+            var warning =
+                $"Google の「{CalendarWorkspace.LegacyWorkingDayCalendarName}」を" +
+                $"「{CalendarWorkspace.WorkingDayCalendarName}」に改名できませんでした" +
+                $"（{ex.Reason}）。次の同期でまた試します";
+
+            try
+            {
+                // 本体を変える権限が無くても、一覧側の個人設定（summaryOverride）は
+                // たいてい通る。これで見え方だけ「Kado」にしておき、実働日が
+                // 見えなくなるのを防ぐ。Summary は「inaCalendar」のままにして、
+                // 次の同期でも本当の改名を試し直す
+                var patched = await calendars.PatchCalendarListAsync(
+                    legacy.Id,
+                    new JsonObject { ["summaryOverride"] = CalendarWorkspace.WorkingDayCalendarName },
+                    cancellationToken).ConfigureAwait(false);
+
+                workspace.Sources.Upsert(legacy with
+                {
+                    SummaryOverride = patched.Text("summaryOverride")
+                        ?? CalendarWorkspace.WorkingDayCalendarName,
+                    UpdatedAt = DateTimeOffset.Now,
+                });
+            }
+            catch (GoogleApiException)
+            {
+                // これも断られたら、見た目をごまかす手が無い。次の同期でまた両方試す
+            }
+
+            return new SyncReport { Warnings = [warning] };
+        }
+    }
+
+    /// <summary>
     /// 実働日データの入れ先を Google 側へ移す。
     /// <para>
-    /// 繋ぐ前に取り込むと、マイルストーンはこのアプリの中の「inaCalendar」に入る。繋いだ
+    /// 繋ぐ前に取り込むと、マイルストーンはこのアプリの中の「Kado」に入る。繋いだ
     /// あとは Google 側の同じ名前のカレンダーへ集めたい。旧 inaCalendar と同じ場所になり、
     /// 他の端末やブラウザからも見える。
     /// </para>

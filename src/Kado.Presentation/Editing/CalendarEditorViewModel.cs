@@ -36,7 +36,7 @@ public sealed class CalendarEditorViewModel : ObservableObject
 
     /// <summary>すでにあるものを直す。</summary>
     /// <param name="isNameLocked">
-    /// 名前を変えさせないか。「inaCalendar」は名前で見分けて日付の行に出しているので、
+    /// 名前を変えさせないか。「Kado」は名前で見分けて日付の行に出しているので、
     /// 変えられると特別な表示が黙って止まる。
     /// </param>
     public CalendarEditorViewModel(
@@ -55,7 +55,7 @@ public sealed class CalendarEditorViewModel : ObservableObject
     /// <summary>
     /// 名前を変えられないか。
     /// <para>
-    /// 「inaCalendar」だけ。名前で見分けて日付の行に出しているので、変えられると
+    /// 「Kado」だけ。名前で見分けて日付の行に出しているので、変えられると
     /// 特別な表示が黙って止まる。色は変えられる。
     /// </para>
     /// </summary>

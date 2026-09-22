@@ -91,7 +91,7 @@ public sealed class CalendarWorkspace
     }
 
     /// <summary>
-    /// 保存されている実働日に、「inaCalendar」の印から組み立てたものを重ねる。
+    /// 保存されている実働日に、「Kado」の印から組み立てたものを重ねる。
     /// <para>
     /// Excel を持っていない端末でも、同期で渡ってきた印だけで実働日数が出る。
     /// 取り込んだ端末でも、印のほうが月の頭から月末までを覆うので、ファイルが月の
@@ -129,7 +129,7 @@ public sealed class CalendarWorkspace
         }
     }
 
-    /// <summary>「inaCalendar」に入っている印から稼働日を組み立てる。</summary>
+    /// <summary>「Kado」に入っている印から稼働日を組み立てる。</summary>
     private WorkingDayCalendar RebuildFromMarks()
     {
         var calendars = WorkingDayCalendars();
@@ -167,11 +167,23 @@ public sealed class CalendarWorkspace
     /// <summary>
     /// 実働日データから起こしたマイルストーンを入れるカレンダーの名前。
     /// <para>
-    /// 旧 inaCalendar と同じ名前にしてある。向こうは Google 側にこの名前のカレンダーを
-    /// 作って書き込んでいた。同じ名前にしておけば、繋いだときに同じところへ集まる。
+    /// アプリ名に合わせて「Kado」に一本化した。以前は旧 inaCalendar と同じ「inaCalendar」を
+    /// 使っていたが、その名前は <see cref="LegacyWorkingDayCalendarName"/> に残し、
+    /// 引っ越し（<c>GoogleSyncService</c> の改名処理）だけで使う。
     /// </para>
     /// </summary>
-    public const string WorkingDayCalendarName = "inaCalendar";
+    public const string WorkingDayCalendarName = "Kado";
+
+    /// <summary>
+    /// 実働日カレンダーの旧い名前。
+    /// <para>
+    /// <b>引っ越しのためだけに使う。</b>ふだんの照合（<see cref="WorkingDayCalendars"/> など）
+    /// はすべて <see cref="WorkingDayCalendarName"/> だけを見る。ユーザーの Google
+    /// アカウントには、この名前のカレンダーに実働日とマイルストーンが実データとして
+    /// 入っている。<c>GoogleSyncService</c> がこれを見つけて「Kado」へ改名する。
+    /// </para>
+    /// </summary>
+    public const string LegacyWorkingDayCalendarName = "inaCalendar";
 
     /// <summary>
     /// マイルストーン由来の予定に付ける印。
@@ -462,7 +474,7 @@ public sealed class CalendarWorkspace
     }
 
     /// <summary>
-    /// 実働日データを「inaCalendar」の予定として書き出す。
+    /// 実働日データを「Kado」の予定として書き出す。
     /// <para>
     /// マイルストーンと休業日の2種類。取り込んだ期間ぶんを<b>入れ替える</b>ので、古い
     /// ファイルを読み直しても前の版が残らない。期間の外は触らない。
@@ -630,11 +642,11 @@ public sealed class CalendarWorkspace
     /// 期間内の書き出し分を入れ替える。
     /// <para>
     /// 見分けは<b>識別子の頭</b>で行う。所属や Source では見分けられない。同期を通ると
-    /// Source は "google" に書き換わり、所属は Google 側の inaCalendar に移るため。
+    /// Source は "google" に書き換わり、所属は Google 側の Kado に移るため。
     /// 識別子はこちらが付けたまま残るので、これが唯一の手がかりになる。
     /// </para>
     /// <para>
-    /// こちらが書いたものだけを消す。inaCalendar には利用者が自分で入れた予定も
+    /// こちらが書いたものだけを消す。Kado には利用者が自分で入れた予定も
     /// ありうるので、期間内を丸ごと消してはいけない。
     /// </para>
     /// </summary>
@@ -682,7 +694,7 @@ public sealed class CalendarWorkspace
     private const string MilestoneIdPrefix = WorkingDaySource + ":";
 
     /// <summary>
-    /// 「inaCalendar」を用意する。
+    /// 「Kado」を用意する。
     /// <para>
     /// 名前で探す。Google から取り込んだものがあればそれを使い、無ければこのアプリの
     /// 中に作る。繋いだあとに同じ名前のものが降りてきたら、そちらへ寄せ直す。
@@ -740,7 +752,7 @@ public sealed class CalendarWorkspace
         return true;
     }
 
-    /// <summary>「inaCalendar」という名前のカレンダー。Google のものを先に返す。</summary>
+    /// <summary>「Kado」という名前のカレンダー。Google のものを先に返す。</summary>
     public IReadOnlyList<CalendarSource> WorkingDayCalendars() =>
         Sources.Calendars()
             .Where(c => string.Equals(c.DisplayName, WorkingDayCalendarName, StringComparison.Ordinal))

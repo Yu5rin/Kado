@@ -199,6 +199,38 @@ public class GoogleCalendarApiTests
     }
 
     [Fact]
+    public async Task カレンダーの改名はcalendarsをpatchで送る()
+    {
+        HttpRequestMessage? sent = null;
+        var handler = new StubHttpHandler(request =>
+        {
+            sent = request;
+            return (HttpStatusCode.OK, """{"id":"ina@example","summary":"Kado"}""");
+        });
+        var api = new GoogleCalendarApi(new HttpClient(handler), new FixedToken());
+
+        await api.RenameCalendarAsync("ina@example", "Kado");
+
+        // calendarList ではなく calendars 本体を叩く。共有相手にも見える名前を変えるため
+        Assert.Equal(HttpMethod.Patch, sent!.Method);
+        Assert.EndsWith("/calendars/ina%40example", sent.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+
+        // 扱わない項目は送らない。summary だけが本文に載る
+        Assert.Equal("""{"summary":"Kado"}""", Assert.Single(handler.Requests));
+    }
+
+    [Fact]
+    public async Task カレンダーの改名を断られたら知らせる()
+    {
+        var (api, _) = Create(_ => (HttpStatusCode.Forbidden, """
+            {"error":{"errors":[{"reason":"insufficientPermissions"}]}}
+            """));
+
+        // 持ち主でない・共有されているだけのカレンダーは断られる
+        await Assert.ThrowsAsync<GoogleApiException>(() => api.RenameCalendarAsync("shared@example", "Kado"));
+    }
+
+    [Fact]
     public async Task カレンダー一覧を読める()
     {
         var (api, seen) = Create(_ => (HttpStatusCode.OK, """

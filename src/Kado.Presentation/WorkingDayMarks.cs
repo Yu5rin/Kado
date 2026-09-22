@@ -4,9 +4,9 @@ using Kado.Data.Models;
 namespace Kado.Presentation;
 
 /// <summary>
-/// 「inaCalendar」に入っている印から稼働日を組み立てる。
+/// 「Kado」に入っている印から稼働日を組み立てる。
 /// <para>
-/// 旧 inaCalendar は実働日データを Google の inaCalendar に書き出していた。書いているのは
+/// 旧 inaCalendar は実働日データを Google の Kado に書き出していた。書いているのは
 /// <b>例外の日だけ</b>で、平日なのに休む日は「休業日」、土日祝なのに動く日は「特別出勤」。
 /// ふつうに稼働する平日には何も書かない。
 /// </para>
@@ -20,7 +20,7 @@ public static class WorkingDayMarks
     /// <summary>
     /// 印から稼働日を組み立てる。印が1つも無ければ <see cref="WorkingDayCalendar.Empty"/>。
     /// </summary>
-    /// <param name="events">「inaCalendar」に入っている予定。</param>
+    /// <param name="events">「Kado」に入っている予定。</param>
     /// <param name="holidays">祝日。渡さなければ土日だけで判断する。</param>
     public static WorkingDayCalendar Rebuild(
         IEnumerable<CalendarEvent> events, IHolidaySource? holidays = null)
