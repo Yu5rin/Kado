@@ -181,6 +181,11 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>いまの置き場所を控える。</summary>
     private void TrackPlacement()
     {
+        // スライド／ピン留めのあいだ、窓は帯の形をしている。
+        // それを「ウィンドウのときの置き場所」として覚えてしまうと、
+        // 次に起動したとき帯の幅の窓で出てくる
+        if (ViewModel?.Shell.IsAtEdge == true) return;
+
         switch (WindowState)
         {
             // 最小化で終わった次の起動でアイコンのまま出てくると、
@@ -522,30 +527,6 @@ public partial class MainWindow : Window, ISlideRevealHost
     }
 
     /// <summary>
-    /// クイック入力は Enter で入れる。Esc は打ちかけを消してフォーカスを外す（項目17）。
-    /// <para>検索は Esc で消せるのに、クイック入力にはそれが無かった。</para>
-    /// </summary>
-    private void OnQuickKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            if (ViewModel is { } vm) vm.QuickText = string.Empty;
-
-            // フォーカスを外さないと、単独キーのショートカット（T・1〜5 など）が
-            // 引き続き奪われたままになる
-            Keyboard.ClearFocus();
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key != Key.Enter) return;
-        if (ViewModel is not { } main || !main.QuickCommand.CanExecute(null)) return;
-
-        main.QuickCommand.Execute(null);
-        e.Handled = true;
-    }
-
-    /// <summary>
     /// 本体のキー割当（項目3）。
     /// <para>
     /// 修飾キー無しの単独キー（T・1〜5・矢印・PageUp・PageDown）は、クイック入力欄・
@@ -665,44 +646,17 @@ public partial class MainWindow : Window, ISlideRevealHost
         }
     }
 
-    /// <summary>右ペインでマウスが指している行を消す（項目8）。何も指していなければ何もしない。</summary>
-    private bool DeletePointedRow(MainViewModel vm)
-    {
-        switch (_pointedRow)
-        {
-            case DayEventViewModel ev when vm.DeleteEventCommand.CanExecute(ev):
-                vm.DeleteEventCommand.Execute(ev);
-                return true;
-
-            case TaskListItemViewModel task when vm.DeleteTaskCommand.CanExecute(task):
-                vm.DeleteTaskCommand.Execute(task);
-                return true;
-
-            default:
-                return false;
-        }
-    }
-
     /// <summary>
-    /// 右ペインでマウスが指している行（予定・タスク）。Delete キー（項目8）が使う。
-    /// <para>キーボードだけでは「指している」に相当する場所が無いので、ホバーで代える。</para>
+    /// マウスが指している行を消す（項目8）。何も指していなければ何もしない。
+    /// <para>
+    /// 予定・タスクの行は <see cref="Views.DayPaneView"/> の中にあり、右パネル用
+    /// （<c>Detail</c>）とスリムパネル用（<c>Sidebar.DayPane</c>）の2つが同時に
+    /// 画面に出ていることがある。マウスは1つしか指せないので、両方に聞いて
+    /// 消せたほうを採る。
+    /// </para>
     /// </summary>
-    private object? _pointedRow;
-
-    /// <summary>右ペインの行に乗った。</summary>
-    private void OnRowPointerEntered(object sender, MouseEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: { } item }) _pointedRow = item;
-    }
-
-    /// <summary>右ペインの行から外れた。指しているものが無くなる。</summary>
-    private void OnRowPointerExited(object sender, MouseEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: { } item } && ReferenceEquals(_pointedRow, item))
-        {
-            _pointedRow = null;
-        }
-    }
+    private bool DeletePointedRow(MainViewModel vm) =>
+        Detail.DeleteHoveredRow(vm) || Sidebar.DayPane.DeleteHoveredRow(vm);
 
     /// <summary>InputBindings に登録してある、修飾キー無しの単独キー。</summary>
     private static bool IsBareShortcutKey(Key key) => key is
@@ -730,8 +684,7 @@ public partial class MainWindow : Window, ISlideRevealHost
         {
             if (vm.IsDetailPaneOpen)
             {
-                QuickInputBox.Focus();
-                Keyboard.Focus(QuickInputBox);
+                Detail.FocusQuickInput();
             }
             else if (vm.IsSlimPanelOpen)
             {
@@ -760,24 +713,6 @@ public partial class MainWindow : Window, ISlideRevealHost
         e.Handled = true;
     }
 
-    /// <summary>右ペインの予定。ダブルクリックで編集画面を開く。</summary>
-    private void OnEventRowClicked(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount != 2 || DataContextOf<DayEventViewModel>(sender) is not { } target) return;
-
-        ViewModel?.EditEventCommand.Execute(target);
-        e.Handled = true;
-    }
-
-    /// <summary>右ペインのタスク。ダブルクリックで編集画面を開く。</summary>
-    private void OnTaskRowClicked(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount != 2 || DataContextOf<TaskListItemViewModel>(sender) is not { } target) return;
-
-        ViewModel?.EditTaskCommand.Execute(target);
-        e.Handled = true;
-    }
-
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
     private void OnSettingsClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);
 
@@ -799,16 +734,6 @@ public partial class MainWindow : Window, ISlideRevealHost
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.DataContext = DataContext;
         menu.IsOpen = true;
-    }
-
-    /// <summary>日付の行のラベルを2回押すと、その予定を開く。</summary>
-    private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount != 2) return;
-        if (DataContextOf<MilestoneViewModel>(sender) is not { } milestone) return;
-
-        ViewModel?.EditMilestoneCommand.Execute(milestone);
-        e.Handled = true;
     }
 
     // ------------------------------------------------------------------

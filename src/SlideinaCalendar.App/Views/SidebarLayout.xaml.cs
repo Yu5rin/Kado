@@ -121,60 +121,16 @@ public partial class SidebarLayout : UserControl
         vm.SlimCalendarShare = CalendarRow.ActualHeight / total;
     }
 
-    /// <summary>クイック入力は Enter で入れる。Esc は打ちかけを消してフォーカスを外す（項目17）。</summary>
-    private void OnQuickKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            if (DataContext is MainViewModel main) main.QuickText = string.Empty;
-
-            Keyboard.ClearFocus();
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key != Key.Enter) return;
-        if (DataContext is not MainViewModel vm || !vm.QuickCommand.CanExecute(null)) return;
-
-        vm.QuickCommand.Execute(null);
-        e.Handled = true;
-    }
-
-    /// <summary>本体（<c>MainWindow</c>）から、クイック入力欄へフォーカスするために呼ぶ（項目4）。</summary>
-    public void FocusQuickInput()
-    {
-        QuickInputBox.Focus();
-        Keyboard.Focus(QuickInputBox);
-    }
-
-    private void OnEventClicked(object sender, MouseButtonEventArgs e) =>
-        Open(sender, e, (main, item) => main.EditEventCommand.Execute(item));
-
-    private void OnTaskClicked(object sender, MouseButtonEventArgs e) =>
-        Open(sender, e, (main, item) => main.EditTaskCommand.Execute(item));
+    /// <summary>
+    /// 本体（<c>MainWindow</c>）から、クイック入力欄へフォーカスするために呼ぶ（項目4）。
+    /// <para>中身の <see cref="DayPaneView"/>（<see cref="DayPane"/>）へそのまま委ねる。</para>
+    /// </summary>
+    public void FocusQuickInput() => DayPane.FocusQuickInput();
 
     /// <summary>
-    /// 日付ラベル（マイルストーン）を2回押すと編集を開く。
-    /// <para>右ペイン・月ビューと同じ挙動に揃える（項目9）。</para>
+    /// 選んだ日の予定・タスクの部品（項目1）。<c>MainWindow.xaml.cs</c> の
+    /// Delete キー処理（<c>DeletePointedRow</c>）が、いま指している行を
+    /// こちら側からも消せるように公開する。
     /// </summary>
-    private void OnMilestoneClicked(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount != 2) return;
-        if ((sender as FrameworkElement)?.DataContext is not MilestoneViewModel milestone) return;
-        if (Window.GetWindow(this)?.DataContext is not MainViewModel main) return;
-
-        main.EditMilestoneCommand.Execute(milestone);
-        e.Handled = true;
-    }
-
-    /// <summary>ダブルクリックで編集。1回押しは選ぶだけにする。</summary>
-    private static void Open(object sender, MouseButtonEventArgs e, Action<MainViewModel, object> open)
-    {
-        if (e.ClickCount != 2) return;
-        if (sender is not FrameworkElement element || element.DataContext is not { } item) return;
-        if (Window.GetWindow(element)?.DataContext is not MainViewModel main) return;
-
-        open(main, item);
-        e.Handled = true;
-    }
+    public DayPaneView DayPane => DayPaneHost;
 }
