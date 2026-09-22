@@ -128,4 +128,79 @@ public class EventMapperBlankTests
 
         Assert.True(EventMapper.NeedsPush(value with { Title = "打ち合わせ（変更）" }));
     }
+
+    // ------------------------------------------------------------------
+    // 表せない繰り返し（RDATE・EXRULE・RRULE 2本以上など）を、空の繰り返しと
+    // 取り違えて Google 側の繰り返しを消してしまわないか
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void RDATE付きの予定は送り返さない()
+    {
+        // RecurrenceConverter.FromGoogle が読めず Recurrence は null になるが、
+        // それは「繰り返しが無い」のではなく「表せないものを預かっている」だけ
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e40", "summary": "不定期の集まり", "status": "confirmed",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+              "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH", "RDATE;VALUE=DATE:20261008"]
+            }
+            """), "primary");
+
+        Assert.Null(value.Recurrence);
+        Assert.False(EventMapper.NeedsPush(value));
+    }
+
+    [Fact]
+    public void RDATE付きの予定を書き戻すとき本文にrecurrenceキーを入れない()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e41", "summary": "不定期の集まり", "status": "confirmed",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+              "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH", "RDATE;VALUE=DATE:20261008"]
+            }
+            """), "primary");
+
+        // 入れなければ patch は recurrence に触らない。空の配列を入れると
+        // 「繰り返しを外す」意味になり、Google 側の繰り返しが消えてしまう
+        Assert.False(EventMapper.ToGoogle(value).ContainsKey("recurrence"));
+    }
+
+    [Fact]
+    public void 本当に繰り返しを外した予定は空の配列を送る()
+    {
+        // 元は RRULE 1本（表せる）で受け取っていたが、こちらで単発に変えた場面
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e42", "summary": "週次レビュー", "status": "confirmed",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+              "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH"]
+            }
+            """), "primary") with { Recurrence = null };
+
+        var body = EventMapper.ToGoogle(value);
+
+        Assert.True(body.ContainsKey("recurrence"));
+        Assert.Empty(body["recurrence"]!.AsArray());
+        Assert.True(EventMapper.NeedsPush(value));
+    }
+
+    [Fact]
+    public void 繰り返しを持たない予定はこれまでどおり()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e43", "summary": "定例", "status": "confirmed",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" }
+            }
+            """), "primary");
+
+        Assert.Null(value.Recurrence);
+
+        var body = EventMapper.ToGoogle(value);
+        Assert.True(body.ContainsKey("recurrence"));
+        Assert.Empty(body["recurrence"]!.AsArray());
+        Assert.False(EventMapper.NeedsPush(value));
+    }
 }

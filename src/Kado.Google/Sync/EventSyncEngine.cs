@@ -174,6 +174,7 @@ public sealed class EventSyncEngine(
         var updated = 0;
         var deleted = 0;
         var now = _clock.GetUtcNow();
+        var overwritten = new List<string>();
 
         // 例外回は必ず親のあとに処理する。先に処理すると、そのあと親を取り込んだときに
         // 足した除外日が消え、同じ日に二重に出たままになる
@@ -218,6 +219,13 @@ public sealed class EventSyncEngine(
                 continue;
             }
 
+            // Google を採る方針は変えないが、こちらにまだ送れていない編集があるなら
+            // それを黙って捨てることになる。気づけるよう警告に残す
+            if (existing is not null && EventMapper.NeedsPush(existing))
+            {
+                overwritten.Add(existing.Title is { Length: > 0 } title ? title : "(無題)");
+            }
+
             var mapped = EventMapper.FromGoogle(item, localCalendarId, existing, now);
 
             if (existing is null)
@@ -248,7 +256,28 @@ public sealed class EventSyncEngine(
             UpdatedLocal = updated,
             DeletedLocal = deleted,
             FullResync = fullResync,
+            Warnings = SummarizeOverwritten(overwritten),
         };
+    }
+
+    /// <summary>
+    /// 未送信の編集を捨てて Google 側を採った予定を、警告文にまとめる。
+    /// <para>
+    /// 件数が多いと画面が埋まるので、名前を出すのは数件までにして残りは件数だけ添える。
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<string> SummarizeOverwritten(IReadOnlyList<string> titles)
+    {
+        if (titles.Count == 0) return [];
+
+        const int maxNamed = 3;
+        var named = string.Concat(titles.Take(maxNamed).Select(title => $"「{title}」"));
+
+        var message = titles.Count > maxNamed
+            ? $"{named}ほか{titles.Count - maxNamed}件は、こちらの変更を捨てて Google 側を採りました"
+            : $"{named}は、こちらの変更を捨てて Google 側を採りました";
+
+        return [message];
     }
 
     private async Task<(List<JsonElement> Items, string? NextSyncToken)> ReadAllPagesAsync(
