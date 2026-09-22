@@ -639,16 +639,23 @@ public sealed class MainViewModel : ObservableObject
     // ------------------------------------------------------------------
 
     /// <summary>実働・残りのバッジを出す下限。同じ数字は右ペインの日付欄にも出る。</summary>
-    public const double WorkdayBadgeFloor = 1000;
+    /// <remarks>
+    /// 下限はどれも「ちょうど収まる幅」ではなく、<b>少し余らせた幅</b>にしてある。
+    /// 以前はぴったりに置いていたので、下限のすぐ上では左の列（年月・◀▶・今日・
+    /// ビュー切替・バッジ）が右の列（検索・同期・📌・出しかた・パネル・⚙）に
+    /// 突き当たり、「日」や検索の枠が切れた姿で止まっていた。実機で 1011px の
+    /// ときにバッジと検索欄が隙間なく接していたのがその状態。
+    /// </remarks>
+    public const double WorkdayBadgeFloor = 1040;
 
     /// <summary>同期の状態（●同期済み）を出す下限。</summary>
-    public const double SyncStatusFloor = 880;
+    public const double SyncStatusFloor = 920;
 
     /// <summary>検索の入力欄をそのまま出す下限。これを切ると虫めがねのボタンに畳む。</summary>
-    public const double SearchBoxFloor = 820;
+    public const double SearchBoxFloor = 860;
 
     /// <summary>ビュー切り替え（一覧・年・月・週・日）を出す下限。</summary>
-    public const double ViewSwitcherFloor = 700;
+    public const double ViewSwitcherFloor = 740;
 
     /// <summary>「今日」を出す下限。ここまで細いと、置く場所が無い。</summary>
     public const double TodayButtonFloor = 380;
