@@ -1390,37 +1390,6 @@
                                        Visibility="{Binding DataContext.QuickPreview,
                                                     RelativeSource={RelativeSource AncestorType=Window},
                                                     Converter={StaticResource NullToVisibility}}" />
-
-                            <Border Height="9" />
-
-                            <!--
-                                右ペインの「＋予定」「＋タスク」は文字つきのボタンのまま残す
-                                （項目4）。スリムパネル（幅160pxまで細くなる）は当たり判定を
-                                稼ぐためアイコンだけにしたが、右ペインは296px幅で余裕があり、
-                                文字が読める。作りを無理に揃える必要は無いと判断した
-                            -->
-                            <UniformGrid Rows="1" Columns="2">
-                            <Button Style="{StaticResource AddButtonStyle}" Margin="0,0,3.5,0"
-                                    Command="{Binding DataContext.AddEventCommand,
-                                              RelativeSource={RelativeSource AncestorType=Window}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
-                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
-                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    <TextBlock Text="予定" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button Style="{StaticResource AddButtonStyle}" Margin="3.5,0,0,0"
-                                    Command="{Binding DataContext.AddTaskCommand,
-                                              RelativeSource={RelativeSource AncestorType=Window}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconPlus}" Stretch="Uniform" Width="12" Height="12"
-                                          Margin="0,0,6,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
-                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    <TextBlock Text="タスク" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            </UniformGrid>
                         </StackPanel>
                     </Border>
 
@@ -1433,6 +1402,24 @@
                                            Typography.NumeralAlignment="Tabular" />
                                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定" Foreground="{DynamicResource Ink3Brush}" />
                             </DockPanel>
+
+                            <!--
+                                「＋ 予定を追加」（項目1）。以前はクイック入力の下に文字つきの
+                                ボタンとして置いていたが、作られる場所（この一覧）から離れていた。
+                                見出しのすぐ下・一覧のすぐ上に置き、一覧の1行として地続きに見える
+                                形にする。スリムパネル（SidebarLayout.xaml）と同じ形
+                            -->
+                            <Button Style="{StaticResource SectionAddRowStyle}"
+                                    Command="{Binding DataContext.AddEventCommand,
+                                              RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconEventAdd}" Stretch="Uniform" Width="16" Height="16"
+                                          Margin="0,0,9,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="予定を追加" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
 
                             <!-- 予定（.ev）。時刻38px＋帯3px＋タイトル13px＋補助行 -->
                             <ItemsControl ItemsSource="{Binding Events}">
@@ -1500,6 +1487,19 @@
                                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスク" Foreground="{DynamicResource Ink3Brush}" />
                             </DockPanel>
 
+                            <!-- 「✓＋ タスクを追加」（項目1）。予定と同じ理由・同じ形 -->
+                            <Button Style="{StaticResource SectionAddRowStyle}"
+                                    Command="{Binding DataContext.AddTaskCommand,
+                                              RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconTaskAdd}" Stretch="Uniform" Width="16" Height="16"
+                                          Margin="0,0,9,0" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="タスクを追加" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
                             <!-- タスク（.tk） -->
                             <ItemsControl ItemsSource="{Binding Tasks}"
                                           ItemTemplate="{StaticResource TaskRowTemplate}" />
@@ -1515,6 +1515,12 @@
                                 出ず、保存されるのに二度と見えなくなっていた。
                                 0件のときは節ごと畳む（ShowsNoDueTasks）。行の見た目・
                                 挙動は上の「タスク」と同じ TaskRowTemplate を使い回す
+
+                                この節には「＋ タスクを追加」の行を置いていない（項目1）。
+                                ShowsNoDueTasks が0件のときは見出しごと畳むため、置いても
+                                「最初の1件を作る」場面でだけ隠れて使えない。期限なしで
+                                作りたいときは、上の「＋ タスクを追加」から開いた編集画面で
+                                「期限を付ける」を外せばよい（TaskEditorWindow.xaml）
                             -->
                             <StackPanel Visibility="{Binding ShowsNoDueTasks, Converter={StaticResource BoolToVisibility}}">
                                 <DockPanel Margin="14,9,14,4">

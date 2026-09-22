@@ -458,7 +458,7 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsSidePanelOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsDayNav), nameof(ShowsSlimDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
                 nameof(ShowsSlimToday));
         }
     }
@@ -559,7 +559,7 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsMainViewOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsDayNav), nameof(ShowsSlimDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
                 nameof(ShowsSlimToday));
             RaiseHeader();
         }
@@ -576,7 +576,7 @@ public sealed class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(ShowsDayNav), nameof(ShowsSlimDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
                 nameof(ShowsSlimToday));
         }
     }
@@ -607,6 +607,19 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool ShowsDayNav => !_isMainViewOpen && _isDetailPaneOpen;
+
+    /// <summary>
+    /// 日送り（前の日・次の日）をスリムパネルの日付ヘッダに置くか（項目4）。
+    /// <para>
+    /// <see cref="PreviousCommand"/>／<see cref="NextCommand"/> は、中央のカレンダーを
+    /// 出しているとき（<c>_isMainViewOpen</c>）はそのビューの単位（月・週など）を送る
+    /// （<see cref="GoToPrevious"/>）。中央を畳んでいるときだけ選んだ日を1日ずつ動かすので、
+    /// ここも <see cref="ShowsDayNav"/> と同じく中央が畳まれているときだけ出す。中央も
+    /// 出ている状態でここに矢印があると、押したときに「日が進む」のではなく中央の
+    /// ビューが送られてしまい、日送りとして機能しない。
+    /// </para>
+    /// </summary>
+    public bool ShowsSlimDayNav => !_isMainViewOpen;
 
     /// <summary>
     /// ツールバーに「◀ ▶」を置くか。
@@ -688,6 +701,27 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool HasSlimCalendarShare => _settings?.HasSlimCalendarShare ?? false;
+
+    /// <summary>
+    /// スリムパネルの月カレンダーを畳んでいるか（項目2）。
+    /// <para>
+    /// 設定を持たない組み立て方（テストなど）では常に false（畳んでいない）。
+    /// 畳み・開きは <c>SidebarLayout.xaml.cs</c> の <c>OnMonthHeaderClicked</c> から
+    /// 呼ばれ、ここで <c>AppSettings</c> へ控えて次回も引き継ぐ。
+    /// </para>
+    /// </summary>
+    public bool IsSlimCalendarCollapsed
+    {
+        get => _settings?.IsSlimCalendarCollapsed ?? false;
+        set
+        {
+            if (_settings is not { } settings) return;
+            if (settings.IsSlimCalendarCollapsed == value) return;
+
+            settings.IsSlimCalendarCollapsed = value;
+            Raise(nameof(IsSlimCalendarCollapsed));
+        }
+    }
 
     /// <summary>スリムパネルの既定の幅。</summary>
     public const double DefaultSlimPanelWidth = 264;

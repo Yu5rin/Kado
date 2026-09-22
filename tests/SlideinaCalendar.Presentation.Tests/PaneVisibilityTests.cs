@@ -179,4 +179,26 @@ public class PaneVisibilityTests
         Assert.True(vm.IsDetailPaneOpen);
         Assert.False(vm.IsMainViewOpen);
     }
+
+    /// <summary>
+    /// スリムパネルの日送り（項目4）。中央のカレンダーを出しているときは
+    /// PreviousCommand／NextCommand がそのビューの単位（月など）を送ってしまうので、
+    /// 中央を畳んでいるときだけ出す（ShowsDayNav と同じ理由）。
+    /// </summary>
+    [Fact]
+    public void 中央を畳むとスリムパネルの日送りを出す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // ふだんは中央を出しているので、押すと月などが送られてしまう
+        Assert.False(vm.ShowsSlimDayNav);
+
+        vm.ToggleMainViewCommand.Execute(null);
+
+        Assert.True(vm.ShowsSlimDayNav);
+
+        vm.ToggleMainViewCommand.Execute(null);
+        Assert.False(vm.ShowsSlimDayNav);
+    }
 }
