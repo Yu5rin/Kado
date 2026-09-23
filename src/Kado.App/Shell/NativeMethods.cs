@@ -243,6 +243,26 @@ internal static class NativeMethods
     internal const int SWP_NOSIZE = 0x0001;
     internal const int SWP_NOMOVE = 0x0002;
 
+    /// <summary>並び順だけ変える（位置・大きさ・手前へ出す操作はしない）。</summary>
+    internal const int SWP_NOACTIVATE = 0x0010;
+
+    /// <summary>いちばん手前の並びへ入れる。</summary>
+    internal static readonly IntPtr HWND_TOPMOST = new(-1);
+
+    /// <summary>
+    /// 窓の並び順を決め直す。
+    /// <para>
+    /// <c>Window.Topmost</c> を true にしてあっても、隠して出し直したり、他のアプリが
+    /// 前面を取ったりした拍子に、実際の並びがそのとおりでなくなることがある。
+    /// 帯として出しているあいだは <b>出すたびにここで並びを入れ直す</b>。
+    /// <c>SWP_NOACTIVATE</c> を付けるので、前面を奪って相手の入力を邪魔することはない。
+    /// </para>
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(
+        IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct WINDOWPOS
     {
