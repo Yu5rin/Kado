@@ -52,8 +52,22 @@ public static class RecurrenceChoice
 
     private static readonly string[] DayNames = ["日", "月", "火", "水", "木", "金", "土"];
 
-    /// <summary>開始日に合わせた選択肢。<paramref name="includeCustom"/> は元が独自指定のときだけ true。</summary>
-    public static IReadOnlyList<RecurrenceOption> OptionsFor(DateOnly date, bool includeCustom)
+    /// <summary>
+    /// 開始日に合わせた選択肢。<paramref name="includeCustom"/> は元が独自指定のときだけ true。
+    /// </summary>
+    /// <param name="date">系列の開始日。曜日や日付を省いた指定を具体的に読むのに使う。</param>
+    /// <param name="includeCustom">選択肢に「このまま」を足すか。</param>
+    /// <param name="spec">
+    /// 元の指定文字列（RRULE）。渡すと「このまま」の文言に中身を書く。
+    /// <para>
+    /// 「この予定の設定のまま」だけでは、繰り返しなのかどうかすら読めなかった。
+    /// <see cref="RecurrenceRule"/> は間隔・終了日・複数曜日・第n曜日・月末まで読めて
+    /// 文字にもできるので、それを借りて「2週ごと 月・水・金（このまま）」と出す。
+    /// 読めなかったときだけ、これまでどおりの文言に戻る。
+    /// </para>
+    /// </param>
+    public static IReadOnlyList<RecurrenceOption> OptionsFor(
+        DateOnly date, bool includeCustom, string? spec = null)
     {
         var options = new List<RecurrenceOption>(6)
         {
@@ -64,9 +78,24 @@ public static class RecurrenceChoice
             new(RecurrenceKind.Yearly, $"毎年 {date.ToString("M月d日", CultureInfo.InvariantCulture)}"),
         };
 
-        if (includeCustom) options.Add(new RecurrenceOption(RecurrenceKind.Custom, "この予定の設定のまま"));
+        if (includeCustom) options.Add(new RecurrenceOption(RecurrenceKind.Custom, CustomLabel(date, spec)));
 
         return options;
+    }
+
+    /// <summary>
+    /// 「このまま」の文言。中身を読めたらそれを書き、読めなければ元の言い方に戻る。
+    /// </summary>
+    private static string CustomLabel(DateOnly date, string? spec)
+    {
+        const string Fallback = "この予定の設定のまま";
+
+        if (spec is not { Length: > 0 }) return Fallback;
+        if (!RecurrenceRule.TryParse(spec, out var rule)) return Fallback;
+
+        var label = rule.ToLabel(date);
+
+        return label is { Length: > 0 } ? $"{label}（このまま）" : Fallback;
     }
 
     /// <summary>種類から指定文字列を作る。繰り返さないなら null。</summary>
