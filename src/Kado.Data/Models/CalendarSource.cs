@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Kado.Data.Models;
 
 /// <summary>
@@ -47,6 +49,46 @@ public sealed record CalendarSource
 
     /// <summary>ローカルでの更新時刻。</summary>
     public DateTimeOffset UpdatedAt { get; init; }
+
+    /// <summary>
+    /// こちらから書けないカレンダーか。
+    /// <para>
+    /// 祝日・誕生日・他人から共有されたものは読むだけ。送ろうとしても断られる。
+    /// 判断は取り込んだときの <c>accessRole</c> で行う（<c>owner</c> / <c>writer</c> だけが
+    /// 書ける）。<b>同期処理（送るかどうか）と画面（編集・削除・ドラッグを止めるかどうか）の
+    /// 両方がここを見る。</b>判定を2箇所に分けて持つと、どちらかだけ直し忘れて食い違う。
+    /// </para>
+    /// </summary>
+    public bool IsReadOnly
+    {
+        get
+        {
+            if (GoogleRaw is not { Length: > 0 } raw) return false;
+
+            try
+            {
+                using var document = JsonDocument.Parse(raw);
+
+                if (!document.RootElement.TryGetProperty("accessRole", out var value) ||
+                    value.ValueKind != JsonValueKind.String)
+                {
+                    return false;
+                }
+
+                var role = value.GetString();
+
+                return role is not null &&
+                       !string.Equals(role, "owner", StringComparison.Ordinal) &&
+                       !string.Equals(role, "writer", StringComparison.Ordinal);
+            }
+            catch (JsonException)
+            {
+                // 読めないなら書けると見なす。書けないものへ送れば断られるだけで、
+                // 書けるものを読み取り専用にしてしまうより害が小さい
+                return false;
+            }
+        }
+    }
 }
 
 /// <summary>タスクリスト1つ。カレンダーとは独立した同期経路を持つ（要件書 6.3）。</summary>

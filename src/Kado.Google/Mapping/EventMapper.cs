@@ -72,6 +72,11 @@ public static class EventMapper
 
             // 色はカレンダーで決まる。イベント個別の colorId は取り込まない
             Color = existing?.Color,
+
+            // 通知の指定はこちら独自の項目で、Google には対応する欄が無い。引き継がないと、
+            // PushChangesAsync が PATCH の応答をそのまま FromGoogle に通して上書き保存する
+            // たびに、この予定だけの通知指定が消える
+            Notify = existing?.Notify,
             CalendarId = calendarId,
 
             // 表せない繰り返しは null。控えた生データが残るので、書き戻さなければ無傷
@@ -236,9 +241,41 @@ public static class EventMapper
             return true;
         }
 
-        return original["eventType"] is JsonValue kind
+        if (original["eventType"] is JsonValue kind
             && kind.TryGetValue<string>(out var type)
-            && type is "fromGmail" or "birthday" or "workingLocation";
+            && type is "fromGmail" or "birthday" or "workingLocation")
+        {
+            return true;
+        }
+
+        return IsOrganizedByOther(original);
+    }
+
+    /// <summary>
+    /// 他人が主催する予定か。
+    /// <para>
+    /// 主催者でなければ、こちらで内容を変えても Google 側は拒む（<c>guestsCanModify</c>
+    /// が立っていれば別）。編集させても保存はできるのに向こうへ伝わらないので、
+    /// 送れない予定として扱う。
+    /// </para>
+    /// <para>
+    /// 条件は<b>「<c>organizer.self</c> が明示的に false で、かつ <c>guestsCanModify</c> が
+    /// true でない」</b>。<c>organizer</c> が無いとき、<c>organizer.self</c> が無いときは
+    /// 止めない。省略されていることが実際にあり、そこまで巻き込むと自分の予定まで
+    /// 編集できなくなる。
+    /// </para>
+    /// </summary>
+    private static bool IsOrganizedByOther(JsonObject original)
+    {
+        if (original["organizer"] is not JsonObject organizer) return false;
+        if (organizer["self"] is not JsonValue selfFlag || !selfFlag.TryGetValue<bool>(out var isSelf)) return false;
+        if (isSelf) return false;
+
+        var guestsCanModify = original["guestsCanModify"] is JsonValue modify
+            && modify.TryGetValue<bool>(out var canModify)
+            && canModify;
+
+        return !guestsCanModify;
     }
 
     /// <summary>
@@ -393,10 +430,15 @@ public static class EventMapper
         return (timed && endDate > start ? endDate : null, endTime);
     }
 
-    private static JsonObject WriteStart(CalendarEvent value) =>
-        value.IsAllDay
-            ? new JsonObject { ["date"] = Format(value.Date) }
-            : new JsonObject { ["dateTime"] = FormatDateTime(value.Date, value.StartTime!.Value) };
+    private static JsonObject WriteStart(CalendarEvent value)
+    {
+        if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.Date) };
+
+        var body = new JsonObject { ["dateTime"] = FormatDateTime(value.Date, value.StartTime!.Value) };
+        if (LocalIanaTimeZoneId.Value is { } zone) body["timeZone"] = zone;
+
+        return body;
+    }
 
     /// <summary>
     /// 終日予定は<b>翌日</b>を送る。Google 側が排他で解釈するため。
@@ -423,11 +465,40 @@ public static class EventMapper
 
         if (endAt <= startAt) endAt = startAt.AddHours(1);
 
-        return new JsonObject
+        var body = new JsonObject
         {
             ["dateTime"] = FormatDateTime(DateOnly.FromDateTime(endAt), TimeOnly.FromDateTime(endAt)),
         };
+        if (LocalIanaTimeZoneId.Value is { } zone) body["timeZone"] = zone;
+
+        return body;
     }
+
+    /// <summary>
+    /// この PC の時差の IANA 名（例 <c>Asia/Tokyo</c>）。得られなければ null。
+    /// <para>
+    /// Google Calendar の Events リファレンスは、<b>繰り返し予定では
+    /// <c>start.timeZone</c> / <c>end.timeZone</c> が必須</b>と明記している。単発の予定に
+    /// だけ付けて繰り返しには付け忘れる、という抜けを作らないよう、<b>時刻つきの予定なら
+    /// 繰り返しの有無を問わず常に添える</b>ほうが単純で安全と判断した。
+    /// </para>
+    /// <para>
+    /// Windows は「Tokyo Standard Time」のような独自の ID を持つので、
+    /// <see cref="TimeZoneInfo.TryConvertWindowsIdToIanaId"/> で IANA 名に変換する。
+    /// Linux ではもとから IANA 名（<see cref="TimeZoneInfo.HasIanaId"/>）なのでそのまま使う。
+    /// <b>変換できなければ null を返し、呼び出し側は timeZone を添えずにこれまでどおり送る。</b>
+    /// </para>
+    /// <para>
+    /// 一度求めれば同じ実行中は変わらないので、プロセス内で使い回す。
+    /// </para>
+    /// </summary>
+    private static readonly Lazy<string?> LocalIanaTimeZoneId = new(() =>
+    {
+        var local = TimeZoneInfo.Local;
+        if (local.HasIanaId) return local.Id;
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : null;
+    });
 
     private static DateOnly ParseDate(string text) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
