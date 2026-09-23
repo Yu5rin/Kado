@@ -493,6 +493,47 @@ public class GoogleSyncServiceTests : IDisposable
         Assert.Equal("私の実働日", stored.SummaryOverride);
     }
 
+    [Fact]
+    public async Task 呼び名を送れなくても取り込み自体は続ける()
+    {
+        // 前は「送れなかった」だけで、そのカレンダーの取り込みを丸ごと飛ばしていた。
+        // Google 側で名前や権限が変わっても Kado に入ってこず、警告も出ない状態
+        var legacy = SeedLegacyGoogleCalendar();
+        _test.Workspace.Sources.Upsert(legacy with
+        {
+            SummaryOverride = "私の実働日",
+            BackgroundColor = "#112233",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        var handler = new RoutingHandler(url => url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, $$"""
+                    {"items":[{"id":"{{LegacyCalendarId}}","summary":"名前が変わった",
+                      "accessRole":"reader","backgroundColor":"#445566"}]}
+                    """)
+                : RouteLegacy(url))
+        {
+            WriteRoute = request => IsCalendarListPatch(request)
+                ? (HttpStatusCode.Forbidden,
+                   """{"error":{"errors":[{"reason":"insufficientPermissions"}]}}""")
+                : null,
+        };
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        var stored = _test.Workspace.Sources.Calendars().Single(c => c.Id == LegacyCalendarId);
+
+        // Google 側の名前・権限は取り込む
+        Assert.Equal("名前が変わった", stored.Summary);
+        Assert.True(stored.IsReadOnly);
+        Assert.NotNull(stored.GoogleRaw);
+
+        // こちらで変えた呼び名と色は、断られた以上こちらの値のまま
+        Assert.Equal("私の実働日", stored.SummaryOverride);
+        Assert.Equal("#112233", stored.BackgroundColor);
+    }
+
     // ------------------------------------------------------------------
     // 実働日カレンダーの旧い名前「inaCalendar」
     //

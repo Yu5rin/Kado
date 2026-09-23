@@ -258,6 +258,132 @@ public class EventMapperTests
     }
 
     [Fact]
+    public void 予定ごとの通知の指定を引き継ぐ()
+    {
+        // Google には無い、こちら独自の項目。引き継がないと、PushChangesAsync が
+        // PATCH の応答をそのまま FromGoogle に通すたびに消える
+        const string source = """
+            {
+              "id": "e-notify", "summary": "定例",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" }
+            }
+            """;
+
+        var existing = new CalendarEvent { Id = "元の予定", Notify = true };
+        var notified = EventMapper.FromGoogle(Json(source), "primary", existing);
+
+        Assert.Equal(true, notified.Notify);
+
+        var existingOff = new CalendarEvent { Id = "元の予定", Notify = false };
+        var silenced = EventMapper.FromGoogle(Json(source), "primary", existingOff);
+
+        Assert.Equal(false, silenced.Notify);
+
+        // 初回の取り込みでは、こちらにまだ指定が無いので null のまま
+        var first = EventMapper.FromGoogle(Json(source), "primary");
+        Assert.Null(first.Notify);
+    }
+
+    [Fact]
+    public void 時刻つきの予定にはtimeZoneを添える()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        // 変換できない環境（実機では通常 Windows で成功する）では添えない、が
+        // どちらの場合でも「クラッシュしない」「終日には絶対に付かない」ことは保証する
+        var expected = ExpectedIanaZone();
+
+        if (expected is null)
+        {
+            Assert.False(body["start"]!.AsObject().ContainsKey("timeZone"));
+            Assert.False(body["end"]!.AsObject().ContainsKey("timeZone"));
+            return;
+        }
+
+        Assert.Equal(expected, body["start"]!["timeZone"]!.GetValue<string>());
+        Assert.Equal(expected, body["end"]!["timeZone"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void 終日予定にはtimeZoneを添えない()
+    {
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "棚卸し", Date = D(2026, 9, 24),
+        });
+
+        Assert.False(body["start"]!.AsObject().ContainsKey("timeZone"));
+        Assert.False(body["end"]!.AsObject().ContainsKey("timeZone"));
+    }
+
+    [Fact]
+    public void 繰り返しでも単発でも同じくtimeZoneを添える()
+    {
+        // 繰り返しの有無で出し分けない。単純さのほうを取った
+        var recurring = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "週次", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+            Recurrence = "FREQ=WEEKLY;BYDAY=TH",
+        });
+
+        var single = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e2", Title = "単発", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        var hasZone = recurring["start"]!.AsObject().ContainsKey("timeZone");
+        Assert.Equal(hasZone, single["start"]!.AsObject().ContainsKey("timeZone"));
+    }
+
+    /// <summary>本番のコードと同じ手順で、この環境で得られるはずの IANA 名を求める。</summary>
+    private static string? ExpectedIanaZone()
+    {
+        var local = TimeZoneInfo.Local;
+        if (local.HasIanaId) return local.Id;
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : null;
+    }
+
+    [Fact]
+    public void timeZoneを足しても毎回は送り返さない()
+    {
+        // 控えに timeZone が無い状態から始めても、書き戻す本文に新しく添えるだけで
+        // 「変わった」とは判定しない。SameMoment は date / dateTime しか見ないので、
+        // timeZone の有無やキーの追加は比較に影響しない
+        var withoutZone = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e11", "summary": "定例",
+              "start": { "dateTime": "{{START}}" },
+              "end":   { "dateTime": "{{END}}" }
+            }
+            """.Replace("{{START}}", LocalTime(2026, 9, 24, 9, 0))
+               .Replace("{{END}}", LocalTime(2026, 9, 24, 10, 0))), "primary");
+
+        Assert.False(EventMapper.NeedsPush(withoutZone));
+
+        // 控えの側に timeZone が入っていても同じ
+        var withZone = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e11", "summary": "定例",
+              "start": { "dateTime": "{{START}}", "timeZone": "Asia/Tokyo" },
+              "end":   { "dateTime": "{{END}}", "timeZone": "Asia/Tokyo" }
+            }
+            """.Replace("{{START}}", LocalTime(2026, 9, 24, 9, 0))
+               .Replace("{{END}}", LocalTime(2026, 9, 24, 10, 0))), "primary");
+
+        Assert.False(EventMapper.NeedsPush(withZone));
+
+        // それでも本当に時刻を変えれば、ちゃんと検知する
+        Assert.True(EventMapper.NeedsPush(withoutZone with { StartTime = new TimeOnly(9, 30) }));
+    }
+
+    [Fact]
     public void ローカルの識別子は引き継ぐ()
     {
         const string source = """
@@ -273,6 +399,67 @@ public class EventMapperTests
         // 変えると作業時間や Undo の参照が切れる
         Assert.Equal("元からの ID", value.Id);
         Assert.Equal("定例", value.Title);
+    }
+
+    // ------------------------------------------------------------------
+    // 他人が主催する予定は Google 側で変えられない
+    //
+    // organizer.self が明示的に false で、かつ guestsCanModify が true でなければ、
+    // こちらで変えても保存はできるのに向こうへは伝わらない
+    // ------------------------------------------------------------------
+
+    private static CalendarEvent WithRaw(string raw) => new()
+    {
+        Id = "e1", Title = "会議", GoogleRaw = raw,
+    };
+
+    [Fact]
+    public void 他人が主催する予定は変えられない()
+    {
+        var value = WithRaw("""{"id":"g1","organizer":{"self":false}}""");
+
+        Assert.True(EventMapper.IsLocked(value));
+    }
+
+    [Fact]
+    public void guestsCanModifyが立っていれば他人主催でも変えられる()
+    {
+        var value = WithRaw(
+            """{"id":"g1","organizer":{"self":false},"guestsCanModify":true}""");
+
+        Assert.False(EventMapper.IsLocked(value));
+    }
+
+    [Fact]
+    public void 自分が主催する予定は変えられる()
+    {
+        var value = WithRaw("""{"id":"g1","organizer":{"self":true}}""");
+
+        Assert.False(EventMapper.IsLocked(value));
+    }
+
+    [Fact]
+    public void organizerが無ければ自分の予定として扱う()
+    {
+        // 自分の予定にも organizer が省略されることがある。ここまで巻き込むと
+        // 自分の予定まで編集できなくなる
+        Assert.False(EventMapper.IsLocked(WithRaw("""{"id":"g1"}""")));
+        Assert.False(EventMapper.IsLocked(WithRaw("""{"id":"g1","organizer":{}}""")));
+    }
+
+    [Fact]
+    public void 他人が主催する予定は書き戻さない()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "e12", "summary": "会議",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+              "organizer": { "self": false }
+            }
+            """), "primary");
+
+        // 送っても向こうに拒まれるだけ。毎回「一部を伝えられません」を出さないために送らない
+        Assert.False(EventMapper.NeedsPush(value with { Title = "会議（変更）" }));
     }
 
     [Fact]

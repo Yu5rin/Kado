@@ -59,7 +59,7 @@ public sealed class GoogleSyncService(
                     new CalendarApiGateway(calendars, from));
 
                 report += await RunAsync(
-                    () => engine.SyncAsync(calendar.Id, calendar.Id, cancellationToken, IsReadOnly(calendar)),
+                    () => engine.SyncAsync(calendar.Id, calendar.Id, cancellationToken, calendar.IsReadOnly),
                     calendar.DisplayName,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -264,34 +264,6 @@ public sealed class GoogleSyncService(
     }
 
     /// <summary>
-    /// こちらから書けないカレンダーか。
-    /// <para>
-    /// 祝日・誕生日・他人から共有されたものは読むだけ。送ろうとしても断られる。
-    /// 判断は取り込んだときの <c>accessRole</c> で行う。
-    /// </para>
-    /// </summary>
-    private static bool IsReadOnly(CalendarSource calendar)
-    {
-        if (calendar.GoogleRaw is not { Length: > 0 } raw) return false;
-
-        try
-        {
-            var role = JsonDocument.Parse(raw).RootElement.Text("accessRole");
-
-            // owner と writer だけが書ける。reader / freeBusyReader は読むだけ
-            return role is not null &&
-                   !string.Equals(role, "owner", StringComparison.Ordinal) &&
-                   !string.Equals(role, "writer", StringComparison.Ordinal);
-        }
-        catch (JsonException)
-        {
-            // 読めないなら書けると見なす。書けないものへ送れば断られるだけで、
-            // 書けるものを読み取り専用にしてしまうより害が小さい
-            return false;
-        }
-    }
-
-    /// <summary>
     /// Google のカレンダー一覧を取り込む。
     /// <para>
     /// 名前と色をここで受け取る。左パネルの色見本と画面上の帯が、Google で見えている
@@ -338,18 +310,23 @@ public sealed class GoogleSyncService(
                         continue;
                     }
 
-                    // 断られたぶんも、ここから先へは進めない。相手の姿で上書きすると、
-                    // こちらで変えた呼び名や色がその場で消える。送れないだけで、変えた
-                    // ことまで取り消す道理は無い。次の同期でまた送り直す
-                    if (pushedSettings is PushOutcome.Refused) continue;
+                    // 断られたときも、このカレンダー自体は取り込む。丸ごと飛ばすと、
+                    // Google 側で名前・色・権限が変わっても Kado に入ってこなくなり、
+                    // 警告も出ない。ただし、こちらで変えた呼び名と色はこちらの値を残す。
+                    // 送れないだけで、変えたことまで取り消す道理は無い。次の同期でまた送り直す
+                    var refused = pushedSettings is PushOutcome.Refused;
 
                     workspace.Sources.Upsert(new CalendarSource
                     {
                         Id = id,
                         Summary = item.Text("summary") ?? id,
-                        SummaryOverride = item.Text("summaryOverride"),
-                        BackgroundColor = item.Text("backgroundColor") ?? existing?.BackgroundColor,
-                        ForegroundColor = item.Text("foregroundColor") ?? existing?.ForegroundColor,
+                        SummaryOverride = refused ? existing?.SummaryOverride : item.Text("summaryOverride"),
+                        BackgroundColor = refused
+                            ? existing?.BackgroundColor
+                            : item.Text("backgroundColor") ?? existing?.BackgroundColor,
+                        ForegroundColor = refused
+                            ? existing?.ForegroundColor
+                            : item.Text("foregroundColor") ?? existing?.ForegroundColor,
                         IsPrimary = item.Flag("primary"),
 
                         // チェックを外したカレンダーが同期のたびに戻らないようにする。

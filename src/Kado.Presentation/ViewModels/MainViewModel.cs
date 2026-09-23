@@ -2308,6 +2308,14 @@ public sealed class MainViewModel : ObservableObject
             return false;
         }
 
+        // 読み取り専用のカレンダーには送れない。複製で入れても、その複製先が
+        // 書けないままなので、複製かどうかに関わらず止める
+        if (IsInReadOnlyCalendar(found))
+        {
+            StatusMessage = ReadOnlyCalendarMessage;
+            return false;
+        }
+
         // 向こうで変えられない予定は動かさない。ここで動かしても伝わらず、
         // 画面と Google とで日付が食い違うだけ。複製は元を触らないので通す
         if (!copy && IsLocked(found))
@@ -2432,6 +2440,22 @@ public sealed class MainViewModel : ObservableObject
     private const string LockedMessage =
         "この予定は Google 側で作られたもので、ここからは変えられません（削除はできます）";
 
+    /// <summary>
+    /// 読み取り専用のカレンダーに入っている予定か。
+    /// <para>
+    /// 送信は止まるので Google 側は無傷だが、こちらだけ変わって食い違い、しかも
+    /// 何も知らされないのでは不親切。編集・削除・ドラッグの手前でここを見て、
+    /// <see cref="StatusMessage"/> で理由を伝える。判定は <see cref="CalendarSource.IsReadOnly"/>
+    /// に1箇所にまとめてあり、同期処理（<c>GoogleSyncService</c>）もここを見る。
+    /// </para>
+    /// </summary>
+    private bool IsInReadOnlyCalendar(CalendarEvent value) =>
+        value.CalendarId is { Length: > 0 } id &&
+        _workspace.Sources.FindCalendar(id) is { IsReadOnly: true };
+
+    private const string ReadOnlyCalendarMessage =
+        "このカレンダーは読み取り専用のため、変えられません（削除・移動もできません）";
+
     private void AddEvent()
     {
         var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime, QuickCalendarId);
@@ -2480,6 +2504,12 @@ public sealed class MainViewModel : ObservableObject
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
         if (_workspace.Events.Find(id) is not { } stored) return;
 
+        if (IsInReadOnlyCalendar(stored))
+        {
+            StatusMessage = ReadOnlyCalendarMessage;
+            return;
+        }
+
         if (IsLocked(stored))
         {
             StatusMessage = LockedMessage;
@@ -2512,6 +2542,15 @@ public sealed class MainViewModel : ObservableObject
     private void DeleteEventBy(string? id)
     {
         if (id is not { Length: > 0 }) return;
+
+        // Google 側で内容を変えられない予定（メールから起こされた予約など）は
+        // 消すことができる（LockedMessage 参照）が、読み取り専用のカレンダーは
+        // それ自体に書き込めないので、削除も止める
+        if (_workspace.Events.Find(id) is { } target && IsInReadOnlyCalendar(target))
+        {
+            StatusMessage = ReadOnlyCalendarMessage;
+            return;
+        }
 
         // 繰り返しの回を選ばず、系列ごと消える。黙って消えると気づきにくいので、
         // 「すべての回」を消したことが分かる文言にする（確認ダイアログは増やさない。

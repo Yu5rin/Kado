@@ -420,6 +420,105 @@ public class DragMoveTests
         Assert.Equal(new TimeOnly(23, 59), moved.EndTime);
     }
 
+    // ------------------------------------------------------------------
+    // 読み取り専用のカレンダー
+    //
+    // 送信は止まるので Google 側は無傷だが、黙って編集・削除・ドラッグをさせると
+    // こちらだけ変わって食い違い、しかも何も知らされないのでは不親切
+    // ------------------------------------------------------------------
+
+    private static CalendarSource ReadOnlyCalendar(string id = "cal-ro") => new()
+    {
+        Id = id, Summary = "共有カレンダー",
+        GoogleRaw = $$"""{"id":"{{id}}","accessRole":"reader"}""",
+        UpdatedAt = DateTimeOffset.Now,
+    };
+
+    [Fact]
+    public void 読み取り専用カレンダーの予定はドラッグで動かせない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(ReadOnlyCalendar());
+        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-ro" });
+
+        var main = Create(test);
+
+        Assert.False(main.MoveEventTo("e1", Tomorrow));
+        Assert.Equal(Today, test.Workspace.Events.Find("e1")!.Date);
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void 読み取り専用カレンダーの予定は複製も止める()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(ReadOnlyCalendar());
+        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-ro" });
+
+        // 複製で入れても、その複製先が書けないまま残る。編集で直すこともできないので、
+        // 複製かどうかに関わらず止める
+        Assert.False(Create(test).MoveEventTo("e1", Tomorrow, copy: true));
+        Assert.Single(test.Workspace.Events.All());
+    }
+
+    [Fact]
+    public void 読み取り専用カレンダーの予定は編集画面を開かない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(ReadOnlyCalendar());
+        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-ro" });
+
+        var editors = new FakeEditorPresenter();
+        var main = new MainViewModel(test.Workspace, Today, editors: editors);
+        var chip = main.Month.Cells.Single(c => c.Date == Today).Events.Single();
+
+        main.EditChipCommand.Execute(chip);
+
+        Assert.Null(editors.LastEventEditor);
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void 読み取り専用カレンダーの予定は削除もできない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(ReadOnlyCalendar());
+        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-ro" });
+
+        var main = Create(test);
+        var chip = main.Month.Cells.Single(c => c.Date == Today).Events.Single();
+        main.DeleteChipCommand.Execute(chip);
+
+        Assert.NotNull(test.Workspace.Events.Find("e1"));
+        Assert.NotNull(main.StatusMessage);
+    }
+
+    [Fact]
+    public void 書けるカレンダーの予定は今までどおり扱える()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "cal-rw", Summary = "自分のカレンダー",
+            GoogleRaw = """{"id":"cal-rw","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-rw" });
+
+        Assert.True(Create(test).MoveEventTo("e1", Tomorrow));
+    }
+
+    [Fact]
+    public void カレンダーに属さない予定は読み取り専用扱いにしない()
+    {
+        // CalendarId が無い予定（手で入れた、まだどのカレンダーにも属さない）まで
+        // 巻き込むと、ふつうの操作ができなくなる
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));
+
+        Assert.True(Create(test).MoveEventTo("e1", Tomorrow));
+    }
+
     [Fact]
     public void 移した予定は週ビューに出る()
     {
