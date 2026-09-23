@@ -325,9 +325,17 @@ public sealed class EventEditorViewModel : ObservableObject
         set => Set(ref _recurrence, value);
     }
 
-    /// <summary>繰り返しの選択肢。開始日に合わせて文言が変わる。</summary>
+    /// <summary>
+    /// 繰り返しの選択肢。開始日に合わせて文言が変わる。
+    /// <para>
+    /// こちらの5択に当てはまらない指定は「このまま」の1項目になる。その文言には、
+    /// 元の指定を読んだ中身（「2週ごと 月・水・金」など）を書く。以前は
+    /// 「この予定の設定のまま」としか出ず、繰り返しなのかどうかも読めなかった。
+    /// </para>
+    /// </summary>
     public IReadOnlyList<RecurrenceOption> RecurrenceOptions =>
-        RecurrenceChoice.OptionsFor(_date, includeCustom: _recurrence == RecurrenceKind.Custom);
+        RecurrenceChoice.OptionsFor(
+            _date, includeCustom: _recurrence == RecurrenceKind.Custom, spec: _original?.Recurrence);
 
     /// <summary>場所。Google Calendar の <c>location</c>。</summary>
     public string? Location
