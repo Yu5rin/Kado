@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Kado.Presentation.Settings;
@@ -274,6 +275,37 @@ public sealed class ShellController : IDisposable
 
         _window.Show();
         _window.Activate();
+
+        RaiseToTopIfOverlay();
+    }
+
+    /// <summary>
+    /// 帯として出しているあいだ、窓の並びをいちばん手前へ入れ直す。
+    /// <para>
+    /// <c>Window.Topmost</c> は <see cref="ToEdge"/> で true にしてあるが、それだけでは
+    /// <b>他のウィンドウの下に出ることがある</b>。隠して出し直す作りなので、出し直した
+    /// 拍子に実際の並びが Topmost のとおりでなくなる。出すたびにここで入れ直す。
+    /// </para>
+    /// <para>
+    /// 位置も大きさも変えず、前面も奪わない（<c>SWP_NOACTIVATE</c>）。相手のアプリで
+    /// 文字を打っている最中に呼ばれても、入力の行き先は変わらない。
+    /// </para>
+    /// <para>
+    /// ピンで留めているあいだ（<see cref="ShellMode.Dock"/>）は呼ばない。あちらは
+    /// 作業領域そのものを分けてもらっていて、<c>Topmost</c> を落とすのが正しい
+    /// （落とさないと、シェルが重なった窓を押し出す）。
+    /// </para>
+    /// </summary>
+    private void RaiseToTopIfOverlay()
+    {
+        if (_shell.Mode != ShellMode.Overlay) return;
+
+        var handle = new WindowInteropHelper(_window).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        NativeMethods.SetWindowPos(
+            handle, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
     }
 
     /// <summary>
@@ -365,6 +397,11 @@ public sealed class ShellController : IDisposable
                 () =>
                 {
                     _revealHost?.EndSlideReveal();
+
+                    // 滑り出しているあいだに他のアプリが前面を取ると、出きった時点で
+                    // 下に潜っていることがある。終わりにもう一度入れ直す
+                    RaiseToTopIfOverlay();
+
                     LogWindowRect("Animate完了");
                 });
         }));
