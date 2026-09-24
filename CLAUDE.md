@@ -24,9 +24,15 @@ git clone https://github.com/Yu5rin/Kado.git kado-tag
 cd kado-tag
 git checkout dev
 
-git tag -a vX.Y.Z -m "Kado X.Y.Z"
+git -c user.name="Yu5rin" -c user.email="Yu5rin@users.noreply.github.com" tag -a vX.Y.Z -m "Kado X.Y.Z"
 git push origin vX.Y.Z
 ```
+
+`-c` で名前とメールをその場で渡している。注釈付きのタグ（`-a`）は作り手の
+名前とメールが要るので、git を設定していない端末だと「Committer identity
+unknown」で作れず、続く push も「src refspec … does not match any」で落ちる。
+`-c` はその1回だけ効くので、端末の設定は変えない。メールは GitHub の
+非公開用アドレスにして、実際のアドレスを出さない。
 
 ## 旧い名前（SlideinaCalendar）
 
