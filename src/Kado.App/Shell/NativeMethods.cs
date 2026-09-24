@@ -329,4 +329,30 @@ internal static class NativeMethods
 
     [DllImport("shcore.dll")]
     internal static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    // ------------------------------------------------------------------
+    // 窓の見える範囲を絞る（右に寄せたときの開く演出。SetWindowRgn）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 矩形のリージョンを作る。座標は物理ピクセル。
+    /// <para>
+    /// <see cref="SetWindowRgn"/> に渡して成功すれば、このハンドルの持ち主は OS に移る
+    /// （自分で <see cref="DeleteObject"/> しない）。失敗したときだけ自分で片付ける。
+    /// </para>
+    /// </summary>
+    [DllImport("gdi32.dll")]
+    internal static extern IntPtr CreateRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect);
+
+    /// <summary>
+    /// 窓の見える範囲（クリップ）を、渡したリージョンに絞る。<c>IntPtr.Zero</c> を渡すと
+    /// 範囲の指定を外し、窓全体が見える元の状態に戻る。
+    /// </summary>
+    [DllImport("user32.dll")]
+    internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool bRedraw);
+
+    /// <summary>GDI オブジェクトを片付ける。<see cref="SetWindowRgn"/> が失敗したときだけ使う。</summary>
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteObject(IntPtr hObject);
 }

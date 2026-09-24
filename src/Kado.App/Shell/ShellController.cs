@@ -124,16 +124,47 @@ public sealed class ShellController : IDisposable
 
     /// <summary>
     /// 開く演出のあいだだけ下げる <c>Window.MinWidth</c>。演出前の値をここへ控えておき、
-    /// 演出が終わる・打ち切られるときに戻す。
+    /// 演出が終わる・打ち切られるときに戻す。<b>左に寄せているときだけ使う</b>
+    /// （<see cref="SlideInLeft"/> 参照）。
     /// </summary>
     private double _minWidthBeforeReveal;
 
     /// <summary>
+    /// <see cref="_minWidthBeforeReveal"/> へ控えてあり、<see cref="EndReveal"/> で
+    /// 戻す必要があるか。
+    /// <para>
+    /// 右に寄せているときは <c>MinWidth</c> をそもそも下げないので、<see cref="EndReveal"/>
+    /// は右の演出のあとにまで無条件で <c>MinWidth</c> を書き戻してはいけない
+    /// （書き戻すと、下げる前の値を一度も控えていない右の演出のあと 0 に落ちてしまう）。
+    /// この旗を見て、左で下げたときだけ戻す。
+    /// </para>
+    /// </summary>
+    private bool _minWidthLowered;
+
+    /// <summary>
     /// 右に寄せているときの開く演出が使う、毎フレームの <c>CompositionTarget.Rendering</c>
     /// ハンドラ。演出中だけ入っており、打ち切り（<see cref="CancelReveal"/>）でも
-    /// 必ずここから外す。外し忘れると、引っ込めたあとも窓を動かし続ける。
+    /// 必ずここから外す。外し忘れると、引っ込めたあとも毎フレーム呼び続けてしまう。
     /// </summary>
     private EventHandler? _revealRenderingHandler;
+
+    /// <summary>
+    /// 右に寄せているときの開く演出で、<c>SetWindowRgn</c> により窓の見える範囲を
+    /// 絞っている最中か。
+    /// <para>
+    /// 打ち切り（<see cref="CancelReveal"/>）で範囲の指定を必ず外すための控え。
+    /// これを見ずに外し忘れると、窓が細い帯のまま切り取られて残り、中身が
+    /// 見えなくなる（いちばん起きてはいけない壊れ方）。
+    /// </para>
+    /// </summary>
+    private bool _revealClippingRight;
+
+    /// <summary>
+    /// <see cref="_revealClippingRight"/> が立っているあいだ、範囲を絞っている窓の
+    /// ハンドル。<see cref="CancelReveal"/> から <c>SetWindowRgn(hwnd, IntPtr.Zero, …)</c>
+    /// を呼び直すために控えておく。
+    /// </summary>
+    private IntPtr _revealClipHandle;
 
     /// <summary>
     /// スライドから、カーソルが外れたら引っ込めるか。
@@ -318,23 +349,30 @@ public sealed class ShellController : IDisposable
     /// <summary>
     /// 滑り出させて出す。
     /// <para>
-    /// <b>窓は最初から定位置（寄せている辺）にあり、<c>Width</c> を広げて
-    /// 「めくれるように」見せる。</b>画面の外から <c>Left</c> を動かして
-    /// 滑り込ませていた前の作りは、窓の右端（寄せている辺と逆側）が先に画面へ
-    /// 入ってしまい、いちばん先に読みたい左端の中身が最後に到着するうえ、
-    /// 中身が横に流れて落ち着かなかった。中身（<see cref="ISlideRevealHost"/>）の
-    /// 幅は定位置に固定して端へ寄せておくので、窓の <c>Width</c> が動いても中身の
-    /// レイアウトは組み直されない（月・年ビューの重さの問題を防ぐ）。
+    /// <b>窓は最初から定位置（寄せている辺）にあり、それを広げて「めくれるように」
+    /// 見せる。</b>画面の外から <c>Left</c> を動かして滑り込ませていた前の作りは、
+    /// 窓の右端（寄せている辺と逆側）が先に画面へ入ってしまい、いちばん先に読みたい
+    /// 左端の中身が最後に到着するうえ、中身が横に流れて落ち着かなかった。
+    /// </para>
+    /// <para>
+    /// <b>左右で作りが違う。</b> Windows は、ウィンドウを左の辺から広げると、
+    /// 描き直しが追い付くまでのあいだ古い中身を窓の左上に合わせて表示する。左に
+    /// 寄せた窓は右へ広がるので、この性質があっても古い中身がそのまま正しい場所に
+    /// 残り、問題が起きない――だから左のときは <see cref="SlideInLeft"/> で、
+    /// これまでどおり <c>Window.Width</c> を WPF の <c>DoubleAnimation</c> で広げる。
+    /// 右に寄せた窓は逆に左へ広がるので、同じやり方だと中身が壁から離れて左へ
+    /// 引きずられるように見えてしまう（実機の記録で確認済み。<c>SetWindowPos</c>
+    /// を1回にまとめても、窓の大きさを変えていること自体が原因なので直らなかった）。
+    /// だから右のときだけ <see cref="SlideInRight"/> に任せ、<b>窓の大きさは
+    /// 一切変えず</b> <c>SetWindowRgn</c> で見える範囲だけを広げる。
+    /// <b>次に誰かが「左右で揃えよう」としても、この理由でまた壊れるので揃えないこと。</b>
+    /// </para>
+    /// <para>
+    /// 中身（<see cref="ISlideRevealHost"/>）の幅は、どちらの辺でも定位置に固定して
+    /// 端へ寄せておく。左のときは窓の <c>Width</c> が動くのでこれが要る。右のときは
+    /// 窓がはじめから定位置の幅なので害は無い。
     /// </para>
     /// <para>位置を決めてから出す。出してから動かすと、一度別の場所に見えて飛ぶ。</para>
-    /// <para>
-    /// <b>アニメーションの開始は、出したのと同じフレームではしない。</b>
-    /// <see cref="Show"/>／<see cref="Window.Activate"/> の直後に始めると、
-    /// 窓が現れる処理と競合して開始値が拾われず、いきなり最終位置に出てしまう
-    /// （実機で確認済み。引っ込み側 <see cref="SlideOutIfIdle"/> はこの競合が無く、
-    /// 完璧に動いている）。窓が出きったあとのフレーム（<see cref="DispatcherPriority.Loaded"/>）
-    /// まで待ってから始める。
-    /// </para>
     /// </summary>
     private void SlideIn()
     {
@@ -350,7 +388,7 @@ public sealed class ShellController : IDisposable
 
         ApplyOverlayBounds();
 
-        // 定位置（このあと動かさない値）を、Width を縮める前に確定しておく
+        // 定位置（このあと動かさない値）を、左の演出が Width を縮める前に確定しておく
         var restingLeft = _window.Left;
         var restingWidth = _window.Width;
 
@@ -364,13 +402,27 @@ public sealed class ShellController : IDisposable
         _revealHost?.BeginSlideReveal(restingWidth, _shell.Edge);
         _revealing = true;
 
+        if (_shell.Edge == DockEdge.Right) SlideInRight();
+        else SlideInLeft(restingLeft, restingWidth);
+
+        // 出たあとは、外れるのを見張る番
+        if (SlideOutOnLeave) _hotZone.WatchLeaving(shown);
+    }
+
+    /// <summary>
+    /// 左に寄せているときの開く演出。窓を <see cref="SlideRevealStartWidth"/> まで
+    /// いったん畳んでから、<c>Window.Width</c> を <see cref="AnimateReveal"/> で
+    /// 広げる。従来どおりの作り（詳しくは <see cref="SlideIn"/> のコメント）。
+    /// </summary>
+    private void SlideInLeft(double restingLeft, double restingWidth)
+    {
         // 窓をいったん畳んでおく。0 だと WPF が嫌がる場面があるので 1 にする。
         // MinWidth がそのままだとそこで頭打ちになるので、演出のあいだだけ下げる
         _minWidthBeforeReveal = _window.MinWidth;
+        _minWidthLowered = true;
         _window.MinWidth = SlideRevealStartWidth;
         _window.Width = SlideRevealStartWidth;
 
-        // 右に寄せているときは、右端を定位置のまま保つよう Left も詰める。
         // 左に寄せているときは Left はもう動かさない（ShellGeometry.RevealLeft）
         _window.Left = ShellGeometry.RevealLeft(_shell.Edge, restingLeft, restingWidth, SlideRevealStartWidth);
 
@@ -379,6 +431,7 @@ public sealed class ShellController : IDisposable
 
         // Show() の直後、同じフレームでアニメーションを始めない。窓が出る処理と
         // 競合して開始値が拾われないことがあるため、出きった次のフレームまで待つ
+        // （実機で確認済み。引っ込み側 SlideOutIfIdle はこの競合が無く、完璧に動いている）
         _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
             // 待っているあいだに引っ込め始めた・出しかたが変わったなら、もう動かさない
@@ -400,7 +453,7 @@ public sealed class ShellController : IDisposable
             LogWindowRect("アニメーション開始直前");
 
             // 開始値は現在値まかせにせず、畳んだ幅と定位置の左端を明示して渡す
-            AnimateReveal(startWidth, restingWidth, restingLeft,
+            AnimateReveal(startWidth, restingWidth,
                 () =>
                 {
                     _revealHost?.EndSlideReveal();
@@ -412,10 +465,132 @@ public sealed class ShellController : IDisposable
                     LogWindowRect("Animate完了");
                 });
         }));
-
-        // 出たあとは、外れるのを見張る番
-        if (SlideOutOnLeave) _hotZone.WatchLeaving(shown);
     }
+
+    /// <summary>
+    /// 右に寄せているときの開く演出。
+    /// <para>
+    /// <b>窓の大きさ・位置は最初から定位置（<see cref="ApplyOverlayBounds"/> が
+    /// 置いた値）のまま一切変えない。</b>広げているように見せる仕事は、窓の
+    /// <c>Width</c> ではなく <c>SetWindowRgn</c> による「見える範囲」の切り取りに
+    /// 任せる。中身は常に定位置に描かれているので、見える範囲を右端から左へ
+    /// 広げていっても、中身が動いて見えることはない（なぜ右だけこの作りにしたかは
+    /// <see cref="SlideIn"/> のコメントを参照）。
+    /// </para>
+    /// <para>
+    /// 座標は窓の左上を原点とする物理ピクセル。<c>WindowStyle=None</c> なので枠が無く、
+    /// 窓の矩形そのものが基準になる。<see cref="Scale"/> で DIP から物理ピクセルへ
+    /// 換算する。
+    /// </para>
+    /// <para>
+    /// <b>一度も出したことが無い窓はまだハンドルが無い。</b> 見せる前に範囲を絞る
+    /// 必要があるので、<c>WindowInteropHelper.EnsureHandle()</c> で先にハンドルを
+    /// 作らせる。絞っておかないと、定位置・全幅の窓が一瞬まるごと見えてしまう。
+    /// </para>
+    /// <para>
+    /// <b>打ち切られても、<see cref="CancelReveal"/> が必ず範囲の指定を外す。</b>
+    /// 演出中かどうかを <see cref="_revealClippingRight"/> に、窓のハンドルを
+    /// <see cref="_revealClipHandle"/> に控えておき、<see cref="CancelReveal"/> が
+    /// そこを見て外す。外し忘れると、窓が細い帯のまま切り取られて残り、中身が
+    /// 見えなくなる（いちばん起きてはいけない壊れ方）。
+    /// </para>
+    /// </summary>
+    private void SlideInRight()
+    {
+        var handle = new WindowInteropHelper(_window).EnsureHandle();
+
+        var scale = Scale();
+        var widthPhysical = Math.Max(1, (int)Math.Round(_window.Width * scale));
+        var heightPhysical = Math.Max(1, (int)Math.Round(_window.Height * scale));
+
+        ShellDiagnosticsLog.Write(
+            $"SlideIn 開く演出 edge=Right 方式=SetWindowRgn restingLeft={_window.Left:F1} " +
+            $"restingWidth={_window.Width:F1} widthPhysical={widthPhysical} heightPhysical={heightPhysical}");
+
+        // 見せる前に、見える範囲を右端 1px 幅の帯にしておく
+        SetRevealRegion(handle, widthPhysical, heightPhysical, 1);
+        _revealClippingRight = true;
+        _revealClipHandle = handle;
+
+        Show();
+        LogWindowRect("Show直後");
+        LogWindowRect("アニメーション開始直前");
+
+        // 前の演出の処理が残っていれば外してから登録する。二重に走ると、
+        // 2本の処理が同じ窓の範囲を奪い合う
+        if (_revealRenderingHandler is { } previous)
+        {
+            System.Windows.Media.CompositionTarget.Rendering -= previous;
+            _revealRenderingHandler = null;
+        }
+
+        var totalMs = SlideInTime.TimeSpan.TotalMilliseconds;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var frame = 0;
+
+        void OnRendering(object? sender, EventArgs e)
+        {
+            var t = totalMs <= 0 ? 1.0 : Math.Min(1.0, stopwatch.Elapsed.TotalMilliseconds / totalMs);
+            var eased = SlideRevealEasing.Ease(t);
+            var revealPhysical = Math.Clamp((int)Math.Round(widthPhysical * eased), 1, widthPhysical);
+
+            SetRevealRegion(handle, widthPhysical, heightPhysical, revealPhysical);
+
+            // 毎コマは記録しない。何かあったとき記録だけで切り分けられるよう、
+            // 何コマかに1回だけ見える幅を残す
+            frame++;
+            if (t >= 1.0 || frame % 4 == 0)
+            {
+                ShellDiagnosticsLog.Write(
+                    $"SlideIn 開く演出(右) t={t:F2} revealPhysical={revealPhysical}/{widthPhysical}");
+            }
+
+            if (t < 1.0) return;
+
+            System.Windows.Media.CompositionTarget.Rendering -= OnRendering;
+            _revealRenderingHandler = null;
+
+            // 範囲の指定を外す（窓全体が見える元の状態に戻す）
+            ClearRevealRegion(handle);
+            _revealClippingRight = false;
+            _revealClipHandle = IntPtr.Zero;
+
+            EndReveal();
+            _revealHost?.EndSlideReveal();
+
+            // 滑り出しているあいだに他のアプリが前面を取ると、出きった時点で
+            // 下に潜っていることがある。終わりにもう一度入れ直す
+            RaiseToTopIfOverlay();
+
+            LogWindowRect("Animate完了");
+        }
+
+        _revealRenderingHandler = OnRendering;
+        System.Windows.Media.CompositionTarget.Rendering += OnRendering;
+    }
+
+    /// <summary>
+    /// 窓の見える範囲を、右端から <paramref name="revealPhysical"/> px ぶんの帯に絞る。
+    /// <para>
+    /// <c>SetWindowRgn</c> に渡したリージョンのハンドルは、成功したら OS が持ち主に
+    /// なるので自分で <c>DeleteObject</c> しない。失敗（0 が返る）したときだけ、
+    /// 自分で作ったリージョンを片付ける。
+    /// </para>
+    /// </summary>
+    private static void SetRevealRegion(IntPtr handle, int widthPhysical, int heightPhysical, int revealPhysical)
+    {
+        var region = NativeMethods.CreateRectRgn(
+            widthPhysical - revealPhysical, 0, widthPhysical, heightPhysical);
+
+        if (NativeMethods.SetWindowRgn(handle, region, true) == 0)
+        {
+            NativeMethods.DeleteObject(region);
+        }
+    }
+
+    /// <summary>範囲の指定を外し、窓全体が見える元の状態に戻す。</summary>
+    private static void ClearRevealRegion(IntPtr handle) =>
+        NativeMethods.SetWindowRgn(handle, IntPtr.Zero, true);
 
     /// <summary>
     /// 引っ込める。
@@ -590,28 +765,20 @@ public sealed class ShellController : IDisposable
     }
 
     /// <summary>
-    /// 幅を「めくれるように」広げる（開く演出）。
+    /// 幅を「めくれるように」広げる（開く演出）。<b>左に寄せているときだけ使う。</b>
     /// <para>
     /// 中身は <see cref="ISlideRevealHost.BeginSlideReveal"/> で固定してあるので、
-    /// ここは窓の <c>Width</c>（右に寄せているときは <c>Left</c> も）を動かすだけでよい。
-    /// </para>
-    /// <para>
-    /// <b>左に寄せているときは、これまでどおり WPF の <c>DoubleAnimation</c> で
-    /// <c>Width</c> だけを動かす。</b>右に寄せているときだけ話が別で、
-    /// <see cref="AnimateRevealRight"/> に任せる（下記コメント参照）。
+    /// ここは窓の <c>Width</c> を WPF の <c>DoubleAnimation</c> で動かすだけでよい。
+    /// 右に寄せているときは話がまるで別で、<see cref="SlideInRight"/> が
+    /// <c>SetWindowRgn</c> で見える範囲を広げる作りを使う（<see cref="SlideIn"/> の
+    /// コメントに理由がある）。
     /// </para>
     /// </summary>
-    private void AnimateReveal(double fromWidth, double toWidth, double restingLeft, Action? done)
+    private void AnimateReveal(double fromWidth, double toWidth, Action? done)
     {
         ShellDiagnosticsLog.Write(
             $"SlideIn 開く演出 edge={_shell.Edge} widthFrom={fromWidth:F1} widthTo={toWidth:F1} " +
-            $"dockWidth={_shell.DockWidth:F1} restingLeft={restingLeft:F1}");
-
-        if (_shell.Edge == DockEdge.Right)
-        {
-            AnimateRevealRight(fromWidth, toWidth, restingLeft, done);
-            return;
-        }
+            $"dockWidth={_shell.DockWidth:F1}");
 
         var widthAnimation = new DoubleAnimation(fromWidth, toWidth, SlideInTime)
         {
@@ -630,93 +797,16 @@ public sealed class ShellController : IDisposable
     }
 
     /// <summary>
-    /// 右に寄せているときの開く演出。
-    /// <para>
-    /// <b>WPF の <c>DoubleAnimation</c> は使わない。</b><c>Window.LeftProperty</c> と
-    /// <c>Window.WidthProperty</c> に別々のアニメーションを掛けると、WPF はこの2つを
-    /// 別々の <c>SetWindowPos</c> でウィンドウへ反映する。1コマごとに「Left だけ動いて
-    /// 右端が壁から離れる」中間状態が挟まり、右端が壁に貼り付いたまま伸びるように
-    /// 見えなくなる（引っ込むほう・左に寄せているときのどちらも Left か Width の
-    /// 片方しか動かさないので、この問題は起きない）。
-    /// </para>
-    /// <para>
-    /// 代わりに <see cref="System.Windows.Media.CompositionTarget.Rendering"/> で
-    /// 毎コマ呼ばれる処理を作り、経過時間から進み具合 t（0〜1）を出して
-    /// <see cref="SlideRevealEasing"/> で緩急を付け、いまの幅を求める。右端
-    /// （<paramref name="restingLeft"/> + <paramref name="toWidth"/>）を物理ピクセルで
-    /// 固定し、<c>x = 右端 − 幅</c> として位置と幅を <b>1回の <c>SetWindowPos</c> に
-    /// まとめて</b>渡す。これで「Left だけ動く」中間状態が生まれない。
-    /// </para>
-    /// <para>
-    /// <b>打ち切り（<see cref="CancelReveal"/>）でも必ず外す。</b>
-    /// <see cref="_revealRenderingHandler"/> に控えておき、外し忘れて窓を動かし続ける
-    /// ことがないようにする。
-    /// </para>
-    /// </summary>
-    private void AnimateRevealRight(double fromWidth, double toWidth, double restingLeft, Action? done)
-    {
-        var handle = new WindowInteropHelper(_window).Handle;
-        if (handle == IntPtr.Zero)
-        {
-            // ハンドルがまだ無い（Show() のあとにしか来ないので、実機ではまず起きない）。
-            // 演出は省いて、いきなり定位置に置く。WPF のアニメーションで代用すると、
-            // まさに直したかった「右端が壁から離れる」動きに戻ってしまう
-            _window.Left = restingLeft;
-            _window.Width = toWidth;
-            EndReveal();
-            done?.Invoke();
-            return;
-        }
-
-        // 前の演出の処理が残っていれば外してから登録する。二重に走ると、
-        // 2本の処理が同じ窓を奪い合って位置が暴れる
-        if (_revealRenderingHandler is { } previous)
-        {
-            System.Windows.Media.CompositionTarget.Rendering -= previous;
-            _revealRenderingHandler = null;
-        }
-
-        var scale = Scale();
-        var topPhysical = (int)Math.Round(_window.Top * scale);
-        var heightPhysical = (int)Math.Round(_window.Height * scale);
-        var rightEdgePhysical = (int)Math.Round((restingLeft + toWidth) * scale);
-        var totalMs = SlideInTime.TimeSpan.TotalMilliseconds;
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        void OnRendering(object? sender, EventArgs e)
-        {
-            var t = totalMs <= 0 ? 1.0 : Math.Min(1.0, stopwatch.Elapsed.TotalMilliseconds / totalMs);
-            var eased = SlideRevealEasing.Ease(t);
-            var width = fromWidth + ((toWidth - fromWidth) * eased);
-            var widthPhysical = (int)Math.Round(width * scale);
-            var xPhysical = rightEdgePhysical - widthPhysical;
-
-            NativeMethods.SetWindowPos(
-                handle, IntPtr.Zero, xPhysical, topPhysical, widthPhysical, heightPhysical,
-                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER);
-
-            if (t < 1.0) return;
-
-            System.Windows.Media.CompositionTarget.Rendering -= OnRendering;
-            _revealRenderingHandler = null;
-
-            _window.Left = restingLeft;
-            _window.Width = toWidth;
-            EndReveal();
-            done?.Invoke();
-        }
-
-        _revealRenderingHandler = OnRendering;
-        System.Windows.Media.CompositionTarget.Rendering += OnRendering;
-    }
-
-    /// <summary>
     /// 開く演出を打ち切る。演出中でなければ何もしない。
     /// <para>
     /// <see cref="SlideOutIfIdle"/> 自体は変えない（引っ込みは完璧に動いている）。
     /// 呼び出し側でここを先に呼ぶことで、<see cref="SlideInTime"/>（220ms）より
     /// 短い間隔で引っ込みが割り込んでも、広がる演出と画面外へ動く演出が重ならない
     /// ようにする。
+    /// </para>
+    /// <para>
+    /// <c>StopSliding</c> など複数の経路から呼ばれる一本道なので、右に寄せていると
+    /// きの後始末（<c>SetWindowRgn</c> の範囲を外す）もここへ集約してある。
     /// </para>
     /// </summary>
     private void CancelReveal()
@@ -728,22 +818,43 @@ public sealed class ShellController : IDisposable
         _window.BeginAnimation(Window.LeftProperty, null);
 
         // 右に寄せているときの開く演出は WPF のアニメーションではなく
-        // CompositionTarget.Rendering を使っている。外し忘れると、引っ込めた
-        // あとも毎フレーム SetWindowPos を呼び続けて窓を動かし続けてしまう
+        // CompositionTarget.Rendering で毎コマ SetWindowRgn を呼んでいる。
+        // 外し忘れると、引っ込めたあとも毎フレーム呼び続けてしまう
         if (_revealRenderingHandler is { } handler)
         {
             System.Windows.Media.CompositionTarget.Rendering -= handler;
             _revealRenderingHandler = null;
         }
 
+        // 範囲の指定を必ず外す。外し忘れると、窓が細い帯のまま切り取られて残り、
+        // 中身が見えなくなる（いちばん起きてはいけない壊れ方）。演出中かどうかと
+        // 窓のハンドルはフィールドに控えてあるので、呼び出し経路を問わずここで外れる
+        if (_revealClippingRight)
+        {
+            ClearRevealRegion(_revealClipHandle);
+            _revealClippingRight = false;
+            _revealClipHandle = IntPtr.Zero;
+        }
+
         _revealHost?.EndSlideReveal();
     }
 
-    /// <summary>演出中フラグを下ろし、演出向けに下げていた <c>MinWidth</c> を元に戻す。</summary>
+    /// <summary>
+    /// 演出中フラグを下ろし、左の演出向けに下げていた <c>MinWidth</c> を元に戻す。
+    /// <para>
+    /// 右の演出は <c>MinWidth</c> を下げていないので、<see cref="_minWidthLowered"/>
+    /// が立っているとき（左の演出のとき）だけ戻す。無条件に戻すと、右の演出のあと
+    /// 一度も控えていない値（0）へ落としてしまう。
+    /// </para>
+    /// </summary>
     private void EndReveal()
     {
         _revealing = false;
+
+        if (!_minWidthLowered) return;
+
         _window.MinWidth = _minWidthBeforeReveal;
+        _minWidthLowered = false;
     }
 
     /// <summary>滑りを止めて、位置を自分の手に戻す。</summary>
@@ -752,8 +863,9 @@ public sealed class ShellController : IDisposable
         _slidingOut = false;
         _window.BeginAnimation(Window.LeftProperty, null);
 
-        // 開く演出（Width、右寄せなら Left も）が残っていたら、ここで打ち切る。
-        // 掛けたままだと、このあと Width へ入れる値が効かなくなる
+        // 開く演出（左は Width のアニメーション、右は SetWindowRgn の範囲）が
+        // 残っていたら、ここで打ち切る。Width のアニメーションを掛けたままだと、
+        // このあと Width へ入れる値が効かなくなる
         CancelReveal();
     }
 
