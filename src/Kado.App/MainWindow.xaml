@@ -1240,7 +1240,7 @@
                         スライド、ピンで固定）と最初の一歩（マスをダブルクリック）を、
                         ここでしか教えていなかった。ステータス行の帯を流用する
                     -->
-                    <DockPanel LastChildFill="False"
+                    <DockPanel LastChildFill="True"
                                Visibility="{Binding ShowsOnboarding, Converter={StaticResource BoolToVisibility}}">
                         <Button DockPanel.Dock="Right" Content="閉じる" Padding="8,2" Margin="6,0,0,0"
                                 Style="{StaticResource GhostButtonStyle}"
@@ -1249,7 +1249,14 @@
                                 Style="{StaticResource GhostButtonStyle}"
                                 Command="{Binding TryOnboardingCommand}"
                                 ToolTip="スライドに切り替えます" />
+                        <!--
+                            LastChildFill="True" で残りの幅に収め、その中で折り返させる。
+                            帯が狭いと、既定の Stretch のままではボタンの下まで文字が
+                            伸びて重なっていた。HorizontalAlignment="Left" で、幅が
+                            余ったときにボタンから離れて真ん中に寄らないようにする
+                        -->
                         <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
+                                   HorizontalAlignment="Left" Margin="0,0,8,0"
                                    TextWrapping="Wrap" MaxWidth="360"
                                    Text="画面の端に寄せて使えます：出しかたのボタンでスライド、ピンで固定 ／ 予定はマスをダブルクリック" />
                     </DockPanel>

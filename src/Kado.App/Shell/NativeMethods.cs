@@ -246,6 +246,12 @@ internal static class NativeMethods
     /// <summary>並び順だけ変える（位置・大きさ・手前へ出す操作はしない）。</summary>
     internal const int SWP_NOACTIVATE = 0x0010;
 
+    /// <summary>Z オーダーはそのまま（<c>hWndInsertAfter</c> を無視する）。</summary>
+    internal const int SWP_NOZORDER = 0x0004;
+
+    /// <summary>所有者の窓の重なり順を変えない。</summary>
+    internal const int SWP_NOOWNERZORDER = 0x0200;
+
     /// <summary>いちばん手前の並びへ入れる。</summary>
     internal static readonly IntPtr HWND_TOPMOST = new(-1);
 
