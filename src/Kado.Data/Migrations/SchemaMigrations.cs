@@ -271,6 +271,54 @@ public static class SchemaMigrations
           AND calendar_id IN (SELECT id FROM calendars);
         """;
 
+    /// <summary>
+    /// 索引を足す。動作速度の改善（データベースまわり）のうち、実際の問い合わせの
+    /// 条件に効くものだけを選んである。<c>IF NOT EXISTS</c> を付け、同じ名前の索引が
+    /// すでにある（作り直しなど）状態で当てても失敗しないようにしてある。
+    /// <para>
+    /// <b><c>ix_events_span</c></b>：<c>EventRepository.InRange</c> の
+    /// <c>WHERE recurrence IS NULL AND date &lt;= @to AND COALESCE(end_date, date) &gt;= @from</c>
+    /// 用。既存の <c>ix_events_date</c>（<c>date</c> だけの索引）は <c>date &lt;= @to</c> 側しか
+    /// 絞れず、<c>@from</c> より前の予定（複数日予定なら <c>end_date</c>）を索引の外で1件ずつ
+    /// 見て捨てていた。過去に予定が積み上がるほど、直近の月を開くだけでも過去分を
+    /// なめることになる。<c>COALESCE(end_date, date)</c> という式そのものを索引に立てると、
+    /// クエリの式と一致するので SQLite がこの式索引を使える（<c>EXPLAIN QUERY PLAN</c> で確認済み。
+    /// <c>DatabaseIndexTests</c>）。単発の予定だけが対象なので <c>WHERE recurrence IS NULL</c> を
+    /// 付けた部分索引にし、繰り返し予定ぶんは持たせない。
+    /// </para>
+    /// <para>
+    /// <b><c>ix_events_calendar</c></b>：<c>events.calendar_id</c>。カレンダーを消す・移すときの
+    /// <c>SourceRepository</c> の <c>WHERE calendar_id = @id</c>（件数・付け替え・削除）と、
+    /// <c>EventSyncEngine.PushChangesAsync</c> が送る対象を絞る
+    /// <c>EventRepository.ByCalendarId</c> に効く。
+    /// </para>
+    /// <para>
+    /// <b><c>ix_tasks_task_list</c></b>：<c>tasks.task_list_id</c>。<c>SourceRepository</c> の
+    /// タスクリスト版（<c>WHERE task_list_id = @id</c>）に効く。
+    /// </para>
+    /// <para>
+    /// <b><c>ix_tombstones_google_kind</c></b>：<c>TombstoneRepository.ContainsGoogleId</c> の
+    /// <c>WHERE google_id = @googleId AND kind = @kind</c> に合わせた複合索引。同期の取り込みで
+    /// 1件ごとに呼ばれる（「こちらで消したものを復活させない」判定）。主キーは
+    /// <c>(id, kind)</c> で <c>google_id</c> 側には何も無かったため全走査になっていた。
+    /// <c>google_id</c> が無い記録（未同期のまま消したもの）は <c>ContainsGoogleId</c> の対象に
+    /// ならないので、部分索引にして小さく保つ。
+    /// </para>
+    /// </summary>
+    private const string V8 = """
+        CREATE INDEX IF NOT EXISTS ix_events_span
+            ON events (COALESCE(end_date, date))
+            WHERE recurrence IS NULL;
+
+        CREATE INDEX IF NOT EXISTS ix_events_calendar ON events (calendar_id);
+
+        CREATE INDEX IF NOT EXISTS ix_tasks_task_list ON tasks (task_list_id);
+
+        CREATE INDEX IF NOT EXISTS ix_tombstones_google_kind
+            ON tombstones (google_id, kind)
+            WHERE google_id IS NOT NULL;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -281,6 +329,7 @@ public static class SchemaMigrations
         new(5, "削除の記録に持ち主（カレンダー／タスクリスト）を持つ", V5),
         new(6, "タスクの並び順と作成日時を持つ", V6),
         new(7, "予定に Google 側の実カレンダーと、添付の未送信の指定を持つ", V7),
+        new(8, "期間検索・所属・tombstone の突き合わせに効く索引を足す", V8),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

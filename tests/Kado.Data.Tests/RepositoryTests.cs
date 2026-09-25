@@ -128,6 +128,28 @@ public class EventRepositoryTests
         Assert.False(repo.Delete("e1"));
         Assert.Equal(0, repo.Count());
     }
+
+    /// <summary>
+    /// EventSyncEngine.PushChangesAsync が events.All() の代わりに使う絞り込み。
+    /// 所属カレンダーの違う予定・所属の無い予定を含まないことを確かめる。
+    /// </summary>
+    [Fact]
+    public void カレンダーIDで絞り込める()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new EventRepository(db.Connection);
+
+        repo.UpsertMany([
+            Sample("mine-1", D(2026, 9, 24)) with { CalendarId = "cal-a" },
+            Sample("mine-2", D(2026, 9, 25)) with { CalendarId = "cal-a" },
+            Sample("other", D(2026, 9, 24)) with { CalendarId = "cal-b" },
+            Sample("orphan", D(2026, 9, 24)) with { CalendarId = null },
+        ]);
+
+        var found = repo.ByCalendarId("cal-a");
+
+        Assert.Equal(["mine-1", "mine-2"], found.Select(e => e.Id));
+    }
 }
 
 public class TaskRepositoryTests

@@ -526,18 +526,24 @@ public sealed class CalendarWorkspace
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        WorkingDayStore.Apply(result);
-        ReloadWorkingDays();
+        // ReloadWorkingDays → BackfillMilestones → WriteClosedDays → ReloadWorkingDays と、
+        // この中だけで通知が4回起きる。画面はどのみち引き直すたびに全体を作り直すので、
+        // 途中の状態を見せる意味は無い。まとめて最後に1回だけ出す
+        using (SuppressNotify())
+        {
+            WorkingDayStore.Apply(result);
+            ReloadWorkingDays();
 
-        // 旧 inaCalendar と同じく、マイルストーンと休業日をカレンダーの予定としても持つ。
-        // Google に繋いでいれば、そちらへ送られて他の端末からも見える。
-        // 読み直したあとのデータを見る。取り込みは期間を広げることがある
-        BackfillMilestones();
-        WriteClosedDays(result.WorkingDayRangeStart, result.WorkingDayRangeEnd);
+            // 旧 inaCalendar と同じく、マイルストーンと休業日をカレンダーの予定としても持つ。
+            // Google に繋いでいれば、そちらへ送られて他の端末からも見える。
+            // 読み直したあとのデータを見る。取り込みは期間を広げることがある
+            BackfillMilestones();
+            WriteClosedDays(result.WorkingDayRangeStart, result.WorkingDayRangeEnd);
 
-        // 書き出した印をもう一度重ねる。Excel の期間は最初と最後の稼働日で切れて
-        // いるので、そのままだと端の月が「未登録」のままになる
-        ReloadWorkingDays();
+            // 書き出した印をもう一度重ねる。Excel の期間は最初と最後の稼働日で切れて
+            // いるので、そのままだと端の月が「未登録」のままになる
+            ReloadWorkingDays();
+        }
 
         return result;
     }
@@ -725,18 +731,9 @@ public sealed class CalendarWorkspace
     {
         var keep = wanted.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var stale in Events.InRange(from, to)
-                     .Where(e => mine(e.Id) && !keep.Contains(e.Id)))
-        {
-            Events.Delete(stale.Id);
-
-            // 同期先にも伝える。残さないと次の同期で相手から戻ってくる
-            if (stale.GoogleEventId is { Length: > 0 } googleId)
-            {
-                Tombstones.Record(
-                    stale.Id, TombstoneRepository.EventKind, googleId, now, stale.CalendarId);
-            }
-        }
+        var stale = Events.InRange(from, to)
+            .Where(e => mine(e.Id) && !keep.Contains(e.Id))
+            .ToArray();
 
         // すでにある分は所属と中身だけ直す。結び付けた Google の識別子は残す。
         // 消して作り直すと、同期のたびに相手側でも消えて作られることになる。
@@ -760,7 +757,27 @@ public sealed class CalendarWorkspace
                 : x.Wanted)
             .ToArray();
 
-        if (toUpsert.Length > 0) Events.UpsertMany(toUpsert);
+        if (stale.Length == 0 && toUpsert.Length == 0) return;
+
+        // 消す分・入れ替える分をまとめて1つのトランザクションで書く。
+        // 1件ずつ確定していたころは、取り込みのたびに件数ぶんの書き込みが起きていた
+        using var transaction = _connection.BeginTransaction();
+
+        foreach (var value in stale)
+        {
+            Events.Delete(value.Id, transaction);
+
+            // 同期先にも伝える。残さないと次の同期で相手から戻ってくる
+            if (value.GoogleEventId is { Length: > 0 } googleId)
+            {
+                Tombstones.Record(
+                    value.Id, TombstoneRepository.EventKind, googleId, now, value.CalendarId, transaction);
+            }
+        }
+
+        foreach (var value in toUpsert) Events.Upsert(value, transaction);
+
+        transaction.Commit();
     }
 
     /// <summary>
@@ -1102,5 +1119,58 @@ public sealed class CalendarWorkspace
         NotifyChanged();
     }
 
-    private void NotifyChanged() => DataChanged?.Invoke(this, EventArgs.Empty);
+    // ------------------------------------------------------------------
+    // 通知のまとめ出し
+    // ------------------------------------------------------------------
+
+    /// <summary>入れ子になっている間の深さ。0 なら通常どおり即座に通知する。</summary>
+    private int _notifySuppressionDepth;
+
+    /// <summary>まとめている間に、通知すべきことが1回でもあったか。</summary>
+    private bool _notifyPending;
+
+    /// <summary>
+    /// この区間の間、<see cref="NotifyChanged"/> をため、区間が終わったところで
+    /// （何かあれば）1回だけ出す。
+    /// <para>
+    /// <see cref="ApplyWorkingDays"/> のように、1回の作業の中で
+    /// <c>ReloadWorkingDays</c>・<c>BackfillMilestones</c>・<c>WriteClosedDays</c> と
+    /// 何度も内部で通知が起きる処理をまとめるために使う。画面はどのみち引き直すたびに
+    /// 全体を作り直すので、間の状態を見せる意味は無く、まとめても最終的な見え方は変わらない。
+    /// </para>
+    /// <para>入れ子にしても安全（深さを数える）。いちばん外側が終わったときにだけ出す。</para>
+    /// </summary>
+    private NotifyBatch SuppressNotify() => new(this);
+
+    private readonly struct NotifyBatch : IDisposable
+    {
+        private readonly CalendarWorkspace _owner;
+
+        public NotifyBatch(CalendarWorkspace owner)
+        {
+            _owner = owner;
+            _owner._notifySuppressionDepth++;
+        }
+
+        public void Dispose()
+        {
+            if (--_owner._notifySuppressionDepth > 0) return;
+
+            if (!_owner._notifyPending) return;
+
+            _owner._notifyPending = false;
+            _owner.DataChanged?.Invoke(_owner, EventArgs.Empty);
+        }
+    }
+
+    private void NotifyChanged()
+    {
+        if (_notifySuppressionDepth > 0)
+        {
+            _notifyPending = true;
+            return;
+        }
+
+        DataChanged?.Invoke(this, EventArgs.Empty);
+    }
 }

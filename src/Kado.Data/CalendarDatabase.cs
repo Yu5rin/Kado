@@ -94,8 +94,11 @@ public sealed class CalendarDatabase
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            // 既定の共有なしだと、同じファイルを開いた接続どうしで即座にロック競合する
-            Cache = SqliteCacheMode.Shared,
+            // 共有キャッシュ（Cache=Shared）は外してある。WAL + busy_timeout だけで
+            // UI 用・Google 同期用の2本の接続が同時に読み書きできることは
+            // DualConnectionTests で確かめてある。共有キャッシュはテーブル単位の
+            // ロックに変わるぶん、書き込みどうしがかえってぶつかりやすくなる
+            // （SQLite 自身が既定では勧めていない）
         };
 
         return new CalendarDatabase(path, builder.ToString());
@@ -104,8 +107,11 @@ public sealed class CalendarDatabase
     /// <summary>
     /// メモリ上のデータベースを開く。テスト用。
     /// <para>
-    /// 名前を付けて共有モードにするので、同じ名前で開いた接続からは同じ内容が見える。
-    /// 接続をすべて閉じると消える。
+    /// 中身は開いた接続の間だけ生きる（<c>:memory:</c> と同じ）。共有キャッシュ
+    /// （Cache=Shared）は付けていない。付けるのは「同じ名前で開いた<b>別の</b>接続からも
+    /// 見える」ようにするためだが、このアプリのテストは1つの
+    /// <see cref="CalendarDatabase"/> インスタンスにつき <see cref="Connect"/> を
+    /// 1回しか呼ばないので、要らない。接続を閉じると消える。
     /// </para>
     /// </summary>
     public static CalendarDatabase OpenInMemory(string? name = null)
@@ -115,7 +121,6 @@ public sealed class CalendarDatabase
         {
             DataSource = source,
             Mode = SqliteOpenMode.Memory,
-            Cache = SqliteCacheMode.Shared,
         };
 
         return new CalendarDatabase(":memory:", builder.ToString());
