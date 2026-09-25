@@ -129,6 +129,15 @@ jobs:
       # タグから来たときだけ Releases に上げる。手動実行は成果物の確認まで
       # exe をそのまま添える。アプリの自動更新はこれを落として入れ替えるので、
       # ZIP だけだと更新が見つけられない（.exe で終わるものを探している）
+      #
+      # 本文は「変更点」と「ダウンロード」の2節だけにし、インストールや更新の方法は
+      # README に置く（CLAUDE.md「リリース」）。変更点は公開後に手で書き換える。
+      # 自動生成の本文（--generate-notes）は Full Changelog のリンクしか入らないので使わない。
+      # タイトルはタグと同じ表記（v1.0.5 など）にする。
+      #
+      # アプリの更新の窓は、この本文を Markdown として解釈せず文字のまま出す。
+      # SHA256 の照合は本文ではなく、GitHub がファイルごとに持つ digest を読んでいる
+      # （ReleaseFeed.ReadSha256）。本文の表は人が確かめるためのもの。
       - name: Releases に上げる
         if: github.ref_type == 'tag'
         shell: pwsh
@@ -137,10 +146,39 @@ jobs:
         run: |
           $exe = "Kado-${{ steps.version.outputs.value }}-win-x64.exe"
           Copy-Item publish/Kado.App.exe $exe
+          $zip = '${{ steps.package.outputs.asset }}'
 
-          gh release create '${{ github.ref_name }}' $exe '${{ steps.package.outputs.asset }}' `
-            --title 'Kado ${{ steps.version.outputs.value }}' `
-            --generate-notes
+          # 1MB 以上は「12.3 MB」、未満は「456.7 KB」（1024 で割り小数1桁）
+          function Format-Size([long]$bytes) {
+            $inv = [System.Globalization.CultureInfo]::InvariantCulture
+            if ($bytes -ge 1MB) { return ($bytes / 1MB).ToString('0.0', $inv) + ' MB' }
+            return ($bytes / 1KB).ToString('0.0', $inv) + ' KB'
+          }
+
+          $rows = foreach ($file in @($exe, $zip)) {
+            $size = Format-Size (Get-Item $file).Length
+            $sha = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "| $file | $size | ``$sha`` |"
+          }
+
+          $lines = @(
+            '## 変更点'
+            ''
+            '(ここに書く)'
+            ''
+            '## ダウンロード'
+            ''
+            '| ファイル | サイズ | SHA256 |'
+            '|---|---|---|'
+          ) + $rows + @(
+            ''
+            'インストールと更新の方法は [README](${{ github.server_url }}/${{ github.repository }}#インストール) をご覧ください。'
+          )
+          $lines -join "`n" | Out-File -FilePath release-notes.md -Encoding utf8NoBOM
+
+          gh release create '${{ github.ref_name }}' $exe $zip `
+            --title '${{ github.ref_name }}' `
+            --notes-file release-notes.md
 
       # 手動実行でも受け取れるようにしておく。
       #
