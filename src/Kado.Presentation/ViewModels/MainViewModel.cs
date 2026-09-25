@@ -358,9 +358,16 @@ public sealed class MainViewModel : ObservableObject
 
         Sync = new SyncViewModel(google);
 
-        // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す
+        // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す。
+        //
+        // ただし取り込み・送信・削除・作成・移動・カレンダー一覧の変化がすべて0
+        // （SyncReport.HasChanges が false）なら、この重い作り直しを省く。
+        // LastReport が無いとき（切断時など、データを触っていない呼び出し）は
+        // これまでどおり必ず走らせる。判断に自信が持てない経路は省かない側に倒す
         Sync.Synced += (_, _) =>
         {
+            if (Sync.LastReport is { HasChanges: false }) return;
+
             _workspace.EnsureSources();
 
             // 「Kado」の印も同期で増減する。実働日を組み立て直さないと、

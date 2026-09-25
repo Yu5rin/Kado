@@ -103,6 +103,15 @@ public class GoogleSyncServiceTests : IDisposable
         ]}
         """;
 
+    /// <summary>TwoCalendars の「仕事」の名前だけを変えたもの。</summary>
+    private const string TwoCalendarsRenamed = """
+        {"items":[
+          {"id":"yomeru@group.calendar.google.com","summary":"しごと（改称）","accessRole":"owner",
+           "backgroundColor":"#2f6fed"},
+          {"id":"yomenai@group.v.calendar.google.com","summary":"誕生日","accessRole":"reader"}
+        ]}
+        """;
+
     private GoogleSyncService Create(RoutingHandler handler)
     {
         var http = new HttpClient(handler);
@@ -170,6 +179,50 @@ public class GoogleSyncServiceTests : IDisposable
 
         Assert.Contains("仕事", names);
         Assert.Contains("誕生日", names);
+    }
+
+    /// <summary>
+    /// 既知のカレンダーを読み直しただけでは「更新」と数えない（項目7の追加分）。
+    /// <para>
+    /// ここが無条件に数えていたころは、同期のたびに UpdatedLocal が積み上がり、
+    /// SyncReport.HasChanges がほぼ常に true になって、MainViewModel が同期のあとの
+    /// 画面の作り直しを省く仕組みがほとんど働かなかった。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task 同じ一覧をもう一度取り込んでも更新と数えない()
+    {
+        using var service = Create(new RoutingHandler(Route));
+
+        await service.SyncAsync();
+        var report = await service.SyncAsync();
+
+        Assert.Equal(0, report!.UpdatedLocal);
+        Assert.Equal(0, report.CreatedLocal);
+        Assert.False(report.HasChanges);
+    }
+
+    /// <summary>逆に、名前が変わっていれば「更新」と数える。</summary>
+    [Fact]
+    public async Task カレンダーの名前が変わると更新と数える()
+    {
+        var renamed = false;
+        var handler = new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, renamed ? TwoCalendarsRenamed : TwoCalendars)
+                : Route(url));
+
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+        renamed = true;
+        var report = await service.SyncAsync();
+
+        Assert.Equal(1, report!.UpdatedLocal);
+        Assert.True(report.HasChanges);
+
+        var names = _test.Workspace.Sources.Calendars().Select(c => c.DisplayName).ToArray();
+        Assert.Contains("しごと（改称）", names);
     }
 
     [Fact]
@@ -373,6 +426,44 @@ public class GoogleSyncServiceTests : IDisposable
         Assert.Contains(report!.Warnings, w =>
             w.Contains("消したカレンダー", StringComparison.Ordinal) &&
             w.Contains("一覧から外しました", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 「何も変わっていない」判定（MainViewModel が画面の作り直しを省くかどうか）が、
+    /// カレンダーが消えただけの同期を見落とさないことを確かめる（項目7）。
+    /// <para>
+    /// created/updated には数えない（作った・直したわけではない）ので、
+    /// <see cref="SyncReport.SourcesChanged"/> という別の印で拾う。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task カレンダーが消えるとSourcesChangedが立つ()
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = "kieta@group.calendar.google.com",
+            Summary = "消したカレンダー",
+            GoogleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        using var service = Create(new RoutingHandler(Route));
+
+        var report = await service.SyncAsync();
+
+        Assert.True(report!.SourcesChanged);
+        Assert.True(report.HasChanges);
+    }
+
+    /// <summary>逆に、消えたカレンダーが無ければ SourcesChanged は立たない。</summary>
+    [Fact]
+    public async Task カレンダーが消えていなければSourcesChangedは立たない()
+    {
+        using var service = Create(new RoutingHandler(Route));
+
+        var report = await service.SyncAsync();
+
+        Assert.False(report!.SourcesChanged);
     }
 
     [Fact]

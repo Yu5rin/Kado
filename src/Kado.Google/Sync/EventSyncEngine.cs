@@ -401,9 +401,12 @@ public sealed class EventSyncEngine(
         var now = _clock.GetUtcNow();
 
         // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む。
-        // 入れ先だけの変更は NeedsPush（内容の比較）では気づけない
-        var mine = events.All()
-            .Where(e => string.Equals(e.CalendarId, localCalendarId, StringComparison.Ordinal))
+        // 入れ先だけの変更は NeedsPush（内容の比較）では気づけない。
+        //
+        // 全件を読んでから絞ると、カレンダーが増えるほど無駄が積み重なる
+        // （同期はカレンダーごとに回るので、他所の予定まで毎回読むことになる）。
+        // DB 側でこのカレンダーの分だけに絞る（EventRepository.ByCalendarId）
+        var mine = events.ByCalendarId(localCalendarId)
             .Where(e => EventMapper.NeedsPush(e) || NeedsMove(e, calendarId))
             .ToArray();
 

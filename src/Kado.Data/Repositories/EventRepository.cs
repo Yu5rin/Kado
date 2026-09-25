@@ -98,6 +98,19 @@ public sealed class EventRepository(SqliteConnection connection)
         _connection.Query<CalendarEvent>(
             $"SELECT {Columns} FROM events WHERE recurrence IS NOT NULL ORDER BY date;").ToArray();
 
+    /// <summary>
+    /// 指定のカレンダーに入っている予定だけ。
+    /// <para>
+    /// <c>All()</c> を呼んでから絞るより、DB 側で絞ったほうが速い
+    /// （<c>ix_events_calendar</c>）。同期がカレンダーごとに回るとき、送る対象を
+    /// 選ぶのに使う（<c>EventSyncEngine.PushChangesAsync</c>）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<CalendarEvent> ByCalendarId(string calendarId) =>
+        _connection.Query<CalendarEvent>(
+            $"SELECT {Columns} FROM events WHERE calendar_id = @calendarId ORDER BY date, start_time;",
+            new { calendarId }).ToArray();
+
     /// <summary>Google 側の ID で引く。同期で突き合わせるときに使う。</summary>
     public CalendarEvent? FindByGoogleId(string googleEventId) =>
         _connection.QuerySingleOrDefault<CalendarEvent>(

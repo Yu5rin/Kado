@@ -45,13 +45,26 @@ public sealed record SyncReport
     /// <summary>差分では追いつけず、全部取り直したか。</summary>
     public bool FullResync { get; init; }
 
+    /// <summary>
+    /// カレンダー・タスクリストの一覧そのものが変わったか（Google 側で消えた、など）。
+    /// <para>
+    /// カレンダー一覧の取り込み（<c>GoogleSyncService.ImportCalendarListAsync</c>）は、
+    /// 見つけた・更新したぶんは <see cref="CreatedLocal"/> / <see cref="UpdatedLocal"/> で
+    /// 数えるが、<b>Google から消えたので一覧から外した</b>ものはどちらにも数えない
+    /// （警告文にだけ残す）。ここだけ数から漏れると、消えたカレンダーがある同期でも
+    /// 「何も変わっていない」と判定され、左パネルが古いまま残ってしまう。
+    /// </para>
+    /// </summary>
+    public bool SourcesChanged { get; init; }
+
     /// <summary>伝えきれなかったことがら。止めるほどではないが、黙らせない。</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
     /// <summary>何か変わったか。変わっていなければ画面に出さない。</summary>
     public bool HasChanges =>
         CreatedLocal + UpdatedLocal + DeletedLocal +
-        CreatedRemote + UpdatedRemote + DeletedRemote + Relinked + Moved > 0;
+        CreatedRemote + UpdatedRemote + DeletedRemote + Relinked + Moved > 0 ||
+        SourcesChanged;
 
     /// <summary>取り込んだ件数の合計。</summary>
     public int PulledCount => CreatedLocal + UpdatedLocal + DeletedLocal;
@@ -76,6 +89,7 @@ public sealed record SyncReport
         Relinked = left.Relinked + right.Relinked,
         Moved = left.Moved + right.Moved,
         FullResync = left.FullResync || right.FullResync,
+        SourcesChanged = left.SourcesChanged || right.SourcesChanged,
         Warnings = [.. left.Warnings, .. right.Warnings],
     };
 }

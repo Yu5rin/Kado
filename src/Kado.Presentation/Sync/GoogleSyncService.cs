@@ -316,7 +316,7 @@ public sealed class GoogleSyncService(
                     // 送れないだけで、変えたことまで取り消す道理は無い。次の同期でまた送り直す
                     var refused = pushedSettings is PushOutcome.Refused;
 
-                    workspace.Sources.Upsert(new CalendarSource
+                    var wanted = new CalendarSource
                     {
                         Id = id,
                         Summary = item.Text("summary") ?? id,
@@ -338,10 +338,18 @@ public sealed class GoogleSyncService(
                         SortOrder = existing?.SortOrder ?? order++,
                         GoogleRaw = GoogleJson.Normalize(item),
                         UpdatedAt = DateTimeOffset.Now,
-                    });
+                    };
+
+                    // 中身が前回と同じなら書かない。既知のカレンダーを読み直しただけで
+                    // 無条件に「更新」と数えていたころは、同期のたびに UpdatedLocal が
+                    // 積み上がり、SyncReport.HasChanges がほぼ常に true になって、
+                    // 同期のあとの画面の作り直しを省く仕組みが働かなかった
+                    var changed = existing is null || CalendarChanged(existing, wanted);
+
+                    if (changed) workspace.Sources.Upsert(wanted);
 
                     if (existing is null) created++;
-                    else updated++;
+                    else if (changed) updated++;
                 }
 
                 pageToken = page.NextPageToken;
@@ -365,6 +373,8 @@ public sealed class GoogleSyncService(
         // <b>一覧を最後まで取れたときだけ見る。</b>途中で切れた一覧を頼りにすると、
         // 読めなかっただけのカレンダーを消してしまう。1件も返ってこなかったときも
         // 触らない。応答が壊れていただけで全部消える、という壊れ方を避ける
+        var removedCount = 0;
+
         if (listed && seen.Count > 0)
         {
             var removed = workspace.Sources.Calendars()
@@ -376,6 +386,8 @@ public sealed class GoogleSyncService(
                 workspace.Sources.DropRemovedCalendar(calendar.Id);
                 workspace.Tombstones.ForgetSource(calendar.Id);
             }
+
+            removedCount = removed.Length;
 
             if (removed.Length > 0)
             {
@@ -390,6 +402,9 @@ public sealed class GoogleSyncService(
             CreatedLocal = created,
             UpdatedLocal = updated,
             UpdatedRemote = pushed,
+            // 消えたカレンダーは created/updated に数えない（作った・直したわけではない）。
+            // それでも一覧は変わっているので、専用の印を立てる（SyncReport.SourcesChanged を見よ）
+            SourcesChanged = removedCount > 0,
             Warnings = warnings,
         };
     }
@@ -478,6 +493,41 @@ public sealed class GoogleSyncService(
     }
 
     /// <summary>
+    /// 既存の控えと、これから書こうとしている内容とで、実際に違うところがあるか。
+    /// <para>
+    /// <c>SourceRepository.Upsert(CalendarSource)</c> の SQL は <c>ON CONFLICT</c> の
+    /// <c>SET</c> 句に <c>is_visible</c> と <c>notify_default</c> を含めていない
+    /// （＝更新では書き換わらず、既存の値がそのまま残る）。<c>IsVisible</c> は
+    /// <c>existing?.IsVisible ?? …</c> で必ず <paramref name="existing"/> と同じ値になるので
+    /// ここで比べても実害は無いが、<c>NotifyDefault</c> は <paramref name="wanted"/> 側が
+    /// 常に既定値（<c>true</c>）になる（この処理は関知しない項目のため）。DB には反映され
+    /// ないのに比べてしまうと、通知を切ったカレンダーが同期のたびに「変わった」と誤判定
+    /// されるので、<c>NotifyDefault</c> はここでは見ない。
+    /// </para>
+    /// <para>
+    /// <c>IsReadOnly</c> は <c>GoogleRaw</c>（<c>accessRole</c>）から計算する派生プロパティ
+    /// なので、<c>GoogleRaw</c> を比べれば自動でカバーされる。<c>UpdatedAt</c> は書くたびに
+    /// 変わる値なので比べない。
+    /// </para>
+    /// </summary>
+    private static bool CalendarChanged(CalendarSource existing, CalendarSource wanted) =>
+        !string.Equals(existing.Summary, wanted.Summary, StringComparison.Ordinal) ||
+        !string.Equals(existing.SummaryOverride, wanted.SummaryOverride, StringComparison.Ordinal) ||
+        !string.Equals(existing.BackgroundColor, wanted.BackgroundColor, StringComparison.Ordinal) ||
+        !string.Equals(existing.ForegroundColor, wanted.ForegroundColor, StringComparison.Ordinal) ||
+        existing.IsPrimary != wanted.IsPrimary ||
+        existing.IsVisible != wanted.IsVisible ||
+        existing.SortOrder != wanted.SortOrder ||
+        !GoogleJson.SameContent(existing.GoogleRaw, wanted.GoogleRaw);
+
+    /// <summary>タスクリスト版。理由は <see cref="CalendarChanged"/> と同じ。</summary>
+    private static bool TaskListChanged(TaskListSource existing, TaskListSource wanted) =>
+        !string.Equals(existing.Title, wanted.Title, StringComparison.Ordinal) ||
+        existing.IsVisible != wanted.IsVisible ||
+        existing.SortOrder != wanted.SortOrder ||
+        !GoogleJson.SameContent(existing.GoogleRaw, wanted.GoogleRaw);
+
+    /// <summary>
     /// 色の一覧。一度取ったら覚えておく。
     /// <para>めったに変わらないので、同期のたびに取りに行かない。</para>
     /// </summary>
@@ -506,7 +556,7 @@ public sealed class GoogleSyncService(
 
                     var existing = workspace.Sources.FindTaskList(id);
 
-                    workspace.Sources.Upsert(new TaskListSource
+                    var wanted = new TaskListSource
                     {
                         Id = id,
                         Title = item.Text("title") ?? id,
@@ -514,10 +564,15 @@ public sealed class GoogleSyncService(
                         SortOrder = existing?.SortOrder ?? order++,
                         GoogleRaw = GoogleJson.Normalize(item),
                         UpdatedAt = DateTimeOffset.Now,
-                    });
+                    };
+
+                    // 理由はカレンダー一覧側と同じ（ImportCalendarListAsync を見よ）
+                    var changed = existing is null || TaskListChanged(existing, wanted);
+
+                    if (changed) workspace.Sources.Upsert(wanted);
 
                     if (existing is null) created++;
-                    else updated++;
+                    else if (changed) updated++;
                 }
 
                 pageToken = page.NextPageToken;
