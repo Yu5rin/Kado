@@ -102,6 +102,36 @@ public class WorkingDayCalendarImportTests
         Assert.Equal(afterFirst, test.Workspace.Events.Count());
     }
 
+    /// <summary>
+    /// 中身が前回と同じマイルストーンは書き直さない（項目B-4）。
+    /// <para>
+    /// <c>BackfillMilestones</c> は起動のたびに呼ばれる。以前は中身が同じでも
+    /// <c>UpdatedAt</c> を毎回いまの時刻へ書き換えていた。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void 変わっていないマイルストーンはUpdatedAtを書き換えない()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+
+        using var file = SampleFile();
+        test.Workspace.ImportWorkingDays(file);
+
+        var before = test.Workspace.Events.All()
+            .Where(e => CalendarWorkspace.IsMilestoneId(e.Id))
+            .ToDictionary(e => e.Id, e => e.UpdatedAt);
+        Assert.NotEmpty(before);
+
+        // 起動時と同じく、もう一度呼ぶ。実働日データも Kado カレンダーも変わっていない
+        test.Workspace.BackfillMilestones();
+
+        var after = test.Workspace.Events.All()
+            .Where(e => CalendarWorkspace.IsMilestoneId(e.Id))
+            .ToDictionary(e => e.Id, e => e.UpdatedAt);
+
+        Assert.Equal(before, after);
+    }
+
     [Fact]
     public void 手で入れた予定は消さない()
     {

@@ -172,6 +172,7 @@ public sealed class SelectedDayViewModel : ObservableObject
     private IReadOnlyList<DayEventViewModel> _events = [];
     private IReadOnlyList<TaskListItemViewModel> _tasks = [];
     private IReadOnlyList<TaskListItemViewModel> _noDueTasks = [];
+    private IReadOnlyList<MilestoneViewModel> _milestones = [];
 
     public SelectedDayViewModel(CalendarWorkspace workspace, DateOnly date, DateOnly today,
         ICalendarSources? sources = null)
@@ -190,7 +191,9 @@ public sealed class SelectedDayViewModel : ObservableObject
         get => _date;
         set
         {
-            if (Set(ref _date, value)) Refresh();
+            // 選んだ日が変わっただけなら、日付に依存する部分だけ組み直す。
+            // 期限なしタスクの一覧（NoDueTasks）は選択日を見ていないので触らない
+            if (Set(ref _date, value)) RefreshDateDependent();
         }
     }
 
@@ -222,9 +225,15 @@ public sealed class SelectedDayViewModel : ObservableObject
     public bool IsNonWorkingDay =>
         _workspace.WorkingDays.HasDataFor(_date) && !_workspace.WorkingDays.IsWorkingDay(_date);
 
-    /// <summary>この日のマイルストーン。左パネルのチェックに従う。</summary>
-    public IReadOnlyList<MilestoneViewModel> Milestones =>
-        MilestoneRow.For(_date, _workspace.Schedule.EventsInRange(_date, _date), _sources);
+    /// <summary>
+    /// この日のマイルストーン。左パネルのチェックに従う。
+    /// <para>
+    /// 読まれるたびに DB を引く計算プロパティだったのを、<see cref="RefreshDateDependent"/>
+    /// で1回だけ計算してフィールドに持つ形に変えた。バインドは何度も読みに来る
+    /// （右ペインの描画のたびなど）ので、そのたびに問い合わせていた。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MilestoneViewModel> Milestones => _milestones;
 
     /// <summary>この日の予定。</summary>
     public IReadOnlyList<DayEventViewModel> Events
@@ -335,16 +344,51 @@ public sealed class SelectedDayViewModel : ObservableObject
             ? _workspace.DueFormatter.FormatDone(due, DateOnly.FromDateTime(at.LocalDateTime))
             : null;
 
-    /// <summary>読み直す。</summary>
+    /// <summary>
+    /// データが変わった・「今日」が変わったときに、すべて読み直す。
+    /// <para>
+    /// <see cref="Kado.Data.Repositories.TaskRepository.All"/> は呼ぶたびに DB を1回
+    /// 読む。以前は <see cref="RefreshDateDependent"/> と期限なしタスクの組み立てで
+    /// それぞれ呼んでおり、1回の Refresh で2回読んでいた。ここで1回だけ読み、
+    /// 両方に使い回す。
+    /// </para>
+    /// </summary>
     public void Refresh()
     {
+        var allTasks = _workspace.Tasks.All();
+
+        RefreshDateDependent(allTasks);
+        RefreshNoDueTasks(allTasks);
+    }
+
+    /// <summary>
+    /// 選んでいる日に依存する部分だけ組み直す。
+    /// <para>
+    /// 予定（<see cref="Events"/>）・マイルストーン・タスクの一覧（完了済みは選択日の
+    /// ぶんだけ添えるので、こちらも選択日に効く）が対象。<see cref="NoDueTasks"/>
+    /// （期限なしの未完了タスク）は選択日を見ていないので、ここでは触らない
+    /// （<see cref="Date"/> の setter が呼ぶときは日を送っただけなので、そちらは
+    /// 前のままでよい）。
+    /// </para>
+    /// </summary>
+    /// <param name="allTasks">
+    /// 呼び出し側ですでに読んでいれば渡す。<see cref="Refresh"/> から渡された1回ぶんを
+    /// 使い回し、<see cref="Date"/> の setter から呼ばれたときだけここで読み直す。
+    /// </param>
+    private void RefreshDateDependent(IReadOnlyList<TaskItem>? allTasks = null)
+    {
+        // 予定とマイルストーンは同じ範囲（選んでいる日1日）を見るので、問い合わせを共有する。
+        // 以前は Milestones が読まれるたびに別クエリを投げていた
+        var eventsOnDate = _workspace.Schedule.EventsInRange(_date, _date);
+
         Events = EventOrder
-            .Sort(_workspace.Schedule.EventsInRange(_date, _date)
-                .Where(e => _sources.IncludesEvent(e.Source)), _sources)
+            .Sort(eventsOnDate.Where(e => _sources.IncludesEvent(e.Source)), _sources)
             .Select(e => new DayEventViewModel(e, _sources.ColorOf(e.Source.CalendarId)))
             .ToArray();
 
-        Tasks = _workspace.Tasks.All()
+        _milestones = MilestoneRow.For(_date, eventsOnDate, _sources);
+
+        Tasks = (allTasks ?? _workspace.Tasks.All())
             .Where(_sources.IncludesTask)
             .Where(t => t.HasDue)
             // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
@@ -361,9 +405,24 @@ public sealed class SelectedDayViewModel : ObservableObject
                 DoneOf(t)))
             .ToArray();
 
-        // 期限を付けていない、未完了のタスク（項目1）。並びは並び順→作成日時→識別子
-        // （既定は登録が古い順）。期限のあるタスクと同じ考え方
-        NoDueTasks = _workspace.Tasks.All()
+        Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
+              nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
+              nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText),
+              nameof(HasNoEvents), nameof(HasNoTasks));
+    }
+
+    /// <summary>
+    /// 期限を付けていない、未完了のタスク（項目1）を組み直す。
+    /// <para>
+    /// 選んでいる日を見ないので、<see cref="Date"/> が変わっただけのときは
+    /// 呼ばない。並びは並び順→作成日時→識別子（既定は登録が古い順）。
+    /// 期限のあるタスクと同じ考え方。
+    /// </para>
+    /// </summary>
+    /// <param name="allTasks"><see cref="Refresh"/> から渡された1回ぶんの読み直し結果。</param>
+    private void RefreshNoDueTasks(IReadOnlyList<TaskItem>? allTasks = null)
+    {
+        NoDueTasks = (allTasks ?? _workspace.Tasks.All())
             .Where(_sources.IncludesTask)
             .Where(t => !t.HasDue && !t.IsDone)
             .OrderBy(t => t.SortOrder)
@@ -372,10 +431,7 @@ public sealed class SelectedDayViewModel : ObservableObject
             .Select(t => new TaskListItemViewModel(t, due: null))
             .ToArray();
 
-        Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
-              nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
-              nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText),
-              nameof(HasNoEvents), nameof(HasNoTasks), nameof(NoDueTaskCount), nameof(ShowsNoDueTasks));
+        Raise(nameof(NoDueTaskCount), nameof(ShowsNoDueTasks));
     }
 
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];

@@ -155,7 +155,7 @@
                     <StackPanel Margin="0,0,10,0">
                         <TextBlock Text="セット名" Style="{StaticResource FieldLabelStyle}" />
                         <TextBox Width="180" Style="{StaticResource FieldTextBoxStyle}"
-                                 Text="{Binding SelectedPlan.Name, UpdateSourceTrigger=PropertyChanged}" />
+                                 Text="{Binding SelectedPlan.Name, UpdateSourceTrigger=LostFocus}" />
                     </StackPanel>
 
                     <StackPanel>
@@ -165,7 +165,12 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- 節目の編集。名前・オフセットの書き換えは即座に保存される -->
+                <!--
+                    節目の編集。名前はフォーカスが外れたとき（欄を離れたとき）に保存する。
+                    到達日の一覧（下の PlanRows）が生きたまま動くのはオフセットのほうなので、
+                    そちらは打つたびに反映・保存する。ウィンドウを閉じるときは、開いたままの
+                    欄の分もここで確定してから閉じる（WorkdayCalculatorWindow.xaml.cs の Closing）
+                -->
                 <TextBlock Text="節目（並び順・オフセットは自由に変えられる）" Style="{StaticResource CaptionTextStyle}"
                            Foreground="{DynamicResource Ink3Brush}" Margin="0,10,0,5" />
 
@@ -174,7 +179,7 @@
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
                                 <TextBox Width="150" Style="{StaticResource FieldTextBoxStyle}"
-                                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                         Text="{Binding Name, UpdateSourceTrigger=LostFocus}" />
                                 <TextBox Width="56" Margin="6,0,0,0" Style="{StaticResource FieldTextBoxStyle}"
                                          Typography.NumeralAlignment="Tabular"
                                          Text="{Binding Offset, UpdateSourceTrigger=PropertyChanged,

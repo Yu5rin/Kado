@@ -9,7 +9,23 @@ namespace Kado.App.Views;
 /// <summary>週ビュー。表示だけを担い、状態は <c>WeekViewModel</c> が持つ。</summary>
 public partial class WeekView : UserControl
 {
-    public WeekView() => InitializeComponent();
+    /// <summary>
+    /// 手が止まってから1時間の高さを決め直す。
+    /// <para>
+    /// ウィンドウや仕切りを動かしているあいだ、<c>SizeChanged</c> は1ドラッグで
+    /// 何十回も来る。そのたびに ViewModel へ渡すと時間軸を組み直すことになり、
+    /// 掴んで動かすと画面が固まる（月ビューのマスと同じ理由）。
+    /// </para>
+    /// </summary>
+    private readonly Settle _settle;
+
+    private double _pendingViewportHeight;
+
+    public WeekView()
+    {
+        InitializeComponent();
+        _settle = new Settle(ApplyViewportHeight);
+    }
 
     /// <summary>終日レーンの予定を2回押すと開く。</summary>
     private void OnAllDayEventClicked(object sender, MouseButtonEventArgs e) =>
@@ -86,7 +102,14 @@ public partial class WeekView : UserControl
     private void OnTimelineResized(object sender, SizeChangedEventArgs e)
     {
         if (!e.HeightChanged) return;
-        if (DataContext is WeekViewModel week) week.ViewportHeight = e.NewSize.Height;
+
+        _pendingViewportHeight = e.NewSize.Height;
+        _settle.Poke();
+    }
+
+    private void ApplyViewportHeight()
+    {
+        if (DataContext is WeekViewModel week) week.ViewportHeight = _pendingViewportHeight;
     }
 
     // ------------------------------------------------------------------

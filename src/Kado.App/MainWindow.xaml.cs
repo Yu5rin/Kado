@@ -124,6 +124,11 @@ public partial class MainWindow : Window, ISlideRevealHost
         // ステータス行（項目1）。出すたびに数秒後へ仕切り直し、最後の1件だけを消す
         _statusClear = new Views.Settle(() => ViewModel?.ClearStatusMessage(), TimeSpan.FromSeconds(4.5));
 
+        // 検索語は打つたびに欄自体は動くが、ViewModel への反映（＝検索の実行）は
+        // 手が止まってから。1文字ごとに DB を読みに行っていたのをやめる
+        // （Text バインディングは UpdateSourceTrigger=Explicit にしてある）
+        _searchSettle = new Views.Settle(CommitSearchText, TimeSpan.FromMilliseconds(250));
+
         DataContextChanged += (_, args) =>
         {
             if (args.OldValue is MainViewModel before)
@@ -152,6 +157,7 @@ public partial class MainWindow : Window, ISlideRevealHost
             _clock.Stop();
             _statusClear.Dispose();
             _persist.Dispose();
+            _searchSettle.Dispose();
             SavePaneWidths();
             Placements?.Save(_placement);
         };
@@ -328,6 +334,9 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// </para>
     /// </summary>
     private readonly Views.Settle _persist;
+
+    /// <summary>検索語の入力が落ち着いてから、ViewModel へ渡して検索を走らせる。</summary>
+    private readonly Views.Settle _searchSettle;
 
     /// <summary>StatusMessage が変わるたびに、消すまでの時間を仕切り直す。</summary>
     private void OnStatusMessageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -692,11 +701,36 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>Esc で検索をやめる。</summary>
     private void OnSearchKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Enter)
+        {
+            // 確定操作。待たずにすぐ検索する
+            _searchSettle.Now();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Escape) return;
 
         ViewModel?.ClearSearch();
         e.Handled = true;
     }
+
+    /// <summary>
+    /// 検索欄の中身が変わった（1文字打つたび）。
+    /// <para>
+    /// バインディングは <c>UpdateSourceTrigger=Explicit</c> にしてあるので、ここで
+    /// 明示的に押さないと ViewModel の <c>SearchText</c> は動かない。手を止めてから
+    /// 250ms 後に <see cref="CommitSearchText"/> がまとめて反映する（項目A-3）。
+    /// </para>
+    /// </summary>
+    private void OnSearchTextChanged(object sender, TextChangedEventArgs e) => _searchSettle.Poke();
+
+    /// <summary>欄から離れたら、待っている分があればすぐ確定する。</summary>
+    private void OnSearchLostFocus(object sender, RoutedEventArgs e) => _searchSettle.Now();
+
+    /// <summary>検索欄の中身を ViewModel へ渡し、検索を走らせる。</summary>
+    private void CommitSearchText() =>
+        SearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
 
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
     private void OnSettingsClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);

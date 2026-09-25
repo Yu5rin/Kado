@@ -1,4 +1,7 @@
+using Kado.Core.WorkingDays;
+using Kado.Data;
 using Kado.Data.Models;
+using Kado.Data.Repositories;
 
 namespace Kado.Presentation.Tests;
 
@@ -212,5 +215,45 @@ public class CalendarWorkspaceTests
 
         // 期限の表示も組み立てられる
         Assert.Equal("残り 1実働日", ws.DueFormatter.Format(D(2026, 9, 25), D(2026, 9, 24)).Text);
+    }
+
+    /// <summary>
+    /// Google 同期専用の workspace（項目B-4）は実働日を読み込まない。
+    /// <para>
+    /// 同期（GoogleSyncService）は Sources／Events／Tasks／Tombstones／Settings と
+    /// WorkingDayCalendars（カレンダー一覧からの検索）しか見ないため。参照しても
+    /// 落ちない（空のまま安全に使える）ことも合わせて確かめる。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void loadWorkingDaysをfalseにすると実働日を読み込まない()
+    {
+        using var db = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
+
+        new WorkingDayRepository(db).Save(WorkingDayCalendar.Create(
+            [D(2026, 9, 1), D(2026, 9, 2)], D(2026, 9, 1), D(2026, 9, 30),
+            [new Milestone(D(2026, 9, 14), "仕様期限", "Ver.1")], D(2026, 9, 14), D(2026, 9, 14)));
+
+        // 既定（今までどおり）は読み込む
+        var full = new CalendarWorkspace(db);
+        Assert.NotNull(full.WorkingDays.RangeStart);
+        Assert.NotEmpty(full.WorkingDays.AllMilestones);
+
+        // 同期用の軽い構築は読み込まない
+        var light = new CalendarWorkspace(db, loadWorkingDays: false);
+        Assert.Null(light.WorkingDays.RangeStart);
+        Assert.Empty(light.WorkingDays.AllMilestones);
+
+        // 参照しても落ちない
+        Assert.False(light.WorkingDays.IsWorkingDay(D(2026, 9, 1)));
+        Assert.NotNull(light.WorkingDayMath);
+        Assert.NotNull(light.DueFormatter);
+
+        // 同期が実際に使うものは、軽い構築でも変わらず動く
+        Assert.NotNull(light.Sources);
+        Assert.NotNull(light.Events);
+        Assert.NotNull(light.Tasks);
+        Assert.NotNull(light.Tombstones);
+        Assert.NotNull(light.Settings);
     }
 }
