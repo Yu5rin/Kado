@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Data.Sqlite;
 using Kado.App.Editing;
 using Kado.App.Google;
@@ -72,8 +73,25 @@ public partial class App : Application
     private static string CrashLogPath => System.IO.Path.Combine(
         System.IO.Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "crash.log");
 
+    /// <summary>
+    /// 起動にかかった時間の起点。プロセスが生まれた時刻（OS が持つ値）を使う。
+    /// <para>
+    /// <c>Main</c> はビルドのたびに作り直される自動生成コードなので、そこに
+    /// <c>Stopwatch</c> を仕込めない。<c>Process.StartTime</c> ならここだけで済む。
+    /// </para>
+    /// </summary>
+    private static readonly DateTime ProcessStart = System.Diagnostics.Process.GetCurrentProcess().StartTime;
+
+    /// <summary>起動時から今までの経過（ms）。<see cref="ProcessStart"/> からの差。</summary>
+    private static double ElapsedStartupMs() => (DateTime.Now - ProcessStart).TotalMilliseconds;
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 起動にかかった時間の記録（項目B-5）。1回の起動で shell.log に1行だけ残す。
+        // 「開始」は ProcessStart（OS が数える、Main より前）からの経過なので、
+        // ここではもう何 ms か経っている
+        var onStartupMs = ElapsedStartupMs();
+
         base.OnStartup(e);
 
         // 入れ替え直後は、前のプロセスがまだ終わりきっていない。待たずに判定すると
@@ -151,9 +169,22 @@ public partial class App : Application
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない
+        // （起動時の1回目は ThemeChoice.Auto。ここで同じ Auto のままなら、
+        // Theme.xaml を作り直す2回目は要らない）
         var settings = _settings = new AppSettings(workspace.Settings);
-        ThemeManager.Apply(settings.Theme);
-        settings.Changed += (_, _) => ThemeManager.Apply(settings.Theme);
+        if (settings.Theme != ThemeManager.Current) ThemeManager.Apply(settings.Theme);
+
+        // 設定が変わるたびに来るが、配色（Theme）が実際に変わったときだけ当て直す。
+        // ThemeManager.Apply は Theme.xaml ごと作り直すので、無関係な設定
+        // （通知音など）まで来るたびに払うには重い
+        var appliedTheme = settings.Theme;
+        settings.Changed += (_, _) =>
+        {
+            if (settings.Theme == appliedTheme) return;
+
+            appliedTheme = settings.Theme;
+            ThemeManager.Apply(appliedTheme);
+        };
 
         try
         {
@@ -176,7 +207,11 @@ public partial class App : Application
             // 終わった時点で UI 側の接続からも読める。EnsureSources・実働日の組み直しは
             // Sync.Synced を受けた側（MainViewModel）が UI 側の workspace で読み直している
             _syncConnection = CalendarDatabase.OpenDefault().ConnectAndMigrate();
-            var syncWorkspace = new CalendarWorkspace(_syncConnection);
+            // 同期は実働日・マイルストーンを見ない（GoogleSyncService が触るのは
+            // Sources／Events／Tasks／Tombstones／Settings と WorkingDayCalendars だけ）。
+            // 全予定を読む LoadWorkingDays を起動のたびに2回払わなくてよいよう、
+            // こちらは軽い構築にする（CalendarWorkspace のコンストラクタのコメント参照）
+            var syncWorkspace = new CalendarWorkspace(_syncConnection, loadWorkingDays: false);
 
             var tokenStore = new DpapiTokenStore(Path.Combine(
                 Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"));
@@ -218,10 +253,27 @@ public partial class App : Application
                         _google, workspace.Settings)),
             };
 
+            // 「MainWindow を作り終えた時点」
+            var windowCreatedMs = ElapsedStartupMs();
+
             MainWindow = window;
 
             // 閉じるボタンではトレイに入るだけにする。終了はトレイのメニューから
             window.Closing += OnMainWindowClosing;
+
+            // 起動にかかった時間の最後の1点。最初の描画が終わったところで
+            // 3つまとめて1行だけ書く（項目B-5）。1回の起動で複数回来ないよう、
+            // 書いたらすぐ外す
+            void LogStartupTiming(object? sender, EventArgs args)
+            {
+                window.ContentRendered -= LogStartupTiming;
+
+                Shell.ShellDiagnosticsLog.Write(
+                    $"startup-timing 開始→OnStartup={onStartupMs:F0}ms " +
+                    $"→画面作成={windowCreatedMs:F0}ms →最初の描画={ElapsedStartupMs():F0}ms");
+            }
+
+            window.ContentRendered += LogStartupTiming;
 
             window.Show();
 
@@ -242,9 +294,12 @@ public partial class App : Application
             // 2本目が起動されたら、こちらを前に出す
             _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
 
-            // 前回の入れ替えで残ったものを片付ける
+            // 前回の入れ替えで残ったものを片付ける。ファイルの削除（同期I/O）なので、
+            // 最初の画面が出てからでよい。ApplicationIdle まで待たせば、初回描画の
+            // あとに回る。CleanupOldFiles は他の起動処理を待たない独立した後片付けで、
+            // 何かの前提になっていない（_updater フィールド自体はここで先に作っておく）
             _updater = new UpdateService(UpdateApiUrl);
-            _updater.CleanupOldFiles();
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _updater.CleanupOldFiles());
 
             // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
             if (window.DataContext is MainViewModel main)

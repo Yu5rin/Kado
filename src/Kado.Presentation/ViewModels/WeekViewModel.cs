@@ -242,7 +242,17 @@ public sealed class WeekViewModel : ObservableObject
     /// <summary>表示する週を変える。</summary>
     public void GoTo(DateOnly date)
     {
-        if (Set(ref _anchor, date, nameof(WeekStart))) Refresh();
+        if (_anchor == date) return;
+
+        var previousWeekStart = WeekStart;
+        _anchor = date;
+
+        // 週の頭の日（WeekStart）が変わらないなら、同じ週の中で別の日を押しただけ。
+        // 列の中身は変わらないので組み直さない。選んだ日の印は呼び出し側が
+        // SelectedDate を通して別に更新する
+        if (WeekStart == previousWeekStart) return;
+
+        Refresh();
     }
 
     /// <summary>選んでいる日。列の見出しに印を付ける。</summary>

@@ -793,7 +793,9 @@
                 <Grid DockPanel.Dock="Right" Margin="0,0,8,0"
                       Visibility="{Binding ShowsSearchBox, Converter={StaticResource BoolToVisibility}}">
                     <TextBox x:Name="SearchBox" Style="{StaticResource SearchBoxStyle}"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=Explicit}"
+                             TextChanged="OnSearchTextChanged"
+                             LostFocus="OnSearchLostFocus"
                              KeyDown="OnSearchKeyDown" />
 
                     <Popup IsOpen="{Binding IsSearching, Mode=OneWay}" PlacementTarget="{Binding ElementName=SearchBox}"

@@ -137,6 +137,27 @@ public class SettingsTests
         Assert.Equal(DayOfWeek.Monday, main.Month.Cells[0].Date.DayOfWeek);
     }
 
+    /// <summary>
+    /// レイアウトに関わらない設定（通知音など）が変わっても、月・週・日・年の
+    /// ビュー一式は作り直さない（項目A-1）。作り直すと Month などの参照が別物になる。
+    /// </summary>
+    [Fact]
+    public void 無関係な設定が変わってもビューは組み直さない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+        var main = new MainViewModel(test.Workspace, today: new DateOnly(2026, 9, 24), settings: settings);
+
+        var month = main.Month;
+        var week = main.Week;
+
+        settings.NotifySound = !settings.NotifySound;
+        settings.DefaultCalendarId = "local:dummy";
+
+        Assert.Same(month, main.Month);
+        Assert.Same(week, main.Week);
+    }
+
     [Fact]
     public void 表示時間帯を変えると週ビューの時間軸が変わる()
     {
@@ -545,6 +566,39 @@ public class SettingsTests
         Assert.Equal("量産品", loaded.Name);
         Assert.Equal(-20, loaded.Steps[0].Offset);
         Assert.Equal("p1", next.SelectedWorkdayOffsetPlanId);
+    }
+
+    /// <summary>
+    /// 中身が前回と同じなら書かず、Changed も出さない（項目A-1）。
+    /// <para>
+    /// 実働日計算パネルは1文字打つたびにここへ書きに来る。<c>WorkdayOffsetPlan</c> は
+    /// record だが <c>Steps</c>（<c>IReadOnlyList</c>）を持つので、既定の等価性では
+    /// 別のリストインスタンスを同じ中身とは見なせない。JSON にして比べている。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void オフセット列は中身が同じなら書き換えない()
+    {
+        using var test = TestWorkspace.Create();
+        var settings = new AppSettings(test.Workspace.Settings);
+
+        var plan = new WorkdayOffsetPlan("p1", "量産品", [new WorkdayOffsetStep("仕様期限", -20)]);
+        settings.WorkdayOffsetPlans = [plan];
+
+        var changed = 0;
+        settings.Changed += (_, _) => changed++;
+
+        // 中身は同じだが、別のインスタンス（編集画面が組み直すたびそうなる）
+        settings.WorkdayOffsetPlans =
+            [new WorkdayOffsetPlan("p1", "量産品", [new WorkdayOffsetStep("仕様期限", -20)])];
+
+        Assert.Equal(0, changed);
+
+        // 中身が変われば、今までどおり Changed が出る
+        settings.WorkdayOffsetPlans =
+            [new WorkdayOffsetPlan("p1", "量産品", [new WorkdayOffsetStep("仕様期限", -21)])];
+
+        Assert.Equal(1, changed);
     }
 
     [Fact]

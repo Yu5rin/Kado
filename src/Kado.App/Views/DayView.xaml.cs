@@ -9,7 +9,16 @@ namespace Kado.App.Views;
 /// <summary>日ビュー。表示だけを担い、状態は <c>DayViewModel</c> が持つ。</summary>
 public partial class DayView : UserControl
 {
-    public DayView() => InitializeComponent();
+    /// <summary>手が止まってから1時間の高さを決め直す（週ビューと同じ理由）。</summary>
+    private readonly Settle _settle;
+
+    private double _pendingViewportHeight;
+
+    public DayView()
+    {
+        InitializeComponent();
+        _settle = new Settle(ApplyViewportHeight);
+    }
 
     /// <summary>終日レーンの予定を2回押すと開く。</summary>
     private void OnAllDayEventClicked(object sender, MouseButtonEventArgs e) =>
@@ -53,7 +62,14 @@ public partial class DayView : UserControl
     private void OnTimelineResized(object sender, SizeChangedEventArgs e)
     {
         if (!e.HeightChanged) return;
-        if (DataContext is DayViewModel day) day.ViewportHeight = e.NewSize.Height;
+
+        _pendingViewportHeight = e.NewSize.Height;
+        _settle.Poke();
+    }
+
+    private void ApplyViewportHeight()
+    {
+        if (DataContext is DayViewModel day) day.ViewportHeight = _pendingViewportHeight;
     }
 
     // ------------------------------------------------------------------

@@ -79,6 +79,25 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private bool _miniFollowsCenter = true;
 
+    /// <summary>
+    /// <see cref="RebuildViews"/> が実際に読む設定の、前回の値。
+    /// <para>
+    /// <see cref="AppSettings.Changed"/> はどの項目が変わったかを教えてくれないので、
+    /// ここで控えて比べる。これらが変わっていないのに設定が変わるたびにビュー一式を
+    /// 作り直すと、通知音のON/OFFのような無関係な設定でも月・週・日・年が総入れ替えになる。
+    /// </para>
+    /// </summary>
+    private TimeOnly _lastDayStart;
+
+    /// <inheritdoc cref="_lastDayStart"/>
+    private TimeOnly _lastDayEnd;
+
+    /// <inheritdoc cref="_lastDayStart"/>
+    private int _lastHourHeight;
+
+    /// <inheritdoc cref="_lastDayStart"/>
+    private YearLayout _lastYearLayout;
+
     /// <summary>初回起動だけ出す案内（項目7）を、もう読んだか。</summary>
     private const string OnboardingSeenKey = "ui.onboarding_seen";
 
@@ -136,12 +155,44 @@ public sealed class MainViewModel : ObservableObject
             SourceLists.DefaultTaskListChanged += (_, id) => settings.DefaultTaskListId = id;
             _reminders = new ReminderService(workspace, settings, _notifier);
 
-            // 週の始まりや表示時間帯が変わったら、その形でビューを組み直す
+            // BuildViews(today, today) がすでにこれらの値で組んである。以後の比較の
+            // 基準にする
+            _lastDayStart = settings.DayStart;
+            _lastDayEnd = settings.DayEnd;
+            _lastHourHeight = settings.HourHeight;
+            _lastYearLayout = settings.YearLayout;
+
+            // 週の始まりや表示時間帯など、ビューの組み立てに効く設定が変わったときだけ
+            // 組み直す。通知音や既定カレンダーのような無関係な設定まで来るたびに
+            // 月・週・日・年の一式を作り直していたので、実際に読んでいる項目だけ比べる
             settings.Changed += (_, _) =>
             {
+                var layoutChanged =
+                    _weekStart != settings.WeekStart ||
+                    _lastDayStart != settings.DayStart ||
+                    _lastDayEnd != settings.DayEnd ||
+                    _lastHourHeight != settings.HourHeight ||
+                    _lastYearLayout != settings.YearLayout;
+
+                var countChanged = workspace.CountInCalendarDays != settings.CountInCalendarDays;
+
                 _weekStart = settings.WeekStart;
                 workspace.CountInCalendarDays = settings.CountInCalendarDays;
-                RebuildViews();
+
+                if (layoutChanged)
+                {
+                    _lastDayStart = settings.DayStart;
+                    _lastDayEnd = settings.DayEnd;
+                    _lastHourHeight = settings.HourHeight;
+                    _lastYearLayout = settings.YearLayout;
+                    RebuildViews();
+                }
+                else if (countChanged)
+                {
+                    // 暦日／実働日の数え方だけが変わった。ビューを作り直さなくても、
+                    // 出している中身を引き直せば期限の表記に反映できる
+                    RefreshViews();
+                }
             };
 
             CurrentView = settings.StartupView;
@@ -380,11 +431,25 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public ShellViewModel Shell { get; }
 
-    /// <summary>年ビュー（ストリップ／カレンダー）。年度単位。</summary>
-    public YearViewModel Year { get; private set; }
+    /// <summary>
+    /// 年ビュー（ストリップ／カレンダー）。年度単位。
+    /// <para>
+    /// 年は12か月ぶんを組み立てる重いビューなので、起動時には作らない。初めて
+    /// <see cref="CurrentView"/> を <see cref="CalendarView.Year"/> にしたとき、
+    /// このプロパティを初めて読んだ時点で組み立てる（項目B-4）。以後は使い回す。
+    /// </para>
+    /// </summary>
+    public YearViewModel Year => _year ??= CreateYear();
 
-    /// <summary>一覧ビュー。予定のない日は畳んで流す。</summary>
-    public AgendaViewModel Agenda { get; private set; }
+    private YearViewModel? _year;
+
+    /// <summary>
+    /// 一覧ビュー。予定のない日は畳んで流す。
+    /// <para><see cref="Year"/> と同じ理由で、初めて表示されたときに組み立てる。</para>
+    /// </summary>
+    public AgendaViewModel Agenda => _agenda ??= CreateAgenda();
+
+    private AgendaViewModel? _agenda;
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; private set; }
@@ -427,7 +492,7 @@ public sealed class MainViewModel : ObservableObject
             FocusOn(SelectedDate);
 
             // 出す番になった。まだ溜まっていれば、ここで済ませる
-            RefreshHeavyIfShown();
+            RefreshVisibleCenterView();
 
             Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
                 nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
@@ -1009,14 +1074,28 @@ public sealed class MainViewModel : ObservableObject
                 MiniCalendar.GoTo(value);
             }
 
-            Week.GoTo(value);
-            Week.SelectedDate = value;
-            Day.Date = value;
+            // 中央に出しているビューだけ、その場で日付を合わせる。週・日・年・一覧は
+            // 1つしか表に出ないので、出ていないほうを組み直しても誰も見ない。
+            // ビューを切り替えたときは FocusOn がまとめて追いつかせる
+            switch (_currentView)
+            {
+                case CalendarView.Week:
+                    Week.GoTo(value);
+                    Week.SelectedDate = value;
+                    break;
 
-            // 年と一覧にも伝える。押した日がそこでも光っていないと、
-            // ビューを切り替えたときにどこを見ていたのか分からなくなる
-            Year.SelectedDate = value;
-            Agenda.SelectedDate = value;
+                case CalendarView.Day:
+                    Day.Date = value;
+                    break;
+
+                case CalendarView.Year:
+                    Year.SelectedDate = value;
+                    break;
+
+                case CalendarView.Agenda:
+                    Agenda.SelectedDate = value;
+                    break;
+            }
 
             // 前後の月のマスを押したら、右パネルの月カレンダーもその月へ移る。
             // 選んだ日が見えない月を出したままでは、どこを選んだのか分からない
@@ -1667,8 +1746,11 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Date = _today;
         Week.GoToToday();
         Day.GoToToday();
-        Year.GoToToday();
-        Agenda.GoToToday();
+
+        // まだ作っていなければ触らない。作っていなければ「今日」はそもそも見えていない
+        if (_year is not null) Year.GoToToday();
+        if (_agenda is not null) Agenda.GoToToday();
+
         SyncMiniToCenter(_today);
         MiniCalendar.SelectedDate = _today;
         PaneMonth.GoTo(_today);
@@ -2913,17 +2995,18 @@ public sealed class MainViewModel : ObservableObject
     {
         SourceLists.Refresh();
 
-        Month.Refresh();
+        // 右パネルの選択日・左パネルのミニ月暦は常に見えているので、その場で直す
         SelectedDay.Refresh();
-        Week.Refresh();
-        Day.Refresh();
         MiniCalendar.Refresh();
 
-        // 年と一覧は重い。年は12か月ぶん、一覧は数年ぶんの予定を組み立てる。
-        // 出していないあいだに組み直しても誰も見ないので、出すときまで待つ
+        // 月・週・日・年・一覧は中央に1つしか出ていない。出していないビューまで
+        // 毎回組み直しても誰も見ないので、印だけ付けて、表示に切り替えたときに組む
+        _monthStale = true;
+        _weekStale = true;
+        _dayStale = true;
         _yearStale = true;
         _agendaStale = true;
-        RefreshHeavyIfShown();
+        RefreshVisibleCenterView();
 
         RaiseHeader();
 
@@ -2942,8 +3025,7 @@ public sealed class MainViewModel : ObservableObject
     /// 設定が変わったときは組み直す。
     /// </para>
     /// </summary>
-    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
-        nameof(Year), nameof(Agenda), nameof(PaneMonth))]
+    [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day), nameof(PaneMonth))]
     private void BuildViews(DateOnly month, DateOnly selected)
     {
         var start = _settings?.DayStart;
@@ -2963,19 +3045,11 @@ public sealed class MainViewModel : ObservableObject
             _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
         Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
 
-        Year = new YearViewModel(
-            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart)
-        {
-            SelectedDate = selected,
-        };
-        Year.GoTo(selected);
-
-        // 出し方は年ビューの中のボタンで切り替える。年ビューを見ているときにしか
-        // 関係しない選び方なので、設定画面には出さない（要件書 5.1）
-        if (_settings is { } settings) Year.LayoutChanged += (_, layout) => settings.YearLayout = layout;
-
-        Agenda = new AgendaViewModel(_workspace, _today, SourceLists);
-        Agenda.GoTo(selected);
+        // 年と一覧は重い（項目B-4）。まだ一度も表示していなければ、ここでは作らない。
+        // Year／Agenda プロパティを初めて読んだときに組み立てる。すでに表示したことが
+        // あるなら（前の組が残っていると週の始まりや年の出し方が食い違うので）作り直す
+        if (_year is not null) _year = CreateYear();
+        if (_agenda is not null) _agenda = CreateAgenda();
 
         // 右パネルの月カレンダーは自前の月暦を持つ。中央が週や日を出していても、
         // こちらはひと月の並びを見せ続ける
@@ -2986,13 +3060,47 @@ public sealed class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// 年ビューを組み立てる。
+    /// <para>選んでいる日・週の始まり・年の出し方は、呼ばれた時点の最新のものを使う。</para>
+    /// </summary>
+    private YearViewModel CreateYear()
+    {
+        var year = new YearViewModel(
+            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart)
+        {
+            SelectedDate = SelectedDate,
+        };
+        year.GoTo(SelectedDate);
+
+        // 出し方は年ビューの中のボタンで切り替える。年ビューを見ているときにしか
+        // 関係しない選び方なので、設定画面には出さない（要件書 5.1）
+        if (_settings is { } settings) year.LayoutChanged += (_, layout) => settings.YearLayout = layout;
+
+        return year;
+    }
+
+    /// <summary>一覧ビューを組み立てる。</summary>
+    private AgendaViewModel CreateAgenda()
+    {
+        var agenda = new AgendaViewModel(_workspace, _today, SourceLists);
+        agenda.GoTo(SelectedDate);
+        return agenda;
+    }
+
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
     private void RebuildViews()
     {
         BuildViews(Month.Month, SelectedDate);
 
-        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day),
-            nameof(Year), nameof(Agenda));
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+
+        // Year／Agenda は、まだ作っていなければ Raise しない。バインディングは
+        // Collapsed でも読みに来るので、ここで通知すると「読んでいないのに作られる」
+        // という、まさに避けたい動きになる
+        if (_year is not null) Raise(nameof(Year));
+        if (_agenda is not null) Raise(nameof(Agenda));
+
         RefreshViews();
     }
 
@@ -3067,31 +3175,58 @@ public sealed class MainViewModel : ObservableObject
             isEnd ? date : calculator.RangeTo);
     }
 
-    /// <summary>年ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>
+    /// <summary>月ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>
+    private bool _monthStale;
+
+    /// <inheritdoc cref="_monthStale"/>
+    private bool _weekStale;
+
+    /// <inheritdoc cref="_monthStale"/>
+    private bool _dayStale;
+
+    /// <inheritdoc cref="_monthStale"/>
     private bool _yearStale;
 
-    /// <inheritdoc cref="_yearStale"/>
+    /// <inheritdoc cref="_monthStale"/>
     private bool _agendaStale;
 
     /// <summary>
-    /// いま出しているほうだけ組み直す。
+    /// いま中央に出しているビューだけ組み直す。
     /// <para>
-    /// 年と一覧は重い。予定を1件足すたびに両方を組み直していたので、全体の動きが
-    /// もたついていた。
+    /// 月・週・日・年・一覧は中央に1つしか出ない。年と一覧はとくに重く（年は12か月ぶん、
+    /// 一覧は数年ぶんの予定を組み立てる）、予定を1件足すたびに5つとも組み直していたので
+    /// 全体の動きがもたついていた。<see cref="FocusOn"/> が日付を合わせるときに、実際に
+    /// 組み直しが起きたビューの印はそちらで下ろす（ここで二重に組み直さないため）。
     /// </para>
     /// </summary>
-    private void RefreshHeavyIfShown()
+    private void RefreshVisibleCenterView()
     {
-        if (_yearStale && _currentView == CalendarView.Year)
+        switch (_currentView)
         {
-            _yearStale = false;
-            Year.Refresh();
-        }
+            case CalendarView.Month when _monthStale:
+                _monthStale = false;
+                Month.Refresh();
+                break;
 
-        if (_agendaStale && _currentView == CalendarView.Agenda)
-        {
-            _agendaStale = false;
-            Agenda.Refresh();
+            case CalendarView.Week when _weekStale:
+                _weekStale = false;
+                Week.Refresh();
+                break;
+
+            case CalendarView.Day when _dayStale:
+                _dayStale = false;
+                Day.Refresh();
+                break;
+
+            case CalendarView.Year when _yearStale:
+                _yearStale = false;
+                Year.Refresh();
+                break;
+
+            case CalendarView.Agenda when _agendaStale:
+                _agendaStale = false;
+                Agenda.Refresh();
+                break;
         }
     }
 
@@ -3151,20 +3286,40 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void FocusOn(DateOnly date)
     {
+        // 月・週が変われば、それぞれの GoTo がここで組み直す。溜めてある印を
+        // 下ろしておかないと、このあと RefreshVisibleCenterView が同じ組み立てを
+        // もう一度やることになる
+        var month = Month.Month;
         Month.GoTo(date);
+        if (Month.Month != month) _monthStale = false;
+
         SyncMiniToCenter(date);
+
+        var weekStart = Week.WeekStart;
         Week.GoTo(date);
         Week.SelectedDate = date;
+        if (Week.WeekStart != weekStart) _weekStale = false;
+
+        var day = Day.Date;
         Day.Date = date;
+        if (Day.Date != day) _dayStale = false;
 
-        // 年度が変われば、ここで組み直される。溜めてある印を下ろしておかないと、
-        // このあと同じ組み立てをもう一度やることになる
-        var fiscal = Year.FiscalYear;
-        Year.SelectedDate = date;
-        if (Year.FiscalYear != fiscal) _yearStale = false;
+        // 年と一覧は、すでに作っている（前に表示したことがある）か、いままさに
+        // 表示する番（_currentView が切り替わった先）のときだけ触る。ここで
+        // Year／Agenda を読むと、その場で組み立てられてしまう（項目B-4）
+        if (_year is not null || _currentView == CalendarView.Year)
+        {
+            // 年度が変われば、ここで組み直される
+            var fiscal = Year.FiscalYear;
+            Year.SelectedDate = date;
+            if (Year.FiscalYear != fiscal) _yearStale = false;
+        }
 
-        Agenda.SelectedDate = date;
-        Agenda.GoTo(date);
+        if (_agenda is not null || _currentView == CalendarView.Agenda)
+        {
+            Agenda.SelectedDate = date;
+            Agenda.GoTo(date);
+        }
 
         RaiseHeader();
     }

@@ -479,6 +479,9 @@ public class MainViewModelEditingTests
         });
 
         editors.OnEvent = editor => { editor.Title = "定例（変更）"; return true; };
+
+        // 週ビューは中央に出しているときだけ組み直す。切り替えて最新の内容にする
+        vm.CurrentView = CalendarView.Week;
         vm.EditBlockCommand.Execute(Block(vm, "e1"));
 
         Assert.Equal("定例（変更）", test.Workspace.Events.Find("e1")!.Title);
@@ -496,6 +499,7 @@ public class MainViewModelEditingTests
             StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
         });
 
+        vm.CurrentView = CalendarView.Week;
         vm.DeleteBlockCommand.Execute(Block(vm, "e1"));
 
         Assert.Null(test.Workspace.Events.Find("e1"));

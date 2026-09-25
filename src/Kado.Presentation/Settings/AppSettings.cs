@@ -374,7 +374,14 @@ public sealed class AppSettings
         {
             ArgumentNullException.ThrowIfNull(value);
 
-            _store.Set(WorkdayOffsetPlansKey, WorkdayOffsetPlanStore.Write(value));
+            // 実働日計算パネルは1文字打つたびにここへ書きに来る（Settle でまとめては
+            // いるが、それでも指を止めるたびに呼ばれる）。中身が変わっていなければ、
+            // 書き込みも Changed も出さない。JSON にして比べるのは、Steps を含む
+            // record の既定の等価性が中身ではなく参照で決まる（IReadOnlyList のため）ため
+            var json = WorkdayOffsetPlanStore.Write(value);
+            if (string.Equals(_store.Get(WorkdayOffsetPlansKey), json, StringComparison.Ordinal)) return;
+
+            _store.Set(WorkdayOffsetPlansKey, json);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }

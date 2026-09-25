@@ -346,6 +346,31 @@ public class MainViewModelTests
         Assert.Equal(D(2026, 9, 14), vm.Day.Date);
     }
 
+    /// <summary>
+    /// 出していないビューはデータが変わっても即座に組み直さず、印だけ付けておいて
+    /// 表示に切り替えたときに最新になる（項目A-2）。
+    /// </summary>
+    [Fact]
+    public void 出していないビューは切り替えたときに最新になる()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        // 既定は月ビュー。週は出していない
+        Assert.True(vm.IsMonthView);
+
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "会議", Date = D(2026, 9, 24),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0),
+        });
+
+        // 切り替えて初めて、追加した予定が週ビューにも出る
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        var column = vm.Week.Days.Single(d => d.Date == D(2026, 9, 24));
+        Assert.Contains(column.Blocks, b => b.Id == "e1");
+    }
+
     [Fact]
     public void 前後の移動はビューごとに幅が変わる()
     {
@@ -668,6 +693,28 @@ public class MainViewModelTests
         vm.NextCommand.Execute(null);
         Assert.Single(vm.Week.Days, d => d.IsSelected);
         Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 29)).IsSelected);
+    }
+
+    /// <summary>
+    /// 週ビューを出しているあいだに、同じ週の中で別の日を押しても組み直さない
+    /// （項目A-2）。印だけ動かす。
+    /// </summary>
+    [Fact]
+    public void 週ビューで同じ週の別の日を押しても組み直さない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        vm.SwitchViewCommand.Execute(CalendarView.Week);
+        vm.SelectDateCommand.Execute(D(2026, 9, 22));
+
+        var before = vm.Week.Days;
+
+        // 9/22 と同じ週の 9/24 へ
+        vm.SelectDateCommand.Execute(D(2026, 9, 24));
+
+        Assert.Same(before, vm.Week.Days);
+        Assert.True(vm.Week.Days.Single(d => d.Date == D(2026, 9, 24)).IsSelected);
     }
 
     [Fact]

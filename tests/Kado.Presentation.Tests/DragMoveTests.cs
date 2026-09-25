@@ -530,6 +530,10 @@ public class DragMoveTests
 
         main.MoveEventToTime("e1", Today, new TimeOnly(23, 30));
 
+        // 週ビューは中央に出しているときだけ組み直す（出していないあいだは印を
+        // 付けて溜めておく）。切り替えて初めて最新の内容になる
+        main.CurrentView = CalendarView.Week;
+
         var column = main.Week.Days.Single(d => d.Date == Today);
         Assert.Contains(column.Blocks, b => b.Id == "e1");
     }

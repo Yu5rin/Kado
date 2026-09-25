@@ -212,6 +212,37 @@ public class WeekViewModelTests
     }
 
     [Fact]
+    public void 同じ週の中で別の日を押しても組み直さない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        var before = vm.Days;
+
+        // 9/24（木）と同じ週の 9/22（火）へ。週の頭（WeekStart）は変わらない
+        vm.GoTo(D(2026, 9, 22));
+
+        Assert.Equal(D(2026, 9, 20), vm.WeekStart);
+
+        // 組み直していなければ、列の並び（配列そのもの）は同じインスタンスのまま
+        Assert.Same(before, vm.Days);
+    }
+
+    [Fact]
+    public void 週をまたぐ日へ動くと組み直す()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = Create(test);
+
+        var before = vm.Days;
+
+        vm.GoTo(D(2026, 9, 30));
+
+        Assert.Equal(D(2026, 9, 27), vm.WeekStart);
+        Assert.NotSame(before, vm.Days);
+    }
+
+    [Fact]
     public void 表示していないカレンダーは時間軸にも出ない()
     {
         using var test = TestWorkspace.Create();

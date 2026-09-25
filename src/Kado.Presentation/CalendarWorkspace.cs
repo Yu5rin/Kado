@@ -23,7 +23,24 @@ public sealed class CalendarWorkspace
 
     private WorkingDayCalendar _workingDays;
 
-    public CalendarWorkspace(SqliteConnection connection, IHolidaySource? holidays = null)
+    /// <param name="connection">この workspace が使う接続。</param>
+    /// <param name="holidays">祝日の名前を引く先。</param>
+    /// <param name="loadWorkingDays">
+    /// 実働日データを組み立てるか。
+    /// <para>
+    /// 既定は組み立てる（今までどおり）。<b>false</b> は、Google 同期専用に作る
+    /// もう1つの workspace（<c>App.xaml.cs</c>）のためだけの選択肢。同期
+    /// （<c>GoogleSyncService</c>）は <see cref="Sources"/>・<see cref="Events"/>・
+    /// <see cref="Tasks"/>・<see cref="Tombstones"/>・<see cref="Settings"/> と
+    /// <see cref="WorkingDayCalendars"/>（カレンダー一覧からの検索）しか見ず、
+    /// <see cref="WorkingDays"/>・<see cref="WorkingDayMath"/>・
+    /// <see cref="DueFormatter"/>・マイルストーンには触れない。
+    /// <see cref="LoadWorkingDays"/> は全予定を読む重い作りなので、起動のたびに
+    /// UI 側と同期側の2回読んでいたのを1回に減らす。
+    /// </para>
+    /// </param>
+    public CalendarWorkspace(
+        SqliteConnection connection, IHolidaySource? holidays = null, bool loadWorkingDays = true)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
@@ -40,13 +57,24 @@ public sealed class CalendarWorkspace
 
         EnsureSources();
 
-        // 起動のたびに印からも組み立てる。保存されているのは Excel から読んだ分だけで、
-        // 同期で渡ってきた印は入っていない。ここで重ねないと、取り込んだ端末では
-        // 出ていた実働日数が、起動し直すと消える
-        LoadWorkingDays();
+        if (loadWorkingDays)
+        {
+            // 起動のたびに印からも組み立てる。保存されているのは Excel から読んだ分だけで、
+            // 同期で渡ってきた印は入っていない。ここで重ねないと、取り込んだ端末では
+            // 出ていた実働日数が、起動し直すと消える
+            LoadWorkingDays();
 
-        // 実働日データを読んだあとでないと補えない
-        BackfillMilestones();
+            // 実働日データを読んだあとでないと補えない
+            BackfillMilestones();
+        }
+        else
+        {
+            // 空のままにはせず、うっかり参照されても落ちないようにしておく
+            // （中身が空なので BackfillMilestones は呼んでも何もしない。呼ばずに済ませる）
+            _workingDays = WorkingDayCalendar.Empty;
+            WorkingDayMath = new WorkingDayMath(_workingDays);
+            DueFormatter = new DueDateFormatter(WorkingDayMath, _countInCalendarDays);
+        }
     }
 
     public EventRepository Events { get; }
@@ -711,18 +739,39 @@ public sealed class CalendarWorkspace
         }
 
         // すでにある分は所属と中身だけ直す。結び付けた Google の識別子は残す。
-        // 消して作り直すと、同期のたびに相手側でも消えて作られることになる
-        Events.UpsertMany(wanted.Select(e => Events.Find(e.Id) is { } existing
-            ? existing with
-            {
-                Title = e.Title,
-                Date = e.Date,
-                CalendarId = calendarId,
-                Note = e.Note,
-                UpdatedAt = now,
-            }
-            : e));
+        // 消して作り直すと、同期のたびに相手側でも消えて作られることになる。
+        //
+        // 中身が前回と同じなら書かない。BackfillMilestones は起動のたびに呼ばれるので、
+        // 何も変わっていない日でも UpdatedAt=now だけ書き換え続けていた
+        // （NeedsPush は UpdatedAt ではなく内容そのもので比べるので、同期の動きは
+        // 変わらない。DB への無駄な書き込みが減るだけ）
+        var toUpsert = wanted
+            .Select(e => (Wanted: e, Existing: Events.Find(e.Id)))
+            .Where(x => x.Existing is not { } existing || HasChanged(existing, x.Wanted, calendarId))
+            .Select(x => x.Existing is { } existing
+                ? existing with
+                {
+                    Title = x.Wanted.Title,
+                    Date = x.Wanted.Date,
+                    CalendarId = calendarId,
+                    Note = x.Wanted.Note,
+                    UpdatedAt = now,
+                }
+                : x.Wanted)
+            .ToArray();
+
+        if (toUpsert.Length > 0) Events.UpsertMany(toUpsert);
     }
+
+    /// <summary>
+    /// <see cref="Replace"/> が書き出したい内容と、いま入っている内容が違うか。
+    /// <para>ここで見ているぶん（題・日付・所属・メモ）だけを比べる。</para>
+    /// </summary>
+    private static bool HasChanged(CalendarEvent existing, CalendarEvent wanted, string calendarId) =>
+        !string.Equals(existing.Title, wanted.Title, StringComparison.Ordinal) ||
+        existing.Date != wanted.Date ||
+        !string.Equals(existing.CalendarId, calendarId, StringComparison.Ordinal) ||
+        !string.Equals(existing.Note, wanted.Note, StringComparison.Ordinal);
 
     /// <summary>マイルストーンの予定に付ける識別子。同じ日の同じ名前なら同じものになる。</summary>
     private static string MilestoneId(Milestone value) =>
@@ -775,10 +824,20 @@ public sealed class CalendarWorkspace
         return Remember(CreateCalendar(WorkingDayCalendarName));
     }
 
-    /// <summary>見つけた・作った実働日カレンダーの ID を控えてから返す。</summary>
+    /// <summary>
+    /// 見つけた・作った実働日カレンダーの ID を控えてから返す。
+    /// <para>
+    /// 値が前回と同じなら書かない。<see cref="EnsureWorkingDayCalendar"/> は起動の
+    /// たびに呼ばれるので、いつもと同じ「Kado」が見つかっただけでも毎回 DB へ書いていた。
+    /// </para>
+    /// </summary>
     private CalendarSource Remember(CalendarSource value)
     {
-        SavedWorkingDayCalendarId = value.Id;
+        if (!string.Equals(SavedWorkingDayCalendarId, value.Id, StringComparison.Ordinal))
+        {
+            SavedWorkingDayCalendarId = value.Id;
+        }
+
         return value;
     }
 
