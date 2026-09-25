@@ -171,7 +171,7 @@ AppBar の検証手順は `samples/AppBarProbe/README.md` を参照。
 
 #### CI
 
-`main` への push と `main` 宛のプルリクエストで、`.github/workflows/ci.yml` が
+`main` と `dev` への push、およびこの2つ宛のプルリクエストで、`.github/workflows/ci.yml` が
 ビルドと単体テストを回す（Release 構成、ubuntu-latest）。テスト結果は `trx` 形式で
 アーティファクトに残るので、失敗時は Actions の実行ページから中身を確認できる。
 
