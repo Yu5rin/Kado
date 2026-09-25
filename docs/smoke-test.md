@@ -16,7 +16,7 @@ CI は Linux で回しているので、確認できるのは**コンパイル�
 すでに入れてあるなら、**⚙ →「更新を確認」**でも上げられる。更新機能が見にいくのは
 Releases なので、Actions の Artifacts だけでは新しい版に気づかない。
 
-**自分でビルドする**（.NET 8 SDK が要る）
+**自分でビルドする**（.NET 10 SDK が要る）
 
 ```
 git clone https://github.com/Yu5rin/Kado.git

@@ -13,7 +13,7 @@ namespace Kado.App.Tests;
 /// 代入している箇所が src 内に1つも無かった）。
 /// </para>
 /// <para>
-/// App プロジェクトは <c>net8.0-windows</c> で、この <c>net8.0</c> のテストからは
+/// App プロジェクトは <c>net10.0-windows</c> で、この <c>net10.0</c> のテストからは
 /// 参照できない（<c>XamlResourceTests</c> と同じ理由。実際に試すと NU1201 で
 /// 復元が失敗する）。実行して確かめる代わりに、<c>XamlResourceTests</c> と同じ
 /// やり方で、ソースを読んで「結んでいる行が実在するか」を見る。

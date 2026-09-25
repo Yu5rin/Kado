@@ -9,7 +9,7 @@
 
 ## 実行
 
-Windows でのみ動作する（`net8.0-windows` / WPF）。
+Windows でのみ動作する（`net10.0-windows` / WPF）。
 
 ```
 dotnet run --project samples/AppBarProbe
