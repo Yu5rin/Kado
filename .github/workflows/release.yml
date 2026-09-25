@@ -176,7 +176,11 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath release-notes.md -Encoding utf8NoBOM
 
+          # 下書き（--draft）で作り、「変更点」を書き入れてから公開する。本文は更新の窓にそのまま
+          # 出るため、即時公開だと公開から書き換えまでの間に「(ここに書く)」が利用者に見えていた。
+          # 下書きは releases/latest に出ないので、公開するまで自動更新の対象にならない。
           gh release create '${{ github.ref_name }}' $exe $zip `
+            --draft `
             --title '${{ github.ref_name }}' `
             --notes-file release-notes.md
 
