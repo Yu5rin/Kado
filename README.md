@@ -10,7 +10,7 @@ Google カレンダー／Google タスクと同期しつつ、**会社の実働�
 
 | 項目 | 選定 |
 |---|---|
-| ランタイム | .NET 8（LTS） |
+| ランタイム | .NET 10（LTS） |
 | UI | WPF（フルネイティブ。WebView2 や Electron は使わない） |
 | データ保存 | SQLite（Phase 2） |
 | Excel 読込 | ClosedXML |
@@ -47,7 +47,7 @@ dotnet build
 dotnet test
 ```
 
-WPF プロジェクト（`Kado.App` / `AppBarProbe`）は `net8.0-windows` だが、
+WPF プロジェクト（`Kado.App` / `AppBarProbe`）は `net10.0-windows` だが、
 `Directory.Build.props` で `EnableWindowsTargeting` を立てているため Linux の CI でもビルドできる。
 **実行は Windows が必要。**
 

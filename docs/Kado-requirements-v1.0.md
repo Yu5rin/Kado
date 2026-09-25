@@ -1,6 +1,6 @@
 # Kado 要件書 v1.0
 
-**Kado** — Windows デスクトップアプリ（C# / .NET 8 / WPF）として新規に作る、予定とタスクの管理ツール。
+**Kado** — Windows デスクトップアプリ（C# / .NET 10 / WPF）として新規に作る、予定とタスクの管理ツール。
 リポジトリは `github.com/Yu5rin/Kado`。
 既存のEdge拡張 inaCalendar v1.19.3 は**機能の参考**として扱い、UI・操作系・情報設計は一新する。
 
@@ -29,7 +29,7 @@
 
 | 項目 | 選定 |
 |---|---|
-| ランタイム | .NET 8（LTS） |
+| ランタイム | .NET 10（LTS） |
 | UI | WPF（フルネイティブ。WebView2は使わない） |
 | 配布 | 単一exe（self-contained, win-x64） |
 | データ保存 | SQLite（Microsoft.Data.Sqlite + Dapper） |

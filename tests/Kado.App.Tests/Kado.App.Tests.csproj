@@ -3,18 +3,18 @@
   <!--
       XAML を「XML として」読んで検査するだけのテスト。WPF は Windows でしか
       動かせず、CI は Linux で回すので、実行せずに見つけられる壊れ方をここで止める。
-      App プロジェクトは参照しない（net8.0-windows になってしまうため）。
+      App プロジェクトは参照しない（net10.0-windows になってしまうため）。
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Kado.App.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 
