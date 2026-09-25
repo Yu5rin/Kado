@@ -148,7 +148,13 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
             cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>イベントを作る。</summary>
+    /// <summary>
+    /// イベントを作る。
+    /// <para>
+    /// <c>supportsAttachments=true</c> を常に付ける。添付を送らない本文でも無害なので、
+    /// 添付を扱うかどうかで呼び分けずに済ませている。
+    /// </para>
+    /// </summary>
     public async Task<JsonElement> InsertEventAsync(
         string calendarId, JsonObject body, CancellationToken cancellationToken = default)
     {
@@ -156,7 +162,7 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
 
         return await SendAsync(
             HttpMethod.Post,
-            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events",
+            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events?supportsAttachments=true",
             body, cancellationToken).ConfigureAwait(false);
     }
 
@@ -171,8 +177,33 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
 
         return await SendAsync(
             HttpMethod.Patch,
-            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/{Uri.EscapeDataString(eventId)}",
+            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/{Uri.EscapeDataString(eventId)}" +
+            "?supportsAttachments=true",
             body, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// イベントを別のカレンダーへ移す。
+    /// <para>
+    /// 消して作り直すと、ゲスト・会議 URL・添付・色など、このアプリが扱わない項目が
+    /// 落ちる。<c>move</c> はそれらを保ったまま運ぶ。応答は移ったあとのイベントの姿。
+    /// </para>
+    /// <para>
+    /// 繰り返しのうち1回だけを差し替えた回（<c>recurringEventId</c> を持つ子）には使えない
+    /// （Google 側の制約）。呼び出し側で止めること。
+    /// </para>
+    /// </summary>
+    public async Task<JsonElement> MoveEventAsync(
+        string calendarId, string eventId, string destinationCalendarId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationCalendarId);
+
+        var url = $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/" +
+                  $"{Uri.EscapeDataString(eventId)}/move?destination=" +
+                  Uri.EscapeDataString(destinationCalendarId);
+
+        return await SendAsync(HttpMethod.Post, url, new JsonObject(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

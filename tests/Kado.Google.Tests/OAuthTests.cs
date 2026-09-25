@@ -91,6 +91,35 @@ public class OAuthTests
             query["scope"]);
     }
 
+    [Fact]
+    public void 追加認可は指定した権限だけをincludeGrantedScopesつきで求める()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, "{}")));
+        var flow = new LoopbackOAuthFlow(Options(), http, _ => { });
+
+        var url = flow.BuildAuthorizationUrl(
+            "http://127.0.0.1:1/", "c", "s", [GoogleOAuthOptions.DriveFileScope], includeGrantedScopes: true);
+        var query = HttpUtility.ParseQueryString(new Uri(url).Query);
+
+        // 添付のための1つだけを求める。既定のスコープ一式は含めない
+        Assert.Equal(GoogleOAuthOptions.DriveFileScope, query["scope"]);
+
+        // これまでの権限を維持したまま返ってもらうための指定
+        Assert.Equal("true", query["include_granted_scopes"]);
+    }
+
+    [Fact]
+    public void 通常の認可URLにはincludeGrantedScopesを付けない()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, "{}")));
+        var flow = new LoopbackOAuthFlow(Options(), http, _ => { });
+
+        var query = HttpUtility.ParseQueryString(
+            new Uri(flow.BuildAuthorizationUrl("http://127.0.0.1:1/", "c", "s")).Query);
+
+        Assert.Null(query["include_granted_scopes"]);
+    }
+
     // ------------------------------------------------------------------
     // 通しの流れ
     // ------------------------------------------------------------------
@@ -264,7 +293,8 @@ public class OAuthTests
     }
 
     /// <summary>ブラウザの代わりに戻り先を叩く。</summary>
-    private static async Task Visit(string authorizationUrl, string? withCode = null, string? error = null,
+    /// <summary>internal：<see cref="GoogleTokenProviderTests"/> からも使う。</summary>
+    internal static async Task Visit(string authorizationUrl, string? withCode = null, string? error = null,
         string? state = null)
     {
         var query = HttpUtility.ParseQueryString(new Uri(authorizationUrl).Query);

@@ -209,7 +209,12 @@ public partial class App : Application
                     workspace, today, editors: editors, files: files,
                     googleClient: googleClient, google: _google,
                     settings: settings, startup: new StartupRegistration(),
-                    notifier: new ToastNotifier(), shell: dock),
+                    notifier: new ToastNotifier(), shell: dock,
+                    // 添付は UI 側から Google ドライブへ直接アップロードする。
+                    // フォルダ ID の控えは UI 側の workspace.Settings に持つ（同じ
+                    // ファイルを同期用の接続とも共有している）
+                    attachmentUploader: new Kado.Presentation.Sync.GoogleDriveAttachmentUploader(
+                        _google, workspace.Settings)),
             };
 
             MainWindow = window;

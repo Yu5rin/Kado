@@ -56,6 +56,22 @@ public sealed class GoogleConnection(
         return await service.SyncAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public bool HasDriveAttachmentScope =>
+        IsConnected && Provider().HasScope(GoogleOAuthOptions.DriveFileScope);
+
+    public async Task<bool> EnsureDriveAttachmentScopeAsync(CancellationToken cancellationToken = default) =>
+        await Provider().EnsureScopeAsync(GoogleOAuthOptions.DriveFileScope, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <summary>
+    /// ドライブ API を組み立てる。添付のアップロードにだけ使う。
+    /// <para>
+    /// 呼ぶ前に <see cref="HasDriveAttachmentScope"/> を確かめること。権限が無いまま
+    /// 呼ぶと、Google 側に断られる（403）。
+    /// </para>
+    /// </summary>
+    public GoogleDriveApi CreateDriveApi() => new(_http, Provider());
+
     /// <summary>トークンを配る係。設定を読み直して組み立てる。</summary>
     private GoogleTokenProvider Provider()
     {

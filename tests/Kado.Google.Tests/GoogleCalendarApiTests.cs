@@ -210,4 +210,31 @@ public class GoogleCalendarApiTests
         Assert.Single(page.Items);
         Assert.Contains("calendarList", seen[0].RequestUri!.ToString(), StringComparison.Ordinal);
     }
+
+    // ------------------------------------------------------------------
+    // カレンダーの移し替え・添付
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 別のカレンダーへmoveで移す()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"id":"e1","summary":"棚卸し"}"""));
+
+        await api.MoveEventAsync("cal-a", "e1", "cal-b");
+
+        Assert.Equal(HttpMethod.Post, seen[0].Method);
+        Assert.EndsWith("/calendars/cal-a/events/e1/move", seen[0].RequestUri!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Contains("destination=cal-b", seen[0].RequestUri!.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 作成と書き換えはsupportsAttachmentsを付ける()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"id":"e1"}"""));
+
+        await api.InsertEventAsync("primary", new System.Text.Json.Nodes.JsonObject { ["summary"] = "新規" });
+        await api.PatchEventAsync("primary", "e1", new System.Text.Json.Nodes.JsonObject { ["summary"] = "変更" });
+
+        Assert.All(seen, r => Assert.Contains("supportsAttachments=true", r.RequestUri!.Query, StringComparison.Ordinal));
+    }
 }

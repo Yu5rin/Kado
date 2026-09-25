@@ -146,7 +146,14 @@
                     <ComboBox Style="{StaticResource FieldComboBoxStyle}"
                               ItemsSource="{Binding Calendars}"
                               SelectedValuePath="Id"
-                              SelectedValue="{Binding CalendarId}" />
+                              SelectedValue="{Binding CalendarId}"
+                              IsEnabled="{Binding CanChangeCalendar}"
+                              ToolTip="{Binding CalendarLockReason}" />
+
+                    <!-- 繰り返しの1回だけの回は Google でも単体で移せない -->
+                    <TextBlock Text="{Binding CalendarLockReason}" Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap" Margin="0,3,0,0"
+                               Visibility="{Binding CalendarLockReason, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
             </Grid>
 
@@ -177,6 +184,51 @@
             <TextBlock Text="URL" Style="{StaticResource FieldLabelStyle}" />
             <TextBox Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
                      Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
+
+            <!--
+                添付。Google 連携のカレンダーの予定だけ（ローカルだけのカレンダーやタスクには
+                Google 側に書き戻す先が無い）。一覧の行を押すと既定のブラウザで開く
+                （https のものだけ。EventEditorViewModel.IsSafeToOpen）。「外す」は予定から
+                外すだけで、ドライブのファイルは消さない
+            -->
+            <StackPanel Margin="0,0,0,12"
+                        Visibility="{Binding CanUseAttachments, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="添付" Style="{StaticResource FieldLabelStyle}" />
+
+                <ItemsControl ItemsSource="{Binding Attachments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderThickness="1" BorderBrush="{DynamicResource LineBrush}"
+                                    CornerRadius="5" Padding="8,5" Margin="0,0,0,5">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="外す" Margin="8,0,0,0"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            Tag="{Binding}" Click="OnRemoveAttachmentClick" />
+
+                                    <StackPanel Tag="{Binding}" Cursor="Hand"
+                                                MouseLeftButtonUp="OnOpenAttachmentClick"
+                                                ToolTip="押すと既定のブラウザで開きます">
+                                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding MimeType}" Style="{StaticResource CaptionTextStyle}" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="ファイルを追加" Style="{StaticResource GhostButtonStyle}"
+                        HorizontalAlignment="Left" IsEnabled="{Binding CanAddAttachment}"
+                        Click="OnAddAttachmentClick" />
+
+                <TextBlock Text="{Binding AttachmentError}" Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{DynamicResource SundayBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Visibility="{Binding AttachmentError, Converter={StaticResource NullToVisibility}}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding AttachmentsDisabledReason}" Style="{StaticResource CaptionTextStyle}"
+                       Margin="0,0,0,12"
+                       Visibility="{Binding CanUseAttachments, Converter={StaticResource InverseBoolToVisibility}}" />
 
             <TextBlock Text="説明" Style="{StaticResource FieldLabelStyle}" />
             <TextBox Style="{StaticResource FieldNoteBoxStyle}"

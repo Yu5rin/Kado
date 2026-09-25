@@ -65,6 +65,13 @@ public class SyncViewModelTests
             SyncCount++;
             return Report;
         }
+
+        public bool HasDriveAttachmentScope { get; set; }
+
+        public Task<bool> EnsureDriveAttachmentScopeAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(HasDriveAttachmentScope);
+
+        public Kado.Google.Sync.GoogleDriveApi CreateDriveApi() => throw new NotSupportedException();
     }
 
     [Fact]

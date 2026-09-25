@@ -19,6 +19,16 @@ public sealed record GoogleOAuthOptions
         "https://www.googleapis.com/auth/tasks",
     ];
 
+    /// <summary>
+    /// 添付をアップロードするための権限。
+    /// <para>
+    /// 最初から <see cref="DefaultScopes"/> には入れない。既に繋いでいる全員に
+    /// 再同意を強いることになるため。添付を初めて足そうとしたときだけ、この1つを
+    /// <c>include_granted_scopes=true</c> で追加認可する（要件書どおり）。
+    /// </para>
+    /// </summary>
+    public const string DriveFileScope = "https://www.googleapis.com/auth/drive.file";
+
     /// <summary>クライアント ID。</summary>
     public required string ClientId { get; init; }
 

@@ -139,6 +139,80 @@ public static class RecurrenceConverter
         return $"{string.Join(';', ruleParts)};EXDATE={string.Join(',', exceptDates)}";
     }
 
+    /// <summary>
+    /// 除外日（<c>EXDATE=</c>）を取り除いた指定。
+    /// <para>
+    /// <c>EXDATE</c> は編集画面の選択肢には無く、同期の取り込み処理が「同じ日に親の回と
+    /// 例外回が二重に出ない」ようにするためだけに内部で書き足す。
+    /// Google 側の親イベントは、繰り返しのうち1回を差し替えても <c>recurrence</c> に
+    /// <c>EXDATE</c> を持たない（別のイベントとして持つ）。書き戻すときにこちらの内部事情を
+    /// 混ぜて送り返すと、Google 側には要らない変更として PATCH してしまう。
+    /// </para>
+    /// </summary>
+    public static string? WithoutExceptionDates(string? spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec)) return spec;
+
+        var ruleParts = spec
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !part.StartsWith("EXDATE=", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        return ruleParts.Length > 0 ? string.Join(';', ruleParts) : null;
+    }
+
+    /// <summary>
+    /// 書き戻す recurrence の行を組み立てる。
+    /// <para>
+    /// 使う人が RRULE そのものを変えていなければ、Google 側にある元の行
+    /// （<paramref name="originalLines"/>）を、<b>EXDATE を含め書式も並びもそのまま</b>
+    /// 返す。ics 取り込みや他のクライアントが付けた本物の EXDATE は、こちらが
+    /// 経由すると <c>yyyyMMdd</c> に丸めて書式（TZID など）を失うため、こちらの表現へ
+    /// 一度変換してから戻すのではなく、元の文字列をそのまま使う。
+    /// </para>
+    /// <para>
+    /// RRULE を変えていれば、新しい RRULE と、元にあった EXDATE 行だけを組み合わせる
+    /// （やはり書式はそのまま）。どちらの場合も、<b>ローカルの EXDATE</b>
+    /// （<see cref="WithExceptionDate"/> が内部で足した、同じ日の二重表示を防ぐためだけの
+    /// 除外日）は使わない。Google の親はそもそも EXDATE を持たないか、持っていても
+    /// こちらが動かしてよいものではない。
+    /// </para>
+    /// </summary>
+    /// <param name="localSpec">こちらの1本（内部の除外日を含みうる）。</param>
+    /// <param name="originalLines">
+    /// Google 側の元の recurrence 行。新規作成でまだ無い、またはこの予定がまだ
+    /// 繰り返しでなかったときは null。
+    /// </param>
+    public static IReadOnlyList<string> BuildOutgoing(string? localSpec, IReadOnlyList<string>? originalLines)
+    {
+        var ruleOnly = WithoutExceptionDates(localSpec);
+        if (ruleOnly is null) return [];
+
+        if (originalLines is { Count: > 0 })
+        {
+            var originalRuleLine = originalLines.FirstOrDefault(line => LineName(line) == "RRULE");
+            var originalRuleText = originalRuleLine is not null ? After(originalRuleLine, ':') : null;
+
+            // 変えていない。元の並び・書式をそのまま使う（本物の EXDATE も含め）。
+            // こうすると書き戻す内容が控えた姿と一字一句一致し、送る必要も無くなる
+            if (originalRuleText is not null && string.Equals(originalRuleText, ruleOnly, StringComparison.Ordinal))
+            {
+                return originalLines;
+            }
+
+            // RRULE を変えた。新しい RRULE と、元にあった EXDATE 行だけを組み合わせる
+            var merged = new List<string> { $"RRULE:{ruleOnly}" };
+            merged.AddRange(originalLines.Where(line => LineName(line) == "EXDATE"));
+            return merged;
+        }
+
+        // Google 側にまだ recurrence が無い（新規作成、またはいま繰り返しにした）
+        return [$"RRULE:{ruleOnly}"];
+    }
+
+    /// <summary>行の名前（<c>RRULE</c>・<c>EXDATE</c> など）。</summary>
+    private static string LineName(string line) => line.Split([';', ':'], 2)[0].Trim().ToUpperInvariant();
+
     /// <summary>区切りの後ろ。無ければ null。</summary>
     private static string? After(string line, char separator)
     {

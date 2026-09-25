@@ -634,4 +634,110 @@ public class MainViewModelEditingTests
         // 作り直していれば別インスタンスになり、入力中の内容が消えてしまう
         Assert.Same(first, second);
     }
+
+    // ------------------------------------------------------------------
+    // 編集画面のカレンダー欄の候補（項目1：別のカレンダー／別のリストへの移し替え）
+    // ------------------------------------------------------------------
+
+    private static CalendarSource GoogleCalendar(string id, string name = "仕事") => new()
+    {
+        Id = id, Summary = name,
+        GoogleRaw = $$"""{"id":"{{id}}","accessRole":"owner"}""",
+        UpdatedAt = DateTimeOffset.Now,
+    };
+
+    private static CalendarSource ReadOnlyCalendar(string id) => new()
+    {
+        Id = id, Summary = "共有カレンダー",
+        GoogleRaw = $$"""{"id":"{{id}}","accessRole":"reader"}""",
+        UpdatedAt = DateTimeOffset.Now,
+    };
+
+    [Fact]
+    public void 読み取り専用カレンダーは入れ先の候補に出ない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(GoogleCalendar("cal-a"));
+        test.Workspace.Sources.Upsert(ReadOnlyCalendar("cal-ro"));
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24), CalendarId = "cal-a",
+        });
+
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = _ => false;
+        vm.EditEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        var ids = editors.LastEventEditor!.Calendars.Select(c => c.Id).ToArray();
+        Assert.Contains("cal-a", ids);
+        Assert.DoesNotContain("cal-ro", ids);
+    }
+
+    [Fact]
+    public void Google連携済みの予定はローカルだけのカレンダーを選べない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(GoogleCalendar("cal-a"));
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24), CalendarId = "cal-a",
+            GoogleEventId = "g1", GoogleCalendarId = "cal-a", Source = "google",
+            GoogleRaw = """{"id":"g1"}""",
+        });
+
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = _ => false;
+        vm.EditEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        // ローカルの「マイカレンダー」は起動時に作られる。それが候補から外れていること
+        var ids = editors.LastEventEditor!.Calendars.Select(c => c.Id).ToArray();
+        Assert.Contains("cal-a", ids);
+        Assert.DoesNotContain(ids, id => CalendarWorkspace.IsLocalId(id));
+    }
+
+    [Fact]
+    public void ローカルの予定はローカルだけのカレンダーも選べる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "私用の予定", Date = D(2026, 9, 24), CalendarId = "local:mycal",
+        });
+
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = _ => false;
+        vm.EditEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        // まだ Google に無い予定は、これまでどおりローカルのカレンダーも選べる
+        Assert.Contains(editors.LastEventEditor!.Calendars, c => CalendarWorkspace.IsLocalId(c.Id));
+    }
+
+    [Fact]
+    public void Google連携済みのタスクはローカルだけのリストを選べない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.Sources.Upsert(new TaskListSource
+        {
+            Id = "list-a", Title = "仕事", GoogleRaw = """{"id":"list-a","title":"仕事"}""",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "台数計画の確定", TaskListId = "list-a", Due = D(2026, 9, 24),
+            GoogleTaskId = "gt1", GoogleTaskListId = "list-a", Source = "google",
+            GoogleRaw = """{"id":"gt1"}""",
+        });
+
+        var (vm, editors) = Create(test);
+
+        editors.OnTask = _ => false;
+        vm.EditTaskCommand.Execute(Assert.Single(vm.SelectedDay.Tasks));
+
+        var ids = editors.LastTaskEditor!.TaskLists.Select(t => t.Id).ToArray();
+        Assert.Contains("list-a", ids);
+        Assert.DoesNotContain(ids, id => CalendarWorkspace.IsLocalId(id));
+    }
 }

@@ -1,4 +1,5 @@
 using Kado.Data.Models;
+using Kado.Google.Mapping;
 using Kado.Presentation.Infrastructure;
 using Kado.Presentation.ViewModels;
 
@@ -53,7 +54,17 @@ public sealed class EventEditorViewModel : ObservableObject
     /// </summary>
     private const int NoteMaxLength = 8192;
 
+    /// <summary>添付の上限。Google Calendar の仕様どおり。</summary>
+    private const int MaxAttachments = 25;
+
     private readonly CalendarEvent? _original;
+    private readonly IAttachmentUploader _uploader;
+    private readonly IFileDialogs _dialogs;
+
+    private List<EventAttachment> _attachments = [];
+    private bool _attachmentsDirty;
+    private bool _isUploadingAttachment;
+    private string? _attachmentError;
 
     private string _title = string.Empty;
     private DateOnly _date;
@@ -81,9 +92,11 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <param name="now">いまの時刻。開始時刻の初期値に使う。</param>
     /// <param name="defaultCalendarId">入れ先の既定。左の一覧で選ばれているもの。</param>
     public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars, TimeOnly? now = null,
-        string? defaultCalendarId = null)
+        string? defaultCalendarId = null, IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null)
     {
         Calendars = calendars;
+        _uploader = uploader ?? NullAttachmentUploader.Instance;
+        _dialogs = dialogs ?? NullFileDialogs.Instance;
         _date = date;
         _endDate = date;
         _calendarId = calendars.Any(c => string.Equals(c.Id, defaultCalendarId, StringComparison.Ordinal))
@@ -100,12 +113,15 @@ public sealed class EventEditorViewModel : ObservableObject
     }
 
     /// <summary>すでにある予定を直す。</summary>
-    public EventEditorViewModel(CalendarEvent value, IReadOnlyList<SourceChoice> calendars)
+    public EventEditorViewModel(CalendarEvent value, IReadOnlyList<SourceChoice> calendars,
+        IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
         _original = value;
         Calendars = calendars;
+        _uploader = uploader ?? NullAttachmentUploader.Instance;
+        _dialogs = dialogs ?? NullFileDialogs.Instance;
 
         _title = value.Title;
         _date = value.Date;
@@ -121,6 +137,10 @@ public sealed class EventEditorViewModel : ObservableObject
 
         _endDate = value.EndDate ?? value.Date;
         _notify = value.Notify;
+
+        // Google Tasks には添付の API が無いので予定だけが対象。ローカルだけのカレンダー
+        // の予定は attachments を書き戻せないので使わせない（CanUseAttachments を見よ）
+        _attachments = [.. EventMapper.EffectiveAttachments(value)];
     }
 
     /// <summary>新規か。見出しとボタンの文言を変える。</summary>
@@ -357,10 +377,161 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _calendarId;
         set
         {
+            if (!CanChangeCalendar) return;
             if (!Set(ref _calendarId, value)) return;
 
             // 「カレンダーに従う」の結果はカレンダーごとに変わる。選び直したら文言も追従させる
-            Raise(nameof(NotifyOptions));
+            // 添付が使えるかも、入れ先が Google 連携かどうかで変わる
+            Raise(nameof(NotifyOptions), nameof(CanUseAttachments), nameof(AttachmentsDisabledReason));
+        }
+    }
+
+    /// <summary>
+    /// カレンダー欄を変えられるか。
+    /// <para>
+    /// 繰り返しのうち1回だけを差し替えた回（例外回）は、Google でも単体で
+    /// カレンダーを移せない。編集画面でも変えさせず、理由を
+    /// <see cref="CalendarLockReason"/> に出す。
+    /// </para>
+    /// </summary>
+    public bool CanChangeCalendar => _original is null || !EventMapper.IsRecurringInstance(_original);
+
+    /// <summary>カレンダー欄を変えられない理由。変えられるなら null。</summary>
+    public string? CalendarLockReason => CanChangeCalendar
+        ? null
+        : "繰り返しの1回だけを差し替えた予定は、カレンダーを移せません（Google 側の制約）";
+
+    // ------------------------------------------------------------------
+    // 添付。Google 連携のカレンダーの予定だけが対象（Google Tasks には無い機能）
+    // ------------------------------------------------------------------
+
+    /// <summary>いま付いている添付。</summary>
+    public IReadOnlyList<EventAttachment> Attachments => _attachments;
+
+    /// <summary>
+    /// 添付を使えるか。
+    /// <para>
+    /// ローカルだけのカレンダーの予定は Google に書き戻せないので使わせない。
+    /// 入れ先を選んでいなければ（一覧が空など）使わせない。
+    /// </para>
+    /// </summary>
+    public bool CanUseAttachments =>
+        _calendarId is { Length: > 0 } id && !Kado.Presentation.CalendarWorkspace.IsLocalId(id);
+
+    /// <summary>添付欄を使えない理由。使えるなら null。</summary>
+    public string? AttachmentsDisabledReason => CanUseAttachments
+        ? null
+        : "ローカルだけのカレンダーの予定には添付を付けられません";
+
+    /// <summary>アップロード中か。ボタンの二重押しを防ぐ表示に使う。</summary>
+    public bool IsUploadingAttachment
+    {
+        get => _isUploadingAttachment;
+        private set => Set(ref _isUploadingAttachment, value);
+    }
+
+    /// <summary>添付にまつわる最後のエラー。無ければ null。</summary>
+    public string? AttachmentError
+    {
+        get => _attachmentError;
+        private set => Set(ref _attachmentError, value);
+    }
+
+    /// <summary>もう1件足せるか。上限（25件）に達していたら false。</summary>
+    public bool CanAddAttachment => CanUseAttachments && !_isUploadingAttachment && _attachments.Count < MaxAttachments;
+
+    /// <summary>
+    /// ファイルを選ばせて、ドライブへ上げてから添付に足す。
+    /// <para>
+    /// 上げるところまでこの中で行う（オフラインなら <see cref="AttachmentError"/> に出す）。
+    /// 「足した・外した」という操作をしたときだけ保存時に <c>attachments</c> を送るため、
+    /// ここで <see cref="_attachmentsDirty"/> を立てる。
+    /// </para>
+    /// </summary>
+    public async Task AddAttachmentAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanAddAttachment) return;
+
+        var path = _dialogs.PickOpenFile("添付するファイル", "すべてのファイル (*.*)|*.*");
+        if (path is not { Length: > 0 }) return;
+
+        IsUploadingAttachment = true;
+        AttachmentError = null;
+
+        try
+        {
+            var result = await _uploader.UploadAsync(path, cancellationToken).ConfigureAwait(true);
+
+            if (!result.Succeeded)
+            {
+                AttachmentError = result.ErrorMessage ?? "添付を上げられませんでした。";
+                return;
+            }
+
+            _attachments = [.. _attachments, result.Attachment!];
+            _attachmentsDirty = true;
+            Raise(nameof(Attachments), nameof(CanAddAttachment));
+        }
+        finally
+        {
+            IsUploadingAttachment = false;
+            Raise(nameof(CanAddAttachment));
+        }
+    }
+
+    /// <summary>
+    /// 添付を予定から外す。
+    /// <para>ドライブのファイルそのものは消さない。予定との結びつきを外すだけ。</para>
+    /// </summary>
+    public void RemoveAttachment(EventAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        if (!CanUseAttachments) return;
+        if (!_attachments.Any(a => string.Equals(a.FileId, attachment.FileId, StringComparison.Ordinal))) return;
+
+        _attachments = _attachments
+            .Where(a => !string.Equals(a.FileId, attachment.FileId, StringComparison.Ordinal))
+            .ToList();
+        _attachmentsDirty = true;
+
+        Raise(nameof(Attachments), nameof(CanAddAttachment));
+    }
+
+    /// <summary>
+    /// 開いてよい URL か。
+    /// <para>https 以外は開かない（安全のため）。呼び出し側（画面）はこれが true のときだけ
+    /// 既定のブラウザを開く。</para>
+    /// </summary>
+    public static bool IsSafeToOpen(EventAttachment attachment) =>
+        attachment.FileUrl.StartsWith("https://", StringComparison.Ordinal);
+
+    /// <summary>
+    /// 添付を既定のブラウザで開く。
+    /// <para>
+    /// https 以外は開かない。<see cref="SettingsViewModel"/> の「Kado のページを開く」と
+    /// 同じ流儀（ShellExecute に無検証で文字列を渡さない）。
+    /// </para>
+    /// </summary>
+    public void OpenAttachment(EventAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        if (!IsSafeToOpen(attachment))
+        {
+            AttachmentError = "この添付は開けません（https の URL ではありません）";
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(attachment.FileUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
+            or IOException or PlatformNotSupportedException)
+        {
+            AttachmentError = $"開けませんでした（{ex.Message}）";
         }
     }
 
@@ -449,10 +620,29 @@ public sealed class EventEditorViewModel : ObservableObject
                 ? _original?.Recurrence
                 : RecurrenceChoice.ToSpec(_recurrence, _date),
 
-            // Google 側の情報は編集画面で触らない。消さずに引き継ぐ
+            // Google 側の情報は編集画面で触らない。消さずに引き継ぐ。
+            //
+            // GoogleRaw を引き継ぎ忘れると、保存するたびに「Google から一度も
+            // 受け取っていない」状態に戻ってしまう。EventMapper.NeedsPush は
+            // 毎回送り直すようになるだけで済むが、EventMapper.HoldsUnrepresentableRecurrence
+            // は GoogleRaw が無いと「表せない繰り返しではない」と誤判定し、
+            // カスタムの繰り返し（RDATE など）を持つ予定のタイトルを直しただけで
+            // 繰り返しの指定ごと消して送ってしまう。GoogleCalendarId を引き継がないと、
+            // カレンダーを移したあと別の項目も直したときに move ではなく素の patch に
+            // なり、相手の元のカレンダーに孤立した予定を残してしまう
             GoogleEventId = _original?.GoogleEventId,
+            GoogleCalendarId = _original?.GoogleCalendarId,
             GoogleUpdated = _original?.GoogleUpdated,
+            GoogleRaw = _original?.GoogleRaw,
+            Status = _original?.Status,
             Source = _original?.Source,
+
+            // 添付は「足した・外した」という操作をしたときだけ保存する。触っていなければ
+            // 前の値（null なら null のまま）を引き継ぐ
+            PendingAttachments = _attachmentsDirty
+                ? EventMapper.ToPendingAttachmentsJson(_attachments)
+                : _original?.PendingAttachments,
+
             UpdatedAt = DateTimeOffset.Now,
         };
     }

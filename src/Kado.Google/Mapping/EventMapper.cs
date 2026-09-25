@@ -36,14 +36,24 @@ public static class EventMapper
     /// </para>
     /// </summary>
     /// <param name="element">イベント1件の JSON。</param>
-    /// <param name="calendarId">取りに行ったカレンダーの ID。</param>
+    /// <param name="calendarId">
+    /// このイベントを<b>こちらのどのカレンダーに入れるか</b>（<see cref="CalendarEvent.CalendarId"/>
+    /// に入る値）。呼び出し側（<see cref="Sync.EventSyncEngine"/>）ではローカルのカレンダー ID を渡す。
+    /// </param>
     /// <param name="existing">すでに持っている同じ予定。初回なら null。</param>
     /// <param name="now">ローカルの更新時刻に入れる値。</param>
+    /// <param name="googleCalendarId">
+    /// Google 側で<b>実際にこのイベントが入っているカレンダーの ID</b>
+    /// （<see cref="CalendarEvent.GoogleCalendarId"/> に入る値）。省略すると
+    /// <paramref name="calendarId"/> と同じものとして扱う（同期対象のカレンダーを
+    /// 自分自身の ID として渡す、ふつうの呼び方に合わせた既定値）。
+    /// </param>
     public static CalendarEvent FromGoogle(
         JsonElement element,
         string calendarId,
         CalendarEvent? existing = null,
-        DateTimeOffset? now = null)
+        DateTimeOffset? now = null,
+        string? googleCalendarId = null)
     {
         var googleId = element.Text("id")
             ?? throw new ArgumentException("id の無いイベントは読めません。", nameof(element));
@@ -53,6 +63,9 @@ public static class EventMapper
 
         var (date, startTime) = ReadStart(start);
         var (endDate, endTime) = ReadEnd(end, date, startTime is not null);
+
+        // 今回、実際に取りに行った Google 側のカレンダー
+        var actualGoogleCalendarId = googleCalendarId ?? calendarId;
 
         return new CalendarEvent
         {
@@ -77,7 +90,29 @@ public static class EventMapper
             // PushChangesAsync が PATCH の応答をそのまま FromGoogle に通して上書き保存する
             // たびに、この予定だけの通知指定が消える
             Notify = existing?.Notify,
-            CalendarId = calendarId,
+
+            // こちらの希望（入れ先）は編集画面で決める。取りに行ったカレンダーをそのまま
+            // 入れ先にするのが既定。ただし「こちらで移す指示（CalendarId の変更）がまだ
+            // 送れていない」ときだけは例外で、既存の希望を保つ。
+            //
+            // 判定は、Google 側で最後に確かめた場所（existing.GoogleCalendarId）が
+            // 今回取りに行ったカレンダーと同じ（＝ Google はまだ動いていない）で、かつ
+            // こちらの希望が今回のカレンダーと違う（＝移す指示がある）とき。
+            //
+            // ここを「既存があれば常に希望を保つ」にすると、Google 側（Web など）で
+            // 実際に別のカレンダーへ移されたときに追従できず、しかも移動元からの
+            // cancelled をローカルの予定が消えたと誤解して弾いてしまう
+            // （IsCancelled の下のコメントを見よ）
+            CalendarId = existing is not null
+                && existing.GoogleCalendarId is { Length: > 0 } confirmedCalendar
+                && string.Equals(confirmedCalendar, actualGoogleCalendarId, StringComparison.Ordinal)
+                && !string.Equals(existing.CalendarId, calendarId, StringComparison.Ordinal)
+                    ? existing.CalendarId
+                    : calendarId,
+
+            // Google 側で「いま実際にどこにあるか」は、確かめられた時点で必ず更新する。
+            // こちらの希望（CalendarId）と食い違っていれば、次の送信で events.move を使う
+            GoogleCalendarId = actualGoogleCalendarId,
 
             // 表せない繰り返しは null。控えた生データが残るので、書き戻さなければ無傷
             Recurrence = RecurrenceConverter.FromGoogle(element.TextArray("recurrence")),
@@ -87,6 +122,12 @@ public static class EventMapper
             GoogleEventId = googleId,
             GoogleUpdated = element.Text("updated"),
             Source = SourceName,
+
+            // ここへ来た姿（GoogleRaw）が新しい確定した姿。まだ送っていない添付の指定が
+            // あったとしても、この呼び出しは「Google から受け取った」場面（取り込み、または
+            // 送った直後の応答の取り込み）のどちらかなので、もう保留しておく理由が無い
+            PendingAttachments = null,
+
             UpdatedAt = now ?? DateTimeOffset.Now,
         };
     }
@@ -123,6 +164,33 @@ public static class EventMapper
         string.Equals(element.Text("status"), CancelledStatus, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// 繰り返しのうち1回だけを差し替えた・中止した回（<c>recurringEventId</c> を持つ子）か。
+    /// <para>
+    /// このような回だけを別のカレンダーへ移すことは Google でもできない（<c>events.move</c>
+    /// は独立したイベントにしか使えない）。編集画面はこれを見て、カレンダー欄を
+    /// 変えさせないようにする。
+    /// </para>
+    /// </summary>
+    public static bool IsRecurringInstance(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.GoogleRaw is not { Length: > 0 } raw) return false;
+
+        try
+        {
+            return JsonNode.Parse(raw) is JsonObject original &&
+                   original["recurringEventId"] is JsonValue id &&
+                   id.TryGetValue<string>(out var text) &&
+                   text.Length > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 書き戻す本文を作る。
     /// <para>
     /// <c>patch</c> に渡す前提で、<b>こちらが扱う項目だけ</b>を入れる。欄の無いものは
@@ -156,13 +224,124 @@ public static class EventMapper
         // recurrence キー自体を入れず、PATCH で触らないようにする
         if (value.Recurrence is not null || !HoldsUnrepresentableRecurrence(value))
         {
-            var recurrence = RecurrenceConverter.ToGoogle(value.Recurrence);
             var lines = new JsonArray();
-            foreach (var line in recurrence) lines.Add(line);
+            foreach (var line in RecurrenceConverter.BuildOutgoing(value.Recurrence, ReadOriginalRecurrenceLines(value)))
+            {
+                lines.Add(line);
+            }
             body["recurrence"] = lines;
         }
 
+        // 添付は配列まるごとの置き換え。足す・外すという操作をしたときだけ
+        // （PendingAttachments が入っているときだけ）このキーを送る
+        if (value.PendingAttachments is { Length: > 0 } pending)
+        {
+            body["attachments"] = ParseAttachmentsJson(pending);
+        }
+
         return body;
+    }
+
+    /// <summary>
+    /// 添付の一覧。<see cref="CalendarEvent.PendingAttachments"/> があればそれ、無ければ
+    /// <see cref="CalendarEvent.GoogleRaw"/> に控えてある Google 側の姿を読む。
+    /// <para>編集画面が「いま予定に付いている添付」として出すのはこの一覧。</para>
+    /// </summary>
+    public static IReadOnlyList<EventAttachment> EffectiveAttachments(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.PendingAttachments is { Length: > 0 } pending)
+        {
+            return ReadAttachments(ParseAttachmentsJson(pending));
+        }
+
+        if (value.GoogleRaw is not { Length: > 0 } raw) return [];
+
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            return document.RootElement.TryGetProperty("attachments", out var array) &&
+                   array.ValueKind == JsonValueKind.Array
+                ? ReadAttachments(array)
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>添付の一覧を PATCH／insert に送る形の JSON に直す。</summary>
+    public static string ToPendingAttachmentsJson(IReadOnlyList<EventAttachment> attachments)
+    {
+        ArgumentNullException.ThrowIfNull(attachments);
+
+        var array = new JsonArray();
+        foreach (var a in attachments) array.Add(ToAttachmentNode(a));
+
+        return array.ToJsonString();
+    }
+
+    private static JsonArray ParseAttachmentsJson(string json)
+    {
+        try
+        {
+            return JsonNode.Parse(json) as JsonArray ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static JsonObject ToAttachmentNode(EventAttachment a) => new()
+    {
+        ["fileId"] = a.FileId,
+        ["fileUrl"] = a.FileUrl,
+        ["title"] = a.Title,
+        ["mimeType"] = a.MimeType,
+        ["iconLink"] = a.IconLink,
+    };
+
+    private static IReadOnlyList<EventAttachment> ReadAttachments(JsonNode? array)
+    {
+        var result = new List<EventAttachment>();
+        if (array is not JsonArray items) return result;
+
+        foreach (var item in items)
+        {
+            if (item is not JsonObject obj) continue;
+            if (Text(obj, "fileUrl") is not { } fileUrl) continue;
+
+            result.Add(new EventAttachment(
+                Text(obj, "fileId") ?? string.Empty,
+                fileUrl,
+                Text(obj, "title"),
+                Text(obj, "mimeType"),
+                Text(obj, "iconLink")));
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<EventAttachment> ReadAttachments(JsonElement array)
+    {
+        var result = new List<EventAttachment>();
+
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.Text("fileUrl") is not { } fileUrl) continue;
+
+            result.Add(new EventAttachment(
+                item.Text("fileId") ?? string.Empty,
+                fileUrl,
+                item.Text("title"),
+                item.Text("mimeType"),
+                item.Text("iconLink")));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -200,6 +379,42 @@ public static class EventMapper
         {
             // 控えが壊れていたら、これまでどおり空の配列で外す側に倒す
             return false;
+        }
+    }
+
+    /// <summary>
+    /// 控えてある <see cref="CalendarEvent.GoogleRaw"/> の <c>recurrence</c> 行を、
+    /// 書式（TZID や区切りなど）をいじらず一字一句そのまま読む。
+    /// <para>
+    /// <see cref="RecurrenceConverter.BuildOutgoing"/> に渡す。Google 側に本物の
+    /// <c>EXDATE</c>（ics 取り込みや他のクライアントが作った繰り返し）があるとき、
+    /// それを書き戻しでも一字一句保つため。<see cref="RecurrenceConverter.FromGoogle"/>
+    /// を経由すると EXDATE が <c>yyyyMMdd</c> へ丸められ、書式を失ってしまう。
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<string>? ReadOriginalRecurrenceLines(CalendarEvent value)
+    {
+        if (value.GoogleRaw is not { Length: > 0 } raw) return null;
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonObject original) return null;
+            if (original["recurrence"] is not JsonArray array || array.Count == 0) return null;
+
+            var lines = new List<string>();
+            foreach (var item in array)
+            {
+                if (item is JsonValue text && text.TryGetValue<string>(out var line) && line.Length > 0)
+                {
+                    lines.Add(line);
+                }
+            }
+
+            return lines.Count > 0 ? lines : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

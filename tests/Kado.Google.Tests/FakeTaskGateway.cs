@@ -80,6 +80,26 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
         return Task.CompletedTask;
     }
 
+    /// <summary>移した先の一覧。「元のリスト → 先のリスト」で控える。</summary>
+    public List<(string From, string To, string TaskId)> Moved { get; } = [];
+
+    public Task<JsonElement> MoveAsync(
+        string sourceTaskListId, string taskId, string destinationTaskListId,
+        CancellationToken cancellationToken)
+    {
+        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+
+        if (!Items.TryGetValue(taskId, out var stored))
+        {
+            throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
+        }
+
+        Moved.Add((sourceTaskListId, destinationTaskListId, taskId));
+        Touch(taskId);
+
+        return Task.FromResult(Parse(stored));
+    }
+
     /// <summary>相手にタスクを1件置く。</summary>
     public string Add(string id, string title, string? due = null, bool done = false)
     {

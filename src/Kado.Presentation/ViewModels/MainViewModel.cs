@@ -41,6 +41,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly CalendarWorkspace _workspace;
     private readonly IEditorPresenter _editors;
     private readonly IFileDialogs _files;
+    private readonly Editing.IAttachmentUploader _attachmentUploader;
     private readonly GoogleClientSecretsStore? _googleClient;
 
     private readonly AppSettings? _settings;
@@ -92,7 +93,8 @@ public sealed class MainViewModel : ObservableObject
         IStartupRegistration? startup = null,
         INotifier? notifier = null,
         DockPlacement? shell = null,
-        WorkdayFeedClient? feed = null)
+        WorkdayFeedClient? feed = null,
+        Editing.IAttachmentUploader? attachmentUploader = null)
     {
         _clock = clock ?? TimeProvider.System;
         _feed = feed ?? new WorkdayFeedClient();
@@ -100,6 +102,7 @@ public sealed class MainViewModel : ObservableObject
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _editors = editors ?? NullEditorPresenter.Instance;
         _files = files ?? NullFileDialogs.Instance;
+        _attachmentUploader = attachmentUploader ?? Editing.NullAttachmentUploader.Instance;
         _today = today;
 
         _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
@@ -2458,7 +2461,9 @@ public sealed class MainViewModel : ObservableObject
 
     private void AddEvent()
     {
-        var editor = new EventEditorViewModel(SelectedDate, CalendarNames, NowTime, QuickCalendarId);
+        var editor = new EventEditorViewModel(
+            SelectedDate, CalendarChoicesFor(null), NowTime, QuickCalendarId,
+            _attachmentUploader, _files);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
@@ -2477,7 +2482,9 @@ public sealed class MainViewModel : ObservableObject
     {
         SelectedDate = date;
 
-        var editor = new EventEditorViewModel(date, CalendarNames, defaultCalendarId: QuickCalendarId)
+        var editor = new EventEditorViewModel(
+            date, CalendarChoicesFor(null), defaultCalendarId: QuickCalendarId,
+            uploader: _attachmentUploader, dialogs: _files)
         {
             StartTimeText = TimeInput.Format(time),
         };
@@ -2516,7 +2523,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        var editor = new EventEditorViewModel(stored, CalendarNames);
+        var editor = new EventEditorViewModel(stored, CalendarChoicesFor(stored), _attachmentUploader, _files);
         if (!_editors.ShowEventEditor(editor))
         {
             // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
@@ -2567,7 +2574,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
 
-        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
+        var editor = new TaskEditorViewModel(stored, TaskListChoicesFor(stored), _today);
         if (!_editors.ShowTaskEditor(editor))
         {
             // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
@@ -2593,7 +2600,8 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
     private void AddTask()
     {
-        var editor = new TaskEditorViewModel(SelectedDate, TaskListNames, _today, SourceLists.DefaultTaskList?.Id);
+        var editor = new TaskEditorViewModel(
+            SelectedDate, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
@@ -2603,7 +2611,8 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>日を指定して予定を作る。工程逆算の行から呼ぶ。</summary>
     private void CreateEventOn(DateOnly date)
     {
-        var editor = new EventEditorViewModel(date, CalendarNames, NowTime, QuickCalendarId);
+        var editor = new EventEditorViewModel(
+            date, CalendarChoicesFor(null), NowTime, QuickCalendarId, _attachmentUploader, _files);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
@@ -2613,7 +2622,8 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>日を指定してタスクを作る。工程逆算の行から呼ぶ。</summary>
     private void CreateTaskOn(DateOnly date)
     {
-        var editor = new TaskEditorViewModel(date, TaskListNames, _today, SourceLists.DefaultTaskList?.Id);
+        var editor = new TaskEditorViewModel(
+            date, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
@@ -2625,7 +2635,7 @@ public sealed class MainViewModel : ObservableObject
         if (target is null) return;
         if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
 
-        var editor = new TaskEditorViewModel(stored, TaskListNames, _today);
+        var editor = new TaskEditorViewModel(stored, TaskListChoicesFor(stored), _today);
         if (!_editors.ShowTaskEditor(editor))
         {
             // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
@@ -2765,6 +2775,58 @@ public sealed class MainViewModel : ObservableObject
 
     private IReadOnlyList<SourceChoice> TaskListNames =>
         SourceLists.TaskLists.Select(t => new SourceChoice(t.Id, t.Name)).ToArray();
+
+    /// <summary>
+    /// 編集画面に出すカレンダーの候補。<see cref="CalendarNames"/> を、その予定にとって
+    /// 「移し先」として選んでよいものだけに絞る。
+    /// <para>
+    /// 読み取り専用のカレンダーはどの予定であっても選べない。送信は止まる
+    /// （<see cref="IsInReadOnlyCalendar"/>）ので、選べてしまっても保存できるのに
+    /// 相手へは伝わらず、気づかないまま食い違う。
+    /// </para>
+    /// <para>
+    /// すでに Google と結び付いている予定（<paramref name="existing"/> が
+    /// <c>GoogleEventId</c> を持つ）は、ローカルだけのカレンダーも選べない。選べると、
+    /// 保存した時点で Google 側の予定がこちらの管理から外れる（消さずに残るが、
+    /// 二重に残ったまま気づけなくなる）。ローカルの予定を Google 連携のカレンダーへ
+    /// 新しく入れる分には、これまでどおり選べる（新規作成として送られる）。
+    /// </para>
+    /// <para>
+    /// 実働日のカレンダー（<see cref="CalendarWorkspace.IsWorkingDayCalendarId"/>）は、
+    /// この絞り込みの対象にしない。実働日データは編集画面ではなく別の仕組み
+    /// （<c>WriteWorkingDayEvents</c>）で書き込んでいて、今のところこの一覧の扱いは
+    /// 変えていない。
+    /// </para>
+    /// <para>いま実際に入っているカレンダーは、絞り込みに関わらず必ず候補に残す。</para>
+    /// </summary>
+    private IReadOnlyList<SourceChoice> CalendarChoicesFor(CalendarEvent? existing)
+    {
+        var isGoogleLinked = existing?.GoogleEventId is { Length: > 0 };
+        var currentId = existing?.CalendarId;
+
+        return SourceLists.Calendars
+            .Where(c =>
+                string.Equals(c.Id, currentId, StringComparison.Ordinal) ||
+                _workspace.IsWorkingDayCalendarId(c.Id) ||
+                (!(_workspace.Sources.FindCalendar(c.Id)?.IsReadOnly ?? false) && (!isGoogleLinked || c.IsGoogle)))
+            .Select(c => new SourceChoice(c.Id, c.Name, c.Notifies))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// 編集画面に出すタスクリストの候補。<see cref="CalendarChoicesFor"/> と同じ考え方。
+    /// <para>Google Tasks のリストに読み取り専用は無いので、絞るのは入れ先だけ。</para>
+    /// </summary>
+    private IReadOnlyList<SourceChoice> TaskListChoicesFor(TaskItem? existing)
+    {
+        var isGoogleLinked = existing?.GoogleTaskId is { Length: > 0 };
+        var currentId = existing?.TaskListId;
+
+        return SourceLists.TaskLists
+            .Where(t => string.Equals(t.Id, currentId, StringComparison.Ordinal) || !isGoogleLinked || t.IsGoogle)
+            .Select(t => new SourceChoice(t.Id, t.Name))
+            .ToArray();
+    }
 
     private void Undo()
     {

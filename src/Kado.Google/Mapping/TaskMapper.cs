@@ -66,8 +66,11 @@ public static class TaskMapper
             IsDone = isDone,
             Note = element.Text("notes"),
 
-            // 所属はこちらの ID を保つ。Google のリスト ID をそのまま出すと画面に出てしまう
-            TaskListId = localListId ?? existing?.TaskListId,
+            // こちらの希望（入れ先）は編集画面で決める。取りに行ったリストをそのまま
+            // 入れ先にするのが既定。ただし「こちらで移す指示（TaskListId の変更）がまだ
+            // 送れていない」ときだけは例外で、既存の希望を保つ（EventMapper.FromGoogle の
+            // CalendarId と同じ考え方。理由もそちらを見よ）
+            TaskListId = ResolveTaskListId(existing, taskListId, localListId),
 
             // 完了したことだけでは、どちらが新しいか判定できない
             CompletedAt = isDone
@@ -101,6 +104,34 @@ public static class TaskMapper
     /// </para>
     /// </summary>
     public static bool IsDeleted(JsonElement element) => element.Flag(DeletedFlag);
+
+    /// <summary>
+    /// このタスクの入れ先（<see cref="TaskItem.TaskListId"/>）を決める。
+    /// <para>
+    /// 既定は今回取りに行ったリスト（<paramref name="localListId"/>）。ただし、
+    /// Google 側で最後に確かめた場所（<paramref name="existing"/> の
+    /// <see cref="TaskItem.GoogleTaskListId"/>）が今回のリスト（<paramref name="taskListId"/>）
+    /// と同じ（＝ Google はまだ動いていない）で、かつこちらの希望が今回のリストと
+    /// 違う（＝移す指示がまだ送れていない）ときだけ、既存の希望を保つ。
+    /// </para>
+    /// <para>
+    /// 「既存があれば常に希望を保つ」にすると、Google 側（Web など）で実際に別の
+    /// リストへ移されたときに追従できない。<c>localListId</c> が null（呼び出し側が
+    /// 入れ先を指定していない、直接呼び出しでの試験など）のときは、これまでどおり
+    /// 既存の値をそのまま使う。
+    /// </para>
+    /// </summary>
+    private static string? ResolveTaskListId(TaskItem? existing, string taskListId, string? localListId)
+    {
+        if (localListId is null) return existing?.TaskListId;
+
+        var keepsPendingMove = existing is not null
+            && existing.GoogleTaskListId is { Length: > 0 } confirmedList
+            && string.Equals(confirmedList, taskListId, StringComparison.Ordinal)
+            && !string.Equals(existing.TaskListId, localListId, StringComparison.Ordinal);
+
+        return keepsPendingMove ? existing!.TaskListId : localListId;
+    }
 
     /// <summary>
     /// 書き戻す本文を作る。

@@ -241,6 +241,36 @@ public static class SchemaMigrations
         UPDATE tasks SET created_at = updated_at;
         """;
 
+    /// <summary>
+    /// 予定に「Google 側で実際にどのカレンダーに入っているか」と「添付の未送信の指定」を足す。
+    /// <para>
+    /// <c>google_calendar_id</c> は、編集画面でカレンダーを変えたときに <c>events.move</c> を
+    /// 使うかどうかの判断に要る（<c>calendar_id</c> はこちらの希望、こちらは Google 側の実際）。
+    /// </para>
+    /// <para>
+    /// <c>pending_attachments</c> は、添付を足す・外すという操作をしたときだけ入る JSON 配列。
+    /// <c>NULL</c> のままなら書き戻しで <c>attachments</c> キーを送らない（要件書どおり、
+    /// 触っていない項目のキーは送らない）。
+    /// </para>
+    /// </summary>
+    private const string V7 = """
+        ALTER TABLE events ADD COLUMN google_calendar_id TEXT;
+        ALTER TABLE events ADD COLUMN pending_attachments TEXT;
+
+        -- すでに Google と結び付いている予定は、この版が入るまで「Google 側で実際に
+        -- どこにあるか」を持っていなかった。NULL のままだと、この列を見る同期の判断
+        -- （移したかどうか）が全部「移した」側に倒れ、次に入れ先を変えたときに
+        -- events.move ではなく素の patch を試みて 404 になり、結びを解いて作り直し、
+        -- 元のカレンダーに孤立した予定を残してしまう（直したかった不具合が
+        -- そのまま再発する）。いま入っているカレンダー（calendar_id）を Google 側の
+        -- 実際の場所として仮に埋めておく。同期は次に確かめた時点で正す
+        UPDATE events
+        SET google_calendar_id = calendar_id
+        WHERE google_event_id IS NOT NULL
+          AND google_calendar_id IS NULL
+          AND calendar_id IN (SELECT id FROM calendars);
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -250,6 +280,7 @@ public static class SchemaMigrations
         new(4, "通知するかどうかを予定ごと・カレンダーごとに持つ", V4),
         new(5, "削除の記録に持ち主（カレンダー／タスクリスト）を持つ", V5),
         new(6, "タスクの並び順と作成日時を持つ", V6),
+        new(7, "予定に Google 側の実カレンダーと、添付の未送信の指定を持つ", V7),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

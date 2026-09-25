@@ -1,8 +1,11 @@
 using System.Net;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Kado.Data;
 using Kado.Data.Models;
 using Kado.Data.Repositories;
+using Kado.Google.Mapping;
 using Kado.Google.Sync;
 
 namespace Kado.Google.Tests;
@@ -560,5 +563,247 @@ public class EventSyncEngineTests : IDisposable
 
         // 相手側も動いていない
         Assert.Equal("2026-09-24", _remote.Items["g1"]["end"]!["date"]!.GetValue<string>());
+    }
+
+    // ------------------------------------------------------------------
+    // 別のカレンダーへの移し替え。消して作り直すと、こちらに欄の無い項目
+    // （ゲスト・会議 URL・添付・色）が落ちる。events.move で運ぶ
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task カレンダーを変えるとmoveで運ぶ()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "cal-a");
+
+        // 編集画面でカレンダーを変えた場面を再現する
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { CalendarId = "cal-b" });
+
+        var report = await Engine.SyncAsync("secondary", "cal-b");
+
+        Assert.Equal(1, report.Moved);
+        Assert.Equal(0, report.CreatedRemote);
+        Assert.Single(_remote.Moved);
+        Assert.Equal(("primary", "secondary", "g1"), _remote.Moved[0]);
+
+        // ローカルは1件のまま。二重にならない
+        var after = Assert.Single(Events.All());
+        Assert.Equal("cal-b", after.CalendarId);
+        Assert.Equal("secondary", after.GoogleCalendarId);
+        Assert.Equal("g1", after.GoogleEventId);
+    }
+
+    [Fact]
+    public async Task 移した予定も内容の変更があれば続けて送る()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "cal-a");
+
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { CalendarId = "cal-b", Title = "棚卸し（変更）" });
+
+        var report = await Engine.SyncAsync("secondary", "cal-b");
+
+        Assert.Equal(1, report.Moved);
+        Assert.Equal(1, report.UpdatedRemote);
+        Assert.Equal("棚卸し（変更）", _remote.Items["g1"]["summary"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task 移したあと元のカレンダー側のcancelledで消さない()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("primary", "cal-a");
+
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { CalendarId = "cal-b" });
+        await Engine.SyncAsync("secondary", "cal-b");
+
+        // 移ったあと、元のカレンダー（primary）側では「無くなった」という
+        // cancelled が返ることがある。利用者が削除したわけではない
+        _remote.Cancel("g1");
+
+        var report = await Engine.SyncAsync("primary", "cal-a");
+
+        Assert.Equal(0, report.DeletedLocal);
+        Assert.Single(Events.All());
+    }
+
+    [Fact]
+    public async Task 繰り返しの1回だけの回はカレンダーを移せない()
+    {
+        // 実運用では calendarId（Google 側）と localCalendarId（こちらの ID）は同じ値を
+        // 渡す（GoogleSyncService）。ここでも揃えて、戻す先が元のカレンダーと
+        // 一致することを確かめる
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", newDate: "2026-10-02", summary: "振替");
+
+        await Engine.SyncAsync("cal-a", "cal-a");
+
+        var instance = Events.All().Single(e => e.GoogleEventId == "g1_20261001");
+        Events.Upsert(instance with { CalendarId = "cal-b" });
+
+        var report = await Engine.SyncAsync("cal-b", "cal-b");
+
+        // move は試みない。壊さない側に倒し、こちらの希望を元の場所へ戻す
+        Assert.Equal(0, report.Moved);
+        Assert.Empty(_remote.Moved);
+        Assert.Contains(report.Warnings, w => w.Contains("繰り返しの1回だけ", StringComparison.Ordinal));
+
+        var after = Events.All().Single(e => e.GoogleEventId == "g1_20261001");
+        Assert.Equal("cal-a", after.CalendarId);
+    }
+
+    // ------------------------------------------------------------------
+    // 本物の EXDATE（Google 側にもとからある）と、例外回の取り込みが内部で足す
+    // 除外日を混ぜない（レビュー指摘 A）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 例外回の取り込みで内部に足した除外日は元の本物のEXDATEと混ぜて送らない()
+    {
+        _remote.AddRecurring("g1", "週次レビュー", "2026-09-24", "FREQ=WEEKLY;BYDAY=TH");
+
+        // Google 側にもとから本物の EXDATE がある（ics 取り込みなど）
+        _remote.Items["g1"]["recurrence"] =
+            new JsonArray("RRULE:FREQ=WEEKLY;BYDAY=TH", "EXDATE;TZID=Asia/Tokyo:20260910T090000");
+
+        _remote.AddException("g1_20261001", "g1", "2026-10-01", cancelled: true);
+
+        await Engine.SyncAsync("cal-a", "cal-a");
+
+        // 何か別の項目を変えて、次の同期で送信対象にする
+        var parent = Events.All().Single(e => e.GoogleEventId == "g1");
+        Events.Upsert(parent with { Title = "週次レビュー（変更）" });
+
+        await Engine.SyncAsync("cal-a", "cal-a");
+
+        var sent = _remote.Items["g1"]["recurrence"]!.AsArray()
+            .Select(n => n!.GetValue<string>()).ToArray();
+
+        // 元の本物の EXDATE（9/10）はそのまま送られる。例外回の取り込みが内部で足した
+        // 除外日（10/1）は入らない
+        Assert.Contains("EXDATE;TZID=Asia/Tokyo:20260910T090000", sent);
+        Assert.DoesNotContain(sent, l => l.Contains("20261001", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------------
+    // 入れ先の「sticky」と cancelled の扱い（レビュー指摘 B）
+    //
+    // Google 側（Web など）で予定を直接 A → B へ移したときも、こちらの編集画面で
+    // 入れ先を変えてまだ送っていないときも、正しく1件に収束させる
+    // ------------------------------------------------------------------
+
+    /// <summary>相手に置いた予定を、すでに結び付いたローカルの予定として仕込む。</summary>
+    private CalendarEvent SeedLinkedEvent(string googleCalendarId, string localCalendarId)
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+
+        var element = JsonDocument.Parse(_remote.Items["g1"].ToJsonString()).RootElement;
+        var seeded = EventMapper.FromGoogle(element, localCalendarId, null, null, googleCalendarId)
+            with
+        { Id = "e1" };
+
+        Events.Upsert(seeded);
+        return seeded;
+    }
+
+    [Fact]
+    public async Task Google側で直接AからBへ移した予定はBを先に取り込んでも一件でCalendarIdがBになる()
+    {
+        SeedLinkedEvent(googleCalendarId: "cal-a", localCalendarId: "cal-a");
+
+        // Google 側で動いた（内容は同じでも updated が進む）
+        _remote.Edit("g1", "棚卸し");
+        _remote.Items["g1"]["updated"] = "2026-09-20T00:00:00.000Z";
+
+        // B を先に取り込む
+        await Engine.SyncAsync("cal-b", "cal-b");
+
+        var afterB = Assert.Single(Events.All());
+        Assert.Equal("cal-b", afterB.CalendarId);
+        Assert.Equal("cal-b", afterB.GoogleCalendarId);
+
+        // 続いて元のカレンダー（A）側では「無くなった」という cancelled が返る
+        _remote.Cancel("g1");
+        var report = await Engine.SyncAsync("cal-a", "cal-a");
+
+        Assert.Equal(0, report.DeletedLocal);
+        var final = Assert.Single(Events.All());
+        Assert.Equal("cal-b", final.CalendarId);
+
+        // 次の送信でも move は起きない（もう cal-b にいると分かっているため）
+        var pushReport = await Engine.SyncAsync("cal-b", "cal-b");
+        Assert.Equal(0, pushReport.Moved);
+    }
+
+    [Fact]
+    public async Task Google側で直接AからBへ移した予定はAを先に取り込んでも最終的に一件でCalendarIdがBになる()
+    {
+        SeedLinkedEvent(googleCalendarId: "cal-a", localCalendarId: "cal-a");
+
+        // まだ B を見ていないので、A からの cancelled は区別がつかず消える
+        // （どちらの順で取り込んでも最終的に1件に収束することが肝心で、
+        // これ自体は「壊れる」ことではない）
+        _remote.Cancel("g1");
+        var reportA = await Engine.SyncAsync("cal-a", "cal-a");
+
+        Assert.Equal(1, reportA.DeletedLocal);
+        Assert.Empty(Events.All());
+
+        // B 側には新しく見える
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        await Engine.SyncAsync("cal-b", "cal-b");
+
+        var final = Assert.Single(Events.All());
+        Assert.Equal("cal-b", final.CalendarId);
+        Assert.Equal("cal-b", final.GoogleCalendarId);
+
+        var pushReport = await Engine.SyncAsync("cal-b", "cal-b");
+        Assert.Equal(0, pushReport.Moved);
+        Assert.Equal(0, pushReport.CreatedRemote);
+    }
+
+    [Fact]
+    public async Task こちらで移す指示が未送信の間にAから更新が来ても希望が保たれる()
+    {
+        SeedLinkedEvent(googleCalendarId: "cal-a", localCalendarId: "cal-a");
+
+        // 編集画面でカレンダーを B に変えた。まだ送っていない
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { CalendarId = "cal-b" });
+
+        // A 側で、この予定の他の項目（タイトル）が変わった
+        _remote.Edit("g1", "棚卸し（Aで変更）");
+
+        await Engine.SyncAsync("cal-a", "cal-a");
+
+        var after = Assert.Single(Events.All());
+        Assert.Equal("cal-b", after.CalendarId);
+        Assert.Equal("棚卸し（Aで変更）", after.Title);
+    }
+
+    [Fact]
+    public async Task 移す指示が未送信の間にAで削除されたらローカルも消えmoveもinsertもしない()
+    {
+        SeedLinkedEvent(googleCalendarId: "cal-a", localCalendarId: "cal-a");
+
+        var stored = Assert.Single(Events.All());
+        Events.Upsert(stored with { CalendarId = "cal-b" });
+
+        // Google 側で本当に削除された（移したのではない）
+        _remote.Cancel("g1");
+
+        var report = await Engine.SyncAsync("cal-a", "cal-a");
+
+        Assert.Equal(1, report.DeletedLocal);
+        Assert.Empty(Events.All());
+
+        // 続けて B を同期しても、もうローカルに無いので move も insert も起きない
+        var reportB = await Engine.SyncAsync("cal-b", "cal-b");
+        Assert.Equal(0, reportB.Moved);
+        Assert.Equal(0, reportB.CreatedRemote);
+        Assert.Empty(_remote.Moved);
     }
 }

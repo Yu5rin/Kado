@@ -1,8 +1,10 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Kado.Data;
 using Kado.Data.Models;
 using Kado.Data.Repositories;
+using Kado.Google.Mapping;
 using Kado.Google.Sync;
 
 namespace Kado.Google.Tests;
@@ -356,5 +358,124 @@ public class TaskSyncEngineTests : IDisposable
         Assert.Equal(1, report.CreatedRemote);
         Assert.Single(_remote.Items);
         Assert.Single(report.Warnings);
+    }
+
+    // ------------------------------------------------------------------
+    // 別のリストへの移し替え
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task リストを変えるとmoveで運ぶ()
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+        await Engine.SyncAsync("list-a", "list-a");
+
+        var stored = Assert.Single(Tasks.All());
+        Tasks.Upsert(stored with { TaskListId = "list-b" });
+
+        var report = await Engine.SyncAsync("list-b", "list-b");
+
+        Assert.Equal(1, report.Moved);
+        Assert.Equal(0, report.CreatedRemote);
+        Assert.Single(_remote.Moved);
+        Assert.Equal(("list-a", "list-b", "g1"), _remote.Moved[0]);
+
+        var after = Assert.Single(Tasks.All());
+        Assert.Equal("list-b", after.TaskListId);
+        Assert.Equal("list-b", after.GoogleTaskListId);
+        Assert.Equal("g1", after.GoogleTaskId);
+    }
+
+    [Fact]
+    public async Task 移したタスクも内容の変更があれば続けて送る()
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+        await Engine.SyncAsync("list-a", "list-a");
+
+        var stored = Assert.Single(Tasks.All());
+        Tasks.Upsert(stored with { TaskListId = "list-b", Title = "台数計画の確定（変更）" });
+
+        var report = await Engine.SyncAsync("list-b", "list-b");
+
+        Assert.Equal(1, report.Moved);
+        Assert.Equal(1, report.UpdatedRemote);
+        Assert.Equal("台数計画の確定（変更）", _remote.Items["g1"]["title"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task 移したあと元のリスト側のdeletedで消さない()
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+        await Engine.SyncAsync("list-a", "list-a");
+
+        var stored = Assert.Single(Tasks.All());
+        Tasks.Upsert(stored with { TaskListId = "list-b" });
+        await Engine.SyncAsync("list-b", "list-b");
+
+        // 元のリスト（list-a）側では「無くなった」という deleted が返ることがある。
+        // 利用者が削除したわけではない
+        _remote.Delete("g1");
+
+        var report = await Engine.SyncAsync("list-a", "list-a");
+
+        Assert.Equal(0, report.DeletedLocal);
+        Assert.Single(Tasks.All());
+    }
+
+    // ------------------------------------------------------------------
+    // 入れ先の「sticky」と deleted の扱い（レビュー指摘 B。EventSyncEngine と同じ考え方）
+    // ------------------------------------------------------------------
+
+    /// <summary>相手に置いたタスクを、すでに結び付いたローカルのタスクとして仕込む。</summary>
+    private TaskItem SeedLinkedTask(string googleTaskListId, string localTaskListId)
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+
+        var element = JsonDocument.Parse(_remote.Items["g1"].ToJsonString()).RootElement;
+        var seeded = TaskMapper.FromGoogle(element, googleTaskListId, localTaskListId) with { Id = "t1" };
+
+        Tasks.Upsert(seeded);
+        return seeded;
+    }
+
+    [Fact]
+    public async Task こちらで移す指示が未送信の間に元のリストから更新が来ても希望が保たれる()
+    {
+        SeedLinkedTask(googleTaskListId: "list-a", localTaskListId: "list-a");
+
+        // 編集画面でリストを B に変えた。まだ送っていない
+        var stored = Assert.Single(Tasks.All());
+        Tasks.Upsert(stored with { TaskListId = "list-b" });
+
+        // 元のリストで、このタスクの他の項目（タイトル）が変わった
+        _remote.Edit("g1", "台数計画の確定（元のリストで変更）");
+
+        await Engine.SyncAsync("list-a", "list-a");
+
+        var after = Assert.Single(Tasks.All());
+        Assert.Equal("list-b", after.TaskListId);
+        Assert.Equal("台数計画の確定（元のリストで変更）", after.Title);
+    }
+
+    [Fact]
+    public async Task 移す指示が未送信の間に元のリストで削除されたらローカルも消えmoveもinsertもしない()
+    {
+        SeedLinkedTask(googleTaskListId: "list-a", localTaskListId: "list-a");
+
+        var stored = Assert.Single(Tasks.All());
+        Tasks.Upsert(stored with { TaskListId = "list-b" });
+
+        // Google 側で本当に削除された（移したのではない）
+        _remote.Delete("g1");
+
+        var report = await Engine.SyncAsync("list-a", "list-a");
+
+        Assert.Equal(1, report.DeletedLocal);
+        Assert.Empty(Tasks.All());
+
+        var reportB = await Engine.SyncAsync("list-b", "list-b");
+        Assert.Equal(0, reportB.Moved);
+        Assert.Equal(0, reportB.CreatedRemote);
+        Assert.Empty(_remote.Moved);
     }
 }

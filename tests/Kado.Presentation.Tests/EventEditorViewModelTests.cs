@@ -520,4 +520,220 @@ public class EventEditorViewModelTests
         Assert.Equal("知らせる", vm.NotifyOptions.Single(o => o.Value == true).Label);
         Assert.Equal("知らせない", vm.NotifyOptions.Single(o => o.Value == false).Label);
     }
+
+    // ------------------------------------------------------------------
+    // Google 側の情報を保存のたびに失わない
+    //
+    // GoogleRaw が消えると、次の同期で「一度も受け取っていない」扱いになり、
+    // カスタムの繰り返し（RDATE など）が空の配列で送られて消える
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 保存してもGoogleRawとGoogleCalendarIdとStatusを失わない()
+    {
+        var source = new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            GoogleEventId = "g1", GoogleCalendarId = "primary", Source = "google",
+            GoogleRaw = """{"id":"g1","recurrence":["RRULE:FREQ=WEEKLY"]}""",
+            Status = "confirmed",
+        };
+
+        var vm = new EventEditorViewModel(source, Calendars);
+        vm.Title = "定例（変更）";
+
+        var model = vm.ToModel();
+
+        Assert.Equal(source.GoogleRaw, model.GoogleRaw);
+        Assert.Equal("primary", model.GoogleCalendarId);
+        Assert.Equal("confirmed", model.Status);
+    }
+
+    // ------------------------------------------------------------------
+    // カレンダー欄
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 繰り返しの1回だけの回はカレンダーを変えられない()
+    {
+        var source = new CalendarEvent
+        {
+            Id = "e1", Title = "振替", Date = D(2026, 10, 2),
+            CalendarId = "primary",
+            GoogleEventId = "g1_20261001", GoogleCalendarId = "primary", Source = "google",
+            GoogleRaw = """{"id":"g1_20261001","recurringEventId":"g1"}""",
+        };
+
+        SourceChoice[] calendars = [new("primary", "仕事"), new("secondary", "私用")];
+        var vm = new EventEditorViewModel(source, calendars);
+
+        Assert.False(vm.CanChangeCalendar);
+        Assert.NotNull(vm.CalendarLockReason);
+
+        vm.CalendarId = "secondary";
+
+        // 変えようとしても変わらない
+        Assert.Equal("primary", vm.CalendarId);
+    }
+
+    [Fact]
+    public void ふつうの予定はカレンダーを変えられる()
+    {
+        var source = new CalendarEvent
+        {
+            Id = "e1", Title = "定例", Date = D(2026, 9, 24),
+            GoogleEventId = "g1", GoogleCalendarId = "primary", Source = "google",
+            GoogleRaw = """{"id":"g1"}""",
+        };
+
+        SourceChoice[] calendars = [new("primary", "仕事"), new("secondary", "私用")];
+        var vm = new EventEditorViewModel(source, calendars);
+
+        Assert.True(vm.CanChangeCalendar);
+        Assert.Null(vm.CalendarLockReason);
+
+        vm.CalendarId = "secondary";
+        Assert.Equal("secondary", vm.CalendarId);
+    }
+
+    // ------------------------------------------------------------------
+    // 添付
+    // ------------------------------------------------------------------
+
+    private static readonly SourceChoice[] GoogleCalendars = [new("primary", "仕事")];
+
+    [Fact]
+    public void ローカルだけのカレンダーでは添付を使えない()
+    {
+        var vm = New();
+
+        Assert.False(vm.CanUseAttachments);
+        Assert.NotNull(vm.AttachmentsDisabledReason);
+    }
+
+    [Fact]
+    public void Google連携のカレンダーでは添付を使える()
+    {
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars) { Title = "会議" };
+
+        Assert.True(vm.CanUseAttachments);
+        Assert.Null(vm.AttachmentsDisabledReason);
+    }
+
+    [Fact]
+    public async Task 添付を足すとPendingAttachmentsに入る()
+    {
+        var dialogs = new FakeFileDialogs { FileToPick = "/tmp/資料.pdf" };
+        var uploader = new FakeAttachmentUploader
+        {
+            Result = AttachmentUploadResult.Success(
+                new EventAttachment("file1", "https://drive.google.com/file/d/file1/view", "資料.pdf", "application/pdf")),
+        };
+
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars, uploader: uploader, dialogs: dialogs)
+        {
+            Title = "会議",
+        };
+
+        await vm.AddAttachmentAsync();
+
+        Assert.Single(vm.Attachments);
+        Assert.Equal("資料.pdf", vm.Attachments[0].Title);
+
+        var model = vm.ToModel();
+        Assert.NotNull(model.PendingAttachments);
+        Assert.Contains("file1", model.PendingAttachments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task アップロードに失敗したら理由を出す()
+    {
+        var dialogs = new FakeFileDialogs { FileToPick = "/tmp/資料.pdf" };
+        var uploader = new FakeAttachmentUploader
+        {
+            Result = AttachmentUploadResult.Failure("添付を足すにはドライブの権限が要ります。"),
+        };
+
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars, uploader: uploader, dialogs: dialogs)
+        {
+            Title = "会議",
+        };
+
+        await vm.AddAttachmentAsync();
+
+        Assert.Empty(vm.Attachments);
+        Assert.Equal("添付を足すにはドライブの権限が要ります。", vm.AttachmentError);
+    }
+
+    [Fact]
+    public void 添付を外すとPendingAttachmentsに反映される()
+    {
+        var attachment = new EventAttachment(
+            "file1", "https://drive.google.com/file/d/file1/view", "資料.pdf", "application/pdf");
+
+        var source = new CalendarEvent
+        {
+            Id = "e1", Title = "会議", Date = D(2026, 9, 24), CalendarId = "primary",
+            GoogleEventId = "g1", GoogleCalendarId = "primary", Source = "google",
+            GoogleRaw = $$"""
+                {"id":"g1","attachments":[
+                    {"fileId":"file1","fileUrl":"https://drive.google.com/file/d/file1/view","title":"資料.pdf"}
+                ]}
+                """,
+        };
+
+        var vm = new EventEditorViewModel(source, GoogleCalendars);
+        Assert.Single(vm.Attachments);
+
+        vm.RemoveAttachment(attachment);
+
+        Assert.Empty(vm.Attachments);
+
+        var model = vm.ToModel();
+        Assert.Equal("[]", model.PendingAttachments);
+    }
+
+    [Fact]
+    public void 触っていない添付は保存してもPendingAttachmentsのままにしない()
+    {
+        // GoogleRaw から読んだだけで、足す・外すをしていない予定
+        var source = new CalendarEvent
+        {
+            Id = "e1", Title = "会議", Date = D(2026, 9, 24),
+            GoogleEventId = "g1", GoogleCalendarId = "primary", Source = "google",
+            GoogleRaw = """
+                {"id":"g1","attachments":[
+                    {"fileId":"file1","fileUrl":"https://drive.google.com/file/d/file1/view","title":"資料.pdf"}
+                ]}
+                """,
+        };
+
+        var vm = new EventEditorViewModel(source, GoogleCalendars);
+        vm.Title = "会議（変更）";
+
+        var model = vm.ToModel();
+
+        // attachments キーを送らせないために、触っていなければ null のまま
+        Assert.Null(model.PendingAttachments);
+    }
+
+    [Fact]
+    public void 添付のURLはhttpsだけ開いてよい()
+    {
+        var https = new EventAttachment("a", "https://drive.google.com/file/d/a/view", "資料", null);
+        var http = new EventAttachment("b", "http://example.com/a", "資料", null);
+
+        Assert.True(EventEditorViewModel.IsSafeToOpen(https));
+        Assert.False(EventEditorViewModel.IsSafeToOpen(http));
+    }
+
+    /// <summary>アップロードの代わり。あらかじめ決めた結果を返す。</summary>
+    private sealed class FakeAttachmentUploader : IAttachmentUploader
+    {
+        public AttachmentUploadResult Result { get; set; } = AttachmentUploadResult.Failure("未設定");
+
+        public Task<AttachmentUploadResult> UploadAsync(
+            string localFilePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result);
+    }
 }
