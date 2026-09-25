@@ -51,8 +51,9 @@ public partial class App : Application
     /// <summary>
     /// 新しい版を見に行く先。
     /// <para>
-    /// リポジトリが公開されていれば、認証なしで読める。非公開のうちは何も返らないので、
-    /// 更新の確認は黙って見送られる（アプリの動きには差し支えない）。
+    /// リポジトリは公開しているので、認証なしで読める。読めなかったとき（通信できない、
+    /// 公開済みのリリースが無いなど）は <see cref="UpdateCheckStatus.Failed"/> になり、
+    /// 起動時の確認なら黙って見送る（アプリの動きには差し支えない）。
     /// </para>
     /// </summary>
     private const string UpdateApiUrl =
