@@ -95,6 +95,23 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
             body, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// タスクを別のリストへ移す。
+    /// <para>消して作り直すのではなく <c>move</c> を使う。並び順や親子関係を保てる。</para>
+    /// </summary>
+    public async Task<JsonElement> MoveTaskAsync(
+        string taskListId, string taskId, string destinationTaskListId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationTaskListId);
+
+        var url = $"{Root}/lists/{Uri.EscapeDataString(taskListId)}/tasks/" +
+                  $"{Uri.EscapeDataString(taskId)}/move?destinationTasklist=" +
+                  Uri.EscapeDataString(destinationTaskListId);
+
+        return await SendAsync(HttpMethod.Post, url, new JsonObject(), cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>タスクを消す。すでに無ければ成功として扱う。</summary>
     public async Task DeleteTaskAsync(
         string taskListId, string taskId, CancellationToken cancellationToken = default)

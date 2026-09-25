@@ -33,6 +33,15 @@ public sealed record SyncReport
     /// </summary>
     public int Relinked { get; init; }
 
+    /// <summary>
+    /// 別のカレンダー／タスクリストへ移した件数。
+    /// <para>
+    /// 編集画面で入れ先を変えたものを <c>events.move</c> / <c>tasks.move</c> で運んだ数。
+    /// 消して作り直していないので、ゲスト・会議 URL・添付・色は保たれている。
+    /// </para>
+    /// </summary>
+    public int Moved { get; init; }
+
     /// <summary>差分では追いつけず、全部取り直したか。</summary>
     public bool FullResync { get; init; }
 
@@ -42,7 +51,7 @@ public sealed record SyncReport
     /// <summary>何か変わったか。変わっていなければ画面に出さない。</summary>
     public bool HasChanges =>
         CreatedLocal + UpdatedLocal + DeletedLocal +
-        CreatedRemote + UpdatedRemote + DeletedRemote + Relinked > 0;
+        CreatedRemote + UpdatedRemote + DeletedRemote + Relinked + Moved > 0;
 
     /// <summary>取り込んだ件数の合計。</summary>
     public int PulledCount => CreatedLocal + UpdatedLocal + DeletedLocal;
@@ -65,6 +74,7 @@ public sealed record SyncReport
         UpdatedRemote = left.UpdatedRemote + right.UpdatedRemote,
         DeletedRemote = left.DeletedRemote + right.DeletedRemote,
         Relinked = left.Relinked + right.Relinked,
+        Moved = left.Moved + right.Moved,
         FullResync = left.FullResync || right.FullResync,
         Warnings = [.. left.Warnings, .. right.Warnings],
     };

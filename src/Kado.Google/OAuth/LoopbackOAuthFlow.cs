@@ -53,15 +53,30 @@ public sealed class LoopbackOAuthFlow(
     /// 認可を受けてトークンを取る。
     /// <para>ブラウザが閉じられたままだと戻らないので、呼び出し側で打ち切れるようにしておく。</para>
     /// </summary>
-    public async Task<OAuthTokens> AuthorizeAsync(CancellationToken cancellationToken = default)
+    public Task<OAuthTokens> AuthorizeAsync(CancellationToken cancellationToken = default) =>
+        AuthorizeAsync(_options.Scopes, includeGrantedScopes: false, cancellationToken);
+
+    /// <summary>
+    /// 権限を追加で認可する。
+    /// <para>
+    /// <paramref name="scopes"/> には、足りない分だけを渡す（例：添付のための
+    /// <c>drive.file</c> の1つだけ）。<paramref name="includeGrantedScopes"/> を true にすると、
+    /// これまでに許可済みの権限も維持したまま返ってくる。false で呼ぶと、通常の
+    /// <see cref="AuthorizeAsync(CancellationToken)"/> と同じ動きになる。
+    /// </para>
+    /// </summary>
+    public async Task<OAuthTokens> AuthorizeAsync(
+        IReadOnlyList<string> scopes, bool includeGrantedScopes, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(scopes);
+
         var pkce = PkceCodes.Create();
         var state = PkceCodes.Base64Url(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
         using var listener = new HttpListener();
         var redirectUri = StartListener(listener);
 
-        _openBrowser(BuildAuthorizationUrl(redirectUri, pkce.Challenge, state));
+        _openBrowser(BuildAuthorizationUrl(redirectUri, pkce.Challenge, state, scopes, includeGrantedScopes));
 
         // 呼び出し側の取り消しと、こちらの上限とをまとめて1本の待ちにする
         using var timeoutSource = new CancellationTokenSource(_authorizationTimeout);
@@ -107,14 +122,26 @@ public sealed class LoopbackOAuthFlow(
     }
 
     /// <summary>認可画面の URL を組み立てる。</summary>
-    internal string BuildAuthorizationUrl(string redirectUri, string challenge, string state)
+    internal string BuildAuthorizationUrl(string redirectUri, string challenge, string state) =>
+        BuildAuthorizationUrl(redirectUri, challenge, state, _options.Scopes, includeGrantedScopes: false);
+
+    /// <summary>
+    /// 認可画面の URL を組み立てる（権限を指定できる版）。
+    /// <para>
+    /// <paramref name="includeGrantedScopes"/> は追加認可のときだけ true にする。
+    /// 通常の接続では false（省略時は Google 側の既定＝false と同じ）のままでよい。
+    /// </para>
+    /// </summary>
+    internal string BuildAuthorizationUrl(
+        string redirectUri, string challenge, string state,
+        IReadOnlyList<string> scopes, bool includeGrantedScopes)
     {
         var query = HttpUtility.ParseQueryString(string.Empty);
 
         query["client_id"] = _options.ClientId;
         query["redirect_uri"] = redirectUri;
         query["response_type"] = "code";
-        query["scope"] = string.Join(' ', _options.Scopes);
+        query["scope"] = string.Join(' ', scopes);
         query["code_challenge"] = challenge;
         query["code_challenge_method"] = PkceCodes.Method;
         query["state"] = state;
@@ -122,6 +149,8 @@ public sealed class LoopbackOAuthFlow(
         // 更新トークンを得るには両方要る。prompt を省くと2回目以降に返らない
         query["access_type"] = "offline";
         query["prompt"] = "consent";
+
+        if (includeGrantedScopes) query["include_granted_scopes"] = "true";
 
         return $"{_options.AuthorizationEndpoint}?{query}";
     }

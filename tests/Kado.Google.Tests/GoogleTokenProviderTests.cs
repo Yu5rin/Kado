@@ -226,4 +226,77 @@ public class GoogleTokenProviderTests
 
         Assert.NotNull(store.Load());
     }
+
+    // ------------------------------------------------------------------
+    // 添付のための追加認可（drive.file）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void すでに持っている権限はHasScopeがtrue()
+    {
+        var store = new InMemoryTokenStore(new OAuthTokens
+        {
+            AccessToken = "at-1", RefreshToken = "rt-1", ExpiresAt = Now.AddHours(1),
+            Scopes = [GoogleOAuthOptions.DriveFileScope],
+        });
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), new HttpClient(), _ => { }), store);
+
+        Assert.True(provider.HasScope(GoogleOAuthOptions.DriveFileScope));
+    }
+
+    [Fact]
+    public async Task 足りない権限は追加認可でブラウザを開く()
+    {
+        const string tokenResponse = """
+            {"access_token":"at-2","refresh_token":"rt-1","expires_in":3600,
+             "scope":"https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/drive.file"}
+            """;
+
+        using var handler = new StubHttpHandler(_ => (HttpStatusCode.OK, tokenResponse));
+        using var http = new HttpClient(handler);
+
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.FromHours(1))
+            with { Scopes = ["https://www.googleapis.com/auth/tasks"] });
+
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(
+                Options(), http, url => _ = OAuthTests.Visit(url, withCode: "code-1"), new FixedTime(Now)),
+            store, new FixedTime(Now));
+
+        var granted = await provider.EnsureScopeAsync(GoogleOAuthOptions.DriveFileScope);
+
+        Assert.True(granted);
+        Assert.True(provider.HasScope(GoogleOAuthOptions.DriveFileScope));
+
+        // 既存の権限も残っている（include_granted_scopes の応答をそのまま採る）
+        Assert.True(provider.HasScope("https://www.googleapis.com/auth/tasks"));
+
+        // 更新トークンが応答に無くても、前のものを残す
+        Assert.Equal("rt-1", store.Load()!.RefreshToken);
+    }
+
+    [Fact]
+    public async Task 追加認可を断られても今の接続は壊さない()
+    {
+        using var handler = new StubHttpHandler(_ => (HttpStatusCode.OK, "{}"));
+        using var http = new HttpClient(handler);
+
+        var original = Tokens("at-1", "rt-1", TimeSpan.FromHours(1));
+        var store = new InMemoryTokenStore(original);
+
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(
+                Options(), http,
+                url => _ = OAuthTests.Visit(url, error: "access_denied"), new FixedTime(Now)),
+            store, new FixedTime(Now));
+
+        var granted = await provider.EnsureScopeAsync(GoogleOAuthOptions.DriveFileScope);
+
+        Assert.False(granted);
+
+        // 断られても、いまの接続（既定のスコープでの連携）はそのまま
+        Assert.Equal("at-1", store.Load()!.AccessToken);
+        Assert.True(provider.IsConnected);
+    }
 }

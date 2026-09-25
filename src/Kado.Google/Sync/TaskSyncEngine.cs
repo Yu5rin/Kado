@@ -18,6 +18,11 @@ public interface ITaskGateway
         string taskListId, string taskId, JsonObject body, CancellationToken cancellationToken);
 
     Task DeleteAsync(string taskListId, string taskId, CancellationToken cancellationToken);
+
+    /// <summary>タスクを別のリストへ移す。消して作り直すより並び順や親子関係を保てる。</summary>
+    Task<JsonElement> MoveAsync(
+        string sourceTaskListId, string taskId, string destinationTaskListId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary><see cref="GoogleTasksApi"/> を上の口に合わせる。</summary>
@@ -37,6 +42,11 @@ public sealed class TasksApiGateway(GoogleTasksApi api) : ITaskGateway
 
     public Task DeleteAsync(string taskListId, string taskId, CancellationToken cancellationToken) =>
         api.DeleteTaskAsync(taskListId, taskId, cancellationToken);
+
+    public Task<JsonElement> MoveAsync(
+        string sourceTaskListId, string taskId, string destinationTaskListId,
+        CancellationToken cancellationToken) =>
+        api.MoveTaskAsync(sourceTaskListId, taskId, destinationTaskListId, cancellationToken);
 }
 
 /// <summary>
@@ -140,8 +150,12 @@ public sealed class TaskSyncEngine(
 
             if (TaskMapper.IsDeleted(item))
             {
-                // 相手が消した。tombstone は残さない。相手はもう知っている
-                if (existing is not null && tasks.Delete(existing.Id)) deleted++;
+                // 相手が消した。tombstone は残さない。相手はもう知っている。
+                //
+                // ただし、このリストからの deleted は「利用者が削除した」だけとは限らない。
+                // こちらで入れ先を別のリストへ変え、すでに tasks.move で移したあとにも、
+                // 元のリスト（このリスト）側では同じ知らせが返る（ShouldDeleteOnCancel を見よ）
+                if (ShouldDeleteOnCancel(existing, taskListId) && tasks.Delete(existing!.Id)) deleted++;
                 continue;
             }
 
@@ -245,6 +259,15 @@ public sealed class TaskSyncEngine(
         return items;
     }
 
+    /// <summary>
+    /// このリストからの <c>deleted</c> を、削除として受け取ってよいか。
+    /// <para>EventSyncEngine.ShouldDeleteOnCancel と同じ考え方。理由もそちらを見よ。</para>
+    /// </summary>
+    private static bool ShouldDeleteOnCancel(TaskItem? existing, string taskListId) =>
+        existing is not null &&
+        (existing.GoogleTaskListId is not { Length: > 0 } known ||
+         string.Equals(known, taskListId, StringComparison.Ordinal));
+
     /// <summary>まだ結び付いていない、同じ内容のタスクを探す。</summary>
     private TaskItem? FindUnlinkedMatch(TaskItem incoming) =>
         tasks.All()
@@ -259,12 +282,14 @@ public sealed class TaskSyncEngine(
         var created = 0;
         var updated = 0;
         var relinked = 0;
+        var moved = 0;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
 
+        // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む
         var mine = tasks.All()
             .Where(t => string.Equals(t.TaskListId, localListId, StringComparison.Ordinal))
-            .Where(TaskMapper.NeedsPush)
+            .Where(t => TaskMapper.NeedsPush(t) || NeedsMove(t, taskListId))
             .ToArray();
 
         foreach (var value in mine)
@@ -273,19 +298,49 @@ public sealed class TaskSyncEngine(
 
             try
             {
-                var body = TaskMapper.ToGoogle(value);
-
                 if (value.GoogleTaskId is { Length: > 0 } googleId)
                 {
-                    var patched = await gateway
-                        .PatchAsync(taskListId, googleId, body, cancellationToken)
-                        .ConfigureAwait(false);
+                    var current = value;
 
-                    tasks.Upsert(TaskMapper.FromGoogle(patched, taskListId, localListId, value, now));
-                    updated++;
+                    if (NeedsMove(current, taskListId))
+                    {
+                        // 消して作り直すより、tasks.move のほうが並び順や親子関係を保てる
+                        var movedElement = await gateway
+                            .MoveAsync(current.GoogleTaskListId!, googleId, taskListId, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        // move の応答は本文（タイトルなど）が移す前のまま。まるごと
+                        // FromGoogle に通すと、まだ送れていない内容の変更を上書きしてしまう
+                        // ので、場所に関する項目だけを取り込む（EventSyncEngine と同じ理由）
+                        var atDestination = TaskMapper.FromGoogle(movedElement, taskListId, localListId, current, now);
+                        current = current with
+                        {
+                            GoogleTaskId = atDestination.GoogleTaskId,
+                            GoogleTaskListId = atDestination.GoogleTaskListId,
+                            GoogleRaw = atDestination.GoogleRaw,
+                            GoogleUpdated = atDestination.GoogleUpdated,
+                            UpdatedAt = now,
+                        };
+                        tasks.Upsert(current);
+                        moved++;
+                    }
+
+                    if (TaskMapper.NeedsPush(current))
+                    {
+                        var body = TaskMapper.ToGoogle(current);
+
+                        var patched = await gateway
+                            .PatchAsync(taskListId, googleId, body, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        tasks.Upsert(TaskMapper.FromGoogle(patched, taskListId, localListId, current, now));
+                        updated++;
+                    }
                 }
                 else
                 {
+                    var body = TaskMapper.ToGoogle(value);
+
                     var inserted = await gateway
                         .InsertAsync(taskListId, body, cancellationToken)
                         .ConfigureAwait(false);
@@ -296,7 +351,10 @@ public sealed class TaskSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsMissing && value.GoogleTaskId is not null)
             {
-                tasks.Upsert(value with { GoogleTaskId = null, GoogleRaw = null, UpdatedAt = now });
+                tasks.Upsert(value with
+                {
+                    GoogleTaskId = null, GoogleTaskListId = null, GoogleRaw = null, UpdatedAt = now,
+                });
                 relinked++;
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
@@ -320,7 +378,17 @@ public sealed class TaskSyncEngine(
             CreatedRemote = created,
             UpdatedRemote = updated,
             Relinked = relinked,
+            Moved = moved,
             Warnings = warnings,
         };
     }
+
+    /// <summary>
+    /// このリスト（<paramref name="taskListId"/>）へ、<c>tasks.move</c> で運ぶ必要があるか。
+    /// <para>EventSyncEngine.NeedsMove と同じ考え方。</para>
+    /// </summary>
+    private static bool NeedsMove(TaskItem value, string taskListId) =>
+        value.GoogleTaskId is { Length: > 0 } &&
+        value.GoogleTaskListId is { Length: > 0 } origin &&
+        !string.Equals(origin, taskListId, StringComparison.Ordinal);
 }

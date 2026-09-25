@@ -36,6 +36,45 @@ public sealed class GoogleTokenProvider(
         _store.Save(tokens);
     }
 
+    /// <summary>
+    /// いま持っている権限に、指定の1つが含まれるか。
+    /// <para>繋いでいなければ false。API を呼ばずに済む場面（表示の出し分けなど）で使う。</para>
+    /// </summary>
+    public bool HasScope(string scope) =>
+        _store.Load() is { } tokens && tokens.Scopes.Contains(scope, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 権限が足りなければ、追加で認可を受ける。ブラウザが開く。
+    /// <para>
+    /// すでに持っていれば何もせず true。利用者が同意画面で断れば false を返し、
+    /// いま持っている接続はそのまま（壊さない）。<c>include_granted_scopes=true</c> で
+    /// 求めるので、応答にはこれまでの権限も含めて返る（<see cref="OAuthTokens.WithRefreshed"/>
+    /// が万一含まれていなくても今の分を残す）。
+    /// </para>
+    /// </summary>
+    public async Task<bool> EnsureScopeAsync(string scope, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+
+        if (_store.Load() is not { } current) throw new OAuthException("Google に接続していません。");
+        if (current.Scopes.Contains(scope, StringComparer.Ordinal)) return true;
+
+        OAuthTokens granted;
+        try
+        {
+            granted = await _flow
+                .AuthorizeAsync([scope], includeGrantedScopes: true, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OAuthException e) when (e.WasDeclined)
+        {
+            return false;
+        }
+
+        _store.Save(current.WithRefreshed(granted));
+        return true;
+    }
+
     /// <summary>接続を切る。Google 側の許可も取り消す。</summary>
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {

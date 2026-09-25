@@ -141,4 +141,16 @@ public class GoogleTasksApiTests
 
         Assert.Equal("ya29.test", seen[0].Headers.Authorization!.Parameter);
     }
+
+    [Fact]
+    public async Task 別のリストへmoveで移す()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"id":"t1","title":"棚卸し"}"""));
+
+        await api.MoveTaskAsync("list-a", "t1", "list-b");
+
+        Assert.Equal(HttpMethod.Post, seen[0].Method);
+        Assert.EndsWith("/lists/list-a/tasks/t1/move", seen[0].RequestUri!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Contains("destinationTasklist=list-b", seen[0].RequestUri!.Query, StringComparison.Ordinal);
+    }
 }

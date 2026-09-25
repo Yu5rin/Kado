@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Kado.Data.Models;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
 
@@ -125,5 +126,23 @@ public partial class EventEditorWindow : Window
         // 単日と複数日で欄が分かれるので、名前ではなく印で見分ける
         if (box.Tag as string == "End") _editor.NudgeEnd(minutes);
         else _editor.NudgeStart(minutes);
+    }
+
+    // ------------------------------------------------------------------
+    // 添付
+    // ------------------------------------------------------------------
+
+    /// <summary>ファイルを選んでドライブへ上げる。上げ終わるまでボタンは押せなくなる（IsUploadingAttachment）。</summary>
+    private async void OnAddAttachmentClick(object sender, RoutedEventArgs e) => await _editor.AddAttachmentAsync();
+
+    private void OnRemoveAttachmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: EventAttachment attachment }) _editor.RemoveAttachment(attachment);
+    }
+
+    /// <summary>行を押すと既定のブラウザで開く。https の添付だけ（EventEditorViewModel.IsSafeToOpen）。</summary>
+    private void OnOpenAttachmentClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: EventAttachment attachment }) _editor.OpenAttachment(attachment);
     }
 }

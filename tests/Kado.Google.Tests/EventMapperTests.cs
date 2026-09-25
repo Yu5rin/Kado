@@ -570,4 +570,327 @@ public class EventMapperTests
         // 時刻だけ見れば逆転しているが、日が進んでいるので直してはいけない
         Assert.Equal(StartOf(body).AddHours(8), EndOf(body));
     }
+
+    // ------------------------------------------------------------------
+    // 除外日（EXDATE）は同期の内部事情。使う人が変えたのでない限り送り返さない
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 除外日はGoogleへ送り返さない()
+    {
+        // ExcludeFromParent が内部で足す形（RRULE のあとに ;EXDATE=... が続く）
+        var body = EventMapper.ToGoogle(new CalendarEvent
+        {
+            Id = "e1", Title = "週次レビュー", Date = D(2026, 9, 24),
+            Recurrence = "FREQ=WEEKLY;BYDAY=TH;EXDATE=20261001",
+        });
+
+        var line = body["recurrence"]![0]!.GetValue<string>();
+        Assert.Equal("RRULE:FREQ=WEEKLY;BYDAY=TH", line);
+        Assert.DoesNotContain("EXDATE", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 除外日だけの変更ではNeedsPushがtrueにならない()
+    {
+        var original = """
+            {
+              "id": "e9", "summary": "週次レビュー",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+              "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH"]
+            }
+            """;
+
+        var value = EventMapper.FromGoogle(Json(original), "primary");
+
+        // ExcludeFromParent が足す形。中身（タイトル等）は変えていない
+        var withExdate = value with { Recurrence = "FREQ=WEEKLY;BYDAY=TH;EXDATE=20261001" };
+
+        Assert.False(EventMapper.NeedsPush(withExdate));
+    }
+
+    // ------------------------------------------------------------------
+    // Google 側に本物の EXDATE がある予定（ics 取り込みや他のクライアントが作った
+    // 繰り返しは、実際に EXDATE を持つ）。こちらの内部事情（同期の取り込みが足す
+    // 除外日）と混ぜず、一字一句そのまま保つ
+    // ------------------------------------------------------------------
+
+    private const string RecurrenceWithRealExdate = """
+        {
+          "id": "g1", "summary": "週次レビュー",
+          "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" },
+          "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH", "EXDATE;TZID=Asia/Tokyo:20261001T090000"]
+        }
+        """;
+
+    private static string[] RecurrenceLinesOf(JsonObject body) =>
+        body["recurrence"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+
+    [Fact]
+    public void Google側の本物のEXDATEは何も変えなければ送らない()
+    {
+        var value = EventMapper.FromGoogle(Json(RecurrenceWithRealExdate), "primary");
+
+        Assert.False(EventMapper.NeedsPush(value));
+    }
+
+    [Fact]
+    public void 題名だけ変えても元のEXDATE行を一字一句そのまま送る()
+    {
+        var value = EventMapper.FromGoogle(Json(RecurrenceWithRealExdate), "primary");
+        var changed = value with { Title = "週次レビュー（変更）" };
+
+        var lines = RecurrenceLinesOf(EventMapper.ToGoogle(changed));
+
+        Assert.Equal(
+            ["RRULE:FREQ=WEEKLY;BYDAY=TH", "EXDATE;TZID=Asia/Tokyo:20261001T090000"],
+            lines);
+    }
+
+    [Fact]
+    public void RRULEを変えたら新しいRRULEと元のEXDATE行を組み合わせる()
+    {
+        var value = EventMapper.FromGoogle(Json(RecurrenceWithRealExdate), "primary");
+
+        // 繰り返しの曜日を変えた（木曜 → 金曜）
+        var changed = value with { Recurrence = "FREQ=WEEKLY;BYDAY=FR" };
+
+        var lines = RecurrenceLinesOf(EventMapper.ToGoogle(changed));
+
+        Assert.Equal(
+            ["RRULE:FREQ=WEEKLY;BYDAY=FR", "EXDATE;TZID=Asia/Tokyo:20261001T090000"],
+            lines);
+    }
+
+    [Fact]
+    public void 内部で足した除外日は元の本物のEXDATEに混ぜて送らない()
+    {
+        var value = EventMapper.FromGoogle(Json(RecurrenceWithRealExdate), "primary");
+
+        // 別の回（10/8）を例外回として取り込み、EventSyncEngine.ExcludeFromParent が
+        // 内部で除外日を足した状態を再現する（RRULE 部分は変わっていない）
+        var withLocalExclusion = value with
+        {
+            Recurrence = RecurrenceConverter.WithExceptionDate(value.Recurrence, new DateOnly(2026, 10, 8)),
+        };
+
+        var lines = RecurrenceLinesOf(EventMapper.ToGoogle(withLocalExclusion));
+
+        // 元の本物の EXDATE（10/1）はそのまま。内部で足した 10/8 は入らない
+        Assert.Contains("EXDATE;TZID=Asia/Tokyo:20261001T090000", lines);
+        Assert.DoesNotContain(lines, l => l.Contains("20261008", StringComparison.Ordinal));
+        Assert.Equal(2, lines.Length);
+    }
+
+    [Fact]
+    public void GoogleRawが無ければRRULEだけを送る()
+    {
+        // 新規作成、またはまだ繰り返しでなかった予定
+        var value = new CalendarEvent
+        {
+            Id = "e1", Title = "週次レビュー", Date = D(2026, 9, 24),
+            Recurrence = "FREQ=WEEKLY;BYDAY=TH",
+        };
+
+        var lines = RecurrenceLinesOf(EventMapper.ToGoogle(value));
+
+        Assert.Equal(["RRULE:FREQ=WEEKLY;BYDAY=TH"], lines);
+    }
+
+    // ------------------------------------------------------------------
+    // 繰り返しの1回だけの回（子）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void recurringEventIdを持つ回はインスタンスと判定する()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "g1_20261001", "summary": "週次レビュー（振替）",
+              "recurringEventId": "g1",
+              "start": { "date": "2026-10-02" }, "end": { "date": "2026-10-03" }
+            }
+            """), "primary");
+
+        Assert.True(EventMapper.IsRecurringInstance(value));
+    }
+
+    [Fact]
+    public void recurringEventIdを持たない予定はインスタンスでない()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "g1", "summary": "週次レビュー",
+              "start": { "date": "2026-09-24" }, "end": { "date": "2026-09-25" }
+            }
+            """), "primary");
+
+        Assert.False(EventMapper.IsRecurringInstance(value));
+    }
+
+    // ------------------------------------------------------------------
+    // カレンダーの移動先
+    //
+    // CalendarId（こちらの希望）は既存があれば引き継ぐ。GoogleCalendarId（Google 側の
+    // 実際の場所）は取りに行った先で必ず更新する
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 新規の予定はカレンダーIdと実カレンダーIdが両方取りに行った先になる()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {"id": "g1", "summary": "棚卸し", "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-25"}}
+            """), "local:shigoto", existing: null, now: null, googleCalendarId: "primary");
+
+        Assert.Equal("local:shigoto", value.CalendarId);
+        Assert.Equal("primary", value.GoogleCalendarId);
+    }
+
+    [Fact]
+    public void 既存の予定のカレンダー希望は取り込みで上書きしない()
+    {
+        var existing = new CalendarEvent
+        {
+            Id = "e1", Title = "棚卸し", Date = D(2026, 9, 24),
+            CalendarId = "local:private", GoogleEventId = "g1", GoogleCalendarId = "primary",
+        };
+
+        // Google 側はまだ元のカレンダー（primary）のまま。こちらは別のカレンダーへ
+        // 移すつもりで CalendarId を変えているが、まだ送れていない
+        var moved = existing with { CalendarId = "local:kojin" };
+
+        var value = EventMapper.FromGoogle(Json("""
+            {"id": "g1", "summary": "棚卸し（相手で変更）",
+             "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-25"}}
+            """), "primary", moved, googleCalendarId: "primary");
+
+        // 「移すつもり」の希望を、取り込みが元へ戻してしまわない
+        Assert.Equal("local:kojin", value.CalendarId);
+        Assert.Equal("primary", value.GoogleCalendarId);
+    }
+
+    // ------------------------------------------------------------------
+    // 添付
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 添付を足していなければattachmentsキーを送らない()
+    {
+        var value = new CalendarEvent { Id = "e1", Title = "予定", Date = D(2026, 9, 24) };
+
+        var body = EventMapper.ToGoogle(value);
+
+        Assert.False(body.ContainsKey("attachments"));
+    }
+
+    [Fact]
+    public void 添付を足すとattachmentsキーを送る()
+    {
+        var attachments = new[]
+        {
+            new EventAttachment("file1", "https://drive.google.com/file/d/file1/view", "議事録.pdf", "application/pdf"),
+        };
+
+        var value = new CalendarEvent
+        {
+            Id = "e1", Title = "予定", Date = D(2026, 9, 24),
+            PendingAttachments = EventMapper.ToPendingAttachmentsJson(attachments),
+        };
+
+        var body = EventMapper.ToGoogle(value);
+
+        Assert.True(body.ContainsKey("attachments"));
+        Assert.Single(body["attachments"]!.AsArray());
+        Assert.Equal("file1", body["attachments"]![0]!["fileId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void 添付の一覧はPendingAttachmentsがあればそちらを優先する()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "g1", "summary": "予定",
+              "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-25"},
+              "attachments": [
+                {"fileId": "old", "fileUrl": "https://drive.google.com/file/d/old/view", "title": "旧.pdf"}
+              ]
+            }
+            """), "primary");
+
+        Assert.Equal("old", Assert.Single(EventMapper.EffectiveAttachments(value)).FileId);
+
+        var pending = value with
+        {
+            PendingAttachments = EventMapper.ToPendingAttachmentsJson(
+            [
+                new EventAttachment("new", "https://drive.google.com/file/d/new/view", "新.pdf", "application/pdf"),
+            ]),
+        };
+
+        Assert.Equal("new", Assert.Single(EventMapper.EffectiveAttachments(pending)).FileId);
+    }
+
+    [Fact]
+    public void 添付のURLはhttpsだけ読む理由になるfileUrlを持つ()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "g1", "summary": "予定",
+              "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-25"},
+              "attachments": [
+                {"fileId": "a", "fileUrl": "https://drive.google.com/file/d/a/view", "title": "資料.pdf"}
+              ]
+            }
+            """), "primary");
+
+        var attachment = Assert.Single(EventMapper.EffectiveAttachments(value));
+        Assert.StartsWith("https://", attachment.FileUrl, StringComparison.Ordinal);
+    }
+
+    // ------------------------------------------------------------------
+    // ゲスト・会議・出欠・仮の予定は受け取って持つだけ。送る本文には絶対に含めない
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 書き戻す本文にattendeesとconferenceDataとresponseStatusは含めない()
+    {
+        var value = EventMapper.FromGoogle(Json("""
+            {
+              "id": "g1", "summary": "会議",
+              "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-25"},
+              "attendees": [{"email": "a@example.com", "responseStatus": "accepted"}],
+              "conferenceData": {"conferenceId": "abc", "entryPoints": [{"uri": "https://meet.example.com/abc"}]},
+              "hangoutLink": "https://meet.example.com/abc",
+              "colorId": "7",
+              "transparency": "transparent"
+            }
+            """), "primary");
+
+        var body = EventMapper.ToGoogle(value with { Title = "会議（変更）" });
+
+        Assert.False(body.ContainsKey("attendees"));
+        Assert.False(body.ContainsKey("conferenceData"));
+        Assert.False(body.ContainsKey("hangoutLink"));
+        Assert.False(body.ContainsKey("colorId"));
+        Assert.False(body.ContainsKey("responseStatus"));
+        Assert.False(body.ContainsKey("transparency"));
+
+        // 受け取った生データには残っている（読むだけなら安全、要件書どおり）
+        Assert.Contains("attendees", value.GoogleRaw, StringComparison.Ordinal);
+        Assert.Contains("conferenceData", value.GoogleRaw, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void イベント個別のcolorIdは取り込まない()
+    {
+        var existing = new CalendarEvent { Id = "e1", Title = "予定", Date = D(2026, 9, 24), Color = "#336699" };
+
+        var value = EventMapper.FromGoogle(Json("""
+            {"id": "g1", "summary": "予定", "start": {"date": "2026-09-24"},
+             "end": {"date": "2026-09-25"}, "colorId": "11"}
+            """), "primary", existing);
+
+        // 色はカレンダーで決まる。イベント個別の colorId で上書きしない
+        Assert.Equal("#336699", value.Color);
+    }
 }

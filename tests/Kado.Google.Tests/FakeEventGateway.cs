@@ -108,6 +108,26 @@ internal sealed class FakeEventGateway : IEventGateway
         return Task.CompletedTask;
     }
 
+    /// <summary>移した先の一覧。「元のカレンダー → 先のカレンダー」で控える。</summary>
+    public List<(string From, string To, string EventId)> Moved { get; } = [];
+
+    public Task<JsonElement> MoveAsync(
+        string sourceCalendarId, string eventId, string destinationCalendarId,
+        CancellationToken cancellationToken)
+    {
+        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+
+        if (!Items.TryGetValue(eventId, out var stored))
+        {
+            throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
+        }
+
+        Moved.Add((sourceCalendarId, destinationCalendarId, eventId));
+        Touch(eventId);
+
+        return Task.FromResult(Parse(stored));
+    }
+
     /// <summary>相手に終日予定を1件置く。</summary>
     public string Add(string id, string summary, string date, string? endDate = null)
     {

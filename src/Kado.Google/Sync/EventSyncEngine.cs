@@ -21,6 +21,14 @@ public interface IEventGateway
         string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken);
 
     Task DeleteAsync(string calendarId, string eventId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// イベントを別のカレンダーへ移す。消して作り直すより、ゲスト・会議 URL・添付・色が
+    /// 保たれる。
+    /// </summary>
+    Task<JsonElement> MoveAsync(
+        string sourceCalendarId, string eventId, string destinationCalendarId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary><see cref="GoogleCalendarApi"/> を上の口に合わせる。</summary>
@@ -40,6 +48,11 @@ public sealed class CalendarApiGateway(GoogleCalendarApi api, DateTimeOffset? fr
 
     public Task DeleteAsync(string calendarId, string eventId, CancellationToken cancellationToken) =>
         api.DeleteEventAsync(calendarId, eventId, cancellationToken);
+
+    public Task<JsonElement> MoveAsync(
+        string sourceCalendarId, string eventId, string destinationCalendarId,
+        CancellationToken cancellationToken) =>
+        api.MoveEventAsync(sourceCalendarId, eventId, destinationCalendarId, cancellationToken);
 }
 
 /// <summary>
@@ -194,8 +207,11 @@ public sealed class EventSyncEngine(
 
                 if (EventMapper.IsCancelled(item))
                 {
-                    // その回は中止。親から除いたので、予定としては持たない
-                    if (existing is not null && events.Delete(existing.Id)) deleted++;
+                    // その回は中止。親から除いたので、予定としては持たない。
+                    // ただし、こちらがすでに別のカレンダーへ移したと分かっているなら、
+                    // この cancelled は「削除された」ではなく「(移す前の)ここから居なくなった」
+                    // だけの合図。誤って消さない（ShouldDeleteOnCancel を見よ）
+                    if (ShouldDeleteOnCancel(existing, calendarId) && events.Delete(existing!.Id)) deleted++;
                     continue;
                 }
             }
@@ -203,8 +219,13 @@ public sealed class EventSyncEngine(
             if (EventMapper.IsCancelled(item))
             {
                 // 相手が消した。こちらでも消すが、tombstone は要らない。
-                // 相手はもう知っている。残すと次の同期で消しに行ってしまう
-                if (existing is not null && events.Delete(existing.Id)) deleted++;
+                // 相手はもう知っている。残すと次の同期で消しに行ってしまう。
+                //
+                // ただし、このカレンダーからの cancelled は「利用者が削除した」だけとは
+                // 限らない。こちらで入れ先を別のカレンダーへ変え、すでに events.move で
+                // 移したあとにも、元のカレンダー（このカレンダー）側では同じ知らせが返る
+                // （ShouldDeleteOnCancel を見よ）
+                if (ShouldDeleteOnCancel(existing, calendarId) && events.Delete(existing!.Id)) deleted++;
                 continue;
             }
 
@@ -226,7 +247,7 @@ public sealed class EventSyncEngine(
                 overwritten.Add(existing.Title is { Length: > 0 } title ? title : "(無題)");
             }
 
-            var mapped = EventMapper.FromGoogle(item, localCalendarId, existing, now);
+            var mapped = EventMapper.FromGoogle(item, localCalendarId, existing, now, calendarId);
 
             if (existing is null)
             {
@@ -330,6 +351,27 @@ public sealed class EventSyncEngine(
     }
 
     /// <summary>
+    /// このカレンダーからの <c>cancelled</c>（取り消し）を、削除として受け取ってよいか。
+    /// <para>
+    /// cancelled は「利用者が削除した」以外に、「こちらの入れ先を別のカレンダーへ変え、
+    /// <c>events.move</c> で運んだ結果、元のカレンダー側にはもう無い」場面でも届く。
+    /// 後者を削除として扱うと、移した予定を消してしまう。
+    /// </para>
+    /// <para>
+    /// 判定は、Google 側で最後に確かめた場所（<see cref="CalendarEvent.GoogleCalendarId"/>）が
+    /// 分かっていて、かつそれが<b>今回の（cancelled を返してきた）カレンダーと違う</b>とき
+    /// だけ、削除しない。まだ場所を確かめていない（<c>GoogleCalendarId</c> が null。
+    /// 旧いデータや、移す指示が届く前）ときは、これまでどおり削除する側に倒す
+    /// （こちらで移す指示がまだ送れていなくても、Google 側で本当に消されたなら消える。
+    /// 移し先で作り直して生き返らせない）。
+    /// </para>
+    /// </summary>
+    private static bool ShouldDeleteOnCancel(CalendarEvent? existing, string calendarId) =>
+        existing is not null &&
+        (existing.GoogleCalendarId is not { Length: > 0 } known ||
+         string.Equals(known, calendarId, StringComparison.Ordinal));
+
+    /// <summary>
     /// まだ結び付いていない、同じ内容の予定を探す。
     /// <para>
     /// こちらで入れた予定を相手へ送ったあと、応答を受け取る前に落ちると、
@@ -354,12 +396,15 @@ public sealed class EventSyncEngine(
         var created = 0;
         var updated = 0;
         var relinked = 0;
+        var moved = 0;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
 
+        // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む。
+        // 入れ先だけの変更は NeedsPush（内容の比較）では気づけない
         var mine = events.All()
             .Where(e => string.Equals(e.CalendarId, localCalendarId, StringComparison.Ordinal))
-            .Where(EventMapper.NeedsPush)
+            .Where(e => EventMapper.NeedsPush(e) || NeedsMove(e, calendarId))
             .ToArray();
 
         foreach (var value in mine)
@@ -368,32 +413,83 @@ public sealed class EventSyncEngine(
 
             try
             {
-                var body = EventMapper.ToGoogle(value);
-
                 if (value.GoogleEventId is { Length: > 0 } googleId)
                 {
-                    var patched = await gateway
-                        .PatchAsync(calendarId, googleId, body, cancellationToken)
-                        .ConfigureAwait(false);
+                    var current = value;
 
-                    // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため
-                    events.Upsert(EventMapper.FromGoogle(patched, localCalendarId, value, now));
-                    updated++;
+                    if (NeedsMove(current, calendarId))
+                    {
+                        var origin = current.GoogleCalendarId!;
+
+                        if (EventMapper.IsRecurringInstance(current))
+                        {
+                            // 繰り返しのうち1回だけの回は、Google でもカレンダーを移せない。
+                            // 編集画面で止めているはずだが、ここまで来た分は壊さない側に倒し、
+                            // こちらの希望（入れ先）を実際の場所へ戻す
+                            events.Upsert(current with { CalendarId = origin, UpdatedAt = now });
+                            warnings.Add(
+                                $"繰り返しの1回だけの予定はカレンダーを移せません（{current.Title}）。" +
+                                "元のカレンダーのままにしました");
+                            continue;
+                        }
+
+                        // 消して作り直すと、ゲスト・会議 URL・添付・色が落ちる。move で運ぶ
+                        var movedElement = await gateway
+                            .MoveAsync(origin, googleId, calendarId, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        // move の応答は「移った」ことだけを表し、本文（タイトルなど）は
+                        // 移す前のまま。ここでまるごと FromGoogle に通すと、まだ送れていない
+                        // 内容の変更（このあと patch で送るはずのもの）を上書きしてしまうので、
+                        // 場所に関する項目だけを取り込む
+                        var atDestination = EventMapper.FromGoogle(movedElement, localCalendarId, current, now, calendarId);
+                        current = current with
+                        {
+                            GoogleEventId = atDestination.GoogleEventId,
+                            GoogleCalendarId = atDestination.GoogleCalendarId,
+                            GoogleRaw = atDestination.GoogleRaw,
+                            GoogleUpdated = atDestination.GoogleUpdated,
+                            UpdatedAt = now,
+                        };
+                        events.Upsert(current);
+                        moved++;
+
+                        // ほかに変えた項目があれば、このあと続けて patch で送る
+                    }
+
+                    if (EventMapper.NeedsPush(current))
+                    {
+                        var body = EventMapper.ToGoogle(current);
+
+                        var patched = await gateway
+                            .PatchAsync(calendarId, googleId, body, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため
+                        events.Upsert(EventMapper.FromGoogle(patched, localCalendarId, current, now, calendarId));
+                        updated++;
+                    }
                 }
                 else
                 {
+                    var body = EventMapper.ToGoogle(value);
+
                     var inserted = await gateway
                         .InsertAsync(calendarId, body, cancellationToken)
                         .ConfigureAwait(false);
 
-                    events.Upsert(EventMapper.FromGoogle(inserted, localCalendarId, value, now));
+                    events.Upsert(EventMapper.FromGoogle(inserted, localCalendarId, value, now, calendarId));
                     created++;
                 }
             }
             catch (GoogleApiException ex) when (ex.IsMissing && value.GoogleEventId is not null)
             {
-                // 相手から消えていた。結びを外して、次の同期で作り直させる
-                events.Upsert(value with { GoogleEventId = null, GoogleRaw = null, UpdatedAt = now });
+                // 相手から消えていた（移す先で、または元のカレンダーで）。結びを外して、
+                // 次の同期で作り直させる
+                events.Upsert(value with
+                {
+                    GoogleEventId = null, GoogleCalendarId = null, GoogleRaw = null, UpdatedAt = now,
+                });
                 relinked++;
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
@@ -416,7 +512,23 @@ public sealed class EventSyncEngine(
             CreatedRemote = created,
             UpdatedRemote = updated,
             Relinked = relinked,
+            Moved = moved,
             Warnings = warnings,
         };
     }
+
+    /// <summary>
+    /// このカレンダー（<paramref name="calendarId"/>）へ、<c>events.move</c> で
+    /// 運ぶ必要があるか。
+    /// <para>
+    /// Google 側で実際にいる場所（<see cref="CalendarEvent.GoogleCalendarId"/>）と、
+    /// こちらの希望（<see cref="CalendarEvent.CalendarId"/> ＝いま送ろうとしている先）が
+    /// 食い違っているときだけ true。まだ一度も Google の応答を受けていない予定
+    /// （<c>GoogleCalendarId</c> が null）は対象にしない。
+    /// </para>
+    /// </summary>
+    private static bool NeedsMove(CalendarEvent value, string calendarId) =>
+        value.GoogleEventId is { Length: > 0 } &&
+        value.GoogleCalendarId is { Length: > 0 } origin &&
+        !string.Equals(origin, calendarId, StringComparison.Ordinal);
 }

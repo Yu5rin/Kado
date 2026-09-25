@@ -123,4 +123,59 @@ public class MigrationTests
             0L,
             db.Connection.ExecuteScalar<long>("SELECT sort_order FROM tasks WHERE id = 't1';"));
     }
+
+    /// <summary>
+    /// V7（予定に Google 側の実カレンダーを持つ）が、既存の Google 連携済みの予定の
+    /// <c>google_calendar_id</c> を、いま入っているカレンダー（<c>calendar_id</c>）で
+    /// 埋めることを確かめる。埋めないと、更新後に最初にカレンダーを変えたときの判定
+    /// （events.move すべきか）が全部「移した」側に倒れ、直したかった不具合が
+    /// そのまま再発する。
+    /// </summary>
+    [Fact]
+    public void V7は既存のGoogle連携済みの予定のgoogle_calendar_idを埋める()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        // V6 までの状態を再現する
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 7).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO calendars (id, summary, updated_at) VALUES ('cal-a', '仕事', 1758500000000);");
+
+        // Google と結び付いている予定。対応するカレンダーが calendars 表にある
+        db.Connection.Execute(
+            """
+            INSERT INTO events (id, title, date, calendar_id, google_event_id, updated_at)
+            VALUES ('e1', '定例', '2026-09-24', 'cal-a', 'g1', 1758500000000);
+            """);
+
+        // Google と結び付いていない（ローカルだけの）予定。埋めてはいけない
+        db.Connection.Execute(
+            """
+            INSERT INTO events (id, title, date, calendar_id, updated_at)
+            VALUES ('e2', '私用の予定', '2026-09-24', 'local:mycal', 1758500000000);
+            """);
+
+        // 結び付いているが、対応するカレンダーがもう calendars 表に無い（消えた・旧データ）。
+        // 何が正しい場所か分からないので、無理に埋めない
+        db.Connection.Execute(
+            """
+            INSERT INTO events (id, title, date, calendar_id, google_event_id, updated_at)
+            VALUES ('e3', '孤立した予定', '2026-09-24', 'cal-removed', 'g3', 1758500000000);
+            """);
+
+        DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Equal(
+            "cal-a",
+            db.Connection.ExecuteScalar<string>("SELECT google_calendar_id FROM events WHERE id = 'e1';"));
+        Assert.Null(
+            db.Connection.ExecuteScalar<string?>("SELECT google_calendar_id FROM events WHERE id = 'e2';"));
+        Assert.Null(
+            db.Connection.ExecuteScalar<string?>("SELECT google_calendar_id FROM events WHERE id = 'e3';"));
+    }
 }

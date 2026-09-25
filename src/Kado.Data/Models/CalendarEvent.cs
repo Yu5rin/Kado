@@ -75,6 +75,17 @@ public sealed record CalendarEvent
     /// <summary>Google Calendar 側のイベント ID。未同期なら null。</summary>
     public string? GoogleEventId { get; init; }
 
+    /// <summary>
+    /// Google 側で、いまこの予定が実際にどのカレンダーに入っているか（最後に確かめた姿）。
+    /// <para>
+    /// <see cref="CalendarId"/> はこちらの希望（編集画面で選んだ入れ先）で、利用者が
+    /// 変えた直後はまだ Google 側に伝わっていない。この2つが食い違っているときだけ、
+    /// 同期は「別のカレンダーへ移す」と判断する（<c>events.move</c>）。一致していれば
+    /// ふつうの patch で足りる。
+    /// </para>
+    /// </summary>
+    public string? GoogleCalendarId { get; init; }
+
     /// <summary>Google 側の更新時刻。差分判定に使う。</summary>
     public string? GoogleUpdated { get; init; }
 
@@ -89,6 +100,21 @@ public sealed record CalendarEvent
     /// </para>
     /// </summary>
     public bool? Notify { get; init; }
+
+    /// <summary>
+    /// 添付の、まだ送っていない指定。JSON 配列。
+    /// <para>
+    /// <c>null</c> なら「触っていない」。Google Calendar の <c>attachments</c> は配列
+    /// まるごとの置き換えなので、<b>使う人が足す・外すという操作をしたときだけ</b>
+    /// このキーを持ち、書き戻すときだけ <c>attachments</c> を送る。触っていない予定を
+    /// 送るたびに（他の項目の変更で）空の添付で上書きしてしまわないための仕掛け。
+    /// </para>
+    /// <para>
+    /// 送り終えたら（Google の応答を取り込んだら）null に戻る。以降は
+    /// <see cref="GoogleRaw"/> の中身が確定した姿になる。
+    /// </para>
+    /// </summary>
+    public string? PendingAttachments { get; init; }
 
     /// <summary>ローカルでの更新時刻。</summary>
     public DateTimeOffset UpdatedAt { get; init; }
