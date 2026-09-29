@@ -193,6 +193,10 @@ public sealed class MainViewModel : ObservableObject
                     // 出している中身を引き直せば期限の表記に反映できる
                     RefreshViews();
                 }
+
+                // 右パネルの月カレンダーの畳み・開きは設定に持つ。設定側から開かれた
+                // ときも、溜めてあった引き直しを済ませる
+                CatchUpPaneMonth();
             };
 
             CurrentView = settings.StartupView;
@@ -393,12 +397,15 @@ public sealed class MainViewModel : ObservableObject
         _workspace.DataChanged += (_, _) => RefreshViews();
 
         // 左パネルのチェックを外したら、月ビューと右ペインからも消す
+        //
+        // 右パネルの月カレンダーも同じ絞り込みを見る。年・一覧も見るので、出していない
+        // ときは印だけ付けて、切り替えたときに引き直す
         SourceLists.VisibilityChanged += (_, _) =>
         {
-            Month.Refresh();
             SelectedDay.Refresh();
-            Week.Refresh();
-            Day.Refresh();
+            RefreshPaneMonth();
+            MarkCenterViewsStale();
+            RefreshVisibleCenterView();
         };
     }
 
@@ -621,6 +628,7 @@ public sealed class MainViewModel : ObservableObject
             if (!Set(ref _isDetailPaneOpen, value)) return;
 
             EnsureSomethingShows(nameof(IsDetailPaneOpen));
+            CatchUpPaneMonth();
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
                 nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
@@ -771,6 +779,7 @@ public sealed class MainViewModel : ObservableObject
             if (settings.IsPaneCalendarCollapsed == value) return;
 
             settings.IsPaneCalendarCollapsed = value;
+            CatchUpPaneMonth();
             Raise(nameof(IsPaneCalendarCollapsed));
         }
     }
@@ -977,8 +986,15 @@ public sealed class MainViewModel : ObservableObject
         if (_isSidePanelOpen || _isMainViewOpen || _isDetailPaneOpen) return;
 
         // いま閉じたものではなく、中央を戻す。何を見る画面なのかが分かる
-        if (justChanged == nameof(IsMainViewOpen)) Set(ref _isDetailPaneOpen, true, nameof(IsDetailPaneOpen));
-        else Set(ref _isMainViewOpen, true, nameof(IsMainViewOpen));
+        if (justChanged == nameof(IsMainViewOpen))
+        {
+            Set(ref _isDetailPaneOpen, true, nameof(IsDetailPaneOpen));
+            CatchUpPaneMonth();
+        }
+        else
+        {
+            Set(ref _isMainViewOpen, true, nameof(IsMainViewOpen));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1058,6 +1074,24 @@ public sealed class MainViewModel : ObservableObject
             MiniCalendar.Today = value;
             Week.Today = value;
             Day.Today = value;
+
+            // 右パネルの月カレンダーの「今日」の印。ここに入れ忘れると、日をまたいだあとも
+            // 前日に印が付いたままになる
+            PaneMonth.Today = value;
+
+            // 年と一覧は「今日」を作るときに受け取ったきり持つので、もう作っているなら
+            // 作り直す。まだなら、初めて出すときに新しい今日で組む
+            if (_year is not null)
+            {
+                _year = CreateYear();
+                Raise(nameof(Year));
+            }
+
+            if (_agenda is not null)
+            {
+                _agenda = CreateAgenda();
+                Raise(nameof(Agenda));
+            }
         }
     }
 
@@ -3006,13 +3040,13 @@ public sealed class MainViewModel : ObservableObject
         SelectedDay.Refresh();
         MiniCalendar.Refresh();
 
+        // 右パネルの月カレンダーは、出している限り見えている。畳んでいるときだけ、
+        // 開いたときに追いつく（CatchUpPaneMonth）
+        RefreshPaneMonth();
+
         // 月・週・日・年・一覧は中央に1つしか出ていない。出していないビューまで
         // 毎回組み直しても誰も見ないので、印だけ付けて、表示に切り替えたときに組む
-        _monthStale = true;
-        _weekStale = true;
-        _dayStale = true;
-        _yearStale = true;
-        _agendaStale = true;
+        MarkCenterViewsStale();
         RefreshVisibleCenterView();
 
         RaiseHeader();
@@ -3033,7 +3067,7 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     [MemberNotNull(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day), nameof(PaneMonth))]
-    private void BuildViews(DateOnly month, DateOnly selected)
+    private void BuildViews(DateOnly month, DateOnly selected, DateOnly? paneMonth = null)
     {
         var start = _settings?.DayStart;
         var end = _settings?.DayEnd;
@@ -3060,11 +3094,16 @@ public sealed class MainViewModel : ObservableObject
 
         // 右パネルの月カレンダーは自前の月暦を持つ。中央が週や日を出していても、
         // こちらはひと月の並びを見せ続ける
-        PaneMonth = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+        //
+        // 月は中央とは別に送れる。組み直すときは、いま出している月を引き継ぐ
+        PaneMonth = new MonthViewModel(_workspace, paneMonth ?? month, _today, _weekStart, sources: SourceLists)
         {
             SelectedDate = selected,
             IsCompact = true,
         };
+
+        // 作りたてなので、読み直す分は残っていない
+        _paneMonthStale = false;
     }
 
     /// <summary>
@@ -3098,9 +3137,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
     private void RebuildViews()
     {
-        BuildViews(Month.Month, SelectedDate);
+        BuildViews(Month.Month, SelectedDate, PaneMonth.Month);
 
-        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day));
+        // PaneMonth も作り直しているので通知する。通知しないと、画面は捨てたほうの
+        // 月カレンダーを持ち続け、以後の選択や月送りが画面に届かなくなる
+        Raise(nameof(Month), nameof(MiniCalendar), nameof(Week), nameof(Day), nameof(PaneMonth),
+            nameof(PaneTitleYear), nameof(PaneTitleMonth));
 
         // Year／Agenda は、まだ作っていなければ Raise しない。バインディングは
         // Collapsed でも読みに来るので、ここで通知すると「読んでいないのに作られる」
@@ -3180,6 +3222,60 @@ public sealed class MainViewModel : ObservableObject
         calculator.SetRange(
             isEnd ? calculator.RangeFrom : date,
             isEnd ? date : calculator.RangeTo);
+    }
+
+    /// <summary>
+    /// 右パネルの月カレンダーに、読み直していない変更が残っているか。
+    /// <para>畳んでいる（または右パネルごと閉じている）あいだだけ溜まる。</para>
+    /// </summary>
+    private bool _paneMonthStale;
+
+    /// <summary>
+    /// 右パネルの月カレンダーが画面に出ているか。
+    /// <para>右パネルを開いていて、月カレンダーを畳んでいないとき。</para>
+    /// </summary>
+    private bool IsPaneMonthShown => _isDetailPaneOpen && !IsPaneCalendarCollapsed;
+
+    /// <summary>
+    /// データや絞り込みが変わったので、右パネルの月カレンダーを引き直す。
+    /// <para>
+    /// 出ていればその場で。出ていなければ印だけ付けて、開いたときに
+    /// <see cref="CatchUpPaneMonth"/> が引き直す。
+    /// </para>
+    /// </summary>
+    private void RefreshPaneMonth()
+    {
+        if (IsPaneMonthShown)
+        {
+            _paneMonthStale = false;
+            PaneMonth.Refresh();
+        }
+        else
+        {
+            _paneMonthStale = true;
+        }
+    }
+
+    /// <summary>
+    /// 右パネルの月カレンダーが出るようになったとき、溜めてあった引き直しを済ませる。
+    /// <para>溜まっていなければ何もしない。</para>
+    /// </summary>
+    private void CatchUpPaneMonth()
+    {
+        if (!_paneMonthStale || !IsPaneMonthShown) return;
+
+        _paneMonthStale = false;
+        PaneMonth.Refresh();
+    }
+
+    /// <summary>中央に出せる5つのビューに、組み直しが要る印を付ける。</summary>
+    private void MarkCenterViewsStale()
+    {
+        _monthStale = true;
+        _weekStale = true;
+        _dayStale = true;
+        _yearStale = true;
+        _agendaStale = true;
     }
 
     /// <summary>月ビューを組み直す必要があるか。出していないあいだは溜めておく。</summary>
