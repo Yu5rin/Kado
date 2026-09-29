@@ -251,7 +251,7 @@ public partial class DayPaneView : UserControl
     // 動いてから DragDrop を始める（DragSession と同じ手口だが、こちらは独立して
     // 持つ。行の中にチェックボックス・ゴミ箱ボタンがあり、それらを押したときは
     // ドラッグの候補にしない）。ペイロードの型は TaskListItemViewModel にして、
-    // 月・週ビューの DragSession（TaskItem を運ぶ）とは混ざらないようにしている。
+    // 月・週ビューの DragSession（ScheduledTask を運ぶ）とは混ざらないようにしている。
     //
     // 落とせるのは同じ期限日（期限なしなら期限なしどうし）のタスクの上だけ
     // （MainViewModel.CanMoveTask）。しきい値に届かないうちはこれまでどおり

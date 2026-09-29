@@ -190,7 +190,7 @@ public sealed class MonthViewModel : ObservableObject
         var (from, to) = VisibleRange();
 
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
-        var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
+        var tasksByDate = _workspace.TasksByDate(from, to);
         var workingDays = _workspace.WorkingDays;
 
         // 左パネルでチェックを外したカレンダーは、ここで落とす
@@ -210,8 +210,8 @@ public sealed class MonthViewModel : ObservableObject
         {
             var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
             var events = visible[date];
-            var tasks = tasksByDue.TryGetValue(date, out var t)
-                ? t.Where(_sources.IncludesTask).ToArray() : [];
+            var tasks = tasksByDate.TryGetValue(date, out var t)
+                ? t.Where(x => _sources.IncludesTask(x.Source)).ToArray() : [];
 
             cells.Add(new DayCellViewModel(
                 date,

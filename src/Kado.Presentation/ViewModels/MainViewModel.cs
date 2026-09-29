@@ -5,6 +5,7 @@ using System.Text.Json;
 using Kado.Core.Import;
 using Kado.Core.Input;
 using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Google.Mapping;
 using Kado.Google.OAuth;
 using Kado.Presentation.Editing;
@@ -287,9 +288,9 @@ public sealed class MainViewModel : ObservableObject
         EditEventCommand = new RelayCommand<DayEventViewModel?>(EditEvent);
         EditChipCommand = new RelayCommand<EventChipViewModel?>(chip => EditEventBy(chip?.Id));
         DeleteChipCommand = new RelayCommand<EventChipViewModel?>(chip => DeleteEventBy(chip?.Id));
-        EditTaskChipCommand = new RelayCommand<TaskItem?>(task => EditTaskBy(task?.Id));
-        DeleteTaskChipCommand = new RelayCommand<TaskItem?>(task => DeleteTaskBy(task?.Id));
-        ToggleTaskChipDoneCommand = new RelayCommand<TaskItem?>(ToggleTaskChipDone);
+        EditTaskChipCommand = new RelayCommand<ScheduledTask?>(task => EditTaskBy(task?.Id));
+        DeleteTaskChipCommand = new RelayCommand<ScheduledTask?>(task => DeleteTaskBy(task?.Id));
+        ToggleTaskChipDoneCommand = new RelayCommand<ScheduledTask?>(ToggleTaskChipDone);
         EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(block => EditEventBy(block?.Id));
         EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
         DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
@@ -1543,20 +1544,20 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand<EventChipViewModel?> DeleteChipCommand { get; }
 
     /// <summary>月ビューのマスに並ぶタスクを開く。</summary>
-    public RelayCommand<TaskItem?> EditTaskChipCommand { get; }
+    public RelayCommand<ScheduledTask?> EditTaskChipCommand { get; }
 
     /// <summary>月ビューのマスに並ぶタスクを消す。</summary>
-    public RelayCommand<TaskItem?> DeleteTaskChipCommand { get; }
+    public RelayCommand<ScheduledTask?> DeleteTaskChipCommand { get; }
 
     /// <summary>
     /// 月・週・日ビューのタスクチップの完了を切り替える。
     /// <para>
-    /// これらのチップは <see cref="TaskItem"/>（保存されている生の形）を直に持つので、
+    /// これらのチップは <see cref="ScheduledTask"/>（その日にどう出すかの決め）を持つので、
     /// 右ペイン・スリムパネル用の <see cref="ToggleTaskDoneCommand"/>
     /// （<see cref="TaskListItemViewModel"/> 用）とは型が違う。
     /// </para>
     /// </summary>
-    public RelayCommand<TaskItem?> ToggleTaskChipDoneCommand { get; }
+    public RelayCommand<ScheduledTask?> ToggleTaskChipDoneCommand { get; }
 
     /// <summary>日付の行のラベルを開く。実働日データから起こした予定も直せる。</summary>
     public RelayCommand<MilestoneViewModel?> EditMilestoneCommand { get; }
@@ -2790,9 +2791,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// 月・週・日ビューのタスクチップの右クリックメニューから、完了を切り替える。
-    /// <para><see cref="ToggleTaskDone"/> と同じ動きを、<see cref="TaskItem"/> を持つ側にも提供する。</para>
+    /// <para><see cref="ToggleTaskDone"/> と同じ動きを、<see cref="ScheduledTask"/> を持つ側にも提供する。</para>
     /// </summary>
-    private void ToggleTaskChipDone(TaskItem? target)
+    private void ToggleTaskChipDone(ScheduledTask? target)
     {
         if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
 

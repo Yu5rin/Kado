@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Views;
@@ -153,7 +153,7 @@ public partial class MonthView : UserControl
             case TimeBlockViewModel block:
                 main.MoveEventTo(block.Id, cell.Date, copy);
                 break;
-            case TaskItem task:
+            case ScheduledTask task:
                 main.MoveTaskTo(task.Id, cell.Date, copy);
                 break;
         }

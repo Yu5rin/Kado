@@ -53,7 +53,7 @@ public sealed class DayCellViewModel : ObservableObject
         DateOnly today,
         WorkingDayCalendar workingDays,
         IReadOnlyList<ScheduledEvent> events,
-        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<ScheduledTask> tasks,
         string? holidayName = null,
         ICalendarPalette? palette = null,
         int maxChips = DefaultMaxChips,
@@ -189,13 +189,16 @@ public sealed class DayCellViewModel : ObservableObject
     public IReadOnlyList<EventChipViewModel> Events { get; }
 
     /// <summary>マスに並べるタスク。溢れたぶんは含まない。</summary>
-    public IReadOnlyList<TaskItem> Tasks { get; }
+    public IReadOnlyList<ScheduledTask> Tasks { get; }
 
     /// <summary>この日の予定すべて。</summary>
     public IReadOnlyList<ScheduledEvent> AllEvents { get; }
 
-    /// <summary>この日が期限のタスクすべて。</summary>
-    public IReadOnlyList<TaskItem> AllTasks { get; }
+    /// <summary>
+    /// この日に出すタスクすべて。未完了は期限日、完了は完了した日（遅れて完了したものは
+    /// 期限日にも薄く）。決まりは <see cref="ScheduleQuery.PlaceTasks"/>。
+    /// </summary>
+    public IReadOnlyList<ScheduledTask> AllTasks { get; }
 
     /// <summary>マスに入りきらなかった件数。0 なら省略は起きていない。</summary>
     public int OverflowCount { get; }

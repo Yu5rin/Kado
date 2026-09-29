@@ -64,7 +64,7 @@ public sealed class WeekDayColumnViewModel : ObservableObject
     private static readonly string[] JapaneseDayNames = ["日", "月", "火", "水", "木", "金", "土"];
 
     internal WeekDayColumnViewModel(DateOnly date, DateOnly today, WorkingDayCalendar workingDays,
-        string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<TaskItem> tasks,
+        string? holidayName, IReadOnlyList<ScheduledEvent> allDay, IReadOnlyList<ScheduledTask> tasks,
         IReadOnlyList<TimeBlockViewModel> blocks, ICalendarPalette palette,
         IReadOnlyList<MilestoneViewModel>? milestones = null)
     {
@@ -144,7 +144,7 @@ public sealed class WeekDayColumnViewModel : ObservableObject
     public IReadOnlyList<EventChipViewModel> AllDayEvents { get; }
 
     /// <summary>終日レーンに並べる期限付きタスク。</summary>
-    public IReadOnlyList<TaskItem> Tasks { get; }
+    public IReadOnlyList<ScheduledTask> Tasks { get; }
 
     /// <summary>時間軸に置く、時刻付きの予定。</summary>
     public IReadOnlyList<TimeBlockViewModel> Blocks { get; }

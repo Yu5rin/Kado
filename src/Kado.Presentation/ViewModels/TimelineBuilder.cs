@@ -97,15 +97,15 @@ public sealed class TimelineBuilder
     public IReadOnlyList<WeekDayColumnViewModel> Build(DateOnly from, DateOnly to, DateOnly today)
     {
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
-        var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
+        var tasksByDate = _workspace.TasksByDate(from, to);
 
         var columns = new List<WeekDayColumnViewModel>();
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             var all = eventsByDate.TryGetValue(date, out var e) ? e : null;
             var events = EventOrder.Sort(all?.Where(x => _sources.IncludesEvent(x.Source)), _sources);
-            var tasks = tasksByDue.TryGetValue(date, out var t)
-                ? t.Where(_sources.IncludesTask).ToArray() : [];
+            var tasks = tasksByDate.TryGetValue(date, out var t)
+                ? t.Where(x => _sources.IncludesTask(x.Source)).ToArray() : [];
 
             columns.Add(new WeekDayColumnViewModel(
                 date, today, _workspace.WorkingDays, _workspace.Holidays.NameOf(date),

@@ -679,6 +679,158 @@ public class MonthViewModelTests
         Assert.Equal(0, Cell(vm, D(2026, 9, 24)).OverflowCount);
         Assert.Null(Cell(vm, D(2026, 9, 24)).OverflowLabel);
     }
+
+    // ------------------------------------------------------------------
+    // 完了したタスクは、完了した日のマスに出す
+    // ------------------------------------------------------------------
+
+    /// <summary>その日の昼（端末のローカル）に完了した、という時刻。</summary>
+    private static DateTimeOffset LocalNoon(int y, int m, int d) =>
+        new(new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local));
+
+    private static TaskItem Done(string id, DateOnly? due, DateTimeOffset? completedAt) => new()
+    {
+        Id = id, Title = $"済み{id}", Due = due, IsDone = true, CompletedAt = completedAt,
+    };
+
+    [Fact]
+    public void 未完了のタスクは今までどおり期限日のマスに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "提出", Due = D(2026, 9, 24) });
+
+        var vm = Create(test);
+
+        var task = Assert.Single(Cell(vm, D(2026, 9, 24)).Tasks);
+        Assert.False(task.IsFaint);
+        Assert.Null(task.Note);
+        Assert.Equal(1, vm.Cells.Sum(c => c.AllTasks.Count));
+    }
+
+    [Fact]
+    public void 完了したタスクは完了した日のマスに出て期限日のマスには出ない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 期限は 9/30。9/24 に片付けた（前倒し）
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 30), LocalNoon(2026, 9, 24)));
+
+        var vm = Create(test);
+
+        var task = Assert.Single(Cell(vm, D(2026, 9, 24)).Tasks);
+        Assert.True(task.IsDone);
+        Assert.False(task.IsFaint);
+        Assert.Equal("4実働日 早く完了", task.Note);
+        Assert.Empty(Cell(vm, D(2026, 9, 30)).Tasks);
+    }
+
+    [Fact]
+    public void 期限どおりに完了したタスクはその日のマスに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 24)));
+
+        var vm = Create(test);
+
+        Assert.Equal("期限どおり完了", Assert.Single(Cell(vm, D(2026, 9, 24)).Tasks).Note);
+        Assert.Equal(1, vm.Cells.Sum(c => c.AllTasks.Count));
+    }
+
+    [Fact]
+    public void 遅れて完了したタスクは完了日に期限と遅れを添え_期限日に薄く残る()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/24 期限を 9/28 に片付けた。実働日では 9/25・9/28 の2日ぶん遅れ
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));
+
+        var vm = Create(test);
+
+        var onDone = Assert.Single(Cell(vm, D(2026, 9, 28)).Tasks);
+        Assert.False(onDone.IsFaint);
+        Assert.Equal("期限 9/24・2実働日遅れ", onDone.Note);
+
+        var trace = Assert.Single(Cell(vm, D(2026, 9, 24)).Tasks);
+        Assert.True(trace.IsFaint);
+        Assert.Equal("9/28 完了", trace.FaintNote);
+        Assert.Equal("t1", trace.Id);
+    }
+
+    [Fact]
+    public void 遅れの日数は実働日か暦日かの設定に従う()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));
+
+        var vm = Create(test);
+        Assert.Equal("期限 9/24・2実働日遅れ", Cell(vm, D(2026, 9, 28)).Tasks.Single().Note);
+
+        // 暦日に切り替えると、9/24 → 9/28 は4日
+        test.Workspace.CountInCalendarDays = true;
+        vm.Refresh();
+
+        Assert.Equal("期限 9/24・4日遅れ", Cell(vm, D(2026, 9, 28)).Tasks.Single().Note);
+    }
+
+    [Fact]
+    public void 完了日時が無い完了タスクは今までどおり期限日のマスに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), completedAt: null));
+
+        var vm = Create(test);
+
+        var task = Assert.Single(Cell(vm, D(2026, 9, 24)).Tasks);
+        Assert.True(task.IsDone);
+        Assert.False(task.IsFaint);
+        Assert.Equal(1, vm.Cells.Sum(c => c.AllTasks.Count));
+    }
+
+    [Fact]
+    public void 期限の無い完了タスクは完了した日のマスに出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", due: null, LocalNoon(2026, 9, 15)));
+
+        var vm = Create(test);
+
+        Assert.True(Assert.Single(Cell(vm, D(2026, 9, 15)).Tasks).IsDone);
+        Assert.Equal(1, vm.Cells.Sum(c => c.AllTasks.Count));
+    }
+
+    [Fact]
+    public void 期限も完了日時も無い完了タスクはどのマスにも出ない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", due: null, completedAt: null));
+
+        Assert.Equal(0, Create(test).Cells.Sum(c => c.AllTasks.Count));
+    }
+
+    [Fact]
+    public void 完了日のマスに出たタスクは空の案内を消す()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        test.Workspace.AddTask(Done("t1", due: null, LocalNoon(2026, 9, 15)));
+
+        // 実働日データも予定も無いが、完了したタスクがある月は空ではない
+        Assert.False(Create(test).ShowsEmptyGuide);
+    }
+
+    [Fact]
+    public void 右パネルの月カレンダーも同じ決まりで出す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));
+
+        var main = new MainViewModel(test.Workspace, today: D(2026, 9, 24));
+
+        Assert.True(Assert.Single(PaneCell(main, D(2026, 9, 24)).Tasks).IsFaint);
+        Assert.Equal("期限 9/24・2実働日遅れ", Assert.Single(PaneCell(main, D(2026, 9, 28)).Tasks).Note);
+    }
+
+    private static DayCellViewModel PaneCell(MainViewModel main, DateOnly date) =>
+        main.PaneMonth.Cells.Single(c => c.Date == date);
 }
 
 /// <summary>読みやすさのための小さな拡張。</summary>

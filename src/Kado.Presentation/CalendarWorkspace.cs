@@ -93,6 +93,22 @@ public sealed class CalendarWorkspace
 
     public ScheduleQuery Schedule { get; }
 
+    /// <summary>
+    /// 期間に現れるタスクを、日付ごとにまとめる。遅れの数え方は <see cref="DueFormatter"/>
+    /// （実働日か暦日かの設定）に従う。月・週・日・一覧はここから引く。
+    /// </summary>
+    public IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTask>> TasksByDate(DateOnly from, DateOnly to) =>
+        Schedule.TasksByDate(from, to, DueFormatter);
+
+    /// <summary>
+    /// 済んだタスクの結果（「2実働日 遅れて完了」など）。期限か完了日時が無ければ null。
+    /// <para>Google から来たタスクは完了日時を持っている。こちらで片付けたものも控えてある。</para>
+    /// </summary>
+    public DoneText? DoneOf(TaskItem task) =>
+        task is { IsDone: true, Due: { } due } && Schedule.CompletedDate(task) is { } completed
+            ? DueFormatter.FormatDone(due, completed)
+            : null;
+
     /// <summary>元に戻す・やり直しの履歴。</summary>
     public UndoStack Undo { get; } = new();
 
