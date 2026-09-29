@@ -75,25 +75,7 @@ public static class WorkAreaGuard
     /// 書けなくても支障はない――そのときは DB 版の印だけが頼りになる。
     /// </para>
     /// </summary>
-    public static void MarkReserved(bool reserved)
-    {
-        try
-        {
-            if (reserved)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(MarkerPath)!);
-                File.WriteAllText(MarkerPath, string.Empty);
-            }
-            else if (File.Exists(MarkerPath))
-            {
-                File.Delete(MarkerPath);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // 書けなくても、DB 版の印が生きていれば次の起動で拾える
-        }
-    }
+    public static void MarkReserved(bool reserved) => WorkAreaMarker.Set(MarkerPath, reserved);
 
     /// <summary>DB を介さない印の置き場所。データベースと同じフォルダ。</summary>
     private static string MarkerPath => Path.Combine(

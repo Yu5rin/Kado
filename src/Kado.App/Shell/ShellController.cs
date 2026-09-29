@@ -92,6 +92,9 @@ public sealed class ShellController : IDisposable
     private readonly EdgeHotZone _hotZone;
     private readonly DispatcherTimer _resizeSettle;
 
+    /// <summary>AppBar が外れたときの受け方と、終了時の片付け（終了印を消す）。</summary>
+    private readonly UndockReaction _undockReaction;
+
     /// <summary>
     /// 開く演出のあいだ、窓の中身側（<c>MainWindow</c>）に触れるための窓口。
     /// <para>
@@ -182,6 +185,7 @@ public sealed class ShellController : IDisposable
         _store = store ?? throw new ArgumentNullException(nameof(store));
 
         _appBar = new AppBarHost(window, store);
+        _undockReaction = new UndockReaction(shell, WorkAreaGuard.MarkReserved);
         _hotZone = new EdgeHotZone();
 
         // 開く演出のあいだ、中身の幅を固定してもらう窓口。MainWindow でなければ
@@ -275,11 +279,9 @@ public sealed class ShellController : IDisposable
                 SlideOutIfIdle(ignorePopups: true);
             }));
 
-        // 全画面アプリなどで外れたら、見た目も合わせる
-        _appBar.Undocked += (_, _) =>
-        {
-            if (_shell.IsPinned) _shell.Mode = ShellMode.Overlay;
-        };
+        // 全画面アプリなどで外れたら、見た目も合わせる。
+        // 終了処理（Dispose）の途中で来たものは、居かたを書き換えない（UndockReaction）
+        _appBar.Undocked += (_, _) => _undockReaction.OnUndocked();
 
         // Esc などキー操作での引っ込め（要件書外だが実機の使い勝手として足した）。
         // マウスが外れたときと同じ経路（SlideOutIfIdle）を通す。独自の経路は作らない。
@@ -952,8 +954,11 @@ public sealed class ShellController : IDisposable
         _resizeSettle.Stop();
 
         // 削ったまま終わらせない。ここを通らずに落ちた場合は、
-        // 次の起動で WorkAreaGuard が戻す
-        _appBar.Dispose();
+        // 次の起動で WorkAreaGuard が戻す。
+        //
+        // 外したときの Undocked で居かたを Overlay に書き換えてはいけない（次の起動で
+        // ピンが外れる）。その書き換えが消していた終了印は、Shutdown が明示的に消す
+        _undockReaction.Shutdown(_appBar.Dispose);
         _hotZone.Dispose();
     }
 
