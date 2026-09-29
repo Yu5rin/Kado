@@ -159,4 +159,60 @@ public class DatabaseIndexTests
 
         Assert.Equal(new HashSet<string> { "multi", "noend" }, found);
     }
+
+    /// <summary>V8 までの状態（V9 の索引が無い）を作る。</summary>
+    private static TestDatabase CreateAtV8()
+    {
+        var db = TestDatabase.CreateWithoutSchema();
+
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 9).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        return db;
+    }
+
+    /// <summary><c>TaskRepository.InRange</c> と同じ形の問い合わせ（期限の索引と完了日時の索引の OR）。</summary>
+    private const string TaskInRangeSql = """
+        SELECT * FROM tasks
+        WHERE (due IS NOT NULL AND due BETWEEN @from AND @to)
+           OR (completed_at IS NOT NULL AND completed_at BETWEEN @lower AND @upper)
+        ORDER BY due IS NULL, due, sort_order, created_at, id;
+        """;
+
+    [Fact]
+    public void V9を当てると完了日時の範囲検索が索引を使う()
+    {
+        using var db = CreateAtV8();
+
+        var parameters = new { from = "2026-09-01", to = "2026-09-30", lower = 1_788_000_000_000L, upper = 1_790_600_000_000L };
+
+        var before = QueryPlan(db.Connection, TaskInRangeSql, parameters);
+        Assert.DoesNotContain(before, line => line.Contains("ix_tasks_completed", StringComparison.Ordinal));
+
+        DatabaseMigrator.Migrate(db.Connection);
+
+        // 期限側（ix_tasks_due）と完了日時側（ix_tasks_completed）の両方を索引で引く。全件走査にならない
+        var after = QueryPlan(db.Connection, TaskInRangeSql, parameters);
+        Assert.Contains(after, line => line.Contains("ix_tasks_completed", StringComparison.Ordinal));
+        Assert.Contains(after, line => line.Contains("ix_tasks_due", StringComparison.Ordinal));
+        Assert.DoesNotContain(after, line => line.StartsWith("SCAN tasks", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void V9を当てても期限だけのタスクの期間検索の結果は変わらない()
+    {
+        using var db = TestDatabase.Create(); // 最新版（V9 込み）
+        var repo = new Repositories.TaskRepository(db.Connection);
+
+        repo.UpsertMany([
+            new() { Id = "in", Title = "期間内", Due = new DateOnly(2026, 9, 24) },
+            new() { Id = "out", Title = "期間外", Due = new DateOnly(2026, 10, 24) },
+            new() { Id = "nodue", Title = "期限なし" },
+        ]);
+
+        Assert.Equal(["in"], repo.InRange(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)).Select(t => t.Id));
+    }
 }

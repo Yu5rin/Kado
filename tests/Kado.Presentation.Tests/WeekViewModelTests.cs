@@ -261,4 +261,30 @@ public class WeekViewModelTests
 
         Assert.Empty(vm.Days.Single(d => d.Date == D(2026, 9, 24)).Blocks);
     }
+
+    /// <summary>その日の昼（端末のローカル）に完了した、という時刻。</summary>
+    private static DateTimeOffset LocalNoon(int y, int m, int d) =>
+        new(new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local));
+
+    [Fact]
+    public void 完了したタスクは終日レーンの完了日に出て_遅れたものは期限日に薄く残る()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/23 期限を 9/25 に片付けた
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "提出", Due = D(2026, 9, 23), IsDone = true, CompletedAt = LocalNoon(2026, 9, 25),
+        });
+
+        var vm = Create(test);
+
+        var onDone = Assert.Single(vm.Days.Single(d => d.Date == D(2026, 9, 25)).Tasks);
+        Assert.False(onDone.IsFaint);
+        Assert.StartsWith("期限 9/23・", onDone.Note);
+
+        var trace = Assert.Single(vm.Days.Single(d => d.Date == D(2026, 9, 23)).Tasks);
+        Assert.True(trace.IsFaint);
+        Assert.Equal("9/25 完了", trace.Note);
+    }
 }

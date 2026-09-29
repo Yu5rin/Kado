@@ -212,6 +212,11 @@
                     <Setter TargetName="Delete" Property="Opacity" Value="1" />
                 </Trigger>
 
+                <!-- 遅れて完了したものが期限日に残した跡は、行ごと薄く出す。片付けたのはこの日ではない -->
+                <DataTrigger Binding="{Binding IsFaint}" Value="True">
+                    <Setter TargetName="Row" Property="Opacity" Value="0.55" />
+                </DataTrigger>
+
                 <!-- 済みは取り消し線で沈める -->
                 <DataTrigger Binding="{Binding IsDone}" Value="True">
                     <Setter TargetName="TaskTitle" Property="Foreground"

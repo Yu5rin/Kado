@@ -123,4 +123,23 @@ public class DayViewModelTests
         vm.GoToNextDay();
         Assert.Equal("会議", Assert.Single(vm.Day.Blocks).Title);
     }
+
+    /// <summary>その日の昼（端末のローカル）に完了した、という時刻。</summary>
+    private static DateTimeOffset LocalNoon(int y, int m, int d) =>
+        new(new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local));
+
+    [Fact]
+    public void 完了したタスクは完了した日の終日レーンに出て_期限日には出ない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 期限は 9/30。9/24 に片付けた（前倒し）
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "提出", Due = D(2026, 9, 30), IsDone = true, CompletedAt = LocalNoon(2026, 9, 24),
+        });
+
+        Assert.True(Assert.Single(Create(test, D(2026, 9, 24)).Day.Tasks).IsDone);
+        Assert.Empty(Create(test, D(2026, 9, 30)).Day.Tasks);
+    }
 }

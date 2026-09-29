@@ -183,12 +183,145 @@ public class SelectedDayViewModelTests
     }
 
     [Fact]
-    public void 期限の無いタスクは右ペインのタスク節には出さない()
+    public void 期限の無い未完了タスクは右ペインのタスク節には出さない()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.AddTask(new TaskItem { Id = "t1", Title = "いつかやる" });
 
         Assert.Empty(Create(test, D(2026, 9, 24)).Tasks);
+    }
+
+    // ------------------------------------------------------------------
+    // 完了したタスクは、完了した日に出す
+    // ------------------------------------------------------------------
+
+    /// <summary>その日の昼（端末のローカル）に完了した、という時刻。</summary>
+    private static DateTimeOffset LocalNoon(int y, int m, int d) =>
+        new(new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local));
+
+    private static TaskItem Done(string id, DateOnly? due, DateTimeOffset? completedAt) => new()
+    {
+        Id = id, Title = $"済み{id}", Due = due, IsDone = true, CompletedAt = completedAt,
+    };
+
+    [Fact]
+    public void 完了したタスクは完了した日に出て期限日には出ない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 期限は 9/30。9/24 に済ませた（前倒し）
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 30), LocalNoon(2026, 9, 24)));
+
+        var completedDay = Create(test, D(2026, 9, 24));
+        var row = Assert.Single(completedDay.Tasks);
+        Assert.True(row.IsDone);
+        Assert.False(row.IsFaint);
+        Assert.Equal("4実働日 早く完了", row.DoneText);
+        Assert.Equal("完了", row.DayLabel);
+
+        // 期限日を選んでも出てこない
+        Assert.Empty(Create(test, D(2026, 9, 30)).Tasks);
+    }
+
+    [Fact]
+    public void 期限どおりの完了はその日に出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 24)));
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        Assert.Equal("期限どおり完了", Assert.Single(vm.Tasks).DoneText);
+        Assert.Equal("0 / 1", vm.TaskCountText);
+    }
+
+    [Fact]
+    public void 遅れて完了したものは期限日に薄く残り完了日が添えられる()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/24 期限を 9/28 に済ませた
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));
+
+        var dueDay = Assert.Single(Create(test, D(2026, 9, 24)).Tasks);
+        Assert.True(dueDay.IsFaint);
+        Assert.Equal("9/28 完了", dueDay.DoneText);
+        Assert.Equal("期限", dueDay.DayLabel);
+        // 薄い跡は静かに出す。遅れの赤は完了した日のほう
+        Assert.False(dueDay.IsLate);
+
+        var completedDay = Assert.Single(Create(test, D(2026, 9, 28)).Tasks);
+        Assert.False(completedDay.IsFaint);
+        Assert.Equal("期限 9/24・2実働日遅れ", completedDay.DoneText);
+        Assert.True(completedDay.IsLate);
+    }
+
+    [Fact]
+    public void 期限日に残る薄い跡は件数に数えない()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));   // 9/24 では薄い跡
+        ws.AddTask(new TaskItem { Id = "t2", Title = "残り", Due = D(2026, 9, 25) });
+
+        var vm = Create(test, D(2026, 9, 24));
+
+        Assert.Equal(2, vm.Tasks.Count);
+        // 分母にも分子にも入れない（別の日に片付けたもの）
+        Assert.Equal("1 / 1", vm.TaskCountText);
+        Assert.Equal(0, vm.DoneTaskCount);
+    }
+
+    [Fact]
+    public void 完了日時が無い完了タスクは今までどおり期限日に出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), completedAt: null));
+
+        var row = Assert.Single(Create(test, D(2026, 9, 24)).Tasks);
+
+        Assert.True(row.IsDone);
+        Assert.Null(row.DoneText);
+        Assert.Equal("期限", row.DayLabel);
+        Assert.Empty(Create(test, D(2026, 9, 25)).Tasks);
+    }
+
+    [Fact]
+    public void 期限の無い完了タスクは完了日に出る()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(Done("t1", due: null, LocalNoon(2026, 9, 24)));
+
+        var vm = Create(test, D(2026, 9, 24));
+        Assert.True(Assert.Single(vm.Tasks).IsDone);
+        Assert.Equal("0 / 1", vm.TaskCountText);
+
+        Assert.Empty(Create(test, D(2026, 9, 25)).Tasks);
+    }
+
+    [Fact]
+    public void 未完了は今までどおり期限の日にかかわらず並ぶ()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "t1", Title = "遅れ", Due = D(2026, 9, 10) });
+        ws.AddTask(new TaskItem { Id = "t2", Title = "先", Due = D(2026, 10, 30) });
+
+        Assert.Equal(["遅れ", "先"], Create(test, D(2026, 9, 24)).Tasks.Select(t => t.Title));
+    }
+
+    [Fact]
+    public void 遅れの日数は暦日で数える設定に従う()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/24（木）期限を 9/28（月）に。実働日なら2、暦日なら4
+        test.Workspace.AddTask(Done("t1", D(2026, 9, 24), LocalNoon(2026, 9, 28)));
+        test.Workspace.CountInCalendarDays = true;
+
+        Assert.Equal("期限 9/24・4日遅れ", Assert.Single(Create(test, D(2026, 9, 28)).Tasks).DoneText);
     }
 
     // ------------------------------------------------------------------
@@ -399,14 +532,16 @@ public class SelectedDayViewModelTests
         test.Workspace.AddTask(new TaskItem
         {
             Id = "t1", Title = "資料作成", Due = due, IsDone = true,
-            CompletedAt = new DateTimeOffset(2026, 9, 28, 17, 0, 0, TimeSpan.FromHours(9)),
+            CompletedAt = LocalNoon(2026, 9, 28),
         });
 
-        var vm = new SelectedDayViewModel(test.Workspace, due, due);
+        // 済ませた日（9/28）には、期限と遅れを添えて出る
+        var vm = new SelectedDayViewModel(test.Workspace, D(2026, 9, 28), due);
         var row = vm.Tasks.Single(t => t.Id == "t1");
 
-        Assert.Equal("2実働日 遅れて完了", row.DoneText);
+        Assert.Equal("期限 9/24・2実働日遅れ", row.DoneText);
         Assert.True(row.IsLate);
+        Assert.False(row.IsFaint);
     }
 
     [Fact]

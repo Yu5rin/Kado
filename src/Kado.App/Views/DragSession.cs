@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
-using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Views;
@@ -35,6 +35,10 @@ internal sealed class DragSession
 
         _origin = e.GetPosition(null);
         _candidate = (sender as FrameworkElement)?.DataContext;
+
+        // 完了したタスクは掴めない。落とした先で変わるのは期限で、チップが出ているのは
+        // 完了した日（や期限日の跡）なので、動かしたはずのチップが動かないことになる
+        if (_candidate is ScheduledTask { IsDone: true }) _candidate = null;
     }
 
     /// <summary>
@@ -129,5 +133,5 @@ internal sealed class DragSession
     }
 
     private static readonly Type[] Kinds =
-        [typeof(EventChipViewModel), typeof(MilestoneViewModel), typeof(TimeBlockViewModel), typeof(TaskItem)];
+        [typeof(EventChipViewModel), typeof(MilestoneViewModel), typeof(TimeBlockViewModel), typeof(ScheduledTask)];
 }

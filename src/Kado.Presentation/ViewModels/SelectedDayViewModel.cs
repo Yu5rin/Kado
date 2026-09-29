@@ -19,8 +19,15 @@ public enum DueEmphasis
     Overdue,
 }
 
-/// <summary>右ペインに並べるタスク1件。</summary>
-public sealed class TaskListItemViewModel(TaskItem task, DueText? due, DoneText? done = null)
+/// <summary>
+/// 右ペイン・一覧に並べるタスク1件。
+/// <para>
+/// <paramref name="placement"/> は、その日にどんな見た目・添え書きで出すかの決め
+/// （<see cref="ScheduledTask"/>）。渡されなければ、期限日に通常の見た目で出す従来の形。
+/// </para>
+/// </summary>
+public sealed class TaskListItemViewModel(
+    TaskItem task, DueText? due, DoneText? done = null, ScheduledTask? placement = null)
 {
     /// <summary>元のタスク。</summary>
     public TaskItem Task { get; } = task;
@@ -41,19 +48,33 @@ public sealed class TaskListItemViewModel(TaskItem task, DueText? due, DoneText?
     public string? DueText => IsDone ? null : due?.Text;
 
     /// <summary>
-    /// 「2実働日 遅れて完了」などの結果。済んでいない、または期限が無ければ null。
+    /// 済んだタスクに添える一行。済んでいない、または添えるものが無ければ null。
     /// <para>
-    /// 期限に間に合ったかどうかは、片付いたあとで振り返るときに要る。Google ToDo が
+    /// 完了した日には、期限に間に合ったかどうかを添える。遅れたものは「期限 9/7・4実働日遅れ」、
+    /// 期限どおり・前倒しは「期限どおり完了」「3実働日 早く完了」。Google ToDo が
     /// 期限と完了日時の両方を持っているので、その差から出している。
+    /// 遅れて完了したものが期限日に残す薄い跡には「9/11 完了」と、完了した日を添える。
     /// </para>
     /// </summary>
-    public string? DoneText => done?.Text;
+    public string? DoneText => placement is { } p ? p.Note : done?.Text;
 
-    /// <summary>遅れて済ませたか。文字の色を変えるのに使う。</summary>
-    public bool IsLate => done is { Kind: DoneKind.Late };
+    /// <summary>
+    /// 期限日に残した薄い跡か（遅れて完了したタスクを、期限だった日に出すもの）。
+    /// 行を薄く出すのに使う。片付けたのはこの日ではない。
+    /// </summary>
+    public bool IsFaint => placement is { IsFaint: true };
+
+    /// <summary>
+    /// 一覧の日の行で、タスクの頭に置く語。未完了と期限日の跡は「期限」、完了した日に出ているものは「完了」。
+    /// <para>完了日が分からないものは期限日に出るので「期限」のまま。</para>
+    /// </summary>
+    public string DayLabel => Task is { IsDone: true, CompletedAt: not null } && !IsFaint ? "完了" : "期限";
+
+    /// <summary>遅れて済ませたか。文字の色を変えるのに使う。薄い跡は静かに出すので対象外。</summary>
+    public bool IsLate => !IsFaint && done is { Kind: DoneKind.Late };
 
     /// <summary>期限より早く済ませたか。</summary>
-    public bool IsEarly => done is { Kind: DoneKind.Early };
+    public bool IsEarly => !IsFaint && done is { Kind: DoneKind.Early };
 
     /// <summary>
     /// 期限の右に添える期限日。「残り 5実働日」だけでは何日なのか分からないため。
@@ -252,7 +273,7 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// 見出しの右に出す「3 / 4」。<b>残っている数と全体</b>。
     /// <para>片付いた数より、あと何件あるかのほうが知りたい。</para>
     /// </summary>
-    public string TaskCountText => $"{RemainingTaskCount} / {_tasks.Count}";
+    public string TaskCountText => $"{RemainingTaskCount} / {_tasks.Count(t => !t.IsFaint)}";
 
     /// <summary>
     /// 「月末まで 5実働日」。今日から月末までの残り。データが無ければ null。
@@ -279,9 +300,14 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// 右ペインに並べるタスク。
     /// <para>
     /// <b>その日が期限のものだけではない。</b>未完了で期限のあるタスクを期限の早い順に
-    /// すべて出し、完了済みは選択日が期限のものだけ添える。先の期限が見えないと、
-    /// 今日やることは分かっても段取りが組めない（モックの右ペインも 10/1 や
-    /// 2027/3/31 期限のタスクを並べている）。
+    /// すべて出し、完了済みは選択日に出すもの（<see cref="ScheduleQuery.PlaceTasks"/>）だけ添える。
+    /// 先の期限が見えないと、今日やることは分かっても段取りが組めない（モックの右ペインも
+    /// 10/1 や 2027/3/31 期限のタスクを並べている）。
+    /// </para>
+    /// <para>
+    /// 完了済みが出るのは<b>完了した日</b>（遅れて完了したものは期限日にも薄く）。
+    /// 完了日が分からないものは期限日、期限の無いものは完了日に出る。
+    /// 見出しの件数には、薄い跡を数えない。
     /// </para>
     /// <para>
     /// 並びは<b>期限の近い順</b>。遅れているものが一番上に来る。同じ期限日の中は
@@ -300,9 +326,12 @@ public sealed class SelectedDayViewModel : ObservableObject
     public bool HasNoTasks => _tasks.Count == 0;
 
     /// <summary>完了した数。</summary>
-    public int DoneTaskCount => _tasks.Count(t => t.IsDone);
+    public int DoneTaskCount => _tasks.Count(t => t.IsDone && !t.IsFaint);
 
-    /// <summary>まだ残っている数。見出しの分子。</summary>
+    /// <summary>
+    /// まだ残っている数。見出しの分子。
+    /// <para>薄い跡（別の日に片付けたもの）は数えない。分母も同じ。</para>
+    /// </summary>
     public int RemainingTaskCount => _tasks.Count(t => !t.IsDone);
 
     /// <summary>
@@ -313,8 +342,7 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// 編集・削除・完了の切り替えができるようにする。
     /// </para>
     /// <para>
-    /// 完了済みは出さない。期限が無いままでは「いつ片付けたか」を表示する場所が
-    /// 無く、<see cref="Tasks"/> 側のように選択日で絞ることもできないため。
+    /// 未完了だけ。期限の無い完了済みは、完了した日の <see cref="Tasks"/> に出る。
     /// </para>
     /// </summary>
     public IReadOnlyList<TaskListItemViewModel> NoDueTasks
@@ -334,15 +362,6 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool ShowsNoDueTasks => _noDueTasks.Count > 0;
-
-    /// <summary>
-    /// 済んだタスクの結果。期限か完了日時が無ければ null。
-    /// <para>Google から来たタスクは完了日時を持っている。こちらで片付けたものも控えてある。</para>
-    /// </summary>
-    private DoneText? DoneOf(TaskItem task) =>
-        task is { IsDone: true, Due: { } due, CompletedAt: { } at }
-            ? _workspace.DueFormatter.FormatDone(due, DateOnly.FromDateTime(at.LocalDateTime))
-            : null;
 
     /// <summary>
     /// データが変わった・「今日」が変わったときに、すべて読み直す。
@@ -388,21 +407,32 @@ public sealed class SelectedDayViewModel : ObservableObject
 
         _milestones = MilestoneRow.For(_date, eventsOnDate, _sources);
 
-        Tasks = (allTasks ?? _workspace.Tasks.All())
-            .Where(_sources.IncludesTask)
-            .Where(t => t.HasDue)
-            // 完了済みはその日に片付いたものだけ添える。過去の完了が積み上がると読めない
-            .Where(t => !t.IsDone || t.Due == _date)
-            // 期限の近い順。同じ期限日の中は並び順→作成日時→識別子の順
+        var candidates = (allTasks ?? _workspace.Tasks.All()).Where(_sources.IncludesTask).ToArray();
+
+        // 未完了は期限のあるものをすべて（先の期限まで見えないと段取りが組めない）。
+        // 完了済みは、この日に出すもの（完了した日、遅れて完了したものの期限日の跡）だけ添える。
+        // どの日にどう出すかの決めは ScheduleQuery.PlaceTasks の1か所
+        var doneHere = _workspace.Schedule
+            .PlaceTasks(candidates.Where(t => t.IsDone), _date, _date, _workspace.DueFormatter);
+        var placements = candidates
+            .Where(t => !t.IsDone && t.HasDue)
+            .Select(t => new ScheduledTask(t, t.Due!.Value))
+            .Concat(doneHere);
+
+        Tasks = placements
+            // 期限の近い順。期限の無い（完了した）タスクはこの日に置く。
+            // 同じ期限日の中は並び順→作成日時→識別子の順
             // （既定は登録が古い順。Id まで見るのは、並びが毎回同じになる保証のため）
-            .OrderBy(t => t.Due)
-            .ThenBy(t => t.SortOrder)
-            .ThenBy(t => t.CreatedAt)
-            .ThenBy(t => t.Id, StringComparer.Ordinal)
-            .Select(t => new TaskListItemViewModel(
-                t,
-                t.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null,
-                DoneOf(t)))
+            .OrderBy(p => p.Source.Due ?? _date)
+            .ThenBy(p => p.IsFaint)
+            .ThenBy(p => p.Source.SortOrder)
+            .ThenBy(p => p.Source.CreatedAt)
+            .ThenBy(p => p.Source.Id, StringComparer.Ordinal)
+            .Select(p => new TaskListItemViewModel(
+                p.Source,
+                p.Source.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null,
+                p.IsFaint ? null : _workspace.DoneOf(p.Source),
+                p))
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),

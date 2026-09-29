@@ -92,7 +92,7 @@
 
         <!-- タスク1件。予定と見分けがつくよう丸印を添える -->
         <DataTemplate x:Key="AgendaTaskTemplate">
-            <Border Background="Transparent" Padding="0,3" Cursor="Hand"
+            <Border x:Name="Row" Background="Transparent" Padding="0,3" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource AgendaTaskMenu}"
                     MouseLeftButtonDown="OnTaskClicked">
@@ -101,7 +101,7 @@
                              VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
 
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="期限" Width="48" LineHeight="17"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding DayLabel}" Width="48" LineHeight="17"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <StackPanel>
@@ -119,6 +119,11 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <!-- 遅れて完了したものが期限日に残した跡は、行ごと薄く出す。片付けたのはこの日ではない -->
+                <DataTrigger Binding="{Binding IsFaint}" Value="True">
+                    <Setter TargetName="Row" Property="Opacity" Value="0.55" />
+                </DataTrigger>
+
                 <!-- 済んだものは取り消し線。消さずに残すのは、いつ片付いたかを見るため -->
                 <!-- 済み色は右ペイン・月ビューと同じ DoneBrush に揃える（項目13） -->
                 <DataTrigger Binding="{Binding IsDone}" Value="True">

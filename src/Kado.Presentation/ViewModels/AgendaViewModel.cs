@@ -228,7 +228,7 @@ public sealed class AgendaViewModel : ObservableObject
         _to = to;
 
         var eventsByDate = _workspace.Schedule.EventsByDate(from, to);
-        var tasksByDue = _workspace.Schedule.TasksByDue(from, to);
+        var tasksByDate = _workspace.TasksByDate(from, to);
 
         var rows = new List<AgendaRowViewModel>();
 
@@ -254,8 +254,8 @@ public sealed class AgendaViewModel : ObservableObject
                     .ToArray()
                 : [];
 
-            var due = tasksByDue.TryGetValue(date, out var t)
-                ? t.Where(_sources.IncludesTask).ToArray()
+            var due = tasksByDate.TryGetValue(date, out var t)
+                ? t.Where(x => _sources.IncludesTask(x.Source)).ToArray()
                 : [];
 
             if (scheduled.Length == 0 && due.Length == 0)
@@ -293,7 +293,7 @@ public sealed class AgendaViewModel : ObservableObject
         var dates = _workspace.Events.All()
             .Where(e => !CalendarWorkspace.IsMilestoneMark(e))
             .SelectMany(e => new[] { e.Date, e.LastDate })
-            .Concat(_workspace.Tasks.All().Where(t => t.Due is not null).Select(t => t.Due!.Value))
+            .Concat(_workspace.Tasks.All().SelectMany(TaskDates))
             .ToArray();
 
         if (dates.Length == 0)
@@ -316,11 +316,24 @@ public sealed class AgendaViewModel : ObservableObject
         return (first < floor ? floor : first, last > ceiling ? ceiling : last);
     }
 
-    private TaskListItemViewModel Row(TaskItem task) =>
-        new(task,
+    /// <summary>
+    /// タスクが現れうる日。期限日と、完了した日。
+    /// <para>完了した日にも出すので、範囲の端を決めるときに見る。</para>
+    /// </summary>
+    private IEnumerable<DateOnly> TaskDates(TaskItem task)
+    {
+        if (task.Due is { } due) yield return due;
+        if (_workspace.Schedule.CompletedDate(task) is { } completed) yield return completed;
+    }
+
+    /// <summary>右ペインと同じ出し方。済んだものには結果を添える。</summary>
+    private TaskListItemViewModel Row(ScheduledTask placed)
+    {
+        var task = placed.Source;
+
+        return new(task,
             task.Due is { } due ? _workspace.DueFormatter.Format(due, _today) : null,
-            // 済んだものには「2実働日 遅れて完了」を添える。右ペインと同じ出し方
-            task is { IsDone: true, Due: { } d, CompletedAt: { } at }
-                ? _workspace.DueFormatter.FormatDone(d, DateOnly.FromDateTime(at.LocalDateTime))
-                : null);
+            _workspace.DoneOf(task),
+            placed);
+    }
 }

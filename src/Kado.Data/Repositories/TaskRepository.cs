@@ -75,6 +75,41 @@ public sealed class TaskRepository(SqliteConnection connection)
             """,
             new { from = SqliteTypeHandlers.ToText(from), to = SqliteTypeHandlers.ToText(to) }).ToArray();
 
+    /// <summary>
+    /// 期間に現れうるタスク。期限が期間内にあるもの、または完了日時が期間の近くにあるもの。
+    /// <para>
+    /// 完了したタスクは「完了した日」のマスに出す（<see cref="ScheduleQuery.TasksByDate"/>）。
+    /// 完了日時は epoch ミリ秒で持っていて、その日がどこの日付になるかは端末のタイムゾーンで
+    /// 決まる。SQL でタイムゾーンを解くことはしないので、ここは<b>前後 1 日ずつ広めに</b>
+    /// 引いて取りこぼしを防ぎ、ローカル日付での絞り込みは呼び出し側（<see cref="ScheduleQuery"/>）が行う。
+    /// 返すのは「候補」であって、期間に入るかどうかの最終判断ではない。
+    /// </para>
+    /// <para>期限の索引（<c>ix_tasks_due</c>）と完了日時の索引（<c>ix_tasks_completed</c>）の OR で引く。</para>
+    /// </summary>
+    public IReadOnlyList<TaskItem> InRange(DateOnly from, DateOnly to)
+    {
+        // UTC の 0 時から前後 1 日。日付変更線の両端（UTC-12〜+14）まで含めても収まる
+        var lower = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            .ToUnixTimeMilliseconds();
+        var upper = new DateTimeOffset(to.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            .ToUnixTimeMilliseconds();
+
+        return _connection.Query<TaskItem>(
+            $"""
+            SELECT {Columns} FROM tasks
+            WHERE (due IS NOT NULL AND due BETWEEN @from AND @to)
+               OR (completed_at IS NOT NULL AND completed_at BETWEEN @lower AND @upper)
+            ORDER BY due IS NULL, due, sort_order, created_at, id;
+            """,
+            new
+            {
+                from = SqliteTypeHandlers.ToText(from),
+                to = SqliteTypeHandlers.ToText(to),
+                lower,
+                upper,
+            }).ToArray();
+    }
+
     /// <summary>期限が決まっていないタスク。並び順→作成日時→識別子の順（登録順）。</summary>
     public IReadOnlyList<TaskItem> WithoutDue() =>
         _connection.Query<TaskItem>(

@@ -292,4 +292,44 @@ public class AgendaViewModelTests
         Assert.All(vm.Rows, r => Assert.All(r.Events,
             e => Assert.False(CalendarWorkspace.IsMilestoneMark(e.Scheduled.Source))));
     }
+
+    /// <summary>その日の昼（端末のローカル）に完了した、という時刻。</summary>
+    private static DateTimeOffset LocalNoon(int y, int m, int d) =>
+        new(new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local));
+
+    [Fact]
+    public void 完了したタスクは完了した日の行に出て_遅れたものは期限日にも薄く残る()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/22 期限を 9/28 に片付けた
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "提出", Due = D(2026, 9, 22), IsDone = true, CompletedAt = LocalNoon(2026, 9, 28),
+        });
+
+        var vm = Create(test);
+
+        var onDone = Assert.Single(Assert.Single(vm.Rows, r => r.Date == D(2026, 9, 28)).Tasks);
+        Assert.Equal("完了", onDone.DayLabel);
+        Assert.StartsWith("期限 9/22・", onDone.DoneText);
+        Assert.False(onDone.IsFaint);
+
+        var trace = Assert.Single(Assert.Single(vm.Rows, r => r.Date == D(2026, 9, 22)).Tasks);
+        Assert.Equal("期限", trace.DayLabel);
+        Assert.Equal("9/28 完了", trace.DoneText);
+        Assert.True(trace.IsFaint);
+    }
+
+    [Fact]
+    public void 完了日が期限より後ろにあれば一覧の範囲は完了日まで広がる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "提出", Due = D(2026, 9, 22), IsDone = true, CompletedAt = LocalNoon(2026, 10, 8),
+        });
+
+        Assert.Equal(D(2026, 10, 8), Create(test).To);
+    }
 }

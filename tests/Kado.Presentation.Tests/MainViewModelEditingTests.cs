@@ -189,6 +189,9 @@ public class MainViewModelEditingTests
 
         vm.ToggleTaskDoneCommand.Execute(task);
 
+        // 完了したタスクは完了した日に出る。片付けたのは（実機の時計での）今日なので、その日を選ぶ
+        vm.SelectedDate = DateOnly.FromDateTime(DateTime.Today);
+
         Assert.True(Assert.Single(vm.SelectedDay.Tasks).IsDone);
         Assert.Equal("0 / 1", vm.SelectedDay.TaskCountText);
 

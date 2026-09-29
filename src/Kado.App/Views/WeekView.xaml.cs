@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Views;
@@ -33,7 +33,7 @@ public partial class WeekView : UserControl
 
     /// <summary>終日レーンのタスクを2回押すと開く。1回押しはドラッグの始まりなので触らない。</summary>
     private void OnAllDayTaskClicked(object sender, MouseButtonEventArgs e) =>
-        Open(sender, e, (main, item) => main.EditTaskChipCommand.Execute(item as TaskItem));
+        Open(sender, e, (main, item) => main.EditTaskChipCommand.Execute(item as ScheduledTask));
 
     private void Open(object sender, MouseButtonEventArgs e, Action<MainViewModel, object> open)
     {
@@ -155,7 +155,7 @@ public partial class WeekView : UserControl
             case MilestoneViewModel milestone:
                 main.MoveEventTo(milestone.Id, date, copy);
                 break;
-            case TaskItem task:
+            case ScheduledTask task:
                 main.MoveTaskTo(task.Id, date, copy);
                 break;
         }

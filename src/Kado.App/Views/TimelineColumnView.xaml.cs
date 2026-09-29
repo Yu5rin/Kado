@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Views;
@@ -180,7 +180,7 @@ public partial class TimelineColumnView : UserControl
                 break;
 
             // タスクが持つのは期限で、時刻は持たない
-            case TaskItem task:
+            case ScheduledTask task:
                 main.MoveTaskTo(task.Id, column.Date, copy);
                 break;
         }

@@ -215,7 +215,7 @@ public class ScheduleQueryTests
     }
 
     [Fact]
-    public void 期限つきタスクが日付ごとにまとまる()
+    public void 未完了の期限つきタスクが期限日ごとにまとまる()
     {
         var (db, query, _, tasks) = Setup();
         using var _db = db;
@@ -225,10 +225,10 @@ public class ScheduleQueryTests
             new TaskItem { Id = "t2", Title = "期限なし" },
         ]);
 
-        var byDue = query.TasksByDue(D(2026, 9, 1), D(2026, 9, 30));
+        var byDate = query.TasksByDate(D(2026, 9, 1), D(2026, 9, 30), TaskPlacementTests.Formatter());
 
-        Assert.Single(byDue);
-        Assert.Single(byDue[D(2026, 9, 24)]);
+        Assert.Single(byDate);
+        Assert.Single(byDate[D(2026, 9, 24)]);
     }
 
     [Fact]

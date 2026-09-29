@@ -207,7 +207,7 @@
         <!-- タスクは帯を持たず、丸印を添えて予定と区別する -->
         <DataTemplate x:Key="TaskChipTemplate">
             <!-- 押せる面を作るため Background を敷く。透明でも当たり判定は残る -->
-            <Border Background="Transparent" Margin="2,2,0,0"
+            <Border x:Name="Chip" Background="Transparent" Margin="2,2,0,0"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource TaskChipMenu}"
                     MouseLeftButtonDown="OnTaskChipClicked"
@@ -217,7 +217,13 @@
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
                     <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}" LineHeight="16"
                                Foreground="{DynamicResource Ink2Brush}"
-                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Tooltip}" />
+                    <!-- 遅れて完了したものが期限日に残す薄い跡だけ、完了した日を添える（「9/11 完了」）。
+                         ふつうの添え書き（期限と遅れ）は幅に入らないのでツールチップで読む -->
+                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding FaintNote}"
+                               Margin="5,0,0,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Ink3Brush}"
+                               Visibility="{Binding FaintNote, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
             </Border>
 
@@ -230,6 +236,11 @@
                     <Setter TargetName="Title" Property="TextDecorations" Value="Strikethrough" />
                     <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource DoneBrush}" />
                     <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource DoneBrush}" />
+                </DataTrigger>
+
+                <!-- 期限日に残した跡は薄く出す。片付けたのはこの日ではない -->
+                <DataTrigger Binding="{Binding IsFaint}" Value="True">
+                    <Setter TargetName="Chip" Property="Opacity" Value="0.55" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>

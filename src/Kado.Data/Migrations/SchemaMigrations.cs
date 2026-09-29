@@ -319,6 +319,23 @@ public static class SchemaMigrations
             WHERE google_id IS NOT NULL;
         """;
 
+    /// <summary>
+    /// V9：完了日で引く検索の索引。
+    /// <para>
+    /// <b><c>ix_tasks_completed</c></b>：<c>tasks.completed_at</c>。完了したタスクを「完了した日」の
+    /// マスに出すため、<c>TaskRepository.InRange</c> が <c>completed_at BETWEEN @from AND @to</c> で
+    /// 引く。索引が無いと、月を開くたびにタスク全件をなめる。未完了のタスクは
+    /// <c>completed_at</c> が空なので、<c>WHERE completed_at IS NOT NULL</c> の部分索引にして
+    /// 小さく保つ（範囲比較は NULL を含まないので、SQLite はこの部分索引を使える。
+    /// <c>DatabaseIndexTests</c> で <c>EXPLAIN QUERY PLAN</c> を確認している）。
+    /// </para>
+    /// </summary>
+    private const string V9 = """
+        CREATE INDEX IF NOT EXISTS ix_tasks_completed
+            ON tasks (completed_at)
+            WHERE completed_at IS NOT NULL;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -330,6 +347,7 @@ public static class SchemaMigrations
         new(6, "タスクの並び順と作成日時を持つ", V6),
         new(7, "予定に Google 側の実カレンダーと、添付の未送信の指定を持つ", V7),
         new(8, "期間検索・所属・tombstone の突き合わせに効く索引を足す", V8),
+        new(9, "完了日で引くタスクの検索に効く索引を足す", V9),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>
