@@ -38,6 +38,9 @@
     <Compile Include="..\..\src\Kado.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
+    <!-- AppBar が外れたときの受け方と終了印。WPF/Win32 に触れない部品だけ切り出してある -->
+    <Compile Include="..\..\src\Kado.App\Shell\UndockReaction.cs" Link="Shell\UndockReaction.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\WorkAreaMarker.cs" Link="Shell\WorkAreaMarker.cs" />
     <!-- 編集ウィンドウを帯の隣へ置く位置計算。Window/Win32 に依存しないので同じ手が使える -->
     <Compile Include="..\..\src\Kado.App\Editing\EditorWindowPlacement.cs" Link="Editing\EditorWindowPlacement.cs" />
   </ItemGroup>
