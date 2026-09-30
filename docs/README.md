@@ -277,6 +277,19 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
   「見えている範囲」だけを壁側から広げるようにして避けた
   （`ShellController.SlideInRight`）。左右で作りを揃えようとすると同じ壊れ方に戻る
 
+- **`Visibility="Collapsed"` でも `DataContext` のバインディングは起動時に評価される。**
+  年・一覧のビューを `{Binding Year}` に結んでいたので、遅延にしたはずの
+  `MainViewModel.Year`／`Agenda` が起動のたびに作られていた。重いビューは
+  `YearForView`／`AgendaForView`（表示するまで null）に結ぶ
+- **最初の HTTP 要求は、経路（プロキシ）の自動検出で呼んだスレッドのまま数秒止まる
+  ことがある（会社の回線）。** 画面のスレッドから始めず、`Task.Run` の中で呼ぶ
+  （更新の確認・実働日の配信の取得）。DPAPI（`DpapiTokenStore`）も同じく、ドメイン参加の
+  PC では最初の呼び出しが遅いことがある
+
+起動が遅いときは `shell.log` の `startup-timing`（印ごとの累計と区間）と
+`startup-slow`（起動中に100msを超えた処理）を見る。仕掛けは
+`Kado.Presentation.Infrastructure.StartupTrace`。
+
 `tests/Kado.App.Tests` が1つ目を静的に検査する。2つ目と3つ目は
 検査できていないので、同じ書き方をしないよう上に残した。
 

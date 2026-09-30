@@ -1067,6 +1067,11 @@
                 <!--
                     出しているビューだけを置く。畳んだビューは計算もしない。
 
+                    年と一覧は重いので、DataContext を YearForView／AgendaForView に結ぶ。
+                    表示するまでは null が渡り、起動時にバインディングが評価されても
+                    ViewModel は作られない（Year／Agenda に直に結ぶと、Collapsed でも
+                    起動時に組み立てられてしまう）
+
                     DockGrip の掴みしろぶんの余地は、この DockPanel（Padding を
                     持たない）自身ではなく中身の Grid に Margin として与える。
                     DockPanel の Background はそのまま窓の端まで塗り切られる
@@ -1093,11 +1098,11 @@
                                    Visibility="{Binding DataContext.IsDayView,
                                                 RelativeSource={RelativeSource AncestorType=Window},
                                                 Converter={StaticResource BoolToVisibility}}" />
-                    <views:YearView DataContext="{Binding Year}"
+                    <views:YearView DataContext="{Binding YearForView}"
                                     Visibility="{Binding DataContext.IsYearView,
                                                  RelativeSource={RelativeSource AncestorType=Window},
                                                  Converter={StaticResource BoolToVisibility}}" />
-                    <views:AgendaView DataContext="{Binding Agenda}"
+                    <views:AgendaView DataContext="{Binding AgendaForView}"
                                       Visibility="{Binding DataContext.IsAgendaView,
                                                    RelativeSource={RelativeSource AncestorType=Window},
                                                    Converter={StaticResource BoolToVisibility}}" />

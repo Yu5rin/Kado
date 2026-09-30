@@ -211,6 +211,12 @@ public sealed class AppBarHost : IDisposable
     /// 済んだ値。<b>希望した値のまま <c>ABM_SETPOS</c> に渡してはいけない</b>
     /// （要件書 7.2）。返ってきた矩形を見て、自分の幅ぶんだけ切り出す。
     /// </para>
+    /// <para>
+    /// <b>ただし採るのは左右だけ。上下は提案した作業領域のまま。</b>Windows 11 は
+    /// 上下を24px 詰めて返すことがあり、採るとタスクバーとの間に隙間ができる
+    /// （<see cref="ShellGeometry.ResolveDocked"/>）。また、確定済みの矩形と同じなら
+    /// <c>ABM_SETPOS</c> も窓の移動も繰り返さない（<see cref="ShellGeometry.NeedsApply"/>）。
+    /// </para>
     /// </summary>
     private void Reposition()
     {
@@ -238,13 +244,40 @@ public sealed class AppBarHost : IDisposable
             $"work=({work.left},{work.top},{work.right},{work.bottom}) " +
             $"QUERYPOS前=({data.rc.left},{data.rc.top},{data.rc.right},{data.rc.bottom})");
 
+        var proposed = data.rc;
+
         SHAppBarMessage(ABM_QUERYPOS, ref data);
 
         ShellDiagnosticsLog.Write(
             $"Reposition QUERYPOS後=({data.rc.left},{data.rc.top},{data.rc.right},{data.rc.bottom})");
 
-        // 調整後の矩形から、改めて自分の幅を切り出す
-        data.rc = ShellGeometry.SliceWidth(data.rc, Edge, width);
+        // 上下は提案（作業領域）のまま、左右だけ QUERYPOS の返事を採る。Windows 11 は
+        // 上下を詰めて返すことがあり、そのまま採るとタスクバーとの間に隙間ができる
+        var next = ShellGeometry.ResolveDocked(proposed, data.rc, Edge, width, out var verticalAdjusted);
+
+        if (verticalAdjusted)
+        {
+            ShellDiagnosticsLog.Write(
+                $"Reposition QUERYPOS が上下を詰めた 提案top/bottom=({proposed.top},{proposed.bottom}) " +
+                $"返答top/bottom=({data.rc.top},{data.rc.bottom}) → 提案の上下を採る " +
+                $"採用=({next.left},{next.top},{next.right},{next.bottom})");
+        }
+
+        // 確定済みの矩形と同じで、窓もそこに居るなら、SETPOS も移動も繰り返さない。
+        // ピン1回で通知が重なって何度も来るが、そのたびに SETPOS を呼ぶと作業領域の
+        // 変更が増え、デスクトップのアイコンの並べ直しを誘う。位置が本当に変わったとき
+        // （WM_SETTINGCHANGE・ABN_POSCHANGED・表示設定の変更のあと）は、上の比較で
+        // 違いが出るのでここを通らない
+        RECT? current = GetWindowRect(hwnd, out var beforeApply) ? beforeApply : null;
+
+        if (!ShellGeometry.NeedsApply(_confirmed, next, current, (int)Math.Ceiling(scale)))
+        {
+            ShellDiagnosticsLog.Write(
+                $"Reposition 変化なしのため SETPOS・移動を省く rect=({next.left},{next.top},{next.right},{next.bottom})");
+            return;
+        }
+
+        data.rc = next;
 
         // ABM_SETPOS を呼ぶ前に、これから頼む値を確定値として控えておく。シェルが
         // 窓を押し出す動きは ABM_SETPOS の呼び出し自体の中で起きうるので、呼んだ

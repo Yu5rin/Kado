@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Kado.App.Shell;
+using Kado.Presentation.Infrastructure;
 using Kado.Presentation.Settings;
 using Kado.Presentation.ViewModels;
 
@@ -73,7 +74,9 @@ public partial class MainWindow : Window, ISlideRevealHost
 
     public MainWindow()
     {
-        InitializeComponent();
+        // 起動の記録。XAML を読んで部品を作る（5つのビューと3つのパネルの入れ物を含む）。
+        // 100ms を超えたら shell.log に1行残る
+        StartupTrace.Measure("MainWindow.InitializeComponent", InitializeComponent);
 
         _clock.Tick += (_, _) => ViewModel?.UpdateNow(DateTime.Now);
 
@@ -144,12 +147,18 @@ public partial class MainWindow : Window, ISlideRevealHost
         };
 
         // 出した直後に一度合わせる。1分待たないと線が出ないのを避ける
+        //
+        // 現在時刻の線と通知の確認（DB を読む）・実働日の配信の確認は、最初の描画を
+        // 待たせないよう、画面が落ち着いてから行う。Loaded の時点ではまだ最初の描画が
+        // 済んでいない。時計（1分ごと）は従来どおりここで始める
         Loaded += (_, _) =>
         {
-            ViewModel?.UpdateNow(DateTime.Now);
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+                StartupTrace.Measure("UpdateNow(通知の確認・配信の確認)", () => ViewModel?.UpdateNow(DateTime.Now)));
+
             _clock.Start();
-            RestorePaneWidths();
-            _settle.Now();
+            StartupTrace.Measure("Loaded:RestorePaneWidths", RestorePaneWidths);
+            StartupTrace.Measure("Loaded:PublishLayoutWidth", _settle.Now);
         };
 
         Closed += (_, _) =>

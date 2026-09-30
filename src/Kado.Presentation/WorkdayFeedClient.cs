@@ -18,10 +18,14 @@ public sealed class WorkdayFeedClient(HttpClient? client = null)
     /// <summary>受け取る上限。実働日データは10年ぶんでも数百KBに収まる。</summary>
     public const int MaxBytes = 8 * 1024 * 1024;
 
-    private readonly HttpClient _client = client ?? new HttpClient
+    /// <summary>
+    /// 最初の通信のときに作る。起動のたびに作っても、その日取りに行かなければ使わない。
+    /// 渡されたものがあればそれを使う。
+    /// </summary>
+    private readonly Lazy<HttpClient> _client = new(() => client ?? new HttpClient
     {
         Timeout = TimeSpan.FromSeconds(30),
-    };
+    });
 
     /// <summary>取りに行って読む。</summary>
     /// <param name="url">配信元。https であること。</param>
@@ -33,7 +37,7 @@ public sealed class WorkdayFeedClient(HttpClient? client = null)
             throw new InvalidOperationException("配信元は https:// で始まる URL にしてください。");
         }
 
-        using var response = await _client
+        using var response = await _client.Value
             .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
 

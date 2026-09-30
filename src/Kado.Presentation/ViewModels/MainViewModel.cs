@@ -136,14 +136,19 @@ public sealed class MainViewModel : ObservableObject
         _weekStart = settings?.WeekStart ?? weekStart;
 
         Shell = new ShellViewModel(shell ?? DockPlacement.Unknown);
-        SourceLists = new SourceListsViewModel(workspace);
-        SelectedDay = new SelectedDayViewModel(workspace, today, today, SourceLists);
+
+        // 起動の記録（StartupTrace）。100ms を超えた組み立ては shell.log に1行ずつ残る
+        SourceLists = StartupTrace.Measure(
+            "SourceListsViewModel", () => new SourceListsViewModel(workspace));
+        SelectedDay = StartupTrace.Measure(
+            "SelectedDayViewModel", () => new SelectedDayViewModel(workspace, today, today, SourceLists));
         BuildViews(today, today);
 
         // 初回起動だけの案内（項目7）。AppSettings ではなく、既に幅の記憶などで
         // 使っている workspace.Settings（DB の汎用キーと値）に乗せる。AppSettings.cs は
         // 別担当の範囲のため触れない
-        _showsOnboarding = _workspace.Settings.Get(OnboardingSeenKey) != "1";
+        _showsOnboarding = StartupTrace.Measure(
+            "設定の読み込み(初回案内)", () => _workspace.Settings.Get(OnboardingSeenKey) != "1");
 
         if (settings is not null)
         {
@@ -154,7 +159,8 @@ public sealed class MainViewModel : ObservableObject
 
             SourceLists.DefaultTaskListId = settings.DefaultTaskListId;
             SourceLists.DefaultTaskListChanged += (_, id) => settings.DefaultTaskListId = id;
-            _reminders = new ReminderService(workspace, settings, _notifier);
+            _reminders = StartupTrace.Measure(
+                "ReminderService", () => new ReminderService(workspace, settings, _notifier));
 
             // BuildViews(today, today) がすでにこれらの値で組んである。以後の比較の
             // 基準にする
@@ -203,8 +209,9 @@ public sealed class MainViewModel : ObservableObject
             CurrentView = settings.StartupView;
 
             // 配信元が決まっていれば、1日1回だけ取りに行く。日付をまたいだあとも
-            // 同じことをするので、判断は1か所（FetchFeedIfDue）に寄せてある
-            FetchFeedIfDue();
+            // 同じことをするので、判断は1か所（FetchFeedIfDue）に寄せてある。
+            // 通信は別スレッドで始まるので、ここで画面のスレッドは止まらない
+            StartupTrace.Measure("実働日の配信の取得(開始)", FetchFeedIfDue);
         }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
@@ -244,7 +251,7 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _atEdge = Shell.Mode != ShellMode.Window;
-        LoadPanes();
+        StartupTrace.Measure("LoadPanes", LoadPanes);
 
         OpenSearchCommand = new RelayCommand(() =>
         {
@@ -362,7 +369,7 @@ public sealed class MainViewModel : ObservableObject
             () => CheckForUpdate is not null,
             ex => StatusMessage = $"更新を確かめられませんでした（{ex.Message}）");
 
-        Sync = new SyncViewModel(google);
+        Sync = StartupTrace.Measure("SyncViewModel", () => new SyncViewModel(google));
 
         // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す。
         //
@@ -460,12 +467,30 @@ public sealed class MainViewModel : ObservableObject
     private YearViewModel? _year;
 
     /// <summary>
+    /// 画面（<c>YearView</c>）へ渡す年ビュー。<b>表示するまで null</b>。
+    /// <para>
+    /// 画面の <c>DataContext</c> を <see cref="Year"/> に結ぶと、<c>Visibility</c> が
+    /// Collapsed でもバインディングが起動時に評価され、遅延にしたはずの年ビュー
+    /// （12か月ぶんを組み立てる）がその場で作られてしまう。こちらは、年ビューを出している
+    /// ときか、一度作ったあとだけ実体を返す。切り替えで出す番になったとき
+    /// （<see cref="CurrentView"/>）に作られ、通知される。
+    /// </para>
+    /// </summary>
+    public YearViewModel? YearForView => _year is not null || _currentView == CalendarView.Year ? Year : null;
+
+    /// <summary>
     /// 一覧ビュー。予定のない日は畳んで流す。
     /// <para><see cref="Year"/> と同じ理由で、初めて表示されたときに組み立てる。</para>
     /// </summary>
     public AgendaViewModel Agenda => _agenda ??= CreateAgenda();
 
     private AgendaViewModel? _agenda;
+
+    /// <summary>
+    /// 画面（<c>AgendaView</c>）へ渡す一覧ビュー。<b>表示するまで null</b>。
+    /// <para><see cref="YearForView"/> と同じ理由。一覧は数年ぶんを組み立てる。</para>
+    /// </summary>
+    public AgendaViewModel? AgendaForView => _agenda is not null || _currentView == CalendarView.Agenda ? Agenda : null;
 
     /// <summary>左パネルのミニ月暦。中央とは独立して月を送れる。</summary>
     public MiniCalendarViewModel MiniCalendar { get; private set; }
@@ -521,6 +546,9 @@ public sealed class MainViewModel : ObservableObject
 
             Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
                 nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
+
+            // 出す番になった年・一覧の実体を画面へ渡す（それまでは null を渡している）
+            Raise(nameof(YearForView), nameof(AgendaForView));
             RaiseHeader();
         }
     }
@@ -1095,13 +1123,13 @@ public sealed class MainViewModel : ObservableObject
             if (_year is not null)
             {
                 _year = CreateYear();
-                Raise(nameof(Year));
+                Raise(nameof(Year), nameof(YearForView));
             }
 
             if (_agenda is not null)
             {
                 _agenda = CreateAgenda();
-                Raise(nameof(Agenda));
+                Raise(nameof(Agenda), nameof(AgendaForView));
             }
         }
     }
@@ -2106,7 +2134,11 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            var result = await _feed.FetchAsync(settings.FeedUrl).ConfigureAwait(true);
+            // 最初の要求では、経路（プロキシ）の自動検出が呼んだスレッドのまま数秒止まる
+            // ことがある（会社の回線）。画面のスレッドで始めないよう、別スレッドから呼ぶ。
+            // 結果を受けて画面に触るところは、これまでどおり画面のスレッドへ戻ってから
+            var url = settings.FeedUrl;
+            var result = await Task.Run(() => _feed.FetchAsync(url)).ConfigureAwait(true);
 
             _workspace.ApplyWorkingDays(result);
             settings.FeedCheckedOn = _today;
@@ -2986,7 +3018,7 @@ public sealed class MainViewModel : ObservableObject
         Day.UpdateNowLine(time);
 
         // 1分ごとに、いま知らせるものがあるかを見る
-        _reminders?.Check(now);
+        StartupTrace.Measure("ReminderService.Check", () => _reminders?.Check(now));
 
         // 日付をまたいだら、その日ぶんの実働日データを取りに行く。
         //
@@ -3083,19 +3115,22 @@ public sealed class MainViewModel : ObservableObject
         var start = _settings?.DayStart;
         var end = _settings?.DayEnd;
 
-        Month = new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
-        {
-            SelectedDate = selected,
-        };
-        MiniCalendar = new MiniCalendarViewModel(_workspace, month, _today, _weekStart)
-        {
-            SelectedDate = selected,
-        };
+        Month = StartupTrace.Measure("MonthViewModel", () =>
+            new MonthViewModel(_workspace, month, _today, _weekStart, sources: SourceLists)
+            {
+                SelectedDate = selected,
+            });
+        MiniCalendar = StartupTrace.Measure("MiniCalendarViewModel", () =>
+            new MiniCalendarViewModel(_workspace, month, _today, _weekStart)
+            {
+                SelectedDate = selected,
+            });
         var hourHeight = _settings?.HourHeight ?? 0;
 
-        Week = new WeekViewModel(
-            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight);
-        Day = new DayViewModel(_workspace, selected, _today, SourceLists, start, end, hourHeight);
+        Week = StartupTrace.Measure("WeekViewModel", () => new WeekViewModel(
+            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight));
+        Day = StartupTrace.Measure("DayViewModel", () => new DayViewModel(
+            _workspace, selected, _today, SourceLists, start, end, hourHeight));
 
         // 年と一覧は重い（項目B-4）。まだ一度も表示していなければ、ここでは作らない。
         // Year／Agenda プロパティを初めて読んだときに組み立てる。すでに表示したことが
@@ -3107,11 +3142,12 @@ public sealed class MainViewModel : ObservableObject
         // こちらはひと月の並びを見せ続ける
         //
         // 月は中央とは別に送れる。組み直すときは、いま出している月を引き継ぐ
-        PaneMonth = new MonthViewModel(_workspace, paneMonth ?? month, _today, _weekStart, sources: SourceLists)
-        {
-            SelectedDate = selected,
-            IsCompact = true,
-        };
+        PaneMonth = StartupTrace.Measure("PaneMonthViewModel", () =>
+            new MonthViewModel(_workspace, paneMonth ?? month, _today, _weekStart, sources: SourceLists)
+            {
+                SelectedDate = selected,
+                IsCompact = true,
+            });
 
         // 作りたてなので、読み直す分は残っていない
         _paneMonthStale = false;
@@ -3121,7 +3157,9 @@ public sealed class MainViewModel : ObservableObject
     /// 年ビューを組み立てる。
     /// <para>選んでいる日・週の始まり・年の出し方は、呼ばれた時点の最新のものを使う。</para>
     /// </summary>
-    private YearViewModel CreateYear()
+    private YearViewModel CreateYear() => StartupTrace.Measure("YearViewModel", CreateYearCore);
+
+    private YearViewModel CreateYearCore()
     {
         var year = new YearViewModel(
             _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart)
@@ -3138,7 +3176,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>一覧ビューを組み立てる。</summary>
-    private AgendaViewModel CreateAgenda()
+    private AgendaViewModel CreateAgenda() => StartupTrace.Measure("AgendaViewModel", CreateAgendaCore);
+
+    private AgendaViewModel CreateAgendaCore()
     {
         var agenda = new AgendaViewModel(_workspace, _today, SourceLists);
         agenda.GoTo(SelectedDate);
@@ -3158,8 +3198,8 @@ public sealed class MainViewModel : ObservableObject
         // Year／Agenda は、まだ作っていなければ Raise しない。バインディングは
         // Collapsed でも読みに来るので、ここで通知すると「読んでいないのに作られる」
         // という、まさに避けたい動きになる
-        if (_year is not null) Raise(nameof(Year));
-        if (_agenda is not null) Raise(nameof(Agenda));
+        if (_year is not null) Raise(nameof(Year), nameof(YearForView));
+        if (_agenda is not null) Raise(nameof(Agenda), nameof(AgendaForView));
 
         RefreshViews();
     }
