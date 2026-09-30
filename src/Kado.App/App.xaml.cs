@@ -16,6 +16,7 @@ using Kado.Data;
 using Kado.Data.Backup;
 using Kado.Presentation;
 using Kado.Presentation.Sync;
+using Kado.Presentation.Update;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App;
@@ -54,7 +55,12 @@ public partial class App : Application
     /// <para>
     /// リポジトリは公開しているので、認証なしで読める。読めなかったとき（通信できない、
     /// 公開済みのリリースが無いなど）は <see cref="UpdateCheckStatus.Failed"/> になり、
-    /// 起動時の確認なら黙って見送る（アプリの動きには差し支えない）。
+    /// 起動時の確認なら黙って見送る（アプリの動きには差し支えない。理由は shell.log に残る）。
+    /// </para>
+    /// <para>
+    /// 実際に見に行くのは、ここから組み立てる Atom フィード（<c>github.com/.../releases.atom</c>）が先。
+    /// この URL は API の回数上限（未認証は1時間60回、同じ出口の IP で共有）を受けるので、
+    /// 新しい版があるときだけ使う（<see cref="UpdateChecker"/>）。
     /// </para>
     /// </summary>
     private const string UpdateApiUrl =
@@ -298,13 +304,16 @@ public partial class App : Application
             // 最初の画面が出てからでよい。ApplicationIdle まで待たせば、初回描画の
             // あとに回る。CleanupOldFiles は他の起動処理を待たない独立した後片付けで、
             // 何かの前提になっていない（_updater フィールド自体はここで先に作っておく）
-            _updater = new UpdateService(UpdateApiUrl);
+            // 更新の確認・ダウンロードの各段階は shell.log に1行ずつ残す（会社のネットワークで
+            // だけ更新できない、という報告を、理由まで追えるようにするため）
+            _updater = new UpdateService(UpdateApiUrl, Shell.ShellDiagnosticsLog.Write);
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _updater.CleanupOldFiles());
 
             // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
             if (window.DataContext is MainViewModel main)
             {
                 main.CheckForUpdate = () => CheckForUpdateAsync(showWhenLatest: true);
+                main.CheckUpdateConnection = () => _updater!.ProbeConnectionAsync();
 
                 // バックアップの書き出し・復元の口を結ぶ。ここを結ばないと、⚙メニューの
                 // 「バックアップ」は常に「この画面からは書き出せません」を返し、
@@ -424,12 +433,8 @@ public partial class App : Application
                     return;
 
                 case UpdateCheckStatus.Failed:
-                    if (showWhenLatest)
-                    {
-                        MessageBox.Show(
-                            MainWindow, "更新を確かめられませんでした。ネットワークをご確認ください。",
-                            "Kado", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
+                    // 起動時の確認は黙って見送る（理由は shell.log に残っている）
+                    if (showWhenLatest) ShowUpdateFailure(result.Failure);
 
                     return;
 
@@ -452,6 +457,44 @@ public partial class App : Application
         finally
         {
             if (showWhenLatest) Mouse.OverrideCursor = null;
+        }
+    }
+
+    /// <summary>
+    /// 更新を確かめられなかったことを、理由に合わせた文言で伝える。
+    /// <para>
+    /// 「ネットワークをご確認ください」だけでは、会社の回線の上限（403）やプロキシの認証（407）の
+    /// ときに次の一手が分からない。失敗したときも、リリースのページへ行ける道を残す
+    /// （自動更新が通らない人ほど、手で入れ替えるしかない）。
+    /// </para>
+    /// </summary>
+    private void ShowUpdateFailure(UpdateFailure? failure)
+    {
+        var message = failure?.Message ?? "更新を確かめられませんでした。ネットワークをご確認ください。";
+        var page = failure?.ReleasePageUrl ?? string.Empty;
+
+        // 応答から来た値ではなく自分で組み立てた URL だが、開く前に行き先を確かめる流儀は揃える
+        var canOpen = page.Length > 0 && ReleaseFeed.IsAllowedDownloadUrl(page);
+
+        if (!canOpen)
+        {
+            MessageBox.Show(MainWindow, message, "Kado", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            MainWindow, message + "\n\nリリースのページを開きますか？",
+            "Kado", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        if (answer != MessageBoxResult.Yes) return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(page) { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // 既定のブラウザが無いなど。開けなくてもアプリの動きには差し支えない
         }
     }
 

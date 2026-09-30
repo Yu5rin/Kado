@@ -11,6 +11,7 @@ CI は Linux なので、画面と Windows の仕組みと Google との実際�
 | `mock-sidebar.html` | サイドバーモードの UI モック（参考） |
 | `google-field-gap.md` | Google 側の入力項目と、この実装との差分。Phase 4 の計画に使う |
 | `google-setup.md` | Google 連携の下ごしらえ。クライアント ID の発行手順 |
+| `調査記録/修正-会社のネットワークで更新できない.md` | 更新が会社の回線で通らなかった件。原因（API の回数上限）、直し方、`shell.log` の読み方 |
 
 ## 食い違いの調査結果
 

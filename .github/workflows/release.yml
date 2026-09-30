@@ -145,6 +145,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # このファイル名は、アプリの更新が API を使わずに URL を組み立てるときにも使う
+          # （UpdateLinks.BuildAssetFileName）。GitHub の API は回数の上限で断られることがあり、
+          # そのとき更新はこの名前だけが頼り。変えるなら UpdateLinks も直す
+          # （UpdateLinksTests がこの行と突き合わせている）
           $exe = "Kado-${{ steps.version.outputs.value }}-win-x64.exe"
           Copy-Item publish/Kado.App.exe $exe
           $zip = '${{ steps.package.outputs.asset }}'

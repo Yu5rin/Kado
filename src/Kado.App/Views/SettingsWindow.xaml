@@ -553,6 +553,27 @@
                                 ToolTip="新しい版があれば知らせます" />
                     </StackPanel>
 
+                    <!--
+                        更新が通らない環境（会社の回線など）で、原因を見るための入口。
+                        最新版でも押せる。診断できる版を入れた時点で最新版になり、更新するものが
+                        無くなって、ダウンロードを試す手段が消えてしまうため。
+                        Atom・API・配布ファイルの置き場に実際に接続し、先頭の一部だけ受け取って切る。
+                        ファイルは保存しない。結果は shell.log にも残る
+                    -->
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="うまく更新できないとき" Style="{StaticResource FieldLabelStyle}" />
+                        <Button Content="通信を確かめる" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding CheckUpdateConnectionCommand}"
+                                ToolTip="更新に使う3か所へ実際に接続して、届くかどうかを確かめます" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="更新の一覧・リリース情報・配布ファイルの置き場へ実際に接続し、届くかを確かめます。最新版でも押せます。ファイルは保存しません。結果は、データの保存先の shell.log にも残ります。" />
+                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource Ink2Brush}"
+                                   Text="{Binding ConnectionCheckText}"
+                                   Visibility="{Binding ConnectionCheckText, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+
                     <StackPanel Margin="0,0,0,0">
                         <Button Content="Kado のページ（GitHub）を開く" HorizontalAlignment="Left"
                                 Style="{StaticResource GhostButtonStyle}"

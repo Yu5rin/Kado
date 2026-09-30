@@ -10,6 +10,11 @@ namespace Kado.Presentation.Update;
 /// <param name="Sha256">ハッシュ。付いていなければ null。</param>
 /// <param name="ReleaseUrl">リリースのページ。</param>
 /// <param name="ReleaseNotes">何が変わったか。</param>
+/// <param name="DetailsUnavailable">
+/// リリースの詳細（変更点の本文・大きさ・ハッシュ）を API から取れなかった。
+/// 取得先は規則から組み立てたもので、<see cref="Sha256"/> は付かず、
+/// <see cref="ReleaseNotes"/> は空になる。更新の窓は、その旨とリリースのページへの導線を出す。
+/// </param>
 public sealed record UpdateInfo(
     Version Version,
     string TagName,
@@ -17,7 +22,8 @@ public sealed record UpdateInfo(
     long SizeBytes,
     string? Sha256,
     string ReleaseUrl,
-    string ReleaseNotes);
+    string ReleaseNotes,
+    bool DetailsUnavailable = false);
 
 /// <summary>
 /// リリースの応答を読む。

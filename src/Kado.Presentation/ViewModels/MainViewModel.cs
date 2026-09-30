@@ -318,7 +318,8 @@ public sealed class MainViewModel : ObservableObject
                 _settings!, _startup, _notifier, SourceLists.Calendars, Sync,
                 ImportWorkingDaysCommand, ImportLegacyBackupCommand, FetchWorkingDayFeedCommand,
                 ExportWorkingDayFeedCommand, RemoveDuplicatesCommand, BackupCommand, RestoreCommand,
-                ImportGoogleClientCommand, CheckForUpdateCommand)),
+                ImportGoogleClientCommand, CheckForUpdateCommand,
+                CheckUpdateConnection)),
             () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
@@ -483,6 +484,15 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     public Func<Task>? CheckForUpdate { get; set; }
+
+    /// <summary>
+    /// 更新の通信を試す（設定の「うまく更新できないとき」）。
+    /// <para>
+    /// <see cref="CheckForUpdate"/> と同じく、中身は Windows 側の仕事。入っていなければ
+    /// 設定画面のボタンを押せなくする。
+    /// </para>
+    /// </summary>
+    public Func<Task<Update.ConnectionProbeReport>>? CheckUpdateConnection { get; set; }
 
     // ------------------------------------------------------------------
     // 状態

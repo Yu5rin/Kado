@@ -77,6 +77,14 @@ unknown」で作れず、続く push も「src refspec … does not match any」
 - SHA256 の照合は本文を見ない。GitHub が添付ファイルごとに持つ `digest` を読む
   （`ReleaseFeed.ReadSha256`）。だから本文の表は人が確かめるためのもので、形を変えても更新は壊れない
 - 更新が落とすのは添付のうち最初の `.exe`。表の並びではなく添付の並びで決まる
+- **GitHub の API が回数の上限（403）で断られたときは、配布物の URL を組み立てて落とす。**
+  会社の共有回線ではこれが毎回起きる。組み立ては
+  `https://github.com/Yu5rin/Kado/releases/download/v{版}/Kado-{版}-win-x64.exe`
+  （`UpdateLinks.BuildAssetFileName`）なので、**`release.yml` の exe の名前を変えたら
+  ここも直す**（`UpdateLinksTests` が突き合わせている）。この場合は本文と SHA256 が取れず、
+  窓には「変更点を読めませんでした。リリースのページで確かめてください」と出る
+- 最新の版は、API ではなく Atom フィード（`releases.atom`）で先に見る。Atom のタグは
+  `vX.Y.Z` の形だけを読む。**タグを `v1.0.6-beta` のような形にすると、更新の窓には出ない**
 
 ## 旧い名前（SlideinaCalendar）
 
