@@ -11,6 +11,7 @@ using Kado.App.Views;
 using Kado.App.Notifications;
 using Kado.App.Settings;
 using Kado.App.Themes;
+using Kado.Presentation.Infrastructure;
 using Kado.Presentation.Settings;
 using Kado.Data;
 using Kado.Data.Backup;
@@ -79,24 +80,14 @@ public partial class App : Application
     private static string CrashLogPath => System.IO.Path.Combine(
         System.IO.Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "crash.log");
 
-    /// <summary>
-    /// 起動にかかった時間の起点。プロセスが生まれた時刻（OS が持つ値）を使う。
-    /// <para>
-    /// <c>Main</c> はビルドのたびに作り直される自動生成コードなので、そこに
-    /// <c>Stopwatch</c> を仕込めない。<c>Process.StartTime</c> ならここだけで済む。
-    /// </para>
-    /// </summary>
-    private static readonly DateTime ProcessStart = System.Diagnostics.Process.GetCurrentProcess().StartTime;
-
-    /// <summary>起動時から今までの経過（ms）。<see cref="ProcessStart"/> からの差。</summary>
-    private static double ElapsedStartupMs() => (DateTime.Now - ProcessStart).TotalMilliseconds;
-
     protected override void OnStartup(StartupEventArgs e)
     {
-        // 起動にかかった時間の記録（項目B-5）。1回の起動で shell.log に1行だけ残す。
-        // 「開始」は ProcessStart（OS が数える、Main より前）からの経過なので、
-        // ここではもう何 ms か経っている
-        var onStartupMs = ElapsedStartupMs();
+        // 起動にかかった時間の記録（項目B-5）。1回の起動で shell.log に1行（startup-timing）と、
+        // 100ms を超えた処理ごとに1行（startup-slow）を残す。起点は Process.StartTime
+        // （OS が数える、Main より前）なので、ここではもう何 ms か経っている。
+        // 書き先を先に決めておかないと、これより前の処理を測れない
+        StartupTrace.Sink = Shell.ShellDiagnosticsLog.Write;
+        StartupTrace.Mark("OnStartup");
 
         base.OnStartup(e);
 
@@ -154,11 +145,13 @@ public partial class App : Application
         // データベースを開く前に、DB を介さない印だけで前回の異常終了を確かめて戻す。
         // 壊れて開けなくなっていた場合、DB 版の印（下の RecoverIfNeeded(_dockStore)）は
         // 読めないので、ここが最後の砦になる（要件書 2.3）
-        Shell.WorkAreaGuard.RecoverIfNeeded();
+        StartupTrace.Measure("WorkAreaGuard.RecoverIfNeeded", Shell.WorkAreaGuard.RecoverIfNeeded);
 
         try
         {
-            _connection = CalendarDatabase.OpenDefault().ConnectAndMigrate();
+            _connection = StartupTrace.Measure(
+                "DB接続・移行", () => CalendarDatabase.OpenDefault().ConnectAndMigrate());
+            StartupTrace.Mark("DB接続後");
         }
         catch (Exception ex) when (ex is SqliteException or InvalidOperationException or IOException)
         {
@@ -171,14 +164,17 @@ public partial class App : Application
         // 失敗しても起動そのものは止めない（AutoBackupService.TryRun が例外を外へ出さない）
         _ = AutoBackupService.RunInBackgroundAsync();
 
-        var workspace = new CalendarWorkspace(_connection);
+        var workspace = StartupTrace.Measure("CalendarWorkspace(画面用)", () => new CalendarWorkspace(_connection));
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない
         // （起動時の1回目は ThemeChoice.Auto。ここで同じ Auto のままなら、
         // Theme.xaml を作り直す2回目は要らない）
-        var settings = _settings = new AppSettings(workspace.Settings);
-        if (settings.Theme != ThemeManager.Current) ThemeManager.Apply(settings.Theme);
+        var settings = _settings = StartupTrace.Measure("AppSettings", () => new AppSettings(workspace.Settings));
+        if (settings.Theme != ThemeManager.Current)
+        {
+            StartupTrace.Measure("ThemeManager.Apply", () => ThemeManager.Apply(settings.Theme));
+        }
 
         // 設定が変わるたびに来るが、配色（Theme）が実際に変わったときだけ当て直す。
         // ThemeManager.Apply は Theme.xaml ごと作り直すので、無関係な設定
@@ -208,24 +204,33 @@ public partial class App : Application
             // トークンは DPAPI で守る。守るべきはこちら。クライアント設定のほうは
             // デスクトップアプリ型である以上どのみち手元に置かれ、秘密として扱えない
             //
+            // DPAPI は会社の PC（ドメイン参加）だと最初の呼び出しが遅いことがある。以下のデータベースを開く・組み立てる処理と重ねられるよう、
+            // 先に別スレッドで読み始める（DpapiTokenStore は読み込みを1本にして、復号できた
+            // 控えを覚える。あとで画面のスレッドが呼んでも二重には復号しない）
+            var tokenStore = new DpapiTokenStore(Path.Combine(
+                Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"));
+            _ = Task.Run(() => tokenStore.Load());
+
             // Google 同期には UI と別の接続・別の CalendarWorkspace を渡す（_syncConnection
             // のコメント参照）。同じファイルを見ているので、書き込んだ内容は同期が
             // 終わった時点で UI 側の接続からも読める。EnsureSources・実働日の組み直しは
             // Sync.Synced を受けた側（MainViewModel）が UI 側の workspace で読み直している
-            _syncConnection = CalendarDatabase.OpenDefault().ConnectAndMigrate();
+            _syncConnection = StartupTrace.Measure(
+                "DB接続・移行(同期用)", () => CalendarDatabase.OpenDefault().ConnectAndMigrate());
             // 同期は実働日・マイルストーンを見ない（GoogleSyncService が触るのは
             // Sources／Events／Tasks／Tombstones／Settings と WorkingDayCalendars だけ）。
             // 全予定を読む LoadWorkingDays を起動のたびに2回払わなくてよいよう、
             // こちらは軽い構築にする（CalendarWorkspace のコンストラクタのコメント参照）
-            var syncWorkspace = new CalendarWorkspace(_syncConnection, loadWorkingDays: false);
-
-            var tokenStore = new DpapiTokenStore(Path.Combine(
-                Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"));
+            var syncWorkspace = StartupTrace.Measure(
+                "CalendarWorkspace(同期用)", () => new CalendarWorkspace(_syncConnection, loadWorkingDays: false));
 
             // ここで一度読んでおく。GoogleConnection が読むタイミングでは
             // 「復号に失敗したか」を伝える先が無いため、先に確かめておく
             // （DpapiTokenStore.DecryptionFailed を見るのは、ここと下の起動時通知の2か所だけ）
-            tokenStore.Load();
+            //
+            // DPAPI は、会社の PC（ドメイン参加）だと最初の呼び出しが遅いことがある。
+            // 復号できた控えは DpapiTokenStore が覚えているので、2回目以降は呼ばない
+            StartupTrace.Measure("DPAPI(トークン読み込み)", () => tokenStore.Load());
 
             _google = new GoogleConnection(
                 syncWorkspace,
@@ -239,49 +244,85 @@ public partial class App : Application
             Shell.WorkAreaGuard.RecoverIfNeeded(_dockStore);
 
             var dock = _dockStore.Load();
+            StartupTrace.Mark("シェル設定の読み込み後");
 
-            window = new MainWindow
+            // 組み立ての順序は、もとの初期化子（MainWindow → Placements → Settings →
+            // DataContext）と同じ。区間ごとに測るため、3つに分けてある
+            var mainWindow = StartupTrace.Measure("MainWindow構築", () => new MainWindow
             {
                 // 閉じたときの置き場所と大きさを覚え、次はそこで出す
                 Placements = new WindowPlacementStore(workspace.Settings),
 
                 // いちばん細くできる幅は設定から。窓の下限をそのまま決める
                 Settings = settings,
-                DataContext = new MainViewModel(
-                    workspace, today, editors: editors, files: files,
-                    googleClient: googleClient, google: _google,
-                    settings: settings, startup: new StartupRegistration(),
-                    notifier: new ToastNotifier(), shell: dock,
-                    // 添付は UI 側から Google ドライブへ直接アップロードする。
-                    // フォルダ ID の控えは UI 側の workspace.Settings に持つ（同じ
-                    // ファイルを同期用の接続とも共有している）
-                    attachmentUploader: new Kado.Presentation.Sync.GoogleDriveAttachmentUploader(
-                        _google, workspace.Settings)),
-            };
+            });
+            window = mainWindow;
+            StartupTrace.Mark("MainWindow構築後");
+
+            var mainViewModel = StartupTrace.Measure("MainViewModel構築", () => new MainViewModel(
+                workspace, today, editors: editors, files: files,
+                googleClient: googleClient, google: _google,
+                settings: settings, startup: new StartupRegistration(),
+                notifier: new ToastNotifier(), shell: dock,
+                // 添付は UI 側から Google ドライブへ直接アップロードする。
+                // フォルダ ID の控えは UI 側の workspace.Settings に持つ（同じ
+                // ファイルを同期用の接続とも共有している）
+                attachmentUploader: new Kado.Presentation.Sync.GoogleDriveAttachmentUploader(
+                    _google, workspace.Settings)));
+            StartupTrace.Mark("MainViewModel構築後");
+
+            // ここでバインディングが評価される。年・一覧のビューは表示するまで
+            // 作らない（MainViewModel.YearForView／AgendaForView）
+            StartupTrace.Measure("DataContext設定(バインディング評価)", () => mainWindow.DataContext = mainViewModel);
 
             // 「MainWindow を作り終えた時点」
-            var windowCreatedMs = ElapsedStartupMs();
+            StartupTrace.Mark("画面作成");
 
             MainWindow = window;
 
             // 閉じるボタンではトレイに入るだけにする。終了はトレイのメニューから
             window.Closing += OnMainWindowClosing;
 
+            // 起動にかかった時間の区間ごとの印。Show の中で何が起きているかを切り分ける
+            // （窓のハンドルができた時点・最初のレイアウトが済んだ時点・Loaded）。
+            // 1回の起動で複数回来ないよう、記録したらすぐ外す
+            void OnSourceInitializedOnce(object? sender, EventArgs args)
+            {
+                window.SourceInitialized -= OnSourceInitializedOnce;
+                StartupTrace.Mark("SourceInitialized");
+            }
+
+            void OnFirstLayoutUpdated(object? sender, EventArgs args)
+            {
+                window.LayoutUpdated -= OnFirstLayoutUpdated;
+                StartupTrace.Mark("最初のLayoutUpdated");
+            }
+
+            void OnLoadedOnce(object? sender, RoutedEventArgs args)
+            {
+                window.Loaded -= OnLoadedOnce;
+                StartupTrace.Mark("Loaded");
+            }
+
+            window.SourceInitialized += OnSourceInitializedOnce;
+            window.LayoutUpdated += OnFirstLayoutUpdated;
+            window.Loaded += OnLoadedOnce;
+
             // 起動にかかった時間の最後の1点。最初の描画が終わったところで
-            // 3つまとめて1行だけ書く（項目B-5）。1回の起動で複数回来ないよう、
-            // 書いたらすぐ外す
+            // 印を1行にまとめて書く（項目B-5）。1回の起動で複数回来ないよう、
+            // 書いたらすぐ外す。これ以後、起動の記録は止まる
             void LogStartupTiming(object? sender, EventArgs args)
             {
                 window.ContentRendered -= LogStartupTiming;
 
-                Shell.ShellDiagnosticsLog.Write(
-                    $"startup-timing 開始→OnStartup={onStartupMs:F0}ms " +
-                    $"→画面作成={windowCreatedMs:F0}ms →最初の描画={ElapsedStartupMs():F0}ms");
+                StartupTrace.Finish("ContentRendered");
             }
 
             window.ContentRendered += LogStartupTiming;
 
+            StartupTrace.Mark("Show開始");
             window.Show();
+            StartupTrace.Mark("Show終了");
 
             // 保存されていたトークンが復号できなかったときだけ、理由を一度伝える。
             // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
@@ -295,7 +336,7 @@ public partial class App : Application
                     "Kado", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
-            SetUpShell(window);
+            StartupTrace.Measure("SetUpShell", () => SetUpShell(window));
 
             // 2本目が起動されたら、こちらを前に出す
             _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
@@ -306,7 +347,8 @@ public partial class App : Application
             // 何かの前提になっていない（_updater フィールド自体はここで先に作っておく）
             // 更新の確認・ダウンロードの各段階は shell.log に1行ずつ残す（会社のネットワークで
             // だけ更新できない、という報告を、理由まで追えるようにするため）
-            _updater = new UpdateService(UpdateApiUrl, Shell.ShellDiagnosticsLog.Write);
+            _updater = StartupTrace.Measure(
+                "UpdateService構築", () => new UpdateService(UpdateApiUrl, Shell.ShellDiagnosticsLog.Write));
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _updater.CleanupOldFiles());
 
             // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
@@ -339,15 +381,20 @@ public partial class App : Application
                 _background.Start();
             }
 
+            StartupTrace.Mark("同期の準備後");
+
             // 起動したときに一度だけ確かめる。最新なら何も出さない。
             // 設定で切れる（⚙メニューからの手動確認はこの設定に関わらず動く。
             // main.CheckForUpdate 経由で呼ぶほうなので、ここでは分岐しない）
             if (settings.CheckForUpdateOnStartup)
             {
-                _ = CheckForUpdateAsync(showWhenLatest: false);
+                // 通信そのものは別スレッドで走る（UpdateService.CheckAsync）。
+                // ここで測るのは、呼び出しが画面のスレッドを止めた時間
+                StartupTrace.Measure("更新の確認(開始)", () => { _ = CheckForUpdateAsync(showWhenLatest: false); });
             }
 
-            WatchForResume(window);
+            StartupTrace.Measure("WatchForResume", () => WatchForResume(window));
+            StartupTrace.Mark("OnStartup終了");
         }
         catch (Exception ex)
         {

@@ -61,9 +61,10 @@ public sealed class FeedAutoFetchTests
     public async Task 起動したその日にまだなら取りに行く()
     {
         using var test = TestWorkspace.Create();
-        var (_, handler, _) = Create(test, new DateOnly(2026, 9, 24));
+        var (_, handler, settings) = Create(test, new DateOnly(2026, 9, 24));
 
-        await WaitForAsync(() => handler.Calls >= 1);
+        // 通信は別スレッドで始まる。取り込みまで済んで「今日は見た」印が付くのを待つ
+        await WaitForAsync(() => settings.FeedCheckedOn == new DateOnly(2026, 9, 24));
 
         Assert.Equal(1, handler.Calls);
     }
@@ -83,7 +84,7 @@ public sealed class FeedAutoFetchTests
         // 日付が変わった。立ち上げ直さなくても取りに行く
         vm.UpdateNow(new DateTime(2026, 9, 25, 0, 1, 0));
 
-        await WaitForAsync(() => handler.Calls >= 1);
+        await WaitForAsync(() => settings.FeedCheckedOn == new DateOnly(2026, 9, 25));
 
         Assert.Equal(1, handler.Calls);
         Assert.Equal(new DateOnly(2026, 9, 25), settings.FeedCheckedOn);
@@ -93,11 +94,11 @@ public sealed class FeedAutoFetchTests
     public async Task 同じ日に何度呼ばれても一度だけ()
     {
         using var test = TestWorkspace.Create();
-        var (vm, handler, _) = Create(
+        var (vm, handler, settings) = Create(
             test, new DateOnly(2026, 9, 24), checkedOn: new DateOnly(2026, 9, 24));
 
         vm.UpdateNow(new DateTime(2026, 9, 25, 0, 1, 0));
-        await WaitForAsync(() => handler.Calls >= 1);
+        await WaitForAsync(() => settings.FeedCheckedOn == new DateOnly(2026, 9, 25));
 
         for (var minute = 2; minute < 10; minute++)
         {
@@ -122,7 +123,10 @@ public sealed class FeedAutoFetchTests
         Assert.Equal(0, handler.Calls);
     }
 
-    /// <summary>取りに行くのは待たない作りなので、済むまで少しだけ待つ。</summary>
+    /// <summary>
+    /// 取りに行くのは待たない作りで、通信は別スレッドで走る。済むまで少しだけ待つ。
+    /// <para>通信の回数ではなく、取り込みまで済んだ印（<c>FeedCheckedOn</c>）で待つ。</para>
+    /// </summary>
     private static async Task WaitForAsync(Func<bool> done)
     {
         for (var i = 0; i < 100 && !done(); i++) await Task.Delay(10);

@@ -39,29 +39,48 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
     /// </summary>
     public bool DecryptionFailed { get; private set; }
 
+    /// <summary>
+    /// 復号できた控えを覚えておく。<see cref="Load"/> は起動のうちに何度も呼ばれ
+    /// （接続の有無の確認）、そのたびに DPAPI を呼んでいた。会社の PC（ドメイン参加）では
+    /// DPAPI の最初の呼び出しが遅いことがあり、繰り返すぶんだけ画面が止まる。
+    /// <see cref="Save"/> と <see cref="Clear"/> では捨てる。
+    /// </summary>
+    private OAuthTokens? _loaded;
+
+    /// <summary>
+    /// 読み込みと控えの出し入れを1本にする。起動時に裏のスレッドで先に読んでおき
+    /// （<c>App.xaml.cs</c>）、あとから画面のスレッドが呼んでも二重に復号しない。
+    /// </summary>
+    private readonly object _gate = new();
+
     public OAuthTokens? Load()
     {
-        try
+        lock (_gate)
         {
-            if (!File.Exists(_path)) return null;
+            if (_loaded is not null) return _loaded;
 
-            var plain = ProtectedData.Unprotect(
-                File.ReadAllBytes(_path), Entropy, DataProtectionScope.CurrentUser);
+            try
+            {
+                if (!File.Exists(_path)) return null;
 
-            return JsonSerializer.Deserialize<OAuthTokens>(plain);
-        }
-        catch (CryptographicException)
-        {
-            // 別のユーザーや別の PC の控え。読めないものは無いものとして扱い、繋ぎ直させる。
-            // 理由は DecryptionFailed で一度だけ伝える。ファイルは消しておかないと、
-            // 次に起動したときも同じ失敗を繰り返し、毎回この印が立ってしまう
-            DecryptionFailed = true;
-            TryDelete();
-            return null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return null;
+                var plain = ProtectedData.Unprotect(
+                    File.ReadAllBytes(_path), Entropy, DataProtectionScope.CurrentUser);
+
+                return _loaded = JsonSerializer.Deserialize<OAuthTokens>(plain);
+            }
+            catch (CryptographicException)
+            {
+                // 別のユーザーや別の PC の控え。読めないものは無いものとして扱い、繋ぎ直させる。
+                // 理由は DecryptionFailed で一度だけ伝える。ファイルは消しておかないと、
+                // 次に起動したときも同じ失敗を繰り返し、毎回この印が立ってしまう
+                DecryptionFailed = true;
+                TryDelete();
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return null;
+            }
         }
     }
 
@@ -69,18 +88,31 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
     {
         ArgumentNullException.ThrowIfNull(tokens);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        lock (_gate)
+        {
+            // 書き換えたら、覚えていた控えは古い。書けなかったときも読み直させる
+            _loaded = null;
 
-        var cipher = ProtectedData.Protect(
-            JsonSerializer.SerializeToUtf8Bytes(tokens), Entropy, DataProtectionScope.CurrentUser);
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
 
-        // 書いている途中で落ちても、元の控えを壊さない
-        var temporary = _path + ".tmp";
-        File.WriteAllBytes(temporary, cipher);
-        File.Move(temporary, _path, overwrite: true);
+            var cipher = ProtectedData.Protect(
+                JsonSerializer.SerializeToUtf8Bytes(tokens), Entropy, DataProtectionScope.CurrentUser);
+
+            // 書いている途中で落ちても、元の控えを壊さない
+            var temporary = _path + ".tmp";
+            File.WriteAllBytes(temporary, cipher);
+            File.Move(temporary, _path, overwrite: true);
+        }
     }
 
-    public void Clear() => TryDelete();
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _loaded = null;
+            TryDelete();
+        }
+    }
 
     private void TryDelete()
     {

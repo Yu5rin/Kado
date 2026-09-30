@@ -61,6 +61,65 @@ internal static class ShellGeometry
     }
 
     /// <summary>
+    /// <c>ABM_QUERYPOS</c> が返した矩形（<paramref name="queried"/>）から、実際に
+    /// <c>ABM_SETPOS</c> へ渡す矩形を決める。<b>上下は提案のまま、左右だけ返事を採る。</b>
+    /// <para>
+    /// Windows 11 では、タスクバーを除いた作業領域（rcWork）をそのまま上下に提案しても、
+    /// <c>ABM_QUERYPOS</c> が下端を24px 詰めて返してくることがある（実機：提案 bottom=1032 に対し
+    /// 返事 bottom=1008）。そのまま採ると、窓の下とタスクバーのあいだに隙間ができる。
+    /// rcWork は他の AppBar とタスクバーをすでに除いた領域なので、上下をそこに合わせても
+    /// 他の AppBar とは重ならない。左右は、同じ辺に他の AppBar が居るときの譲り合いが
+    /// 返事に入るので、返事を採る。
+    /// </para>
+    /// <para>返事の左右が空（幅0以下）のときは、左右も提案のままにする。</para>
+    /// </summary>
+    /// <param name="proposed"><see cref="ProposeRect"/> で提案した矩形。</param>
+    /// <param name="queried"><c>ABM_QUERYPOS</c> が返した矩形。</param>
+    /// <param name="verticalAdjusted">返事が上下を提案と違う値にしていたら true（記録用）。</param>
+    internal static RECT ResolveDocked(
+        RECT proposed, RECT queried, DockEdge edge, int width, out bool verticalAdjusted)
+    {
+        verticalAdjusted = queried.top != proposed.top || queried.bottom != proposed.bottom;
+
+        var rc = proposed;
+
+        if (queried.right > queried.left)
+        {
+            rc.left = queried.left;
+            rc.right = queried.right;
+        }
+
+        return SliceWidth(rc, edge, width);
+    }
+
+    /// <summary>
+    /// 交渉の結果を <c>ABM_SETPOS</c> と窓の移動へ反映する必要があるか。
+    /// <para>
+    /// すでに確定している矩形と同じで、窓もそこに居るなら、もう一度 <c>ABM_SETPOS</c> を
+    /// 呼んで窓を動かす意味が無い（作業領域の変更の通知が増え、デスクトップのアイコンの
+    /// 並べ直しを誘う）。確定値と違う、まだ確定していない、窓がずれている、のどれかなら
+    /// 反映する。
+    /// </para>
+    /// </summary>
+    /// <param name="confirmed">前回確定した矩形。まだ無ければ null。</param>
+    /// <param name="next">今回の交渉で決まった矩形。</param>
+    /// <param name="actual">いまの窓の矩形（物理ピクセル）。取れなければ null。</param>
+    /// <param name="tolerance">窓の位置の食い違いとして許すピクセル数。DIP との丸めぶん。</param>
+    internal static bool NeedsApply(RECT? confirmed, RECT next, RECT? actual, int tolerance)
+    {
+        if (confirmed is not { } known || !Same(known, next, 0)) return true;
+        if (actual is not { } window) return true;
+
+        return !Same(window, next, tolerance);
+    }
+
+    private static bool Same(RECT a, RECT b, int tolerance) =>
+        Math.Abs(a.left - b.left) <= tolerance &&
+        Math.Abs(a.top - b.top) <= tolerance &&
+        Math.Abs(a.right - b.right) <= tolerance &&
+        Math.Abs(a.bottom - b.bottom) <= tolerance;
+
+    /// <summary>
     /// 矩形から、寄せている辺の側に自分の幅ぶんだけ切り出す。
     /// <para><c>ABM_QUERYPOS</c> への提案と、返ってきた矩形からの切り出しの両方で使う。</para>
     /// </summary>

@@ -6,6 +6,7 @@ using Kado.Data.Import;
 using Kado.Data.Models;
 using Kado.Data.Repositories;
 using Kado.Presentation.Editing;
+using Kado.Presentation.Infrastructure;
 
 namespace Kado.Presentation;
 
@@ -55,17 +56,25 @@ public sealed class CalendarWorkspace
         Tombstones = new TombstoneRepository(connection);
         Schedule = new ScheduleQuery(Events, Tasks);
 
-        EnsureSources();
+        // 起動の記録（StartupTrace）。100ms を超えたら shell.log に1行残る
+        StartupTrace.Measure("CalendarWorkspace.EnsureSources", EnsureSources);
 
         if (loadWorkingDays)
         {
             // 起動のたびに印からも組み立てる。保存されているのは Excel から読んだ分だけで、
             // 同期で渡ってきた印は入っていない。ここで重ねないと、取り込んだ端末では
             // 出ていた実働日数が、起動し直すと消える
-            LoadWorkingDays();
+            // （メソッドに MemberNotNull を付けてあるので、ラムダには包まず using で測る）
+            using (StartupTrace.Measure("CalendarWorkspace.LoadWorkingDays(全予定を読む)"))
+            {
+                LoadWorkingDays();
+            }
 
             // 実働日データを読んだあとでないと補えない
-            BackfillMilestones();
+            using (StartupTrace.Measure("CalendarWorkspace.BackfillMilestones"))
+            {
+                BackfillMilestones();
+            }
         }
         else
         {

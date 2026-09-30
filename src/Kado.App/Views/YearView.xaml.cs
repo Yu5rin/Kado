@@ -70,6 +70,14 @@ public partial class YearView : UserControl
         InitializeComponent();
 
         _settle = new Settle(Fit);
+
+        // 年ビューは表示するまで DataContext が null（MainViewModel.YearForView）。
+        // 表示に切り替わった直後、大きさの通知のほうが先に来て Fit が空振りしたままに
+        // ならないよう、実体が渡ったところで測り直す
+        DataContextChanged += (_, args) =>
+        {
+            if (args.NewValue is YearViewModel) _settle.Poke();
+        };
     }
 
     /// <summary>
