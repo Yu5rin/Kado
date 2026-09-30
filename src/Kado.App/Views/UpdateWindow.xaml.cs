@@ -36,9 +36,21 @@ public partial class UpdateWindow : Window
 
         VersionText.Text = $"いま {UpdateService.CurrentVersion} ／ 新しい版 {info.Version}";
 
-        NotesText.Text = info.ReleaseNotes is { Length: > 0 } notes
-            ? notes
-            : "（何が変わったかの記載はありません）";
+        if (info.DetailsUnavailable)
+        {
+            // 配布元への問い合わせが上限などで通らず、詳細を取れなかった（取得先は組み立てたもの）。
+            // 変更点の本文が無いことを隠さず、リリースのページで確かめる道を示す
+            NotesText.Text = "変更点を読めませんでした。リリースのページで確かめてください。";
+
+            Say("配布元から詳しい情報を取れなかったため、ファイルの照合（SHA256）は行わずに更新します。" +
+                "気になるときは、リリースのページから手で差し替えてください。");
+        }
+        else
+        {
+            NotesText.Text = info.ReleaseNotes is { Length: > 0 } notes
+                ? notes
+                : "（何が変わったかの記載はありません）";
+        }
 
         // Program Files のような場所に置かれていると、自分では入れ替えられない
         if (!UpdateService.CanWriteToInstallDirectory(out var directory))
@@ -86,7 +98,8 @@ public partial class UpdateWindow : Window
         }
         catch (Exception ex)
         {
-            Say($"更新できませんでした（{ex.Message}）。リリースのページから手で差し替えてください。");
+            // 例外の型名やメッセージは出さず、理由に合わせた文言にする。詳細は shell.log にある
+            Say(UpdateFailure.DownloadMessage(ex));
         }
         finally
         {

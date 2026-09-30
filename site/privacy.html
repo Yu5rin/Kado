@@ -36,7 +36,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
 <body>
 <main>
   <h1>プライバシーポリシー</h1>
-  <p class="updated">Kado ／ 2026年9月25日</p>
+  <p class="updated">Kado ／ 2026年9月30日</p>
 
   <h2>要点</h2>
   <ul>
@@ -84,9 +84,12 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
   </p>
   <table>
     <tr>
-      <th>更新の確認<br>（api.github.com）</th>
+      <th>更新の確認<br>（github.com ／ api.github.com）</th>
       <td>アプリの<strong>起動のたびと</strong>、⚙メニューの「更新を確認…」を押したときに、
-          新しい版が出ていないかを確かめます。この通信で GitHub 側に渡るのは、通信元の
+          新しい版が出ていないかを確かめます。まず github.com のリリースの一覧（Atom フィード）を見て、
+          新しい版があるときだけ api.github.com へ変更点などの詳しい情報を取りに行きます。
+          設定の「うまく更新できないとき」の「通信を確かめる」を押したときも、同じ通信先へ
+          接続を試します（ファイルは保存しません）。この通信で GitHub 側に渡るのは、通信元の
           IP アドレスと、アプリの版を含む User-Agent（名乗り）です。この通信に失敗しても、
           更新を確かめられないだけで、アプリの動作には差し支えません。</td>
     </tr>

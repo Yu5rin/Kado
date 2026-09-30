@@ -4,47 +4,9 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
-using System.Text.Json;
 using Kado.Presentation.Update;
 
 namespace Kado.App.Update;
-
-/// <summary>いま確かめている状態。押し直したときに「最新です」と誤って言わないための4状態。</summary>
-public enum UpdateCheckStatus
-{
-    /// <summary>いま別の確認が進んでいて、始められなかった。</summary>
-    AlreadyChecking,
-
-    /// <summary>確かめられなかった（通信できない、応答を読めないなど）。</summary>
-    Failed,
-
-    /// <summary>最新版を使っている。</summary>
-    UpToDate,
-
-    /// <summary>新しい版がある。</summary>
-    UpdateAvailable,
-}
-
-/// <summary>
-/// <see cref="UpdateService.CheckAsync"/> の結果。
-/// <para>
-/// 以前は「新しい版があれば <see cref="UpdateInfo"/>、無ければ <c>null</c>」だけを返していたが、
-/// これだと「確認中で始められなかった」ときも <c>null</c> になり、呼び出し側が「最新です」と
-/// 誤って伝えてしまっていた。状態を4つに分けて区別できるようにする。
-/// </para>
-/// </summary>
-/// <param name="Status">いまの状態。</param>
-/// <param name="Info"><see cref="UpdateCheckStatus.UpdateAvailable"/> のときだけ入る。</param>
-public readonly record struct UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Info = null)
-{
-    public static UpdateCheckResult AlreadyChecking() => new(UpdateCheckStatus.AlreadyChecking);
-
-    public static UpdateCheckResult Failed() => new(UpdateCheckStatus.Failed);
-
-    public static UpdateCheckResult UpToDate() => new(UpdateCheckStatus.UpToDate);
-
-    public static UpdateCheckResult Available(UpdateInfo info) => new(UpdateCheckStatus.UpdateAvailable, info);
-}
 
 /// <summary>
 /// GitHub Releases を見て、新しい版に入れ替える。
@@ -61,7 +23,7 @@ public readonly record struct UpdateCheckResult(UpdateCheckStatus Status, Update
 /// そのまま実行するので、判断の中身を試せるところへ置いてある。
 /// </para>
 /// </summary>
-public sealed class UpdateService(string apiUrl, Action<string>? log = null)
+public sealed class UpdateService
 {
     /// <summary>入れ替え直後の起動だと新しいほうへ伝える合図。</summary>
     public const string AfterUpdateArgument = "--after-update";
@@ -74,8 +36,6 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
 
     private const string OldSuffix = ".old";
 
-    private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(15);
-
     /// <summary>
     /// 落とすときの、読み取りが止まったとみなす長さ。
     /// <para>
@@ -86,10 +46,18 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
     /// </summary>
     private static readonly TimeSpan DownloadIdleTimeout = TimeSpan.FromSeconds(60);
 
-    /// <summary>リダイレクトを自分で辿るときの上限。</summary>
-    private const int MaxRedirects = 5;
+    private readonly Action<string> _log;
+    private readonly UpdateChecker _checker;
 
     private int _checking;
+
+    /// <param name="apiUrl">新しい版を見に行く API の URL。Atom フィードの URL はここから組み立てる。</param>
+    /// <param name="log">更新の確認・ダウンロード・入れ替えの各段階を1行ずつ渡す先（shell.log）。</param>
+    public UpdateService(string apiUrl, Action<string>? log = null)
+    {
+        _log = log ?? (_ => { });
+        _checker = new UpdateChecker(apiUrl, CurrentVersion, CreateClient, _log);
+    }
 
     /// <summary>いま確認中か。連打されても通信は1本に保つ。</summary>
     public bool IsChecking => Volatile.Read(ref _checking) != 0;
@@ -114,38 +82,17 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
     {
         if (Interlocked.Exchange(ref _checking, 1) != 0)
         {
-            log?.Invoke("すでに確認中です");
+            _log("更新の確認: すでに確認中です");
             return UpdateCheckResult.AlreadyChecking();
         }
 
         try
         {
-            using var http = CreateClient(CheckTimeout);
-
-            using var response = await http.GetAsync(apiUrl, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-            if (ReleaseFeed.Parse(json) is not { } info)
-            {
-                log?.Invoke("リリースの中身を読めませんでした");
-                return UpdateCheckResult.Failed();
-            }
-
-            if (!ReleaseFeed.IsNewerThan(info, CurrentVersion))
-            {
-                log?.Invoke($"最新版を使っています（いま {CurrentVersion}）");
-                return UpdateCheckResult.UpToDate();
-            }
-
-            log?.Invoke($"新しい版があります（{CurrentVersion} → {info.Version}）");
-            return UpdateCheckResult.Available(info);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
-        {
-            log?.Invoke($"更新を確かめられませんでした: {ex.Message}");
-            return UpdateCheckResult.Failed();
+            // Atom を先に見て、新しい版があるときだけ API へ行く。流れは UpdateChecker。
+            // 経路（プロキシ）を調べる処理は、自動設定の取得で数秒止まることがあるので、
+            // 画面のスレッドから外して走らせる
+            return await Task.Run(() => _checker.CheckAsync(cancellationToken), cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -154,13 +101,29 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
     }
 
     /// <summary>
+    /// 通信を試す（設定の「うまく更新できないとき」）。
+    /// <para>Atom・API・配布ファイルの置き場に接続し、先頭だけ受け取って切る。ファイルは保存しない。</para>
+    /// </summary>
+    public Task<ConnectionProbeReport> ProbeConnectionAsync(CancellationToken cancellationToken = default) =>
+        Task.Run(() => _checker.ProbeConnectionAsync(cancellationToken), cancellationToken);
+
+    /// <summary>
     /// 落とす。
     /// <para>ハッシュが付いていれば確かめる。合わなければ捨てて例外にする。</para>
     /// <para>
     /// <b>リダイレクトは自分で辿る。</b><c>AllowAutoRedirect</c> の既定（true）だと
     /// 最初の URL しか行き先を確かめず、途中で許されない場所へ跳ばされてもそのまま
     /// 辿って落としてしまう。行き先が変わるたびに <see cref="ReleaseFeed.IsAllowedDownloadUrl"/>
-    /// を通す。
+    /// を通す（<see cref="UpdateHttp.FollowAllowedRedirectsAsync"/>）。
+    /// </para>
+    /// <para>
+    /// <b>ハッシュを確かめられない取得先（API を使わずに組み立てたもの）でも、</b>
+    /// 中身が Web ページ（プロキシのエラーページなど）でないことと、先頭が実行ファイルの形
+    /// （<c>MZ</c>）であることは、置く前に確かめる。落としたものはそのまま実行するので、
+    /// エラーページを exe として置いてしまうと、起動できなくなる。
+    /// </para>
+    /// <para>
+    /// 各段階を1行ずつ記録する。失敗したときは、例外の連鎖と受信済みバイト数を残す。
     /// </para>
     /// </summary>
     public async Task<string> DownloadAsync(
@@ -170,64 +133,108 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
 
         if (!ReleaseFeed.IsAllowedDownloadUrl(info.DownloadUrl))
         {
+            _log($"更新のダウンロード: 取得先が許されていない場所のため中止 {UpdateDiagnostics.SafeUrl(info.DownloadUrl)}");
             throw new InvalidOperationException("更新の取得先が許されていない場所です。");
         }
 
         Directory.CreateDirectory(TempDir);
         var path = Path.Combine(TempDir, $"Kado-{info.TagName}.exe");
 
+        _log($"更新のダウンロード: 開始 {UpdateDiagnostics.SafeUrl(info.DownloadUrl)}" +
+             $"（想定 {info.SizeBytes}バイト, SHA256={(info.Sha256 is { Length: > 0 } ? "あり" : "なし")}）");
+
+        // 経路を調べる処理は、自動設定の取得で数秒止まることがある。画面のスレッドを止めない
+        await Task.Run(() => _checker.LogNetworkEnvironmentOnce(info.DownloadUrl), CancellationToken.None)
+            .ConfigureAwait(false);
+
         // 読み取りが止まったときだけ打ち切る。1バイトでも来るたびに、ここから数え直す
         using var idle = new CancellationTokenSource(DownloadIdleTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, idle.Token);
 
+        long done = 0;
+
         try
         {
             // AllowAutoRedirect は使わず、行き先を自分で確かめながら辿る
-            using var http = CreateClient(Timeout.InfiniteTimeSpan, allowAutoRedirect: false);
+            using var http = CreateClient(allowAutoRedirect: false);
 
-            using var response = await FollowAllowedRedirectsAsync(http, info.DownloadUrl, linked.Token)
+            using var response = await UpdateHttp
+                .FollowAllowedRedirectsAsync(
+                    http, info.DownloadUrl, "application/octet-stream", linked.Token,
+                    m => _log("更新のダウンロード: " + m))
                 .ConfigureAwait(false);
 
             // ヘッダを受け取れた。ここから改めて読み取りを見張り直す
             idle.CancelAfter(DownloadIdleTimeout);
 
-            response.EnsureSuccessStatusCode();
+            // 状態コード・Content-Type・転送先を残す。403/407 の区別と、中身がエラーページに
+            // すり替わっていないか（text/html）は、会社の回線の切り分けに直結する
+            _log("更新のダウンロード: " + UpdateDiagnostics.DescribeResponse(response));
+
+            if (UpdateDiagnostics.DescribeRedirect(info.DownloadUrl, response) is { } redirect)
+            {
+                _log("更新のダウンロード: " + redirect);
+            }
+
+            UpdateHttp.EnsureSuccess(response);
+
+            var contentType = response.Content.Headers.ContentType?.ToString();
+
+            if (UpdateDiagnostics.IsHtml(contentType)) throw new UnexpectedContentException(contentType!);
 
             var total = response.Content.Headers.ContentLength ?? info.SizeBytes;
 
-            await using var source = await response.Content
-                .ReadAsStreamAsync(linked.Token).ConfigureAwait(false);
-
-            await using var target = File.Create(path);
-
-            var buffer = new byte[81920];
-            long done = 0;
-            int read;
-
-            while ((read = await source.ReadAsync(buffer, linked.Token).ConfigureAwait(false)) > 0)
+            await using (var source = await response.Content
+                             .ReadAsStreamAsync(linked.Token).ConfigureAwait(false))
+            await using (var target = File.Create(path))
             {
-                // 来た。次のアイドルタイムアウトをまた最初から数える
-                idle.CancelAfter(DownloadIdleTimeout);
+                var buffer = new byte[81920];
+                int read;
 
-                await target.WriteAsync(buffer.AsMemory(0, read), linked.Token).ConfigureAwait(false);
+                while ((read = await source.ReadAsync(buffer, linked.Token).ConfigureAwait(false)) > 0)
+                {
+                    // 来た。次のアイドルタイムアウトをまた最初から数える
+                    idle.CancelAfter(DownloadIdleTimeout);
 
-                done += read;
-                if (total > 0) progress?.Report((double)done / total);
+                    await target.WriteAsync(buffer.AsMemory(0, read), linked.Token).ConfigureAwait(false);
+
+                    done += read;
+                    if (total > 0) progress?.Report((double)done / total);
+                }
+            }
+
+            // ハッシュを確かめられなくても、実行ファイルの形はしているか
+            if (!await StartsWithExecutableHeaderAsync(path, linked.Token).ConfigureAwait(false))
+            {
+                throw new UnexpectedContentException(contentType ?? "(なし)");
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // 呼び出し側が止めたのではなく、読み取りが1分止まって諦めた
             TryDelete(path);
-            throw new TimeoutException(
+
+            var timeout = new TimeoutException(
                 $"更新の取得が{(int)DownloadIdleTimeout.TotalSeconds}秒間止まったので中止しました。");
+
+            LogDownloadFailure(timeout, done, info);
+            throw timeout;
         }
-        catch
+        catch (OperationCanceledException)
+        {
+            TryDelete(path);
+            _log($"更新のダウンロード: 中止された（受信済み {done}バイト）");
+            throw;
+        }
+        catch (Exception ex)
         {
             // 書きかけを残さない。次に読むと壊れたものを掴む
             TryDelete(path);
+            LogDownloadFailure(ex, done, info);
             throw;
         }
+
+        _log($"更新のダウンロード: 受信を終えた（{done}バイト）");
 
         if (info.Sha256 is { Length: > 0 } expected)
         {
@@ -237,17 +244,33 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
             if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
             {
                 TryDelete(path);
+                _log($"更新の検証: SHA256が一致しない（期待={expected}, 実際={actual}）");
                 throw new InvalidOperationException("落としたファイルが壊れています（ハッシュが合いません）。");
             }
 
-            log?.Invoke("落としたファイルのハッシュを確かめました");
+            _log("更新の検証: SHA256が一致した");
         }
         else
         {
-            log?.Invoke("リリースにハッシュが無いので確かめていません（通信は HTTPS で守られています）");
+            _log("更新の検証: リリースにハッシュが無いので確かめていません（通信は HTTPS で守られています）");
         }
 
         return path;
+    }
+
+    private void LogDownloadFailure(Exception ex, long received, UpdateInfo info) =>
+        _log($"更新のダウンロード: 失敗。{UpdateDiagnostics.Summarize(ex)}" +
+             $"（受信済み {received}バイト / 想定 {info.SizeBytes}バイト）");
+
+    /// <summary>先頭の2バイトが <c>MZ</c>（Windows の実行ファイル）か。</summary>
+    private static async Task<bool> StartsWithExecutableHeaderAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+
+        var head = new byte[2];
+        var read = await stream.ReadAsync(head, cancellationToken).ConfigureAwait(false);
+
+        return UpdateDiagnostics.LooksLikeExecutable(head.AsSpan(0, read));
     }
 
     /// <summary>
@@ -281,7 +304,7 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
     {
         if (Environment.ProcessPath is not { Length: > 0 } current)
         {
-            log?.Invoke("いまの exe の場所が分かりませんでした");
+            _log("更新の入れ替え: いまの exe の場所が分かりませんでした");
             return false;
         }
 
@@ -306,12 +329,12 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
 
             TryDelete(downloadedExe);
 
-            log?.Invoke("新しい版に入れ替えて起動しました");
+            _log("更新の入れ替え: 新しい版に入れ替えて起動しました");
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            log?.Invoke($"入れ替えに失敗しました: {ex.Message}");
+            _log($"更新の入れ替え: 失敗。{UpdateDiagnostics.Summarize(ex)}");
 
             // 途中で転んだなら、名前を戻して元の版で動けるようにする
             if (renamed)
@@ -320,11 +343,11 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
                 {
                     TryDelete(current);
                     File.Move(backup, current);
-                    log?.Invoke("元の版に戻しました");
+                    _log("更新の入れ替え: 元の版に戻しました");
                 }
                 catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
                 {
-                    log?.Invoke($"元に戻すのにも失敗しました: {rollback.Message}。" +
+                    _log($"更新の入れ替え: 元に戻すのにも失敗。{UpdateDiagnostics.Summarize(rollback)}。" +
                                 $"{backup} を {current} に手で戻してください");
                 }
             }
@@ -350,59 +373,25 @@ public sealed class UpdateService(string apiUrl, Action<string>? log = null)
 
     // ------------------------------------------------------------------
 
-    private static HttpClient CreateClient(TimeSpan timeout, bool allowAutoRedirect = true)
+    /// <summary>
+    /// 通信に使うクライアント。<b>タイムアウトは無限</b>にしてある（確認は要求ごとの上限、
+    /// ダウンロードは読み取りが止まったときの上限を、呼ぶ側が掛ける）。
+    /// </summary>
+    private static HttpClient CreateClient(bool allowAutoRedirect)
     {
         var handler = new HttpClientHandler { AllowAutoRedirect = allowAutoRedirect };
-        var http = new HttpClient(handler) { Timeout = timeout };
+        var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
 
         // GitHub の API は名乗らないと断ることがある
         http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("Kado", CurrentVersion.ToString()));
 
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        // Accept は要求ごとに付ける。以前はここで JSON を既定にしていたので、実行ファイルを
+        // 取りに行く要求にまで「JSON をください」と言っていた。中身とヘッダの不一致を見る
+        // 経路（会社のプロキシなど）に弾かれる余地を残す理由は無い
 
         return http;
     }
-
-    /// <summary>
-    /// リダイレクトを自分で辿り、行き先が変わるたびに許可された場所かを確かめる。
-    /// <para>
-    /// GitHub の Releases はアセットの実体を <c>githubusercontent.com</c> 側へ
-    /// リダイレクトすることが多い。<c>AllowAutoRedirect</c> の既定はリダイレクト先を
-    /// 検査しないので、応答の途中で差し替えられても気づけない。
-    /// </para>
-    /// </summary>
-    private static async Task<HttpResponseMessage> FollowAllowedRedirectsAsync(
-        HttpClient http, string url, CancellationToken cancellationToken)
-    {
-        for (var hop = 0; hop <= MaxRedirects; hop++)
-        {
-            if (!ReleaseFeed.IsAllowedDownloadUrl(url))
-            {
-                throw new InvalidOperationException("更新の取得先が許されていない場所です。");
-            }
-
-            var response = await http
-                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!IsRedirect(response.StatusCode) || response.Headers.Location is not { } location)
-            {
-                return response;
-            }
-
-            // 相対な Location もあり得るので、いまの URL を基準に組み立てる
-            url = location.IsAbsoluteUri ? location.ToString() : new Uri(new Uri(url), location).ToString();
-
-            response.Dispose();
-        }
-
-        throw new InvalidOperationException("更新の取得でリダイレクトが多すぎました。");
-    }
-
-    private static bool IsRedirect(HttpStatusCode status) => status is
-        HttpStatusCode.MovedPermanently or HttpStatusCode.Found or
-        HttpStatusCode.SeeOther or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
     private static string ComputeSha256(string path)
     {

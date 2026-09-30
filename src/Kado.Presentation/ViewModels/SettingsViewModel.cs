@@ -63,7 +63,8 @@ public sealed class SettingsViewModel : ObservableObject
         Infrastructure.RelayCommand? backup = null,
         Infrastructure.RelayCommand? restore = null,
         Infrastructure.RelayCommand? importGoogleClient = null,
-        Infrastructure.AsyncRelayCommand? checkForUpdate = null)
+        Infrastructure.AsyncRelayCommand? checkForUpdate = null,
+        Func<Task<Update.ConnectionProbeReport>>? checkUpdateConnection = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startup = startup ?? NullStartupRegistration.Instance;
@@ -84,6 +85,14 @@ public sealed class SettingsViewModel : ObservableObject
         RestoreCommand = restore;
         ImportGoogleClientCommand = importGoogleClient;
         CheckForUpdateCommand = checkForUpdate;
+
+        // 渡されなければ押せない（null のコマンドは、バインドしたボタンを無効にする）
+        CheckUpdateConnectionCommand = checkUpdateConnection is null
+            ? null
+            : new Infrastructure.AsyncRelayCommand(
+                () => RunConnectionCheckAsync(checkUpdateConnection),
+                onError: ex => ConnectionCheckText =
+                    "通信を確かめられませんでした。" + Update.UpdateFailure.Reason(ex));
 
         TestNotifyCommand = new Infrastructure.RelayCommand(TestNotify);
         OpenCrashLogCommand = new Infrastructure.RelayCommand(OpenCrashLog, () => HasCrashLog);
@@ -154,6 +163,39 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>更新を確かめる。⚙メニューから「Kado について」節へ移した。</summary>
     public Infrastructure.AsyncRelayCommand? CheckForUpdateCommand { get; }
+
+    /// <summary>
+    /// 更新の通信を試す。「Kado について」の「うまく更新できないとき」に置く。
+    /// <para>
+    /// <b>最新版でも押せる</b>のが要点。診断できる版を入れた時点で最新版になり、更新するものが
+    /// 無くなって、ダウンロードを試す手段が消えてしまうため。
+    /// </para>
+    /// </summary>
+    public Infrastructure.AsyncRelayCommand? CheckUpdateConnectionCommand { get; }
+
+    private string? _connectionCheckText;
+
+    /// <summary>通信の試験の結果。試す前は null。</summary>
+    public string? ConnectionCheckText
+    {
+        get => _connectionCheckText;
+        private set
+        {
+            if (_connectionCheckText == value) return;
+
+            _connectionCheckText = value;
+            Raise(nameof(ConnectionCheckText));
+        }
+    }
+
+    private async Task RunConnectionCheckAsync(Func<Task<Update.ConnectionProbeReport>> probe)
+    {
+        ConnectionCheckText = "確かめています…（30秒ほどかかることがあります）";
+
+        var report = await probe().ConfigureAwait(true);
+
+        ConnectionCheckText = report.ToDisplayText();
+    }
 
     /// <summary>
     /// 試しに1つ出してみる。

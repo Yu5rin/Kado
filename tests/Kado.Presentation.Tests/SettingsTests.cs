@@ -114,6 +114,40 @@ public class SettingsTests
     }
 
     [Fact]
+    public async Task 通信を確かめる入口は結果を画面用の文にして出す()
+    {
+        using var test = TestWorkspace.Create();
+        var report = new Kado.Presentation.Update.ConnectionProbeReport(
+        [
+            new("更新の一覧（Atom）", true, "12KBを受け取りました"),
+            new("リリース情報（API）", false, "HTTP 403 Forbidden、問い合わせ回数の上限"),
+            new("配布ファイルの置き場", true, "256KBを受け取りました"),
+        ]);
+
+        var vm = new SettingsViewModel(
+            new AppSettings(test.Workspace.Settings), checkUpdateConnection: () => Task.FromResult(report));
+
+        Assert.Null(vm.ConnectionCheckText);   // 押す前は何も出さない
+
+        vm.CheckUpdateConnectionCommand!.Execute(null);
+
+        // AsyncRelayCommand は async void。走り終わるのを待つ
+        for (var i = 0; i < 100 && vm.CheckUpdateConnectionCommand.IsRunning; i++) await Task.Delay(20);
+
+        Assert.Contains("HTTP 403 Forbidden", vm.ConnectionCheckText, StringComparison.Ordinal);
+        Assert.Contains("成功", vm.ConnectionCheckText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 通信の試験が渡されなければ押せない()
+    {
+        using var test = TestWorkspace.Create();
+        var vm = new SettingsViewModel(new AppSettings(test.Workspace.Settings));
+
+        Assert.Null(vm.CheckUpdateConnectionCommand);
+    }
+
+    [Fact]
     public void 扱えない環境では自動起動を出さない()
     {
         using var test = TestWorkspace.Create();
