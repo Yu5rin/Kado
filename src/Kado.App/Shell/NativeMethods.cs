@@ -104,6 +104,9 @@ internal static class NativeMethods
     internal const int MONITOR_DEFAULTTOPRIMARY = 0x00000001;
     internal const int MONITOR_DEFAULTTONEAREST = 0x00000002;
 
+    /// <summary><see cref="MONITORINFOEX.dwFlags"/> に立つ、主画面を表す印。</summary>
+    internal const uint MONITORINFOF_PRIMARY = 0x00000001;
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct POINT
     {

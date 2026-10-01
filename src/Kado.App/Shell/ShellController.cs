@@ -66,6 +66,21 @@ public sealed class ShellController : IDisposable
     /// </summary>
     private static readonly Duration SlideInTime = new(TimeSpan.FromMilliseconds(220));
 
+    /// <summary>
+    /// 画面の構成が変わったあと、これだけ続報が来なくなったら決め直す。
+    /// <para>
+    /// 構成の変更は続けて何度も来る（モニタが1枚ずつ現れる、倍率が切り替わる）。
+    /// 作業領域もすぐには追い付かないので、少し長めに待つ。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan DisplaySettle = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>
+    /// 置き直しを見送れる回数の上限（<see cref="DisplaySettle"/> ごとに1回）。
+    /// 20回で約 14 秒。それでも演出などが終わらなければ、構わず決め直す。
+    /// </summary>
+    private const int MaxDisplayDeferrals = 20;
+
     /// <summary>引っ込む時間。出るときより短くする。用が済んだものを見送らない。</summary>
     private static readonly Duration SlideOutTime = new(TimeSpan.FromMilliseconds(160));
 
@@ -91,6 +106,19 @@ public sealed class ShellController : IDisposable
     private readonly AppBarHost _appBar;
     private readonly EdgeHotZone _hotZone;
     private readonly DispatcherTimer _resizeSettle;
+
+    /// <summary>
+    /// 画面の構成（モニタの数・位置・倍率）が変わったあと、落ち着くのを待つタイマー。
+    /// <para>
+    /// ログオン直後は、構成が数秒〜数十秒かけて何度も変わる。<c>WM_DISPLAYCHANGE</c> と
+    /// <c>WM_DPICHANGED</c> は続けて何度も来るので、そのたびに置き直さず、
+    /// 来なくなってから1回だけ決め直す（<see cref="RelayoutForDisplay"/>）。
+    /// </para>
+    /// </summary>
+    private readonly DispatcherTimer _displaySettle;
+
+    /// <summary>落ち着くのを待っているあいだに来た、画面の構成が変わった原因。ログ用。</summary>
+    private readonly List<string> _displayCauses = [];
 
     /// <summary>AppBar が外れたときの受け方と、終了時の片付け（終了印を消す）。</summary>
     private readonly UndockReaction _undockReaction;
@@ -118,6 +146,24 @@ public sealed class ShellController : IDisposable
     private Rect? _workBeforeDock;
 
     private bool _disposed;
+
+    /// <summary>
+    /// 画面の構成が変わったあとの置き直しを、演出・つまみ・交渉が済むまで見送った回数。
+    /// 何かが引っかかって終わらなくても、待ち続けないための上限に使う。
+    /// </summary>
+    private int _displayDeferrals;
+
+    /// <summary>直近に置き場所を決めたときの画面の構成。変わったかをログに残すため。</summary>
+    private IReadOnlyList<ScreenInfo>? _lastScreens;
+
+    /// <summary>置き直しの最中。自分の置き直しが起こした倍率の変更の知らせを、また数えないため。</summary>
+    private bool _relayouting;
+
+    /// <summary>
+    /// 直前に引っ込めるのを見送った理由。同じ理由を 0.5 秒ごとに書き続けないため、
+    /// 変わったときだけ <c>shell.log</c> へ書く。引っ込めたら消す。
+    /// </summary>
+    private string? _lastSlideOutSkip;
 
     /// <summary>いま引っ込んでいる最中。終わるまで重ねて呼ばない。</summary>
     private bool _slidingOut;
@@ -198,6 +244,15 @@ public sealed class ShellController : IDisposable
             _resizeSettle.Stop();
             _appBar.Resize(_shell.DockWidth);
         };
+
+        _displaySettle = new DispatcherTimer { Interval = DisplaySettle };
+        _displaySettle.Tick += (_, _) => RelayoutForDisplay();
+
+        // 画面の構成が変わったら、今の居かたのまま置き場所と見張る帯を決め直す。
+        // 起動時に1回合わせただけだと、ログオン直後に構成が落ち着いたあとの画面では
+        // 窓が全部の画面の外にあったり、存在しない画面の端を見張り続けたりする
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        _window.DpiChanged += OnWindowDpiChanged;
 
         _shell.ModeChanged += (_, mode) => Apply(mode);
         _shell.EdgeChanged += (_, _) => Apply(_shell.Mode);
@@ -302,8 +357,110 @@ public sealed class ShellController : IDisposable
     /// </summary>
     public event EventHandler<string>? DockFailed;
 
-    /// <summary>起動時に、控えてあった居かたへ戻す。</summary>
-    public void Restore() => Apply(_shell.Mode);
+    /// <summary>
+    /// 起動時に、控えてあった居かたへ戻す。
+    /// <para>
+    /// <b>控えてあった位置が今の画面に乗っているかを、先に確かめる。</b>前日と画面の構成が
+    /// 違う（ノート PC を持ち出す・戻す）ことは普通にあり、そのまま使うと窓が全部の画面の外に
+    /// 置かれたり、存在しない画面の端を見張ったりする。乗っていなければ、主画面（画面端なら
+    /// 同じ端）へ置き直す。乗っていれば何も変えない。判断は <see cref="ShellGeometry"/>。
+    /// 保存値・今の画面・置き直したかは <c>shell.log</c> の <c>startup-restore</c> 行に残す。
+    /// </para>
+    /// </summary>
+    public void Restore()
+    {
+        var mode = _shell.Mode;
+
+        try
+        {
+            RestoreBeforeApply(mode);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 判断に失敗しても、居かたへ戻すこと自体は止めない
+            ShellDiagnosticsLog.Write($"startup-restore 判断に失敗した mode={mode} {ex.GetType().Name}: {ex.Message}");
+        }
+
+        Apply(mode);
+
+        // 起動の途中（ログオン直後）は、画面の構成がまだ変わることがある。落ち着いたあとで
+        // もう一度、今の構成で置き場所と帯を確かめる。同じなら何も動かない
+        QueueRelayout("startup");
+
+        var result = CurrentWindowRect();
+
+        ShellDiagnosticsLog.Write(
+            $"startup-restore 結果 mode={mode} visible={_window.IsVisible} Left={_window.Left:F1} Top={_window.Top:F1} " +
+            $"GetWindowRect={(result is { } rect ? ShellGeometry.FormatRect(rect) : "取得不可")}");
+    }
+
+    /// <summary>
+    /// <see cref="Restore"/> の下ごしらえ。窓の矩形と今の画面から、置き直しが要るか決めて記録する。
+    /// </summary>
+    private void RestoreBeforeApply(ShellMode mode)
+    {
+        var scale = Scale();
+        var screens = Screens.All(scale);
+        var current = CurrentWindowRect();
+
+        _lastScreens = screens;
+
+        if (mode == ShellMode.Window)
+        {
+            // 最大化・最小化の窓は、Windows が置き場所を決める。矩形を触らない
+            if (current is not { } saved || _window.WindowState != WindowState.Normal)
+            {
+                ShellDiagnosticsLog.Write(
+                    $"startup-restore mode=Window saved={(current is { } r ? ShellGeometry.FormatRect(r) : "取得不可")} " +
+                    $"state={_window.WindowState} screens={ShellGeometry.DescribeScreens(screens)} → 触らない");
+                return;
+            }
+
+            var fit = ShellGeometry.RestoreWindow(saved, screens);
+
+            ShellDiagnosticsLog.Write(ShellGeometry.FormatWindowRestoreLine(saved, screens, fit));
+
+            if (fit.Relocated) PlaceWindow(fit.Placed);
+
+            return;
+        }
+
+        var decision = ShellGeometry.DecideEdge(current, _shell.Edge, _shell.DockWidth, screens);
+
+        ShellDiagnosticsLog.Write(ShellGeometry.FormatEdgeRestoreLine(
+            mode, _shell.Edge, _shell.DockWidth, current, screens, decision));
+
+        // 窓が今の画面のどこにも乗っていなければ、先に主画面の端へ寄せておく。
+        // このあとの Apply は「窓が乗っている画面」を基準に置くので、乗せておかないと
+        // 画面外の窓から最も近い画面を引くことになり、見張る帯とずれる
+        if (decision.Relocated && decision.ScreenIndex >= 0) PlaceWindow(decision.Target);
+    }
+
+    /// <summary>いまの窓の矩形（物理ピクセル）。ハンドルが無い・取れなければ <c>null</c>。</summary>
+    private NativeMethods.RECT? CurrentWindowRect()
+    {
+        var handle = new WindowInteropHelper(_window).Handle;
+
+        return handle != IntPtr.Zero && NativeMethods.GetWindowRect(handle, out var rect) ? rect : null;
+    }
+
+    /// <summary>
+    /// 窓を物理ピクセルの矩形へ置く。1 DIP 未満のずれでは代入しない。
+    /// </summary>
+    private void PlaceWindow(NativeMethods.RECT rect)
+    {
+        var scale = Scale();
+
+        void Set(DependencyProperty property, double value, double current)
+        {
+            if (ShellGeometry.ShouldMove(value, current)) _window.SetValue(property, value);
+        }
+
+        Set(Window.LeftProperty, rect.left / scale, _window.Left);
+        Set(Window.TopProperty, rect.top / scale, _window.Top);
+        Set(Window.WidthProperty, rect.Width / scale, _window.Width);
+        Set(Window.HeightProperty, rect.Height / scale, _window.Height);
+    }
 
     /// <summary>前に出す。トレイやホットキーからも呼ぶ。</summary>
     public void Show()
@@ -388,7 +545,7 @@ public sealed class ShellController : IDisposable
         // 約350msごとに繰り返す
         if (_window.IsVisible && !_slidingOut) return;
 
-        ApplyOverlayBounds();
+        ApplyOverlayBounds(verify: true);
 
         // 定位置（このあと動かさない値）を、左の演出が Width を縮める前に確定しておく
         var restingLeft = _window.Left;
@@ -615,19 +772,43 @@ public sealed class ShellController : IDisposable
     {
         if (_shell.Mode != ShellMode.Overlay) return;
 
-        if (_slidingOut || !_window.IsVisible) return;
+        if (_slidingOut) return;
+
+        // 窓が見えていない（トレイへ閉じた・隠れた）。外れるのを見張っても引っ込める
+        // ものが無いので、帯の見張りへ戻す。戻さないと、窓を出し直すまで帯が反応せず、
+        // 「端にマウスを当てても出てこない」ままになる
+        if (!_window.IsVisible)
+        {
+            NoteSlideOutSkip("窓が見えていないので、帯の見張りへ戻した");
+            _hotZone.WatchEdge();
+            return;
+        }
 
         // 幅をつまんでいる最中。手が窓の外に出ていても引っ込めない
-        if (_shell.IsResizing) return;
+        if (_shell.IsResizing)
+        {
+            NoteSlideOutSkip("幅をつまんでいる");
+            return;
+        }
 
         // 自分が出したメニュー・ポップアップが開いている最中。狭いスライドでは
         // メニューが窓の右端をはみ出し、その上へカーソルを動かすとホットゾーンが
         // 「窓から外れた」と判定していた。開いているあいだは引っ込めない（項目3）
-        if (!ignorePopups && PopupActivityHooks.Tracker.IsAnyOpen) return;
+        if (!ignorePopups && PopupActivityHooks.Tracker.IsAnyOpen)
+        {
+            NoteSlideOutSkip("メニュー・ポップアップが開いている");
+            return;
+        }
 
         // 自分が出した窓（編集画面など）に移っただけなら、引っ込めない。
         // 予定を書いている最中に本体が消えると、書き終わって戻る先が無くなる
-        if (OwnsForeground()) return;
+        if (OwnsForeground())
+        {
+            NoteSlideOutSkip("自分の別のウィンドウが前面にある");
+            return;
+        }
+
+        _lastSlideOutSkip = null;
 
         var resting = _window.Left;
         _slidingOut = true;
@@ -644,6 +825,23 @@ public sealed class ShellController : IDisposable
                 _window.Left = resting;
                 _hotZone.WatchEdge();
             });
+    }
+
+    /// <summary>
+    /// 引っ込めるのを見送った理由を <c>shell.log</c> へ残す。
+    /// <para>
+    /// 見送ると、窓は出たままになる。<c>shell.log</c> に <c>OffScreenLeft</c> が出ない起動が
+    /// あったとき、見送られていたのか、そもそも判定が走っていなかったのかを分けられる。
+    /// 外れているあいだは約 0.5 秒ごとに来るので、理由が変わったときだけ書く。
+    /// </para>
+    /// </summary>
+    private void NoteSlideOutSkip(string reason)
+    {
+        if (string.Equals(_lastSlideOutSkip, reason, StringComparison.Ordinal)) return;
+
+        _lastSlideOutSkip = reason;
+
+        ShellDiagnosticsLog.Write($"SlideOut 見送り 理由={reason} visible={_window.IsVisible} edge={_shell.Edge}");
     }
 
     /// <summary>
@@ -728,8 +926,8 @@ public sealed class ShellController : IDisposable
                 }, IntPtr.Zero);
 
             ShellDiagnosticsLog.Write(
-                $"startup virtualScreen=({SystemParameters.VirtualScreenLeft:F0}," +
-                $"{SystemParameters.VirtualScreenWidth:F0}) primaryScreenWidth=" +
+                $"startup virtualScreen=(left={SystemParameters.VirtualScreenLeft:F0}," +
+                $"width={SystemParameters.VirtualScreenWidth:F0}) primaryScreenWidth=" +
                 $"{SystemParameters.PrimaryScreenWidth:F0} monitors=[{string.Join(" ", monitors)}]");
         }
         catch
@@ -952,6 +1150,11 @@ public sealed class ShellController : IDisposable
 
         _disposed = true;
         _resizeSettle.Stop();
+        _displaySettle.Stop();
+
+        // static なイベントなので、外さないとこのオブジェクトを握ったままになる
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _window.DpiChanged -= OnWindowDpiChanged;
 
         // 削ったまま終わらせない。ここを通らずに落ちた場合は、
         // 次の起動で WorkAreaGuard が戻す。
@@ -977,7 +1180,7 @@ public sealed class ShellController : IDisposable
             case ShellMode.Overlay:
                 _appBar.Undock();
                 ToEdge(ShellMode.Overlay);
-                ApplyOverlayBounds();
+                ApplyOverlayBounds(verify: true);
 
                 // 切り替えた直後は出したままにする。いきなり消えると、何が起きたのか
                 // 分からない。他のアプリへ移った時点で引っ込む
@@ -1059,6 +1262,10 @@ public sealed class ShellController : IDisposable
 
             _windowed = null;
         }
+
+        // 端へ寄せているあいだに画面の構成が変わると、寄せる前の位置が今の画面に
+        // 無いことがある。そのまま戻すと窓が画面の外に出る。乗っていなければ収める
+        FitWindowToScreens("ウィンドウへ戻した");
     }
 
     /// <summary>
@@ -1140,8 +1347,17 @@ public sealed class ShellController : IDisposable
     /// <summary>
     /// オーバーレイの位置。
     /// <para>ワークエリアは削らないので、こちらで画面端に合わせる。</para>
+    /// <para>
+    /// どの画面の端かは、窓が乗っている画面で決める。どの画面にも乗っていなければ主画面
+    /// （<see cref="ShellGeometry.DecideEdge"/>）。見張る帯も同じ画面で張るので、窓と帯が別の
+    /// 画面を指すことが無い。
+    /// </para>
     /// </summary>
-    private void ApplyOverlayBounds()
+    /// <param name="verify">
+    /// 置いたあとに実際の矩形を確かめ、倍率の切り替わりでずれていれば置き直す。幅をつまんで
+    /// いるあいだは何度も呼ばれるので、そこでは確かめない。
+    /// </param>
+    private void ApplyOverlayBounds(bool verify = false)
     {
         if (!_shell.IsAtEdge || _shell.IsPinned) return;
 
@@ -1151,15 +1367,24 @@ public sealed class ShellController : IDisposable
 
         // 留める前に控えた値があればそちらを使い、使ったら捨てる。次に出すときには
         // ワークエリアも戻っているので、そのときは素直に測ってよい
-        var work = _workBeforeDock ?? CurrentMonitorWorkArea();
+        var measured = _workBeforeDock is null;
+        var work = _workBeforeDock ?? DockWorkArea();
         _workBeforeDock = null;
 
-        var width = _shell.DockWidth;
+        SetOverlayBounds(work);
 
-        _window.Top = work.Top;
-        _window.Height = work.Height;
-        _window.Width = width;
-        _window.Left = _shell.Edge == DockEdge.Left ? work.Left : work.Right - width;
+        // 倍率の違う画面へ移すと、代入の途中で Windows が倍率を切り替え、大きさや位置が
+        // ずれることがある（WM_DPICHANGED）。実際の矩形を見て、ずれていれば切り替わった
+        // あとの倍率でもう1回だけ置く。ピン留めを外した直後の値（控えたもの）は
+        // 測り直せないので、この確認はしない
+        if (verify && measured && !OverlayBoundsApplied())
+        {
+            ShellDiagnosticsLog.Write(
+                $"OverlayBounds 置いた矩形が狙いとずれた→倍率が切り替わったとみて置き直す " +
+                $"GetWindowRect={FormatCurrentRect()} scale={Scale():F2}");
+
+            SetOverlayBounds(DockWorkArea());
+        }
 
         // 幅を変えたら、見張る範囲も合わせる。
         //
@@ -1167,5 +1392,233 @@ public sealed class ShellController : IDisposable
         // 置いた時点で「窓から外れた」ことになって引っ込む。つまり、
         // 幅を広げようとすると必ず消える――幅を変えられない、という形で出る
         if (_window.IsVisible && SlideOutOnLeave) _hotZone.WatchLeaving(WindowRectAt(_window.Left));
+    }
+
+    /// <summary>作業領域（DIP）の寄せている辺に、窓を合わせる。</summary>
+    private void SetOverlayBounds(Rect work)
+    {
+        var width = _shell.DockWidth;
+
+        _window.Top = work.Top;
+        _window.Height = work.Height;
+        _window.Width = width;
+        _window.Left = _shell.Edge == DockEdge.Left ? work.Left : work.Right - width;
+    }
+
+    /// <summary>
+    /// 窓が、いま寄せるはずの画面の端に、狙いどおり置かれているか。
+    /// 矩形が取れないときは、確かめようがないので true（余計な置き直しをしない）。
+    /// </summary>
+    private bool OverlayBoundsApplied()
+    {
+        if (CurrentWindowRect() is not { } actual) return true;
+
+        var scale = Scale();
+        var screens = Screens.All(scale);
+        var decision = ShellGeometry.DecideEdge(actual, _shell.Edge, _shell.DockWidth, screens);
+
+        if (decision.ScreenIndex < 0) return true;
+
+        return ShellGeometry.Same(actual, decision.Target, (int)Math.Ceiling(scale) + 1);
+    }
+
+    private string FormatCurrentRect() =>
+        CurrentWindowRect() is { } rect ? ShellGeometry.FormatRect(rect) : "取得不可";
+
+    /// <summary>
+    /// 画面端（スライド）を置く作業領域（DIP）。窓が乗っている画面、無ければ主画面。
+    /// 画面の一覧が取れなければ、従来どおり窓の最寄りのモニタ（<see cref="CurrentMonitorWorkArea"/>）。
+    /// </summary>
+    private Rect DockWorkArea()
+    {
+        var scale = Scale();
+        var screens = Screens.All(scale);
+        var decision = ShellGeometry.DecideEdge(CurrentWindowRect(), _shell.Edge, _shell.DockWidth, screens);
+
+        if (decision.ScreenIndex < 0) return CurrentMonitorWorkArea();
+
+        var work = screens[decision.ScreenIndex].Work;
+
+        return new Rect(work.left / scale, work.top / scale, work.Width / scale, work.Height / scale);
+    }
+
+    // ------------------------------------------------------------------
+    // 画面の構成が変わったとき
+    // ------------------------------------------------------------------
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        // この知らせは UI のスレッドには来ない。渡し直してから触る
+        if (_disposed) return;
+
+        _window.Dispatcher.BeginInvoke(() => QueueRelayout("DisplaySettingsChanged"));
+    }
+
+    private void OnWindowDpiChanged(object? sender, DpiChangedEventArgs e)
+    {
+        // 自分の置き直しが起こした倍率の変更は数えない（置き直しの中で確かめている）
+        if (_relayouting) return;
+
+        QueueRelayout("DpiChanged");
+    }
+
+    /// <summary>
+    /// 置き直しを頼む。続けて来るので、来なくなってから1回だけ走らせる。
+    /// </summary>
+    private void QueueRelayout(string cause)
+    {
+        if (_disposed) return;
+
+        _displayCauses.Add(cause);
+        _displayDeferrals = 0;
+        _displaySettle.Stop();
+        _displaySettle.Start();
+    }
+
+    /// <summary>
+    /// 画面の構成が変わったので、今の居かたのまま置き場所と見張る帯を決め直す。
+    /// <para>
+    /// ウィンドウ：どの画面にも手が届かなければ主画面へ収める。スライド：今の画面の端へ置き直し、
+    /// 帯の見張りを張り直す（存在しなくなった画面の端を見張り続けない）。ピン留め：AppBar の
+    /// 位置を交渉し直す（<c>WM_DISPLAYCHANGE</c> では <see cref="AppBarHost"/> も即座に動くが、
+    /// 作業領域が追い付いたあとで確かめ直す。同じ矩形なら何もしない）。
+    /// </para>
+    /// <para>
+    /// 開く演出・引っ込め・幅つまみの最中は、それが済むまで待つ（演出を打ち切ると
+    /// <c>SetWindowRgn</c> の範囲が残るなどの壊れ方をする）。
+    /// </para>
+    /// </summary>
+    private void RelayoutForDisplay()
+    {
+        _displaySettle.Stop();
+
+        if (_disposed) return;
+
+        if ((_revealing || _slidingOut || _shell.IsResizing || _resizeSettle.IsEnabled)
+            && _displayDeferrals < MaxDisplayDeferrals)
+        {
+            _displayDeferrals++;
+            _displaySettle.Start();
+            return;
+        }
+
+        var cause = string.Join("+", _displayCauses.Distinct());
+        _displayCauses.Clear();
+
+        var gaveUp = _displayDeferrals >= MaxDisplayDeferrals;
+        _displayDeferrals = 0;
+
+        _relayouting = true;
+
+        try
+        {
+            var scale = Scale();
+            var screens = Screens.All(scale);
+            var layoutChanged = _lastScreens is null || !ShellGeometry.SameLayout(_lastScreens, screens);
+
+            _lastScreens = screens;
+
+            var head =
+                $"display-change cause={cause} mode={_shell.Mode} edge={_shell.Edge} " +
+                $"構成変化={(layoutChanged ? "あり" : "なし")} screens={ShellGeometry.DescribeScreens(screens)}" +
+                (gaveUp ? " (演出などが終わらないまま決め直した)" : string.Empty);
+
+            switch (_shell.Mode)
+            {
+                case ShellMode.Window:
+                    RelayoutWindow(head, screens);
+                    break;
+
+                case ShellMode.Overlay:
+                    RelayoutOverlay(head);
+                    break;
+
+                case ShellMode.Dock:
+                    ShellDiagnosticsLog.Write($"{head} → ピン留めの位置を交渉し直す（同じなら何もしない）");
+                    _appBar.Resize(_shell.DockWidth);
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 置き直しに失敗しても、いまの姿のまま動き続ける
+            ShellDiagnosticsLog.Write($"display-change 置き直しに失敗した cause={cause} {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _relayouting = false;
+        }
+    }
+
+    /// <summary>ウィンドウのとき：どの画面にも手が届かなければ、主画面へ収める。</summary>
+    private void RelayoutWindow(string head, IReadOnlyList<ScreenInfo> screens)
+    {
+        if (CurrentWindowRect() is not { } rect || _window.WindowState != WindowState.Normal)
+        {
+            ShellDiagnosticsLog.Write($"{head} → 最大化・最小化中か矩形が取れないので触らない state={_window.WindowState}");
+            return;
+        }
+
+        var fit = ShellGeometry.RestoreWindow(rect, screens);
+
+        if (!fit.Relocated)
+        {
+            ShellDiagnosticsLog.Write($"{head} → 窓はそのまま window={ShellGeometry.FormatRect(rect)} 理由={fit.Reason}");
+            return;
+        }
+
+        PlaceWindow(fit.Placed);
+
+        ShellDiagnosticsLog.Write(
+            $"{head} → 窓を置き直した {ShellGeometry.FormatRect(rect)} → {ShellGeometry.FormatRect(fit.Placed)} 理由={fit.Reason}");
+    }
+
+    /// <summary>
+    /// スライドのとき：窓の置き場所と、帯の見張りを決め直す。
+    /// 出ているなら、外れるのを見張る範囲も合わせる（<see cref="ApplyOverlayBounds"/>）。
+    /// </summary>
+    private void RelayoutOverlay(string head)
+    {
+        if (!_shell.IsAtEdge || _shell.IsPinned) return;
+
+        var before = CurrentWindowRect();
+
+        ApplyOverlayBounds(verify: true);
+
+        // 帯の見張りを、いま窓が乗っている画面で張り直す。出ているあいだは、
+        // 外れるのを見張る状態へ戻す（Apply(Overlay) と同じ）
+        var screen = ScreenOfWindow();
+        _hotZone.Arm(_shell.Edge, screen);
+
+        if (_window.IsVisible && SlideOutOnLeave) _hotZone.WatchLeaving(WindowRectAt(_window.Left));
+
+        var after = CurrentWindowRect();
+        var moved = before is { } b && after is { } a ? !ShellGeometry.Same(a, b, 0) : true;
+
+        ShellDiagnosticsLog.Write(
+            $"{head} → 置き場所と見張る帯を決め直した " +
+            $"screen=({screen.left},{screen.top},{screen.right},{screen.bottom}) " +
+            $"window={(after is { } rect ? ShellGeometry.FormatRect(rect) : "取得不可")} " +
+            $"動いた={(moved ? "はい" : "いいえ")} visible={_window.IsVisible}");
+    }
+
+    /// <summary>
+    /// 普通の窓を、手が届く位置へ収める。端へ寄せる前の姿へ戻した直後に使う。
+    /// </summary>
+    private void FitWindowToScreens(string why)
+    {
+        if (_window.WindowState != WindowState.Normal) return;
+
+        if (CurrentWindowRect() is not { } rect) return;
+
+        var screens = Screens.All(Scale());
+        var fit = ShellGeometry.RestoreWindow(rect, screens);
+
+        if (!fit.Relocated) return;
+
+        PlaceWindow(fit.Placed);
+
+        ShellDiagnosticsLog.Write(
+            $"window-fit {why} {ShellGeometry.FormatRect(rect)} → {ShellGeometry.FormatRect(fit.Placed)} 理由={fit.Reason}");
     }
 }

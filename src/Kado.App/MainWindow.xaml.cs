@@ -183,9 +183,9 @@ public partial class MainWindow : Window, ISlideRevealHost
 
         // 前に使っていた画面が無くなっていることがある。外付けのディスプレイを
         // 外したまま起動すると、画面の外に開いて手が出せなくなる
-        var saved = store.Load().ClampTo(
+        var saved = FitToScreens(store.Load().ClampTo(
             SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
-            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight));
 
         Width = saved.Width;
         Height = saved.Height;
@@ -202,6 +202,59 @@ public partial class MainWindow : Window, ISlideRevealHost
         // 大きさを入れたあとで最大化する。先に最大化すると、元に戻したときの
         // 大きさが既定のまま残る
         if (saved.IsMaximized) WindowState = WindowState.Maximized;
+    }
+
+    /// <summary>
+    /// 控えてあった置き場所が、今の画面のどれにも十分に乗っていなければ、主画面へ収める。
+    /// <para>
+    /// 仮想画面全体の外接矩形に収めるだけでは足りない。ノート PC を持ち出す・戻すと、前に
+    /// 使っていた画面とはまるごと別の構成になり、外接矩形の中でもどの画面でもない場所に
+    /// なることがある（画面が L 字に並んだとき、隙間が空く）。乗っていれば何も変えない。
+    /// 判断は <see cref="Shell.ShellGeometry.RestoreWindow"/>、記録は <c>shell.log</c> の
+    /// <c>startup-restore</c> 行。
+    /// </para>
+    /// </summary>
+    private WindowPlacement FitToScreens(WindowPlacement placement)
+    {
+        if (!placement.HasPosition) return placement;
+
+        try
+        {
+            // 窓の座標（DIP）は、いま窓が居る画面の倍率で物理ピクセルに直る。
+            // 出す前なので、まだ既定の位置（主画面）に居る
+            var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11
+                ?? VisualTreeHelper.GetDpi(this).DpiScaleX;
+
+            var screens = Shell.Screens.All(scale);
+
+            var saved = new Shell.NativeMethods.RECT
+            {
+                left = (int)Math.Round(placement.Left * scale),
+                top = (int)Math.Round(placement.Top * scale),
+                right = (int)Math.Round((placement.Left + placement.Width) * scale),
+                bottom = (int)Math.Round((placement.Top + placement.Height) * scale),
+            };
+
+            var fit = Shell.ShellGeometry.RestoreWindow(saved, screens);
+
+            Shell.ShellDiagnosticsLog.Write(Shell.ShellGeometry.FormatWindowRestoreLine(saved, screens, fit));
+
+            if (!fit.Relocated) return placement;
+
+            return placement with
+            {
+                Left = fit.Placed.left / scale,
+                Top = fit.Placed.top / scale,
+                Width = fit.Placed.Width / scale,
+                Height = fit.Placed.Height / scale,
+            };
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 確かめられなくても、これまでどおり外接矩形に収めた値で出す
+            Shell.ShellDiagnosticsLog.Write($"startup-restore 窓の置き場所の確認に失敗した {ex.GetType().Name}: {ex.Message}");
+            return placement;
+        }
     }
 
     /// <summary>いまの置き場所を控える。</summary>
