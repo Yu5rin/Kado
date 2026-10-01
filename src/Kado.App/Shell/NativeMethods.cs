@@ -288,6 +288,14 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    /// <summary><see cref="AllowSetForegroundWindow"/> に渡す「どのプロセスにも譲る」。</summary>
+    internal const uint ASFW_ANY = 0xFFFFFFFF;
+
+    /// <summary>前面へ出す権利を、別のプロセスへ譲る。二重起動の2本目が1本目へ渡す。</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AllowSetForegroundWindow(uint dwProcessId);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetCursorPos(out POINT lpPoint);

@@ -307,4 +307,33 @@ public class ShellGeometryTests
         Assert.Equal(200, gcx);
         Assert.Equal(500, gcy);
     }
+
+    // ------------------------------------------------------------------
+    // ShowsInTaskbar（スライド・ピン留めではタスクバーにボタンを出さない）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void ふつうのウィンドウのときだけタスクバーに出す()
+    {
+        Assert.True(ShellGeometry.ShowsInTaskbar(ShellMode.Window));
+    }
+
+    [Theory]
+    [InlineData(ShellMode.Overlay)]
+    [InlineData(ShellMode.Dock)]
+    public void スライドとピン留めではタスクバーに出さない(ShellMode mode)
+    {
+        Assert.False(ShellGeometry.ShowsInTaskbar(mode));
+    }
+
+    [Fact]
+    public void すべての居かたについて出す出さないが決まっている()
+    {
+        // 居かたを増やしたとき、タスクバーの扱いを決め忘れないための見張り。
+        // 出すのはウィンドウだけ、という決まりを全値で突き合わせる
+        foreach (var mode in Enum.GetValues<ShellMode>())
+        {
+            Assert.Equal(mode == ShellMode.Window, ShellGeometry.ShowsInTaskbar(mode));
+        }
+    }
 }

@@ -27,6 +27,16 @@ internal static class ShellGeometry
             ? Math.Min(resting, screen.left / scale) - width
             : Math.Max(resting + width, screen.right / scale);
 
+    /// <summary>
+    /// 居かたに応じて、タスクバーにボタンを出すか。ふつうのウィンドウのときだけ出す。
+    /// <para>
+    /// スライド・ピン留めは、通知領域のアイコンとホットキーで呼べる。スライドで窓を
+    /// 出し入れ（Show／Hide）するたびにボタンが出たり消えたりするのは邪魔なので出さない。
+    /// ボタンが無い窓は Alt＋Tab にも出ない。ウィンドウに戻せば、ボタンも Alt＋Tab も戻る。
+    /// </para>
+    /// </summary>
+    internal static bool ShowsInTaskbar(ShellMode mode) => mode == ShellMode.Window;
+
     /// <summary>1 DIP 未満のずれでは動かさない。丸め誤差だけで毎回位置を書き換えない（不具合2）。</summary>
     internal static bool ShouldMove(double value, double current) => Math.Abs(value - current) >= 1;
 

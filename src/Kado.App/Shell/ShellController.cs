@@ -976,7 +976,7 @@ public sealed class ShellController : IDisposable
 
             case ShellMode.Overlay:
                 _appBar.Undock();
-                ToEdge();
+                ToEdge(ShellMode.Overlay);
                 ApplyOverlayBounds();
 
                 // 切り替えた直後は出したままにする。いきなり消えると、何が起きたのか
@@ -1006,7 +1006,10 @@ public sealed class ShellController : IDisposable
                 // いま窓が乗っているモニタの作業領域を測る（複数モニタ対策。後述）
                 _workBeforeDock ??= CurrentMonitorWorkArea();
 
-                ToEdge();
+                // タスクバーのボタンを外すのは、AppBar を登録する前（ToEdge の中）。
+                // 登録したあとに窓の見せ方を変えると、窓のハンドルに掛けたもの
+                // （AppBar の登録・メッセージのフック）に響くおそれがある
+                ToEdge(ShellMode.Dock);
 
                 if (_appBar.Dock(_shell.Edge, _shell.DockWidth))
                 {
@@ -1035,6 +1038,10 @@ public sealed class ShellController : IDisposable
     private void ToWindow()
     {
         StopSliding();
+
+        // AppBar は Apply が先に外してある（登録中に触らない）
+        SetTaskbarPresence(ShellMode.Window);
+
         _window.Topmost = false;
         _window.WindowStyle = WindowStyle.SingleBorderWindow;
         _window.ResizeMode = ResizeMode.CanResize;
@@ -1061,9 +1068,13 @@ public sealed class ShellController : IDisposable
     /// （要件書 7.2）。戻せるよう、寄せる前の姿を控えておく。
     /// </para>
     /// </summary>
-    private void ToEdge()
+    private void ToEdge(ShellMode mode)
     {
         StopSliding();
+
+        // 見せる前・AppBar を登録する前に決める。起動時の復元もここを通る
+        SetTaskbarPresence(mode);
+
         _windowed ??= new WindowPlacement(
             _window.Left, _window.Top, _window.Width, _window.Height, IsMaximized: false);
 
@@ -1072,6 +1083,37 @@ public sealed class ShellController : IDisposable
         _window.WindowStyle = WindowStyle.None;
         _window.ResizeMode = ResizeMode.NoResize;
         _window.Topmost = true;
+    }
+
+    /// <summary>
+    /// 居かたに応じて、タスクバーのボタンを出す・出さないを切り替える。
+    /// <para>
+    /// <b>呼ぶ順序が肝。</b>表示中の窓の <c>ShowInTaskbar</c> を変えると、WPF は
+    /// 窓の拡張スタイルを書き換え、ボタンを更新するために窓を隠して出し直すことがある。
+    /// 窓のハンドルに掛けているもの（AppBar の登録・メッセージのフック・
+    /// <c>SetWindowRgn</c> の範囲）が巻き添えにならないよう、AppBar を外したあと・
+    /// 登録する前、開く演出を打ち切ったあとにだけ呼ぶ（<see cref="Apply"/> の並びと
+    /// <see cref="ToWindow"/>・<see cref="ToEdge"/> がそれを守っている）。
+    /// </para>
+    /// <para>
+    /// 窓のハンドルが作り直されると、ホットキー（<c>GlobalHotKeys</c>）と AppBar の
+    /// フックが外れる。作り直されていないかは、<c>shell.log</c> の前後のハンドルで見られる。
+    /// </para>
+    /// </summary>
+    private void SetTaskbarPresence(ShellMode mode)
+    {
+        var show = ShellGeometry.ShowsInTaskbar(mode);
+        if (_window.ShowInTaskbar == show) return;
+
+        var before = new WindowInteropHelper(_window).Handle;
+
+        _window.ShowInTaskbar = show;
+
+        var after = new WindowInteropHelper(_window).Handle;
+
+        ShellDiagnosticsLog.Write(
+            $"ShowInTaskbar mode={mode} -> {show} hwnd=0x{before.ToInt64():X}->0x{after.ToInt64():X}" +
+            (before != after ? " ハンドルが作り直された" : string.Empty));
     }
 
     /// <summary>
