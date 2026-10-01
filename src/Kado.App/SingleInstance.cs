@@ -75,6 +75,12 @@ public sealed class SingleInstance : IDisposable
     {
         try
         {
+            // 前に出る権利は、いま起動された（ユーザーが操作した）こちらが持っている。
+            // 相手へ譲らないと、相手の Activate は Windows に止められ、タスクバーに
+            // ボタンの無いスライド・ピン留めでは何も起きないように見える
+            // （ボタンがあれば点滅する）。失敗しても合図は送る
+            Shell.NativeMethods.AllowSetForegroundWindow(Shell.NativeMethods.ASFW_ANY);
+
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
 
             // 相手が応じなければ諦める。待たせるより、こちらが静かに終わるほうがよい

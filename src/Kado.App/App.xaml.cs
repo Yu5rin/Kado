@@ -320,6 +320,11 @@ public partial class App : Application
 
             window.ContentRendered += LogStartupTiming;
 
+            // スライド・ピン留めで始まるときは、最初からタスクバーに出さない。
+            // 出してからでは、Restore までの一瞬だけボタンが見えてしまう。
+            // 窓のハンドルができる前（Show より前）なら、作り直しも起きない
+            window.ShowInTaskbar = Shell.ShellGeometry.ShowsInTaskbar(dock.Mode);
+
             StartupTrace.Mark("Show開始");
             window.Show();
             StartupTrace.Mark("Show終了");
@@ -552,6 +557,15 @@ public partial class App : Application
     private void BringToFront()
     {
         if (MainWindow is not { } window) return;
+
+        // 居かたに応じた出し方（スライドなら最前面へ入れ直す）は ShellController が持つ。
+        // スライド・ピン留めはタスクバーにボタンが無いので、ここで前に出せないと
+        // 押したのに何も起きないように見える
+        if (_shellController is { } controller)
+        {
+            controller.Show();
+            return;
+        }
 
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
 
