@@ -1828,7 +1828,14 @@ public sealed class MainViewModel : ObservableObject
         Day.GoToToday();
 
         // まだ作っていなければ触らない。作っていなければ「今日」はそもそも見えていない
-        if (_year is not null) Year.GoToToday();
+        // 年は選択日の印も合わせる。GoToToday は年度を移すだけで、選んだ日の印は
+        // 前のまま残る
+        if (_year is not null)
+        {
+            Year.SelectedDate = _today;
+            Year.GoToToday();
+        }
+
         if (_agenda is not null) Agenda.GoToToday();
 
         SyncMiniToCenter(_today);
@@ -3006,12 +3013,27 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// いまの時刻を伝える。週・日ビューの現在時刻の線が動く。
-    /// <para>日付が変わっていたら「今日」も差し替える。起動しっぱなしで日をまたぐため。</para>
+    /// <para>
+    /// 日付が変わっていたら「今日」も差し替える。起動しっぱなしで日をまたぐため。
+    /// 選んでいた日が前の「今日」だったときは、選択も新しい今日へ連れていく
+    /// （<see cref="GoToToday"/>）。別の日を選んでいたら、見ている途中で動かさない。
+    /// </para>
     /// </summary>
     public void UpdateNow(DateTime now)
     {
         var date = DateOnly.FromDateTime(now);
-        if (date != _today) Today = date;
+        if (date != _today)
+        {
+            // 差し替える前に見る。差し替えたあとでは、選択日が無いときの
+            // 既定（今日）まで新しい日になってしまい、取り違える
+            var followsToday = SelectedDate == _today;
+
+            Today = date;
+
+            // 年・一覧は作ってあるものだけ、「今日」の差し替えで作り直され、
+            // GoToToday が新しい今日の位置へ合わせる。作っていないものは触らない
+            if (followsToday) GoToToday();
+        }
 
         var time = TimeOnly.FromDateTime(now);
         Week.UpdateNowLine(time);
