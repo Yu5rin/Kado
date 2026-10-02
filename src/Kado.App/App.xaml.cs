@@ -834,28 +834,46 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// スリープから戻ったら、すぐ追いつく（要件書 7.5）。
+    /// スリープから戻ったとき・時計を変えられたときに、すぐ追いつく（要件書 7.5）。
     /// <para>
     /// 眠っているあいだタイマーは止まっている。起きたあと次の1分を待つと、その間に
     /// 知らせるはずだった予定が遅れる。<see cref="ReminderService"/> は「知らせる時刻を
     /// 過ぎていて、まだ始まっていないもの」を出す作りなので、起こしてやれば取り戻せる。
+    /// 日をまたいで眠っていた場合も、「今日」と選択日をすぐ新しい日へ移せる。
     /// </para>
     /// <para>
     /// この知らせは UI のスレッドには来ないので、渡し直してから触る。
+    /// <b>どちらも static イベントで、購読したままだとアプリより長く生きて漏れる。</b>
+    /// 終了時に必ず外す。
     /// </para>
     /// </summary>
     private void WatchForResume(MainWindow window)
     {
         Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        Exit += (_, _) => Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
-
-        void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs args)
+        Microsoft.Win32.SystemEvents.TimeChanged += OnTimeChanged;
+        Exit += (_, _) =>
         {
-            if (args.Mode != Microsoft.Win32.PowerModes.Resume) return;
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+            Microsoft.Win32.SystemEvents.TimeChanged -= OnTimeChanged;
+        };
+
+        void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs args) =>
+            Recheck(args.Mode switch
+            {
+                Microsoft.Win32.PowerModes.Resume => ClockChange.Resume,
+                Microsoft.Win32.PowerModes.Suspend => ClockChange.Suspend,
+                _ => ClockChange.PowerStatus,
+            });
+
+        void OnTimeChanged(object? sender, EventArgs args) => Recheck(ClockChange.TimeChanged);
+
+        void Recheck(ClockChange change)
+        {
+            if (!ClockChangeRules.ShouldRecheck(change)) return;
 
             Dispatcher.BeginInvoke(() =>
             {
-                if (window.DataContext is MainViewModel resumed) resumed.UpdateNow(DateTime.Now);
+                if (window.DataContext is MainViewModel main) main.UpdateNow(DateTime.Now);
             });
         }
     }
