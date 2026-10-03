@@ -220,33 +220,36 @@ public partial class MainWindow : Window, ISlideRevealHost
 
         try
         {
-            // 窓の座標（DIP）は、いま窓が居る画面の倍率で物理ピクセルに直る。
-            // 出す前なので、まだ既定の位置（主画面）に居る
+            // 出す前なので、窓はまだ既定の位置（主画面）に居る。ここで取れる倍率は主画面のもの
             var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11
                 ?? VisualTreeHelper.GetDpi(this).DpiScaleX;
 
             var screens = Shell.Screens.All(scale);
 
-            var saved = new Shell.NativeMethods.RECT
-            {
-                left = (int)Math.Round(placement.Left * scale),
-                top = (int)Math.Round(placement.Top * scale),
-                right = (int)Math.Round((placement.Left + placement.Width) * scale),
-                bottom = (int)Math.Round((placement.Top + placement.Height) * scale),
-            };
+            // 控えてあるのは、窓が居た画面の倍率で割った値（DIP）。物理ピクセルへ戻す倍率は、
+            // 窓が居た画面のもの。主画面の倍率で戻すと、倍率の違う別の画面に置いていた窓は
+            // 本来の場所からずれる（ShellGeometry.ResolveSavedWindow）
+            var resolved = Shell.ShellGeometry.ResolveSavedWindow(
+                placement.Left, placement.Top, placement.Width, placement.Height, screens, scale);
+
+            var saved = resolved.Physical;
 
             var fit = Shell.ShellGeometry.RestoreWindow(saved, screens);
 
-            Shell.ShellDiagnosticsLog.Write(Shell.ShellGeometry.FormatWindowRestoreLine(saved, screens, fit));
+            Shell.ShellDiagnosticsLog.Write(
+                Shell.ShellGeometry.FormatWindowRestoreLine(saved, screens, fit, resolved));
 
             if (!fit.Relocated) return placement;
 
+            // 置き直した先の画面の倍率で、DIP に戻す
+            var placedScale = fit.ScreenIndex >= 0 ? screens[fit.ScreenIndex].Scale : resolved.Scale;
+
             return placement with
             {
-                Left = fit.Placed.left / scale,
-                Top = fit.Placed.top / scale,
-                Width = fit.Placed.Width / scale,
-                Height = fit.Placed.Height / scale,
+                Left = fit.Placed.left / placedScale,
+                Top = fit.Placed.top / placedScale,
+                Width = fit.Placed.Width / placedScale,
+                Height = fit.Placed.Height / placedScale,
             };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -504,6 +507,22 @@ public partial class MainWindow : Window, ISlideRevealHost
 
         command.Execute(null);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// 離さないまま、マウスの捕捉が奪われた（Alt+Tab・ほかの窓が前に出たなど）。
+    /// <para>
+    /// 離したことにしないと、つまんでいる最中の印が残り続ける。引っ込めない・幅を記憶しない
+    /// （幅の記憶は離したときに1回だけ書くため）状態のままになる。
+    /// </para>
+    /// </summary>
+    private void OnGripCaptureLost(object sender, MouseEventArgs e)
+    {
+        if (_gripFrom is null) return;
+
+        _gripFrom = null;
+
+        if (ViewModel is { } vm) vm.Shell.IsResizing = false;
     }
 
     private void OnGripReleased(object sender, MouseButtonEventArgs e)

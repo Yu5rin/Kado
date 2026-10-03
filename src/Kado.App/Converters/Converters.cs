@@ -99,7 +99,8 @@ public sealed class MilestoneBrushConverter : IValueConverter, IThemeSensitiveCo
         var wantFace = string.Equals(parameter as string, FaceParameter, StringComparison.Ordinal);
         var key = ResolveKey(name, wantFace);
 
-        return Application.Current?.TryFindResource(key);
+        // 配色を当て直すまで同じ結果を使い回す（ThemeResources）
+        return ThemeResources.Find(key);
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -159,7 +160,7 @@ public sealed class DayMarkBrushConverter : IValueConverter, IThemeSensitiveConv
 public sealed class DueEmphasisBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        Application.Current?.TryFindResource(value switch
+        ThemeResources.Find(value switch
         {
             DueEmphasis.Overdue => "SundayBrush",   // 超過は赤（要件書 4.4）
             DueEmphasis.Today => "AccentBrush",
@@ -189,28 +190,17 @@ public sealed class EventTimeConverter : IValueConverter
 /// </summary>
 public sealed class EventColorBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
+    /// <summary>
+    /// 色の文字列ごとに、凍結したブラシを1つだけ作って使い回す（<see cref="BrushCache"/>）。
+    /// 壊れた色・色なしは、既定のアクセント色（配色の辞書から。当て直すまで使い回す）。
+    /// </summary>
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        ParseColor(value) is { } color
-            ? new SolidColorBrush(color)
-            : Application.Current?.TryFindResource("AccentBrush");
+        value is string { Length: > 0 } hex && BrushCache.Solid(hex) is { } brush
+            ? brush
+            : ThemeResources.Find("AccentBrush");
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
-
-    /// <summary>壊れた色でも表示は続ける。既定の色に倒すだけで済ませる。</summary>
-    internal static Color? ParseColor(object? value)
-    {
-        if (value is not string hex || hex.Length == 0) return null;
-
-        try
-        {
-            return (Color)ColorConverter.ConvertFromString(hex);
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
-    }
 }
 
 /// <summary>
@@ -219,19 +209,12 @@ public sealed class EventColorBrushConverter : IValueConverter, IThemeSensitiveC
 /// </summary>
 public sealed class EventColorFaceConverter : IValueConverter, IThemeSensitiveConverter
 {
-    /// <summary>帯の色を敷くときの濃さ。モックの rgba(...,.1) 相当。</summary>
-    private const byte FaceAlpha = 28;
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string { Length: > 0 } hex && BrushCache.Face(hex) is { } brush
+            ? brush
 
-    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (EventColorBrushConverter.ParseColor(value) is not { } color)
-        {
             // 既定の藍には専用の面色がある
-            return Application.Current?.TryFindResource("AccentSoftBrush");
-        }
-
-        return new SolidColorBrush(Color.FromArgb(FaceAlpha, color.R, color.G, color.B));
-    }
+            : ThemeResources.Find("AccentSoftBrush");
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -243,20 +226,12 @@ public sealed class EventColorFaceConverter : IValueConverter, IThemeSensitiveCo
 /// </summary>
 public sealed class HexBrushConverter : IValueConverter
 {
-    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (value is not string hex || hex.Length == 0) return null;
-
-        try
-        {
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-        }
-        catch (FormatException)
-        {
-            // 取り込んだ色が壊れていても表示は続ける。見本が出ないだけで済ませる
-            return null;
-        }
-    }
+    /// <summary>
+    /// 取り込んだ色が壊れていても表示は続ける。見本が出ないだけで済ませる（null）。
+    /// 同じ色の文字列には、凍結した同じブラシを返す（<see cref="BrushCache"/>）。
+    /// </summary>
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string { Length: > 0 } hex ? BrushCache.Solid(hex) : null;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -373,7 +348,7 @@ public sealed class SyncStateBrushConverter : IValueConverter, IThemeSensitiveCo
             _ => "Ink3Brush",
         };
 
-        return Application.Current?.TryFindResource(key) ?? Application.Current?.TryFindResource("Ink3Brush");
+        return ThemeResources.Find(key) ?? ThemeResources.Find("Ink3Brush");
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>

@@ -111,10 +111,43 @@ public sealed class TaskRepository(SqliteConnection connection)
             }).ToArray();
     }
 
+    /// <summary><see cref="SearchText"/> の絞り込み。エスケープの文字は <see cref="TextSearch.LikeEscape"/>。</summary>
+    private const string SearchWhere =
+        "WHERE title LIKE @pattern ESCAPE '\\' OR note LIKE @pattern ESCAPE '\\'";
+
     /// <summary>期限が決まっていないタスク。並び順→作成日時→識別子の順（登録順）。</summary>
     public IReadOnlyList<TaskItem> WithoutDue() =>
         _connection.Query<TaskItem>(
             $"SELECT {Columns} FROM tasks WHERE due IS NULL ORDER BY sort_order, created_at, id;").ToArray();
+
+    /// <summary>
+    /// 題・メモのどちらかに <paramref name="text"/> を含むタスク。検索（<c>MainViewModel.RunSearch</c>）が使う。
+    /// <para>
+    /// <see cref="EventRepository.SearchText"/> と同じ作り。返すタスクは <c>Id・Title・Due・Note</c> しか
+    /// 入っていない（ほかは既定値）。並びは <see cref="All"/> と同じ。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<TaskItem> SearchText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (text.Length == 0) return [];
+
+        var like = TextSearch.TryCreateLikePattern(text, out var pattern);
+
+        var found = _connection.Query<TaskItem>(
+            $"""
+            SELECT id AS Id, title AS Title, due AS Due, note AS Note
+            FROM tasks
+            {(like ? SearchWhere : "")}
+            ORDER BY due IS NULL, due, sort_order, created_at, id;
+            """,
+            new { pattern });
+
+        return found
+            .Where(t => TextSearch.Contains(t.Title, text) || TextSearch.Contains(t.Note, text))
+            .ToArray();
+    }
 
     /// <summary>Google Tasks 側の ID で引く。</summary>
     public TaskItem? FindByGoogleId(string googleTaskId) =>

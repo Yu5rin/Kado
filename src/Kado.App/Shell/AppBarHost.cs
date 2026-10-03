@@ -395,8 +395,9 @@ public sealed class AppBarHost : IDisposable
     /// <summary>
     /// <c>WM_WINDOWPOSCHANGING</c> / <c>WM_WINDOWPOSCHANGED</c> の処理。
     /// <para>
-    /// <b>記録（A）。</b>毎フレーム書くと重くログも埋もれるが、AppBar を登録している
-    /// あいだだけなので実害は無い。ピンを外せばこの経路自体を通らなくなる。
+    /// <b>記録（A）。</b>通知は何十回も来るので、間引いて書く（<see cref="ShellDiagnosticsLog.WriteThrottled"/>）。
+    /// 押し戻したときの行（B）は間引かない。AppBar を登録しているあいだだけ通る経路で、
+    /// ピンを外せばこの経路自体を通らなくなる。
     /// </para>
     /// <para>
     /// <b>ガード（B）。</b><c>WM_WINDOWPOSCHANGING</c> はまだ確定前なので、
@@ -411,7 +412,10 @@ public sealed class AppBarHost : IDisposable
     {
         var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
 
-        ShellDiagnosticsLog.Write(
+        // 幅をつまむあいだ・窓が動くあいだ、通知は何十回も来る。全部書くと記録が埋まり、
+        // 切り分けに要る行が世代ごと押し出される。1秒に1行だけ書き、残りは「n 回省略、最後の値」にする
+        ShellDiagnosticsLog.WriteThrottled(
+            "OnMessage WM_WINDOWPOS",
             $"OnMessage {(msg == WM_WINDOWPOSCHANGING ? "WM_WINDOWPOSCHANGING" : "WM_WINDOWPOSCHANGED")} " +
             $"x={pos.x} y={pos.y} cx={pos.cx} cy={pos.cy} flags=0x{pos.flags:X4} " +
             $"selfMove={_selfMove} suppressGuard={SuppressGuard}");

@@ -108,4 +108,57 @@ public class JapaneseHolidaysTests
         Assert.Equal(18, days.Count);
         Assert.All(days, pair => Assert.Equal(2026, pair.Key.Year));
     }
+
+    [Fact]
+    public void 同じ年の表は作り直さず_同じものを返す()
+    {
+        Assert.Same(JapaneseHolidays.Of(2031), JapaneseHolidays.Of(2031));
+        Assert.Same(JapaneseHolidays.Of(1999), JapaneseHolidays.Of(2100));   // 範囲外はどちらも空
+    }
+
+    [Fact]
+    public void 使い回している表は_呼び出し側から書き換えられない()
+    {
+        var days = JapaneseHolidays.Of(2026);
+
+        Assert.False(days is Dictionary<DateOnly, string>);
+        Assert.Throws<NotSupportedException>(() => ((IDictionary<DateOnly, string>)days).Add(new DateOnly(2026, 6, 1), "偽の祝日"));
+
+        // 書き換えようとしたあとも、中身は変わらない
+        Assert.Equal(18, JapaneseHolidays.Of(2026).Count);
+        Assert.Null(JapaneseHolidays.NameOf(new DateOnly(2026, 6, 1)));
+    }
+
+    [Fact]
+    public void 全年の表とNameOfが食い違わない()
+    {
+        for (var year = JapaneseHolidays.FirstYear; year <= JapaneseHolidays.LastYear; year++)
+        {
+            var table = JapaneseHolidays.Of(year);
+
+            for (var date = new DateOnly(year, 1, 1); date.Year == year; date = date.AddDays(1))
+            {
+                Assert.Equal(table.GetValueOrDefault(date), JapaneseHolidays.NameOf(date));
+            }
+        }
+    }
+
+    [Fact]
+    public void 複数のスレッドから同時に呼んでも_同じ結果になる()
+    {
+        // 初めて呼ばれる年が重なっても、壊れず、全員が同じ表を受け取る
+        var results = new IReadOnlyDictionary<DateOnly, string>[64];
+
+        Parallel.For(0, results.Length, i =>
+        {
+            results[i] = JapaneseHolidays.Of(2077 + i % 3);
+            _ = JapaneseHolidays.NameOf(new DateOnly(2077 + i % 3, 1, 1));
+        });
+
+        for (var i = 0; i < results.Length; i++)
+        {
+            Assert.Same(JapaneseHolidays.Of(2077 + i % 3), results[i]);
+            Assert.Equal("元日", results[i][new DateOnly(2077 + i % 3, 1, 1)]);
+        }
+    }
 }

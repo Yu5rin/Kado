@@ -700,7 +700,9 @@ public sealed class ShellController : IDisposable
             frame++;
             if (t >= 1.0 || frame % 4 == 0)
             {
-                ShellDiagnosticsLog.Write(
+                // コマごとの行は間引く（1秒に1行と、止まったときの最後の値）
+                ShellDiagnosticsLog.WriteThrottled(
+                    "SlideIn 開く演出(右)",
                     $"SlideIn 開く演出(右) t={t:F2} revealPhysical={revealPhysical}/{widthPhysical}");
             }
 

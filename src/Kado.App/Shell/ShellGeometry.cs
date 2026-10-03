@@ -298,6 +298,74 @@ internal static class ShellGeometry
     }
 
     /// <summary>
+    /// 控えてあった窓の位置（DIP）を、物理ピクセルへ直す。<b>控えた位置の画面の倍率で</b>直す。
+    /// <para>
+    /// 控えてあるのは、窓が居た画面の倍率で割った値（DIP）。これを物理ピクセルへ戻す倍率は、
+    /// 窓が居た画面のもの。ところが起動時は、窓をまだ出していないので、窓の倍率は主画面のものを
+    /// 指している。倍率の違う2画面（ノート PC の 150% と、外付けの 100% など）で、主画面でない側に
+    /// 置いていた窓は、主画面の倍率で戻すと、本来の場所から大きくずれて、乗っていない・
+    /// 乗っているが違う場所、となる。
+    /// </para>
+    /// <para>
+    /// 画面ごとに「その画面の倍率で戻したとき、その画面の中に収まるか」を調べて、
+    /// いちばん収まるものを採る。収まる画面が無ければ（その画面がもう無い、など）
+    /// <paramref name="fallbackScale"/>（窓の倍率）で戻す。今までと同じ。同じくらい収まる画面が
+    /// 複数あるときは、窓の倍率と同じ画面を先にする（今までの結果を変えないため）。
+    /// </para>
+    /// </summary>
+    /// <param name="screens">いまつながっている画面（<see cref="Screens.All"/>）。</param>
+    /// <param name="fallbackScale">窓の倍率。収まる画面が無いときの代用。</param>
+    internal static SavedWindowRect ResolveSavedWindow(
+        double left, double top, double width, double height,
+        IReadOnlyList<ScreenInfo> screens, double fallbackScale)
+    {
+        if (fallbackScale <= 0) fallbackScale = 1.0;
+
+        var bestIndex = -1;
+        var bestRatio = 0.0;
+        var bestIsFallback = false;
+        RECT bestRect = default;
+
+        for (var i = 0; i < screens.Count; i++)
+        {
+            var scale = screens[i].Scale;
+            var rect = ToPhysical(left, top, width, height, scale);
+
+            if (rect.Width <= 0 || rect.Height <= 0) continue;
+
+            var overlap = OverlapArea(rect, screens[i].Monitor);
+            if (overlap <= 0) continue;
+
+            // 窓のうち、その画面に乗っている割合。収まっていれば 1。画面の大きさは問わない
+            var ratio = Math.Round(overlap / ((double)rect.Width * rect.Height), 2);
+            var isFallback = Math.Abs(scale - fallbackScale) < 0.005;
+
+            if (bestIndex >= 0)
+            {
+                if (ratio < bestRatio) continue;
+                if (ratio == bestRatio && (!isFallback || bestIsFallback)) continue;
+            }
+
+            bestIndex = i;
+            bestRatio = ratio;
+            bestIsFallback = isFallback;
+            bestRect = rect;
+        }
+
+        return bestIndex >= 0
+            ? new SavedWindowRect(bestRect, bestIndex, screens[bestIndex].Scale)
+            : new SavedWindowRect(ToPhysical(left, top, width, height, fallbackScale), -1, fallbackScale);
+    }
+
+    private static RECT ToPhysical(double left, double top, double width, double height, double scale) => new()
+    {
+        left = (int)Math.Round(left * scale),
+        top = (int)Math.Round(top * scale),
+        right = (int)Math.Round((left + width) * scale),
+        bottom = (int)Math.Round((top + height) * scale),
+    };
+
+    /// <summary>
     /// 起動時（と、画面の構成が変わったとき）に、普通の窓を今の画面へ収める。
     /// <para>
     /// 手が届くほど乗っていれば、そのまま返す（<b>動かさない</b>）。そうでなければ
@@ -450,10 +518,13 @@ internal static class ShellGeometry
 
     /// <summary>起動時の復元（普通の窓）の判断を、shell.log の1行にする。</summary>
     internal static string FormatWindowRestoreLine(
-        RECT saved, IReadOnlyList<ScreenInfo> screens, WindowFit fit) =>
+        RECT saved, IReadOnlyList<ScreenInfo> screens, WindowFit fit, SavedWindowRect? resolved = null) =>
         $"startup-restore mode=Window saved={FormatRect(saved)} screens={DescribeScreens(screens)} → " +
         $"screen={(fit.ScreenIndex >= 0 ? $"#{fit.ScreenIndex}" : "なし")} " +
-        $"置き直し={(fit.Relocated ? "はい" : "いいえ")} placed={FormatRect(fit.Placed)} 理由={fit.Reason}";
+        $"置き直し={(fit.Relocated ? "はい" : "いいえ")} placed={FormatRect(fit.Placed)} 理由={fit.Reason}" +
+        (resolved is { } r
+            ? $" 換算倍率={r.Scale:F2}({(r.ScreenIndex >= 0 ? $"画面#{r.ScreenIndex}" : "窓の倍率")})"
+            : string.Empty);
 }
 
 /// <summary>
@@ -468,6 +539,12 @@ internal readonly record struct ScreenInfo(RECT Monitor, RECT Work, bool IsPrima
     /// <summary>倍率（100% で 1.0）。DPI が 0 のときは 1.0。</summary>
     internal double Scale => Dpi == 0 ? 1.0 : Dpi / 96.0;
 }
+
+/// <summary>控えてあった窓の位置を物理ピクセルへ直した結果。</summary>
+/// <param name="Physical">物理ピクセルの矩形。</param>
+/// <param name="ScreenIndex">直すのに使った倍率の画面の番号。収まる画面が無く、窓の倍率で直したときは -1。</param>
+/// <param name="Scale">直すのに使った倍率。</param>
+internal readonly record struct SavedWindowRect(RECT Physical, int ScreenIndex, double Scale);
 
 /// <summary>普通の窓を今の画面へ収めた結果。</summary>
 /// <param name="Placed">置いた矩形（物理ピクセル）。動かさなければ元のまま。</param>
