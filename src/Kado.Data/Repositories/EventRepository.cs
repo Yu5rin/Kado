@@ -111,6 +111,78 @@ public sealed class EventRepository(SqliteConnection connection)
             $"SELECT {Columns} FROM events WHERE calendar_id = @calendarId ORDER BY date, start_time;",
             new { calendarId }).ToArray();
 
+    /// <summary>
+    /// 指定のカレンダーのどれかに入っている予定だけ。並びは <see cref="All"/> と同じ
+    /// （日付・開始時刻の順）で、<c>All().Where(所属が ids にある)</c> と同じ結果になる。
+    /// <para>
+    /// 全件を読んで絞る代わりに、DB 側で絞る（<c>ix_events_calendar</c>）。実働日の組み立て
+    /// （<c>CalendarWorkspace.ReloadWorkingDays</c>）は、「Kado」の印の予定しか要らないのに、
+    /// 同期で変更があるたびに全予定を画面のスレッドで読んでいた。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<CalendarEvent> ByCalendarIds(IReadOnlyCollection<string> calendarIds)
+    {
+        ArgumentNullException.ThrowIfNull(calendarIds);
+
+        var ids = calendarIds.Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return [];
+
+        // SQLite の変数の数の上限に近いほど多いことは無い（カレンダーは数個〜数十個）が、
+        // 超えるなら諦めて全件から絞る。結果は同じ
+        if (ids.Length > MaxIdsPerQuery)
+        {
+            var set = ids.ToHashSet(StringComparer.Ordinal);
+            return All().Where(e => e.CalendarId is { } id && set.Contains(id)).ToArray();
+        }
+
+        return _connection.Query<CalendarEvent>(
+            $"SELECT {Columns} FROM events WHERE calendar_id IN @ids ORDER BY date, start_time;",
+            new { ids }).ToArray();
+    }
+
+    private const int MaxIdsPerQuery = 500;
+
+    /// <summary><see cref="SearchText"/> の絞り込み。エスケープの文字は <see cref="TextSearch.LikeEscape"/>。</summary>
+    private const string SearchWhere =
+        "WHERE title LIKE @pattern ESCAPE '\\' OR location LIKE @pattern ESCAPE '\\' OR note LIKE @pattern ESCAPE '\\'";
+
+    /// <summary>
+    /// 題・場所・メモのどれかに <paramref name="text"/> を含む予定。検索（<c>MainViewModel.RunSearch</c>）が使う。
+    /// <para>
+    /// 全件を読んで絞らず、SQL の <c>LIKE</c> で先に絞る（<see cref="TextSearch"/>）。<b>読む列は
+    /// 検索結果に要る分だけ</b>で、<c>google_raw</c> など大きな列は読まない。返す予定は
+    /// <c>Id・Title・Date・Location・Note・Source</c> しか入っていない（ほかは既定値）。
+    /// </para>
+    /// <para>
+    /// 並びは <see cref="All"/> と同じ（日付・開始時刻の順。同じなら登録順）。大文字小文字は区別せず、
+    /// 全角と半角は別の文字（今までの探し方と同じ）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<CalendarEvent> SearchText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (text.Length == 0) return [];
+
+        var like = TextSearch.TryCreateLikePattern(text, out var pattern);
+
+        var found = _connection.Query<CalendarEvent>(
+            $"""
+            SELECT id AS Id, title AS Title, date AS Date, location AS Location, note AS Note, source AS Source
+            FROM events
+            {(like ? SearchWhere : "")}
+            ORDER BY date, start_time, rowid;
+            """,
+            new { pattern });
+
+        // LIKE は先に絞るだけ。最終的な判定は、今までと同じ比べ方で行う
+        return found
+            .Where(e => TextSearch.Contains(e.Title, text)
+                || TextSearch.Contains(e.Location, text)
+                || TextSearch.Contains(e.Note, text))
+            .ToArray();
+    }
+
     /// <summary>Google 側の ID で引く。同期で突き合わせるときに使う。</summary>
     public CalendarEvent? FindByGoogleId(string googleEventId) =>
         _connection.QuerySingleOrDefault<CalendarEvent>(

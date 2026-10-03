@@ -76,6 +76,9 @@ public static class ThemeManager
         rebuilt.MergedDictionaries[PaletteIndex] = new ResourceDictionary { Source = source };
         merged[0] = rebuilt;
 
+        // コンバーターが覚えていた、前の配色のブラシを捨てる。結び直し（下）より前に
+        Converters.ThemeResources.Invalidate();
+
         // タイトルバーは OS が描くので、辞書を入れ替えても追随しない。別に頼む
         TitleBarTheme.ApplyToAll();
 

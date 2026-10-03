@@ -1633,13 +1633,16 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        var events = _workspace.Events.All()
+        // 全件を読んで絞らず、SQL の LIKE で絞ってから読む（題・場所・メモの列だけ。google_raw は読まない）。
+        // キー入力が落ち着くたびと、データが変わるたびに走る。大文字小文字・全角半角の扱いは
+        // 今までと同じ（TextSearch）。ここの Hits は、その最終確認
+        var events = _workspace.Events.SearchText(text)
             .Where(e => !CalendarWorkspace.IsMilestoneMark(e))
             .Where(e => Hits(text, e.Title, e.Location, e.Note))
             .Select(SearchResultViewModel.Of);
 
         // 期限の無いタスクも対象にする（項目1）。期限が無ければ選んでいる日で代用して並べる
-        var tasks = _workspace.Tasks.All()
+        var tasks = _workspace.Tasks.SearchText(text)
             .Where(t => Hits(text, t.Title, null, t.Note))
             .Select(t => SearchResultViewModel.Of(t, t.Due ?? SelectedDate));
 
@@ -3601,6 +3604,15 @@ public sealed class MainViewModel : ObservableObject
         MarkCenterViewsStale();
         RefreshVisibleCenterView();
 
+        RaiseViewsRefreshed();
+    }
+
+    /// <summary>
+    /// 引き直しの締め。見出しと、並びで有効・無効が変わるコマンドを合わせる。
+    /// <para><see cref="RefreshViews"/> と、作りたてのビューを渡す <see cref="RebuildViews"/> の両方が通る。</para>
+    /// </summary>
+    private void RaiseViewsRefreshed()
+    {
         RaiseHeader();
 
         // タスクの並びが変わりうるたびに、右クリックメニューの有効・無効を引き直す
@@ -3712,6 +3724,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>設定が変わったあとに組み直す。出している月と選んでいる日は引き継ぐ。</summary>
     private void RebuildViews()
     {
+        // 新しいビューは作るときに、カレンダー一覧から色と出すかどうかを引く。先に読み直しておく
+        SourceLists.Refresh();
+
         BuildViews(Month.Month, SelectedDate, PaneMonth.Month);
 
         // PaneMonth も作り直しているので通知する。通知しないと、画面は捨てたほうの
@@ -3725,7 +3740,22 @@ public sealed class MainViewModel : ObservableObject
         if (_year is not null) Raise(nameof(Year), nameof(YearForView));
         if (_agenda is not null) Raise(nameof(Agenda), nameof(AgendaForView));
 
-        RefreshViews();
+        // 作りたてのビューは、作るときに最新を読んでいる（どのビューも組み立ての最後で
+        // Refresh する）。ここで RefreshViews をそのまま呼ぶと、月・週・日・ミニ月暦・右パネルの月と、
+        // 作ってあった年・一覧を、直後にもう一度組み直してしまう。作っていない・出していない
+        // ビューを作らないことは今までどおり（年・一覧は _year／_agenda が null のまま）。
+        //
+        // 作り直さなかったもの（選んでいる日の一覧）だけを引き直す。組み直しの印は、
+        // 作りたてのぶんだけ下ろす（立てたままだと、そのビューへ切り替えたときにもう一度組み直す）
+        _monthStale = false;
+        _weekStale = false;
+        _dayStale = false;
+        _yearStale = false;
+        _agendaStale = false;
+        _paneMonthStale = false;
+
+        SelectedDay.Refresh();
+        RaiseViewsRefreshed();
     }
 
     /// <summary>

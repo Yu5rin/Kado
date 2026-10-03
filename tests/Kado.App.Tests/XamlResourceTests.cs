@@ -82,7 +82,7 @@ public class XamlResourceTests
         var missing = Directory
             .EnumerateFiles(AppDirectory, "*.cs", SearchOption.AllDirectories)
             .Where(NotGenerated)
-            .SelectMany(f => Regex.Matches(File.ReadAllText(f), @"TryFindResource\(""([^""]+)""\)")
+            .SelectMany(f => Regex.Matches(File.ReadAllText(f), @"(?:TryFindResource|ThemeResources\.Find)\(""([^""]+)""\)")
                 .Select(m => (File: Relative(f), Key: m.Groups[1].Value)))
             .Where(x => !defined.ContainsKey(x.Key))
             .Select(x => $"{x.File}: {x.Key}")

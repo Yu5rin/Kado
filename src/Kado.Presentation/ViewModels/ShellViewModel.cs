@@ -56,8 +56,22 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>寄せる辺が変わった。</summary>
     public event EventHandler<DockEdge>? EdgeChanged;
 
-    /// <summary>ドックの幅が変わった。ドラッグ中は呼ばれない（確定してから）。</summary>
+    /// <summary>
+    /// ドックの幅が変わった。<b>つまんでいる最中も、動かすたびに来る</b>
+    /// （窓の幅を手に追従させるのに要る）。DB へ書くなど、重い後始末はここに付けず
+    /// <see cref="DockWidthCommitted"/> を使う。
+    /// </summary>
     public event EventHandler<double>? DockWidthChanged;
+
+    /// <summary>
+    /// ドックの幅が<b>決まった</b>。つまんでいないときの変更は、そのとき。つまんでいたなら、
+    /// 離したときに、幅が動いていれば1回だけ来る。
+    /// <para>
+    /// 幅の記憶（DB への書き込み）はこちらで受ける。<see cref="DockWidthChanged"/> で受けると、
+    /// つまんでいるあいだ、マウスが動くたびに書き込む。
+    /// </para>
+    /// </summary>
+    public event EventHandler<double>? DockWidthCommitted;
 
     /// <summary>
     /// 今すぐ引っ込めてほしい（Esc など）。アプリ側（<c>ShellController</c>）が受けて、
@@ -125,6 +139,10 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref _width, width, nameof(DockWidth))) return;
 
             DockWidthChanged?.Invoke(this, width);
+
+            // つまんでいるあいだは決まっていない。離したときにまとめて知らせる
+            if (_isResizing) _widthChangedWhileResizing = true;
+            else DockWidthCommitted?.Invoke(this, width);
         }
     }
 
@@ -139,10 +157,31 @@ public sealed class ShellViewModel : ObservableObject
     public bool IsResizing
     {
         get => _isResizing;
-        set => Set(ref _isResizing, value);
+        set
+        {
+            var was = _isResizing;
+
+            if (!Set(ref _isResizing, value)) return;
+
+            if (value)
+            {
+                _widthChangedWhileResizing = false;
+                return;
+            }
+
+            // 離した。つまんでいるあいだに幅が動いていたなら、決まった幅を1回だけ知らせる
+            if (was && _widthChangedWhileResizing)
+            {
+                _widthChangedWhileResizing = false;
+                DockWidthCommitted?.Invoke(this, _width);
+            }
+        }
     }
 
     private bool _isResizing;
+
+    /// <summary>つまんでいるあいだに、幅が動いたか。離したときの通知に要る。</summary>
+    private bool _widthChangedWhileResizing;
 
     /// <summary>
     /// いちばん細くできる幅。設定から受ける。

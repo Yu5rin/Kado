@@ -1169,6 +1169,7 @@
                 MouseLeftButtonDown="OnGripPressed"
                 MouseMove="OnGripDragging"
                 MouseLeftButtonUp="OnGripReleased"
+                LostMouseCapture="OnGripCaptureLost"
                 MouseWheel="OnGripWheel"
                 Visibility="{Binding Shell.IsAtEdge, Converter={StaticResource BoolToVisibility}}">
             <!--

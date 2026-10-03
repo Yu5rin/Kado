@@ -24,14 +24,33 @@ public static class JapaneseHolidays
     /// <summary>計算できる最後の年。春分・秋分の近似式の上限。</summary>
     public const int LastYear = 2099;
 
+    /// <summary>
+    /// 年ごとの祝日表。<see cref="NameOf"/> は月のマス・実働日の判定から何千回も呼ばれ、
+    /// 以前は呼ぶたびにその年の表を一から作り直していた。表は年が決まれば変わらないので、
+    /// 作ったものを使い回す。複数のスレッド（画面と同期）から呼ばれても安全。
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlyDictionary<DateOnly, string>> Cache = new();
+
+    private static readonly IReadOnlyDictionary<DateOnly, string> NoHolidays =
+        new System.Collections.ObjectModel.ReadOnlyDictionary<DateOnly, string>(new Dictionary<DateOnly, string>());
+
     /// <summary>その日の祝日名。祝日でなければ null。</summary>
     public static string? NameOf(DateOnly date) => Of(date.Year).GetValueOrDefault(date);
 
-    /// <summary>その年の祝日をすべて返す。</summary>
+    /// <summary>
+    /// その年の祝日をすべて返す。年ごとに1度だけ作り、あとは同じ表を返す。
+    /// 返す表は読み取り専用で、呼び出し側が書き換えることはできない。
+    /// </summary>
     public static IReadOnlyDictionary<DateOnly, string> Of(int year)
     {
-        if (year is < FirstYear or > LastYear) return new Dictionary<DateOnly, string>();
+        if (year is < FirstYear or > LastYear) return NoHolidays;
 
+        // 同時に初めて呼ばれて2回作ることがあっても、中身は同じで、残るのは1つ
+        return Cache.GetOrAdd(year, static y => new System.Collections.ObjectModel.ReadOnlyDictionary<DateOnly, string>(Build(y)));
+    }
+
+    private static Dictionary<DateOnly, string> Build(int year)
+    {
         var days = new Dictionary<DateOnly, string>();
 
         foreach (var (date, name) in Fixed(year)) days[date] = name;

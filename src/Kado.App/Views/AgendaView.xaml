@@ -232,11 +232,41 @@
         </Border>
 
         <Grid>
-            <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto"
-                          Background="{DynamicResource LineBrush}">
-                <ItemsControl x:Name="Rows" ItemsSource="{Binding Rows}"
-                              ItemTemplate="{StaticResource AgendaRowTemplate}" />
-            </ScrollViewer>
+            <!--
+                行は前後最大2年ぶんある。以前は ScrollViewer の中に置いた既定の StackPanel の
+                ItemsControl で、全行の入れ物を、中身ごと作っていた（数百行）。
+                出ている行の入れ物だけを作り、使い回す（VirtualizingStackPanel の Recycling）。
+
+                <b>仮想化は、ScrollViewer が ItemsControl のテンプレートの中にあって、
+                ItemsPresenter を直に包んでいるときだけ効く。</b>ScrollViewer が外にあると、
+                パネルに高さの上限が渡らず、全行を作ってしまう。ListBox と同じ作りにしてある。
+                スクロールの単位はピクセル（なめらかに動く）。
+
+                スクロールの ScrollViewer はコードビハインドから <c>Template.FindName</c> で取る。
+            -->
+            <ItemsControl x:Name="Rows" ItemsSource="{Binding Rows}"
+                          ItemTemplate="{StaticResource AgendaRowTemplate}"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="ItemsControl">
+                        <ScrollViewer x:Name="Scroller"
+                                      Background="{DynamicResource LineBrush}"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+            </ItemsControl>
 
             <TextBlock Style="{StaticResource BodyTextStyle}" Text="この期間に予定もタスクもありません"
                        HorizontalAlignment="Center" VerticalAlignment="Center"

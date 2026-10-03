@@ -497,6 +497,10 @@ public partial class App : Application
     /// <summary>異常終了を記録して見せる。ログに残さないと再現待ちになる。</summary>
     private static void ReportFatal(Exception ex)
     {
+        // shell.log は別のスレッドがまとめて書くので、落ちる直前の行が行列に残っている。
+        // 切り分けにいちばん要る行なので、先に書き切る
+        Shell.ShellDiagnosticsLog.Flush();
+
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CrashLogPath)!);
@@ -1091,6 +1095,9 @@ public partial class App : Application
         // 見張りを生かしておく。そうでなければ、ここで止める
         _sessionWatcher?.Dispose();
 
+        // 終わりまでの行を書き切る（shell.log は別のスレッドがまとめて書いている）
+        Shell.ShellDiagnosticsLog.Flush();
+
         base.OnExit(e);
     }
 
@@ -1138,6 +1145,9 @@ public partial class App : Application
             // 本当に終わる。この関数が返ると Windows がプロセスを終わらせるので、
             // AppBar を外すのはここで済ませる（すでに外れていれば何もしない）
             ReleaseShellFromAnyThread();
+
+            // この関数が返ると Windows がプロセスを終わらせる。行列に残った行をここで書き切る
+            Shell.ShellDiagnosticsLog.Flush();
             return;
         }
 
@@ -1216,7 +1226,9 @@ public partial class App : Application
         // 居かたが変わるたびに控える。終了時だけだと、落ちたときに戻せない
         main.Shell.ModeChanged += (_, _) => _shellController?.Save();
         main.Shell.EdgeChanged += (_, _) => _shellController?.Save();
-        main.Shell.DockWidthChanged += (_, _) => _shellController?.Save();
+        // 幅は「決まったとき」に1回だけ。つまんでいるあいだは動かすたびに DockWidthChanged が
+        // 来るが、そのたびに DB へ書かない（離したときに DockWidthCommitted が1回来る）
+        main.Shell.DockWidthCommitted += (_, _) => _shellController?.Save();
 
         // ワークエリアを削っている／いないの、DB を介さない印も同じタイミングで
         // 合わせる。データベースが壊れて開けなくなったときの最後の砦になる

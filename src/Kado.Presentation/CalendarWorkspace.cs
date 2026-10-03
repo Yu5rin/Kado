@@ -191,8 +191,9 @@ public sealed class CalendarWorkspace
 
         var ids = calendars.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
 
-        return WorkingDayMarks.Rebuild(
-            Events.All().Where(e => e.CalendarId is { } id && ids.Contains(id)), Holidays);
+        // 要るのは実働日カレンダー（「Kado」の印）の予定だけ。全件を読んで絞らず、DB 側で絞る。
+        // 同期で変更があるたびに画面のスレッドで走るので、予定が数千件あると数百 ms かかっていた
+        return WorkingDayMarks.Rebuild(Events.ByCalendarIds(ids), Holidays);
     }
 
     // ------------------------------------------------------------------

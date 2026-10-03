@@ -38,6 +38,10 @@
     <Compile Include="..\..\src\Kado.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
+    <!-- shell.log の書き手。呼んだスレッドでは行列に積むだけにして、別のスレッドがまとめて書く -->
+    <Compile Include="..\..\src\Kado.App\Shell\BufferedLogWriter.cs" Link="Shell\BufferedLogWriter.cs" />
+    <!-- コンバーターが色のブラシなどを使い回す入れ物（WPF に依存しない部分） -->
+    <Compile Include="..\..\src\Kado.App\Converters\KeyedCache.cs" Link="Converters\KeyedCache.cs" />
     <!-- AppBar が外れたときの受け方と終了印。WPF/Win32 に触れない部品だけ切り出してある -->
     <Compile Include="..\..\src\Kado.App\Shell\UndockReaction.cs" Link="Shell\UndockReaction.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\WorkAreaMarker.cs" Link="Shell\WorkAreaMarker.cs" />

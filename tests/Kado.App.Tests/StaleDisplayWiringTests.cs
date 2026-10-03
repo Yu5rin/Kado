@@ -104,7 +104,8 @@ public class StaleDisplayWiringTests
         Assert.NotEmpty(classes);
 
         var missing = classes
-            .Where(m => m.Groups[3].Value.Contains("TryFindResource", StringComparison.Ordinal))
+            .Where(m => m.Groups[3].Value.Contains("TryFindResource", StringComparison.Ordinal)
+                || m.Groups[3].Value.Contains("ThemeResources.Find", StringComparison.Ordinal))
             .Where(m => !m.Groups[2].Value.Contains("IThemeSensitiveConverter", StringComparison.Ordinal))
             .Select(m => m.Groups[1].Value)
             .ToArray();

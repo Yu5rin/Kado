@@ -327,6 +327,26 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
   書いた可能性があれば読み直す（`IGoogleSync.MayHaveWrittenBeforeInterruption`、`SyncReport.MayHaveWritten`）。
   分からないときは読み直す側に倒す
 
+- **`shell.log` への書き込みは、呼んだスレッドでは行列に積むだけ。** 別のスレッド（`BufferedLogWriter`）が
+  まとめて書く。ウイルス対策ソフトのファイル検査がある PC で、画面のスレッドが1行ごとに止まらないため。
+  そのかわり**書き込みは遅れる**ので、終わるとき・異常終了のときは `ShellDiagnosticsLog.Flush()`
+  （`App.OnExit`・`ReportFatal`・シャットダウンの確定）。世代は `shell.log`・`.1`・`.2` の3つ、1つ1MBまで。
+  窓の移動通知や演出のコマごとの行のような高頻度の行は `WriteThrottled`（1秒に1行、あとは
+  「同種の行を n 回省略。これが最後の値」の1行）。**起動の計時・更新・Google・配信の行には使わない**
+- **仮想化は、`ScrollViewer` が `ItemsControl` のテンプレートの中で `ItemsPresenter` を直に包んでいるときだけ
+  効く。** 外に `ScrollViewer` があると、全行の入れ物を作ってしまう（一覧ビュー）。仮想化すると、見えていない
+  行の入れ物は無い（`ContainerFromItem` が null）ので、`VirtualizingPanel.BringIndexIntoViewPublic` で
+  作らせてから測る。`Rows` を丸ごと入れ替えるとスクロール位置が先頭へ戻るので、見ていた日へ戻している
+  （`AgendaView` の目印）
+- **`Visibility="Collapsed"` の側もバインドとコンバーターは評価される。** 月のマスはふつうの形と詰めた形を
+  別の `DataTemplate` にして、`CellsHost` の Style が `IsCompact` で `ItemTemplate` を差し替える。
+  マスのテンプレートの中に `IsCompact` を結ばない（マスごとに RelativeSource のトリガーが増える）
+- **コンバーターは、色の文字列から凍結したブラシを作って使い回す（`BrushCache`）。配色の辞書からの引き当ては
+  `ThemeResources.Find` で、配色を当て直すまで同じ結果を使い回す。** `ThemeManager.Apply` が辞書を入れ替えた
+  直後に `ThemeResources.Invalidate()` を呼び、そのあとでバインドを結び直す。この順を変えると前の配色が残る
+- **幅をつまんでいるあいだは、`DockWidthChanged`（動かすたびに来る）で保存しない。** 保存は
+  `DockWidthCommitted`（つまんでいないときの変更はその場で、つまんでいたなら離したときに1回）で受ける
+
 起動が遅いときは `shell.log` の `startup-timing`（印ごとの累計と区間）と
 `startup-slow`（起動中に100msを超えた処理）を見る。仕掛けは
 `Kado.Presentation.Infrastructure.StartupTrace`。
