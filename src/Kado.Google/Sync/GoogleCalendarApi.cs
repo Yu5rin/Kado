@@ -18,6 +18,18 @@ public interface IAccessTokenSource
 {
     /// <summary>いま使えるアクセストークンを返す。期限が近ければ取り直す。</summary>
     Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Google が 401 で断ってきたときに、トークンを取り直す。
+    /// <para>
+    /// 期限は残っているはずなのに通らないことがある（時計のずれ、Google 側での失効）。
+    /// <paramref name="rejectedToken"/> は断られたトークン。すでに別の呼び出しが取り直していれば、
+    /// 取り直さずにその新しいものを返す。<b>取り直せない実装は、同じトークンを返せばよい</b>
+    /// （呼び出し側は、前と同じなら出し直さない）。
+    /// </para>
+    /// </summary>
+    Task<string> RefreshAccessTokenAsync(string rejectedToken, CancellationToken cancellationToken = default) =>
+        GetAccessTokenAsync(cancellationToken);
 }
 
 /// <summary>
@@ -31,12 +43,16 @@ public interface IAccessTokenSource
 /// 全部取り直す</b>（要件書 6.3）。Google は古い token を無期限には覚えていない。
 /// </para>
 /// </summary>
-public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens)
+public sealed class GoogleCalendarApi(
+    HttpClient http, IAccessTokenSource tokens, GoogleRetryPolicy? retry = null)
 {
     private const string Root = "https://www.googleapis.com/calendar/v3";
 
     private readonly HttpClient _http = http ?? throw new ArgumentNullException(nameof(http));
     private readonly IAccessTokenSource _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
+
+    /// <summary>429・5xx のときに待って出し直す方針。省略すると本物の待ち方（<see cref="GoogleRetryPolicy.Default"/>）。</summary>
+    private readonly GoogleRetryPolicy _retry = retry ?? GoogleRetryPolicy.Default;
 
     /// <summary>
     /// イベントの一覧を1ページ取る。
@@ -232,11 +248,10 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
     public async Task DeleteEventAsync(
         string calendarId, string eventId, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/{Uri.EscapeDataString(eventId)}");
+        var url = $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/{Uri.EscapeDataString(eventId)}";
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(HttpMethod.Delete, url), cancellationToken).ConfigureAwait(false);
 
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) return;
 
@@ -261,8 +276,8 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
 
     private async Task<JsonElement> GetAsync(string url, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, url), cancellationToken).ConfigureAwait(false);
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
 
@@ -272,68 +287,34 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
     private async Task<JsonElement> SendAsync(
         HttpMethod method, string url, JsonObject body, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(method, url)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
+        // 出し直すときのために、本文は文字列で持っておき、要求のたびに作る
+        var json = body.ToJsonString();
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(method, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            },
+            cancellationToken).ConfigureAwait(false);
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
 
         return await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendRawAsync(
-        HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", await _tokens.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+    /// <summary>
+    /// 送る。401 はトークンを一度だけ取り直し、429・5xx は待って数回だけ出し直す
+    /// （<see cref="GoogleHttp.SendAsync"/>）。
+    /// </summary>
+    private Task<HttpResponseMessage> SendRawAsync(
+        Func<HttpRequestMessage> createRequest, CancellationToken cancellationToken) =>
+        GoogleHttp.SendAsync(_http, _tokens, createRequest, _retry, timeout: null, cancellationToken);
 
-        return await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task<JsonElement> ReadBodyAsync(
-        HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        // 削除などは本文が空で返る
-        if (string.IsNullOrWhiteSpace(text)) return default;
-
-        return JsonDocument.Parse(text).RootElement.Clone();
-    }
+    private static Task<JsonElement> ReadBodyAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken) =>
+        GoogleHttp.ReadBodyAsync(response, cancellationToken);
 
     /// <summary>断られていたら、見分けられる形にして投げる。</summary>
-    private static async Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode) return;
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        throw new GoogleApiException(response.StatusCode, ReadReason(body), body);
-    }
-
-    /// <summary>エラーの本文から理由を取り出す。読めなければ状態だけで判断する。</summary>
-    private static string ReadReason(string body)
-    {
-        try
-        {
-            var error = JsonDocument.Parse(body).RootElement.GetProperty("error");
-
-            if (error.TryGetProperty("errors", out var list) &&
-                list.ValueKind == JsonValueKind.Array &&
-                list.EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Object } first &&
-                Mapping.GoogleJson.Text(first, "reason") is { } reason)
-            {
-                return reason;
-            }
-
-            return Mapping.GoogleJson.Text(error, "message") ?? "理由なし";
-        }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
-        {
-            return "理由なし";
-        }
-    }
+    private static Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken) =>
+        GoogleHttp.EnsureOkAsync(response, cancellationToken);
 }

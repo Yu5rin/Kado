@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text.Json;
+using Kado.Presentation.Net;
 using Kado.Presentation.Update;
 
 namespace Kado.Presentation.Tests;
@@ -20,14 +21,14 @@ public class UpdateFailureTests
         new($"HTTP {(int)status}", null, status);
 
     [Theory]
-    [InlineData(HttpStatusCode.Forbidden, UpdateFailureKind.RateLimited)]
-    [InlineData((HttpStatusCode)429, UpdateFailureKind.RateLimited)]
-    [InlineData(HttpStatusCode.ProxyAuthenticationRequired, UpdateFailureKind.ProxyAuthRequired)]
-    [InlineData(HttpStatusCode.NotFound, UpdateFailureKind.NotFound)]
-    [InlineData(HttpStatusCode.BadGateway, UpdateFailureKind.ServerError)]
-    [InlineData(HttpStatusCode.ServiceUnavailable, UpdateFailureKind.ServerError)]
-    [InlineData(HttpStatusCode.BadRequest, UpdateFailureKind.Other)]
-    public void 状態コードから種類を決める(HttpStatusCode status, UpdateFailureKind expected)
+    [InlineData(HttpStatusCode.Forbidden, NetworkFailureKind.RateLimited)]
+    [InlineData((HttpStatusCode)429, NetworkFailureKind.RateLimited)]
+    [InlineData(HttpStatusCode.ProxyAuthenticationRequired, NetworkFailureKind.ProxyAuthRequired)]
+    [InlineData(HttpStatusCode.NotFound, NetworkFailureKind.NotFound)]
+    [InlineData(HttpStatusCode.BadGateway, NetworkFailureKind.ServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, NetworkFailureKind.ServerError)]
+    [InlineData(HttpStatusCode.BadRequest, NetworkFailureKind.Other)]
+    public void 状態コードから種類を決める(HttpStatusCode status, NetworkFailureKind expected)
     {
         Assert.Equal(expected, UpdateFailure.Classify(Http(status)));
     }
@@ -60,7 +61,7 @@ public class UpdateFailureTests
     {
         var timeout = new TaskCanceledException("timeout", new TimeoutException());
 
-        Assert.Equal(UpdateFailureKind.Timeout, UpdateFailure.Classify(timeout));
+        Assert.Equal(NetworkFailureKind.Timeout, UpdateFailure.Classify(timeout));
         Assert.Contains("時間内に応答がありませんでした", UpdateFailure.CheckMessage(timeout), StringComparison.Ordinal);
     }
 
@@ -70,7 +71,7 @@ public class UpdateFailureTests
         // 外側は「送信できませんでした」。本当の理由は内側の SocketException
         var ex = new HttpRequestException("送信できませんでした", new SocketException((int)SocketError.ConnectionRefused));
 
-        Assert.Equal(UpdateFailureKind.CannotConnect, UpdateFailure.Classify(ex));
+        Assert.Equal(NetworkFailureKind.CannotConnect, UpdateFailure.Classify(ex));
         Assert.Contains("接続できませんでした", UpdateFailure.CheckMessage(ex), StringComparison.Ordinal);
     }
 
@@ -80,7 +81,7 @@ public class UpdateFailureTests
         var ex = new HttpRequestException(
             "SSL 接続を確立できませんでした", new AuthenticationException("リモート証明書が無効です"));
 
-        Assert.Equal(UpdateFailureKind.CertificateProblem, UpdateFailure.Classify(ex));
+        Assert.Equal(NetworkFailureKind.CertificateProblem, UpdateFailure.Classify(ex));
         Assert.Contains("証明書", UpdateFailure.CheckMessage(ex), StringComparison.Ordinal);
     }
 
@@ -89,20 +90,20 @@ public class UpdateFailureTests
     {
         var tunnel = new HttpRequestException(HttpRequestError.ProxyTunnelError, "tunnel", null, null);
 
-        Assert.Equal(UpdateFailureKind.ProxyError, UpdateFailure.Classify(tunnel));
+        Assert.Equal(NetworkFailureKind.ProxyError, UpdateFailure.Classify(tunnel));
 
         // 407 が付いているならそちらを優先する
         var auth = new HttpRequestException(
             HttpRequestError.ProxyTunnelError, "tunnel", null, HttpStatusCode.ProxyAuthenticationRequired);
 
-        Assert.Equal(UpdateFailureKind.ProxyAuthRequired, UpdateFailure.Classify(auth));
+        Assert.Equal(NetworkFailureKind.ProxyAuthRequired, UpdateFailure.Classify(auth));
     }
 
     [Fact]
     public void 応答を読めなかったときは読み取れなかったと伝える()
     {
-        Assert.Equal(UpdateFailureKind.UnreadableResponse, UpdateFailure.Classify(new JsonException("x")));
-        Assert.Equal(UpdateFailureKind.UnreadableResponse, UpdateFailure.Classify(new InvalidDataException("x")));
+        Assert.Equal(NetworkFailureKind.UnreadableResponse, UpdateFailure.Classify(new JsonException("x")));
+        Assert.Equal(NetworkFailureKind.UnreadableResponse, UpdateFailure.Classify(new InvalidDataException("x")));
     }
 
     [Fact]
@@ -110,7 +111,7 @@ public class UpdateFailureTests
     {
         var ex = new UnexpectedContentException("text/html; charset=utf-8");
 
-        Assert.Equal(UpdateFailureKind.WebPageInsteadOfFile, UpdateFailure.Classify(ex));
+        Assert.Equal(NetworkFailureKind.WebPageInsteadOfFile, UpdateFailure.Classify(ex));
         Assert.Contains("差し替えられている可能性", UpdateFailure.DownloadMessage(ex), StringComparison.Ordinal);
     }
 
@@ -119,7 +120,7 @@ public class UpdateFailureTests
     {
         var ex = new AggregateException(Http(HttpStatusCode.ProxyAuthenticationRequired));
 
-        Assert.Equal(UpdateFailureKind.ProxyAuthRequired, UpdateFailure.Classify(ex));
+        Assert.Equal(NetworkFailureKind.ProxyAuthRequired, UpdateFailure.Classify(ex));
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public class UpdateFailureTests
         var failure = UpdateFailure.From(
             Http(HttpStatusCode.Forbidden), "https://github.com/Yu5rin/Kado/releases/latest");
 
-        Assert.Equal(UpdateFailureKind.RateLimited, failure.Kind);
+        Assert.Equal(NetworkFailureKind.RateLimited, failure.Kind);
         Assert.Equal("https://github.com/Yu5rin/Kado/releases/latest", failure.ReleasePageUrl);
     }
 }

@@ -17,7 +17,8 @@ namespace Kado.Google.Sync;
 /// 取りこぼす。少し前から取り直すことで埋める（<see cref="Overlap"/>）。
 /// </para>
 /// </summary>
-public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
+public sealed class GoogleTasksApi(
+    HttpClient http, IAccessTokenSource tokens, GoogleRetryPolicy? retry = null)
 {
     private const string Root = "https://tasks.googleapis.com/tasks/v1";
 
@@ -29,6 +30,9 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
 
     private readonly HttpClient _http = http ?? throw new ArgumentNullException(nameof(http));
     private readonly IAccessTokenSource _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
+
+    /// <summary>429・5xx のときに待って出し直す方針。省略すると本物の待ち方。</summary>
+    private readonly GoogleRetryPolicy _retry = retry ?? GoogleRetryPolicy.Default;
 
     /// <summary>タスクリストの一覧を取る。</summary>
     public async Task<GooglePage> ListTaskListsAsync(
@@ -123,11 +127,10 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
     public async Task DeleteTaskAsync(
         string taskListId, string taskId, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"{Root}/lists/{Uri.EscapeDataString(taskListId)}/tasks/{Uri.EscapeDataString(taskId)}");
+        var url = $"{Root}/lists/{Uri.EscapeDataString(taskListId)}/tasks/{Uri.EscapeDataString(taskId)}";
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(HttpMethod.Delete, url), cancellationToken).ConfigureAwait(false);
 
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) return;
 
@@ -150,8 +153,8 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
 
     private async Task<JsonElement> GetAsync(string url, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, url), cancellationToken).ConfigureAwait(false);
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
 
@@ -161,65 +164,29 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
     private async Task<JsonElement> SendAsync(
         HttpMethod method, string url, JsonObject body, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(method, url)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
+        var json = body.ToJsonString();
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await SendRawAsync(
+            () => new HttpRequestMessage(method, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            },
+            cancellationToken).ConfigureAwait(false);
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
 
         return await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendRawAsync(
-        HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", await _tokens.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+    /// <summary>送る。401 の取り直しと、429・5xx の出し直しは <see cref="GoogleHttp.SendAsync"/>。</summary>
+    private Task<HttpResponseMessage> SendRawAsync(
+        Func<HttpRequestMessage> createRequest, CancellationToken cancellationToken) =>
+        GoogleHttp.SendAsync(_http, _tokens, createRequest, _retry, timeout: null, cancellationToken);
 
-        return await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-    }
+    private static Task<JsonElement> ReadBodyAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken) =>
+        GoogleHttp.ReadBodyAsync(response, cancellationToken);
 
-    private static async Task<JsonElement> ReadBodyAsync(
-        HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(text)) return default;
-
-        return JsonDocument.Parse(text).RootElement.Clone();
-    }
-
-    private static async Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode) return;
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        throw new GoogleApiException(response.StatusCode, ReadReason(body), body);
-    }
-
-    private static string ReadReason(string body)
-    {
-        try
-        {
-            var error = JsonDocument.Parse(body).RootElement.GetProperty("error");
-
-            if (error.TryGetProperty("errors", out var list) &&
-                list.ValueKind == JsonValueKind.Array &&
-                list.EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Object } first &&
-                Mapping.GoogleJson.Text(first, "reason") is { } reason)
-            {
-                return reason;
-            }
-
-            return Mapping.GoogleJson.Text(error, "message") ?? "理由なし";
-        }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
-        {
-            return "理由なし";
-        }
-    }
+    private static Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken) =>
+        GoogleHttp.EnsureOkAsync(response, cancellationToken);
 }

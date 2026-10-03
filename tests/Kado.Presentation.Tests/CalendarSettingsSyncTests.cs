@@ -86,7 +86,7 @@ public class CalendarSettingsSyncTests : IDisposable
         var token = new FixedToken();
 
         using var service = new GoogleSyncService(
-            _test.Workspace, new GoogleCalendarApi(http, token), new GoogleTasksApi(http, token));
+            _test.Workspace, new GoogleCalendarApi(http, token, GoogleRetryPolicy.None), new GoogleTasksApi(http, token, GoogleRetryPolicy.None));
         await service.SyncAsync();
 
         return handler;

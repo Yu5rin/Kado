@@ -29,7 +29,7 @@ public class GoogleDriveApiTests
             return respond(request);
         });
 
-        return (new GoogleDriveApi(new HttpClient(handler), new FixedToken()), seen);
+        return (new GoogleDriveApi(new HttpClient(handler), new FixedToken(), GoogleRetryPolicy.None), seen);
     }
 
     [Fact]

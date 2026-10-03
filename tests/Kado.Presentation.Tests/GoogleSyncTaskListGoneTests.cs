@@ -65,7 +65,7 @@ public class GoogleSyncTaskListGoneTests : IDisposable
         var token = new FixedToken();
 
         using var service = new GoogleSyncService(
-            _test.Workspace, new GoogleCalendarApi(http, token), new GoogleTasksApi(http, token));
+            _test.Workspace, new GoogleCalendarApi(http, token, GoogleRetryPolicy.None), new GoogleTasksApi(http, token, GoogleRetryPolicy.None));
 
         return ((await service.SyncAsync())!, handler);
     }

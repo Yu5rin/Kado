@@ -4,6 +4,8 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Kado.Core.Net;
+using Kado.Presentation.Net;
 using Kado.Presentation.Update;
 
 namespace Kado.App.Update;
@@ -354,8 +356,9 @@ public sealed class UpdateService
     /// </summary>
     private static HttpClient CreateClient(bool allowAutoRedirect)
     {
-        var handler = new HttpClientHandler { AllowAutoRedirect = allowAutoRedirect };
-        var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        // 作り方は共通の工場（KadoHttp）。認証付きプロキシ（407）へ、ログオン中のユーザーの
+        // 資格情報を渡す設定もそこにある
+        var http = KadoHttp.CreateClient(Timeout.InfiniteTimeSpan, allowAutoRedirect);
 
         // GitHub の API は名乗らないと断ることがある
         http.DefaultRequestHeaders.UserAgent.Add(

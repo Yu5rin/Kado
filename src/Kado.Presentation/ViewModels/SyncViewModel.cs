@@ -2,6 +2,7 @@ using System.Text.Json;
 using Kado.Google.OAuth;
 using Kado.Google.Sync;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Net;
 using Kado.Presentation.Sync;
 
 namespace Kado.Presentation.ViewModels;
@@ -59,6 +60,22 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>直前の中断が <see cref="CancelSyncCommand"/> によるものか。タイムアウトと区別する。</summary>
     private bool _cancelledByUser;
 
+    /// <summary>
+    /// 走っているものの中身。右上の「同期中…」「接続中…」「切断中…」の出し分けに使う。
+    /// 中止ボタンはどれにも効く（<see cref="_syncCts"/> を切る）。
+    /// </summary>
+    private Activity _activity = Activity.Syncing;
+
+    /// <summary>直前の同期が、呼びすぎ（待って出し直してもだめ）で一部を次回に回したか。</summary>
+    private bool _lastSyncThrottled;
+
+    private enum Activity
+    {
+        Syncing,
+        Connecting,
+        Disconnecting,
+    }
+
     public SyncViewModel(IGoogleSync? google = null)
     {
         _google = google;
@@ -97,6 +114,15 @@ public sealed class SyncViewModel : ObservableObject
 
     /// <summary>同期が終わったときに呼ばれる。画面はこれを見て引き直す。</summary>
     public event EventHandler? Synced;
+
+    /// <summary>
+    /// 同期が、失敗でも「呼びすぎで一部を次回に回した」でもなく終わったときに呼ばれる。
+    /// 手で押した同期でも、裏の同期でも上がる。裏の同期は、これを受けて、失敗で延びた間隔を戻す。
+    /// </summary>
+    public event EventHandler? Succeeded;
+
+    /// <summary>「Google に接続」の待ち（ブラウザでの認可）を、中止ボタンで止めたときに呼ばれる。</summary>
+    public event EventHandler? ConnectCancelled;
 
     /// <summary>
     /// 中止ボタンで止めたときに呼ばれる。<see cref="Synced"/> は何も変わっていないので流さない
@@ -159,7 +185,12 @@ public sealed class SyncViewModel : ObservableObject
     public string StatusText => _state switch
     {
         SyncState.Disconnected => "Google 未接続",
-        SyncState.Running => "同期中…",
+        SyncState.Running => _activity switch
+        {
+            Activity.Connecting => "接続中…",
+            Activity.Disconnecting => "切断中…",
+            _ => "同期中…",
+        },
         SyncState.Failed => $"同期できません（{_detail}）",
         SyncState.Warned => $"一部を伝えられません（{WarningSummary}）",
         _ => _lastSyncedAt is { } at ? $"同期済み {at.ToLocalTime():HH:mm}" : "同期済み",
@@ -268,51 +299,65 @@ public sealed class SyncViewModel : ObservableObject
 
         await SyncAsync(cancellationToken).ConfigureAwait(true);
 
-        // 警告どまりなら、繋がってはいる。間隔を伸ばす理由にはしない
-        return State is not SyncState.Failed;
+        // 警告どまりなら、繋がってはいる。間隔を伸ばす理由にはしない。
+        // ただし、呼びすぎ（429）で一部を次回に回したときは、すぐ次を叩いても同じ結果になりやすい。
+        // 失敗と同じに数えて、間隔を延ばす（警告どまりなので State は Warned のまま）
+        return State is not SyncState.Failed && !_lastSyncThrottled;
     }
 
-    /// <summary>繋ぐ。</summary>
+    /// <summary>
+    /// 繋ぐ。
+    /// <para>
+    /// 認可を待つあいだ（最長5分）も、中止ボタンで止められる（<see cref="CancelSyncCommand"/>）。
+    /// 止めたときは失敗にせず、未接続のまま戻る（<see cref="ConnectCancelled"/>）。
+    /// </para>
+    /// </summary>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         if (_google is null) return;
 
+        _activity = Activity.Connecting;
         State = SyncState.Running;
+
+        // 中止ボタンはこの印を切る（同期のときと同じ仕掛け）
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _syncCts = cts;
+        _cancelledByUser = false;
+
         try
         {
-            await _google.ConnectAsync(cancellationToken).ConfigureAwait(true);
+            await _google.ConnectAsync(cts.Token).ConfigureAwait(true);
 
             State = SyncState.Idle;
 
             // 繋いだらすぐ取り込む。繋いだのに何も出ないと、繋がったのか分からない
+            _syncCts = null;
             await SyncAsync(cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_cancelledByUser)
+        {
+            // 認可の待ちを中止ボタンで止めた。失敗ではない。繋がっていなければ、未接続に戻る
+            State = _google.IsConnected ? SyncState.Idle : SyncState.Disconnected;
+            ConnectCancelled?.Invoke(this, EventArgs.Empty);
         }
         catch (OAuthException ex)
         {
             Fail(ex.WasDeclined ? "許可されませんでした" : ex.Message);
         }
-        catch (HttpRequestException)
+        catch (Exception ex)
         {
-            Fail("ネットワークに繋がりません");
-        }
-        catch (OperationCanceledException)
-        {
-            // ブラウザでの認可待ちがタイムアウトした、あるいは打ち切られた
-            Fail("時間内に応答がありませんでした");
-        }
-        catch (JsonException)
-        {
-            Fail("応答を読み取れませんでした（ネットワークの接続先を確認してください）");
-        }
-        catch (Exception)
-        {
-            // 想定していない転び方をしても、繋がっていない扱いのまま止める
-            Fail("接続できませんでした");
+            // 通信の失敗は原因ごとに言い分ける（プロキシの認証・証明書・接続・時間切れ・応答が読めない）。
+            // 想定していない転び方をしても、繋がっていない扱いのまま止める。型名は出さない
+            Fail(GoogleFailure.Describe(ex, ex is HttpRequestException ? "ネットワークに繋がりません" : "接続できませんでした"));
         }
         finally
         {
             // catch で拾い切れない抜け方をしても、Running のまま残さない
             if (State == SyncState.Running) State = SyncState.Idle;
+
+            if (ReferenceEquals(_syncCts, cts)) _syncCts = null;
+            _cancelledByUser = false;
+            _activity = Activity.Syncing;
         }
     }
 
@@ -327,20 +372,34 @@ public sealed class SyncViewModel : ObservableObject
     /// <summary>切ったが、Google 側の取り消しが届かなかったときに呼ばれる。案内を出す先。</summary>
     public event EventHandler? RevocationNotDelivered;
 
-    /// <summary>切る。</summary>
+    /// <summary>
+    /// 切る。
+    /// <para>
+    /// 取り消しの通信（最大30秒）のあいだは「切断中…」で、中止ボタンで通信だけを諦められる。
+    /// 諦めても、こちらの接続は切れる（取り消しが届かなかった案内を出す）。
+    /// </para>
+    /// </summary>
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         if (_google is null) return;
 
+        _activity = Activity.Disconnecting;
+        State = SyncState.Running;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _syncCts = cts;
+        _cancelledByUser = false;
+
         var revoked = true;
         try
         {
-            revoked = await _google.DisconnectAsync(cancellationToken).ConfigureAwait(true);
+            revoked = await _google.DisconnectAsync(cts.Token).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // 取り消しの通信の失敗は、実物の側が受けて戻り値で返す。ここへ来るのは、
-            // 控えを消す段で転んだ場合など。控えが消えていれば切れている（取り消しは届いていない扱い）
+            // 控えを消す段で転んだ場合や、取り消しの通信を止めた場合など。
+            // 控えが消えていれば切れている（取り消しは届いていない扱い）
             revoked = false;
 
             // 控えが残っているのに「切った」と見せると、裏の同期が勝手に再開する。正直に失敗にする
@@ -349,6 +408,12 @@ public sealed class SyncViewModel : ObservableObject
                 Fail("切断できませんでした");
                 return;
             }
+        }
+        finally
+        {
+            if (ReferenceEquals(_syncCts, cts)) _syncCts = null;
+            _cancelledByUser = false;
+            _activity = Activity.Syncing;
         }
 
         LastReport = null;
@@ -370,7 +435,9 @@ public sealed class SyncViewModel : ObservableObject
     {
         if (_google is null || !_google.IsConnected) return;
 
+        _activity = Activity.Syncing;
         State = SyncState.Running;
+        _lastSyncThrottled = false;
 
         // 中止ボタンはこの印を切る。外から渡された cancellationToken（裏の定期同期が
         // 持つ既定のもの）とは別物なので、繋いだものを作って両方を見張る
@@ -391,6 +458,7 @@ public sealed class SyncViewModel : ObservableObject
 
             LastReport = report;
             LastSyncedAt = DateTimeOffset.Now;
+            _lastSyncThrottled = report.Throttled;
 
             // 警告は溜める。今回が無事でも、前回までの警告を使う人が見るまで消さない
             AddWarnings(report.Warnings);
@@ -398,6 +466,9 @@ public sealed class SyncViewModel : ObservableObject
             State = HasUnreadWarnings ? SyncState.Warned : SyncState.Idle;
 
             Synced?.Invoke(this, EventArgs.Empty);
+
+            // 呼びすぎで一部を次回に回したときは、うまくいったことにしない（間隔を戻さない）
+            if (!report.Throttled) Succeeded?.Invoke(this, EventArgs.Empty);
         }
         // 中止ボタンで止めた。失敗ではないので赤くしない。タイムアウト（下の catch）とは
         // 区別するので、こちらを先に置く（型が同じなので条件の無いほうが後だと拾えない）
@@ -411,28 +482,13 @@ public sealed class SyncViewModel : ObservableObject
             // 更新トークンが死んでいたら繋ぎ直しが要る
             Fail(ex.IsRefreshTokenDead ? "繋ぎ直してください" : ex.Message);
         }
-        catch (GoogleApiException ex)
+        catch (Exception ex)
         {
-            Fail(ex.Reason);
-        }
-        catch (HttpRequestException)
-        {
-            Fail("ネットワークに繋がりません");
-        }
-        catch (OperationCanceledException)
-        {
-            // HttpClient の既定タイムアウト超過などで TaskCanceledException が来る場面を含む
-            Fail("時間内に応答がありませんでした");
-        }
-        catch (JsonException)
-        {
-            // キャプティブポータルなどが HTML を 200 で返し、応答を JSON として読めない場面
-            Fail("応答を読み取れませんでした（ネットワークの接続先を確認してください）");
-        }
-        catch (Exception)
-        {
-            // 想定していない転び方をしても、「同期中…」のまま固まらせない
-            Fail("同期できませんでした");
+            // 失敗は原因ごとに言い分ける（プロキシの認証・証明書・接続できない・時間切れ・Google が拒否・
+            // 呼びすぎ・応答が読めない）。「ネットワークに繋がりません」でひとまとめにしない。
+            // 想定していない転び方をしても、「同期中…」のまま固まらせない。型名は画面に出さない
+            // （詳しい連鎖は GoogleConnection が shell.log に残している）
+            Fail(GoogleFailure.Describe(ex, ex is HttpRequestException ? "ネットワークに繋がりません" : "同期できませんでした"));
         }
         finally
         {

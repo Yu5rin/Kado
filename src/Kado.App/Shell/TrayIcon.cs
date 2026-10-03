@@ -45,6 +45,15 @@ public sealed class TrayIcon : IDisposable
     /// <summary>左クリックまたはダブルクリックされた。</summary>
     public event EventHandler? Activated;
 
+    /// <summary>
+    /// <see cref="ShowBalloon"/> で出したバルーンが押された。
+    /// <para>通知の領域のバージョンを上げていない（既定）ので、<c>lParam</c> にメッセージがそのまま入る。</para>
+    /// </summary>
+    public event EventHandler? BalloonClicked;
+
+    /// <summary>バルーンが押された（<c>NIN_BALLOONUSERCLICK</c> = <c>WM_USER + 5</c>）。</summary>
+    private const int NIN_BALLOONUSERCLICK = 0x0400 + 5;
+
     /// <summary>トレイにアイコンが出ているか。出ていないあいだは、窓を隠すと呼び戻せない。</summary>
     public bool IsShown => _added;
 
@@ -211,6 +220,11 @@ public sealed class TrayIcon : IDisposable
 
             case WM_RBUTTONUP:
                 ShowMenu();
+                handled = true;
+                break;
+
+            case NIN_BALLOONUSERCLICK:
+                BalloonClicked?.Invoke(this, EventArgs.Empty);
                 handled = true;
                 break;
         }

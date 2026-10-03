@@ -10,6 +10,7 @@ using Kado.Google.Mapping;
 using Kado.Google.OAuth;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Net;
 using Kado.Presentation.Notifications;
 using Kado.Presentation.Settings;
 using Microsoft.Data.Sqlite;
@@ -215,7 +216,7 @@ public sealed class MainViewModel : ObservableObject
             // 配信元が決まっていれば、1日1回だけ取りに行く。日付をまたいだあとも
             // 同じことをするので、判断は1か所（FetchFeedIfDue）に寄せてある。
             // 通信は別スレッドで始まるので、ここで画面のスレッドは止まらない
-            StartupTrace.Measure("実働日の配信の取得(開始)", FetchFeedIfDue);
+            StartupTrace.Measure("実働日の配信の取得(開始)", () => FetchFeedIfDue());
         }
 
         PreviousCommand = new RelayCommand(GoToPrevious);
@@ -358,7 +359,7 @@ public sealed class MainViewModel : ObservableObject
         FetchWorkingDayFeedCommand = new AsyncRelayCommand(
             () => FetchFeedAsync(quiet: false),
             () => _settings is { FeedUrl.Length: > 0 },
-            ex => StatusMessage = $"配信元から取り込めませんでした（{FailureReason(ex)}）");
+            ex => StatusMessage = $"配信元から取り込めませんでした（{(ex is SqliteException ? FailureReason(ex) : FeedFetchPolicy.Describe(ex))}）");
 
         ExportWorkingDayFeedCommand = new RelayCommand(ExportFeed);
 
@@ -407,6 +408,7 @@ public sealed class MainViewModel : ObservableObject
         // 中止ボタンで止めたときだけ、下のステータス行に断りを出す（項目8）。
         // 失敗ではないので、Sync 側の赤い表示（StatusText）は使わない
         Sync.Cancelled += (_, _) => StatusMessage = "同期を中止しました";
+        Sync.ConnectCancelled += (_, _) => StatusMessage = "Google への接続を中止しました";
 
         SourceLists.SaveFailed += (_, ex) => ReportSaveFailure(ex);
 
@@ -1324,6 +1326,12 @@ public sealed class MainViewModel : ObservableObject
     /// <para>画面側が一定時間後に呼ぶ。すでに次の内容に差し替わっていれば、何もしない。</para>
     /// </summary>
     public void ClearStatusMessage() => StatusMessage = null;
+
+    /// <summary>
+    /// 画面の外（App）から、ステータスに知らせを出す。常駐中の更新の確認が、新しい版を見つけたときなど。
+    /// <para>他の知らせと同じく、数秒後に <see cref="ClearStatusMessage"/> で消える。</para>
+    /// </summary>
+    public void AnnounceStatus(string message) => StatusMessage = message;
 
     /// <summary>
     /// 取り込み・復元など、重い処理が走っている間。
@@ -2301,11 +2309,17 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// 配信元から実働日データを取りに行く。
     /// <para>
-    /// <paramref name="quiet"/> のときは起動時の自動取得。取れなくても黙って見送る。
+    /// <paramref name="quiet"/> のときは自動の取得。取れなくても黙って見送る。
     /// 繋がらない場所に置かれていることもあり、そのたびに断りを出しても仕方がない。
     /// </para>
+    /// <para>
+    /// <b>見送り方は失敗の種類で変える</b>（<see cref="FeedFetchPolicy"/>）。接続できない・時間切れ・5xx
+    /// のような一時的な失敗は、「今日は取りに行った」印を書かず、間隔を延ばしながらその日のうちに
+    /// やり直す（スリープから戻った直後はネットワークが無い）。404 や中身が読めない失敗は、待っても
+    /// 直らないので印を書いて翌日に回す。
+    /// </para>
     /// </summary>
-    private async Task FetchFeedAsync(bool quiet)
+    private async Task FetchFeedAsync(bool quiet, DateTime? startedAt = null)
     {
         if (_settings is not { FeedUrl.Length: > 0 } settings) return;
 
@@ -2320,12 +2334,37 @@ public sealed class MainViewModel : ObservableObject
             _workspace.ApplyWorkingDays(result);
             settings.FeedCheckedOn = _today;
 
+            // うまくいった。失敗の数え直し
+            _feedFailures = 0;
+            _feedRetryAt = null;
+
             StatusMessage = $"配信元から実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）";
         }
-        catch (Exception ex) when (quiet && ex is not OperationCanceledException)
+        catch (Exception ex) when (quiet && ex is not OutOfMemoryException)
         {
-            // 自動の取得はここで止める。次に開いたときにまた試す
-            settings.FeedCheckedOn = _today;
+            // 自動の取得はここで止める。この画面には断りを出さない（理由は shell.log に残っている）。
+            // 呼び出し側は取り消しを渡していないので、OperationCanceledException はすべて時間切れ
+            if (FeedFetchPolicy.IsTransient(ex))
+            {
+                // 印は書かない。間隔を延ばしながら、その日のうちにやり直す
+                _feedFailures++;
+                _feedFailureDay = _today;
+
+                var delay = FeedFetchPolicy.RetryDelay(_feedFailures);
+                _feedRetryAt = (startedAt ?? _clock.GetLocalNow().DateTime) + delay;
+
+                _feed.Log.Write("実働日の配信",
+                    $"一時的な失敗のため、取得済みの印は付けない。{(int)delay.TotalMinutes}分後にやり直す（連続{_feedFailures}回目）");
+            }
+            else
+            {
+                // 待っても直らない。印を書いて、翌日に回す
+                settings.FeedCheckedOn = _today;
+                _feedFailures = 0;
+                _feedRetryAt = null;
+
+                _feed.Log.Write("実働日の配信", "恒久的な失敗のため、今日はやり直さない（取得済みの印を付けた）");
+            }
         }
     }
 
@@ -3358,39 +3397,63 @@ public sealed class MainViewModel : ObservableObject
         // 既定で、ログオン時に自動で起動もするので、何日も立ち上げっぱなしになる。
         // そのあいだ会社の実働日カレンダーが更新されても古いままで、設定の
         // 「1日に1回、自動で取りに行く」が嘘になっていた
-        FetchFeedIfDue();
+        FetchFeedIfDue(now);
     }
 
     /// <summary>取りに行っている最中か。1本だけ走らせるための札。</summary>
     private bool _fetchingFeed;
 
+    /// <summary>今日、一時的な失敗で取れなかった連続の回数（間隔を延ばすのに使う）。</summary>
+    private int _feedFailures;
+
+    /// <summary>次に取りに行ってよい時刻（ローカル）。一時的な失敗のあと、間隔を延ばしている間だけ入る。</summary>
+    private DateTime? _feedRetryAt;
+
+    /// <summary>失敗を数えている日。日が変わったら、数え直す。</summary>
+    private DateOnly? _feedFailureDay;
+
     /// <summary>
     /// その日まだ取りに行っていなければ、配信元から実働日データを取りに行く。
     /// <para>
-    /// 起動したときと、日付をまたいだときに呼ばれる。取れても取れなくても
-    /// <c>FeedCheckedOn</c> に今日を控えるので、同じ日に何度も出て行くことはない。
+    /// 起動したときと、日付をまたいだときと、1分ごとの確認で呼ばれる。取れたとき、または待っても
+    /// 直らない失敗のときは <c>FeedCheckedOn</c> に今日を控えるので、同じ日に何度も出て行くことはない。
+    /// 一時的な失敗のときは印を書かず、間隔を延ばしながら（<see cref="FeedFetchPolicy"/>）その日のうちに
+    /// やり直す。待っている間の1分ごとの確認は、通信せずに戻る。
     /// </para>
     /// </summary>
-    private void FetchFeedIfDue()
+    /// <param name="now">いまの時刻（ローカル）。無ければ時計から読む。</param>
+    private void FetchFeedIfDue(DateTime? now = null)
     {
         if (_fetchingFeed) return;
         if (_settings is not { FeedAuto: true, FeedUrl.Length: > 0 } settings) return;
         if (settings.FeedCheckedOn == _today) return;
 
+        // 前の日の失敗の数えは持ち越さない
+        if (_feedFailureDay != _today)
+        {
+            _feedFailures = 0;
+            _feedRetryAt = null;
+        }
+
+        var current = now ?? _clock.GetLocalNow().DateTime;
+
+        // 一時的な失敗のあと、間隔を延ばしている最中
+        if (_feedRetryAt is { } retryAt && current < retryAt) return;
+
         _fetchingFeed = true;
-        _ = FetchFeedAndReleaseAsync();
+        _ = FetchFeedAndReleaseAsync(current);
     }
 
     /// <summary>取りに行って、終わったら札を下ろす。取れなくても下ろす。</summary>
-    private async Task FetchFeedAndReleaseAsync()
+    private async Task FetchFeedAndReleaseAsync(DateTime startedAt)
     {
         try
         {
-            await FetchFeedAsync(quiet: true).ConfigureAwait(true);
+            await FetchFeedAsync(quiet: true, startedAt).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
-            // 途中で止めただけ。次に日付が変わったらまた試す
+            // 途中で止めただけ。次の確認でまた試す
         }
         finally
         {
