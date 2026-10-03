@@ -179,24 +179,43 @@ public sealed class MainViewModel : ObservableObject
             // 月・週・日・年の一式を作り直していたので、実際に読んでいる項目だけ比べる
             settings.Changed += (_, _) =>
             {
+                // 年の出し方は年ビューだけの話。全ビューを作り直さず、作ってある年ビューに
+                // 切り替えを伝えるだけにする（年ビューの中のボタンで切り替えたときも、
+                // 持ち主である年ビューは新しい出し方になっている）。まだ作っていなければ、
+                // 作るときに設定から読む
+                if (_lastYearLayout != settings.YearLayout)
+                {
+                    _lastYearLayout = settings.YearLayout;
+                    if (_year is not null && _year.Layout != settings.YearLayout) _year.Layout = settings.YearLayout;
+                }
+
                 var layoutChanged =
                     _weekStart != settings.WeekStart ||
                     _lastDayStart != settings.DayStart ||
                     _lastDayEnd != settings.DayEnd ||
-                    _lastHourHeight != settings.HourHeight ||
-                    _lastYearLayout != settings.YearLayout;
+                    _lastHourHeight != settings.HourHeight;
 
                 var countChanged = workspace.CountInCalendarDays != settings.CountInCalendarDays;
 
                 _weekStart = settings.WeekStart;
-                workspace.CountInCalendarDays = settings.CountInCalendarDays;
+
+                // 数え方を渡すとワークスペースが DataChanged を上げる。引き直しは
+                // 下で1回にまとめるので、ここでは受けない（組み直しの中でも引き直す）
+                _holdingDataRefresh = true;
+                try
+                {
+                    workspace.CountInCalendarDays = settings.CountInCalendarDays;
+                }
+                finally
+                {
+                    _holdingDataRefresh = false;
+                }
 
                 if (layoutChanged)
                 {
                     _lastDayStart = settings.DayStart;
                     _lastDayEnd = settings.DayEnd;
                     _lastHourHeight = settings.HourHeight;
-                    _lastYearLayout = settings.YearLayout;
                     RebuildViews();
                 }
                 else if (countChanged)
@@ -205,6 +224,10 @@ public sealed class MainViewModel : ObservableObject
                     // 出している中身を引き直せば期限の表記に反映できる
                     RefreshViews();
                 }
+
+                // 配信元が決まる・消えると、「配信元から取り込む」が押せるかどうかが変わる。
+                // RelayCommand は CommandManager に乗っていないので、自分で知らせる
+                FetchWorkingDayFeedCommand?.RaiseCanExecuteChanged();
 
                 // 右パネルの月カレンダーの畳み・開きは設定に持つ。設定側から開かれた
                 // ときも、溜めてあった引き直しを済ませる
@@ -385,15 +408,14 @@ public sealed class MainViewModel : ObservableObject
         // これまでどおり必ず走らせる。判断に自信が持てない経路は省かない側に倒す
         Sync.Synced += (_, _) =>
         {
-            if (Sync.LastReport is { HasChanges: false }) return;
+            if (Sync.LastReport is { HasChanges: false, MayHaveWritten: false }) return;
 
-            _workspace.EnsureSources();
-
-            // 「Kado」の印も同期で増減する。実働日を組み立て直さないと、
-            // 他の端末で取り込んだ分がこちらでは「未登録」のままになる。
-            // この中から DataChanged が飛ぶので、画面はそれで引き直される
-            _workspace.ReloadWorkingDays();
+            ReloadAfterSync();
         };
+
+        // 中止・失敗で止まったときも、止まるまでに書き込んでいたかもしれない（同期は別の
+        // 接続で書くので、画面は自分では気づけない）。書いた可能性があれば読み直す
+        Sync.InterruptedAfterWrites += (_, _) => ReloadAfterSync();
 
         // 右上の表示は Sync が持つ。こちらは伝えるだけ
         Sync.PropertyChanged += (_, args) =>
@@ -421,7 +443,10 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
-        _workspace.DataChanged += (_, _) => RefreshViews();
+        _workspace.DataChanged += (_, _) =>
+        {
+            if (!_holdingDataRefresh) RefreshAfterDataChanged();
+        };
 
         // 左パネルのチェックを外したら、月ビューと右ペインからも消す
         //
@@ -526,7 +551,19 @@ public sealed class MainViewModel : ObservableObject
     /// 入っていなければメニューを押せなくする。
     /// </para>
     /// </summary>
-    public Func<Task>? CheckForUpdate { get; set; }
+    public Func<Task>? CheckForUpdate
+    {
+        get => _checkForUpdate;
+        set
+        {
+            _checkForUpdate = value;
+
+            // 後から入る（アプリ側が配線する）ので、メニューの押せる状態を知らせ直す
+            CheckForUpdateCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private Func<Task>? _checkForUpdate;
 
     /// <summary>
     /// 更新の通信を試す（設定の「うまく更新できないとき」）。
@@ -1053,6 +1090,10 @@ public sealed class MainViewModel : ObservableObject
         else
         {
             Set(ref _isMainViewOpen, true, nameof(IsMainViewOpen));
+
+            // 見出しの年月は、中央を畳んでいるあいだ選んだ日の書式になっている。
+            // セッターを通さずに戻すので、ここで知らせないと畳んだ書式のまま残る
+            RaiseHeader();
         }
     }
 
@@ -1239,6 +1280,10 @@ public sealed class MainViewModel : ObservableObject
                 _agenda = CreateAgenda();
                 Raise(nameof(Agenda), nameof(AgendaForView));
             }
+
+            // 「実働 n ／ 残り n 日」は今日から数える。月をまたいだときは、見ている月に
+            // 今日が入るかどうかも変わる。通知しないと、前日の数字のまま残る
+            RaiseHeader();
         }
     }
 
@@ -1806,7 +1851,17 @@ public sealed class MainViewModel : ObservableObject
     /// 開いたまま差し替えると壊れる。
     /// </para>
     /// </summary>
-    public Action<string>? RestoreBackup { get; set; }
+    public Action<string>? RestoreBackup
+    {
+        get => _restoreBackup;
+        set
+        {
+            _restoreBackup = value;
+            RestoreCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private Action<string>? _restoreBackup;
 
     /// <summary>
     /// 取り込みの直前に、世代バックアップを1本取ってほしいときの窓口。App 側が入れる。
@@ -3400,6 +3455,36 @@ public sealed class MainViewModel : ObservableObject
         FetchFeedIfDue(now);
     }
 
+    /// <summary>
+    /// 同期が書き込んだ内容を画面に反映する。
+    /// <para>
+    /// 所属カレンダーも増えるので一覧ごと引き直す。「Kado」の印も同期で増減するので、
+    /// 実働日を組み立て直さないと、他の端末で取り込んだ分がこちらでは「未登録」のまま残る。
+    /// この中から DataChanged が飛ぶので、画面はそれで引き直される。
+    /// </para>
+    /// </summary>
+    private void ReloadAfterSync()
+    {
+        _workspace.EnsureSources();
+        _workspace.ReloadWorkingDays();
+    }
+
+    /// <summary>
+    /// 時計やタイムゾーンが変わった（または眠りから戻った）あとに呼ぶ。
+    /// <para>
+    /// <c>ClockCaches.Refresh</c> で .NET のキャッシュを捨てたあとに呼ぶこと。いまの時刻と「今日」を
+    /// 合わせ直し、予定の日付や完了日などタイムゾーンから決まる表示も読み直す。
+    /// </para>
+    /// </summary>
+    /// <param name="now">いまの日時（ローカル）。</param>
+    public void OnClockChanged(DateTime now)
+    {
+        UpdateNow(now);
+
+        // 日付が変わっていなくても、ゾーンが変われば予定の置かれる日や完了日が変わりうる
+        RefreshAfterDataChanged();
+    }
+
     /// <summary>取りに行っている最中か。1本だけ走らせるための札。</summary>
     private bool _fetchingFeed;
 
@@ -3459,6 +3544,35 @@ public sealed class MainViewModel : ObservableObject
         {
             _fetchingFeed = false;
         }
+    }
+
+    /// <summary>
+    /// 設定の変更の途中で、ワークスペースが上げる <c>DataChanged</c> を受けないでおく。
+    /// <para>
+    /// 数え方を渡したときの引き直しと、そのあとの組み直し（または引き直し）が
+    /// 二重に走るのを避けるため。受けなかったぶんは、呼んだ側が1回で済ませる。
+    /// </para>
+    /// </summary>
+    private bool _holdingDataRefresh;
+
+    /// <summary>
+    /// <c>DataChanged</c> を受けて、画面を引き直す。
+    /// <para>
+    /// 各ビューの引き直し（<see cref="RefreshViews"/>）に続けて、<b>出している検索結果</b>と
+    /// <b>開いている実働日計算パネル</b>も最新にする。どちらも自分でデータを読んで持つもので、
+    /// ここで追わせないと、消した予定が検索結果に残り、取り込んだ実働日が計算に反映されない。
+    /// </para>
+    /// </summary>
+    private void RefreshAfterDataChanged()
+    {
+        RefreshViews();
+
+        // 実働日データは取り込みのたびに作り直される。開いているパネルへ最新を渡す
+        _openCalculator?.UseMath(_workspace.WorkingDayMath);
+
+        // 検索結果を出しているときだけ、やり直す（出していなければ何も読まない）。
+        // 見出しや各ビューを引き直したあとに走らせる
+        if (_searchText.Trim().Length > 0) RunSearch();
     }
 
     /// <summary>
@@ -3523,9 +3637,18 @@ public sealed class MainViewModel : ObservableObject
         var hourHeight = _settings?.HourHeight ?? 0;
 
         Week = StartupTrace.Measure("WeekViewModel", () => new WeekViewModel(
-            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight));
+            _workspace, selected, _today, _weekStart, SourceLists, start, end, hourHeight)
+        {
+            // 作り直しても、選んでいる日の列の印は残す（付けないと、次に日を選ぶまで消えたまま）
+            SelectedDate = selected,
+        });
         Day = StartupTrace.Measure("DayViewModel", () => new DayViewModel(
             _workspace, selected, _today, SourceLists, start, end, hourHeight));
+
+        // 作りたての週・日は、次の1分ごとの更新まで現在時刻の線を知らない。いまの時刻で合わせる
+        var now = TimeOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+        Week.UpdateNowLine(now);
+        Day.UpdateNowLine(now);
 
         // 年と一覧は重い（項目B-4）。まだ一度も表示していなければ、ここでは作らない。
         // Year／Agenda プロパティを初めて読んだときに組み立てる。すでに表示したことが
@@ -3556,12 +3679,12 @@ public sealed class MainViewModel : ObservableObject
 
     private YearViewModel CreateYearCore()
     {
+        // 選んでいる日を含む年度から始める（今日の年度で組み立ててから移すと、重い組み立てが
+        // 2回走る）。作りたては最新を読んでいるので、組み直しの印は下ろす
         var year = new YearViewModel(
-            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart)
-        {
-            SelectedDate = SelectedDate,
-        };
-        year.GoTo(SelectedDate);
+            _workspace, _today, _settings?.YearLayout ?? YearLayout.Grid, SourceLists, _weekStart,
+            SelectedDate);
+        _yearStale = false;
 
         // 出し方は年ビューの中のボタンで切り替える。年ビューを見ているときにしか
         // 関係しない選び方なので、設定画面には出さない（要件書 5.1）
@@ -3575,7 +3698,13 @@ public sealed class MainViewModel : ObservableObject
 
     private AgendaViewModel CreateAgendaCore()
     {
-        var agenda = new AgendaViewModel(_workspace, _today, SourceLists);
+        // 選んでいた日を引き継ぐ。省くと、作り直したとき新しい今日を選んだことになる。
+        // 作りたては最新を読んでいるので、組み直しの印は下ろす
+        var agenda = new AgendaViewModel(_workspace, _today, SourceLists, SelectedDate);
+        _agendaStale = false;
+
+        // 画面がまだ受け取っていないときの位置合わせは、画面が実体を受け取った時点で
+        // 行う（AgendaView の DataContextChanged が TakePendingScroll で引き取る）
         agenda.GoTo(SelectedDate);
         return agenda;
     }
@@ -3767,14 +3896,17 @@ public sealed class MainViewModel : ObservableObject
                 Day.Refresh();
                 break;
 
+            // まだ作っていなければ、読んで作るだけで最新（作りたてを続けて引き直さない）
             case CalendarView.Year when _yearStale:
                 _yearStale = false;
-                Year.Refresh();
+                if (_year is null) _ = Year;
+                else _year.Refresh();
                 break;
 
             case CalendarView.Agenda when _agendaStale:
                 _agendaStale = false;
-                Agenda.Refresh();
+                if (_agenda is null) _ = Agenda;
+                else _agenda.Refresh();
                 break;
         }
     }

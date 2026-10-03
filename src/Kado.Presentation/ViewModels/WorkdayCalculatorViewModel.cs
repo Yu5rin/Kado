@@ -23,7 +23,7 @@ public sealed class WorkdayCalculatorViewModel : ObservableObject
 {
     private static readonly CultureInfo Japanese = CultureInfo.GetCultureInfo("ja-JP");
 
-    private readonly WorkingDayMath _math;
+    private WorkingDayMath _math;
     private readonly AppSettings? _settings;
 
     private DateOnly _rangeFrom;
@@ -62,6 +62,29 @@ public sealed class WorkdayCalculatorViewModel : ObservableObject
             row => { if (row?.Date is { } date) CreateTaskAt?.Invoke(date); });
         CopyPlanResultCommand = new RelayCommand(CopyPlanResult, () => PlanRows.Count > 0);
 
+        RecomputePlanRows();
+    }
+
+    /// <summary>
+    /// 計算に使う実働日データを差し替える。
+    /// <para>
+    /// パネルは開いたまま使われる。そのあいだに実働日データを取り込み直す（Excel・配信元・同期）と
+    /// ワークスペースは新しいデータを作るので、持ち主（<c>MainViewModel</c>）が最新を渡す。
+    /// 渡さないと、取り込む前の古いデータで計算し続ける。同じものなら何もしない。
+    /// </para>
+    /// <para>入力した日付やオフセットはそのまま。結果と、データの有無・対象範囲の表示だけを出し直す。</para>
+    /// </summary>
+    public void UseMath(WorkingDayMath math)
+    {
+        ArgumentNullException.ThrowIfNull(math);
+
+        if (ReferenceEquals(_math, math)) return;
+
+        _math = math;
+
+        Raise(nameof(HasData), nameof(CoverageText));
+        RaiseRange();
+        RaiseOffset();
         RecomputePlanRows();
     }
 

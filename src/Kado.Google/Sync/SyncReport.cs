@@ -76,6 +76,17 @@ public sealed record SyncReport
     public bool Throttled { get; init; }
 
     /// <summary>
+    /// 件数には数えられていないが、手元へ書き込んだかもしれないか。
+    /// <para>
+    /// カレンダー・タスクリスト1つの同期が途中で転んだとき（読み込みの途中で通信が切れた、など）。
+    /// ページごとに書き込むので、転ぶまでのぶんは手元に入っているのに、件数は戻ってこない。
+    /// <see cref="HasChanges"/> は「変更を数えられたか」のまま変えず、画面に出すかどうかには
+    /// こちらも見て、分からないときは読み直す側に倒す。
+    /// </para>
+    /// </summary>
+    public bool MayHaveWritten { get; init; }
+
+    /// <summary>
     /// <see cref="Deferred"/> のときに出す警告。<b>同じ文で出す</b>（画面は同じ文を重ねない。
     /// カレンダーごとに出しても1行にまとまる）。
     /// </summary>
@@ -114,6 +125,7 @@ public sealed record SyncReport
         Moved = left.Moved + right.Moved,
         FullResync = left.FullResync || right.FullResync,
         SourcesChanged = left.SourcesChanged || right.SourcesChanged,
+        MayHaveWritten = left.MayHaveWritten || right.MayHaveWritten,
         Deferred = left.Deferred || right.Deferred,
         Throttled = left.Throttled || right.Throttled,
         Warnings = [.. left.Warnings, .. right.Warnings],

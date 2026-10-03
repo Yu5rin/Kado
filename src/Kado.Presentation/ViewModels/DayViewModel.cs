@@ -83,11 +83,26 @@ public sealed class DayViewModel : ObservableObject
     /// <summary>
     /// 「月末まで 5実働日」。表示している日を起点に数える。
     /// <para>右ペインは今日を起点にするが、こちらは見ている日の先行きを知りたい。</para>
+    /// <para>
+    /// 数え方は設定に従う（右ペインと同じ）。暦日で数える設定なら「月末まで 6日」で、
+    /// こちらは実働日データが要らない。
+    /// </para>
     /// </summary>
-    public string? RemainingInMonthText =>
-        _workspace.WorkingDays.IsMonthFullyCovered(_date.Year, _date.Month)
-            ? $"月末まで {_workspace.WorkingDays.RemainingInMonth(_date)}実働日"
-            : null;
+    public string? RemainingInMonthText
+    {
+        get
+        {
+            if (_workspace.CountInCalendarDays)
+            {
+                var last = DateTime.DaysInMonth(_date.Year, _date.Month);
+                return $"月末まで {last - _date.Day}日";
+            }
+
+            return _workspace.WorkingDays.IsMonthFullyCovered(_date.Year, _date.Month)
+                ? $"月末まで {_workspace.WorkingDays.RemainingInMonth(_date)}実働日"
+                : null;
+        }
+    }
 
     /// <summary>時間軸の左に出す「8:00」などの見出し。</summary>
     public IReadOnlyList<string> HourLabels => _timeline.HourLabels;
@@ -119,6 +134,15 @@ public sealed class DayViewModel : ObservableObject
         // 1時間の高さが変わると線の位置も変わる。控えておいて引き直せるようにする
         _now = now;
 
+        ApplyNowLine(now);
+    }
+
+    /// <summary>
+    /// 控えてある「いま」で線を計算し直す。
+    /// <para>別の日へ移ったとき・今日が変わったとき・組み直したときに、次の更新を待たずに合わせる。</para>
+    /// </summary>
+    private void ApplyNowLine(TimeOnly now)
+    {
         var inRange = _timeline.Covers(now);
 
         ShowNowLine = inRange && _date == _today;
@@ -142,9 +166,9 @@ public sealed class DayViewModel : ObservableObject
             if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;
 
             _timeline = _timeline.WithHourHeight(height);
-            Refresh();
 
-            if (_now is { } now) UpdateNowLine(now);
+            // 組み直しの中で線も引き直す
+            Refresh();
         }
     }
 
@@ -154,5 +178,7 @@ public sealed class DayViewModel : ObservableObject
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(RemainingInMonthText),
               nameof(HourLabels), nameof(HourHeight), nameof(DayStartHour), nameof(TimelineHeight));
+
+        if (_now is { } now) ApplyNowLine(now);
     }
 }

@@ -6,6 +6,32 @@ using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.Settings;
 
+/// <summary>
+/// 配色が「自動」のとき、Windows の明暗の切り替えについていくかどうかの判断。
+/// <para>
+/// 配色を当て直すと画面の辞書ごと作り直す。システムの設定変更の通知は無関係な変更でも
+/// 何度も来るので、明暗が実際に変わったときだけ当て直す。WPF の型を持ち込まずに、
+/// 判断だけをテストできるようにしてある。
+/// </para>
+/// </summary>
+public static class ThemeFollow
+{
+    /// <summary>実際に当てる配色。自動ならシステムの明暗（ライトかダーク）、そうでなければ選んだもの。</summary>
+    /// <param name="chosen">設定で選んだ配色。</param>
+    /// <param name="system">いまの Windows の明暗（ライトかダーク）。</param>
+    public static ThemeChoice Resolve(ThemeChoice chosen, ThemeChoice system) =>
+        chosen == ThemeChoice.Auto ? system : chosen;
+
+    /// <summary>
+    /// 当て直すか。自動で、いま当てている配色（<paramref name="applied"/>）とシステムの明暗が違うとき。
+    /// </summary>
+    /// <param name="chosen">設定で選んだ配色。</param>
+    /// <param name="applied">いま当てている配色（自動なら、そのとき解決した明暗）。</param>
+    /// <param name="system">いまの Windows の明暗。</param>
+    public static bool ShouldReapply(ThemeChoice chosen, ThemeChoice applied, ThemeChoice system) =>
+        chosen == ThemeChoice.Auto && Resolve(chosen, system) != applied;
+}
+
 /// <summary>配色の選び方。</summary>
 public enum ThemeChoice
 {
@@ -196,10 +222,12 @@ public sealed class AppSettings
         {
             var hour = Math.Clamp(value, 0, 23);
 
-            // 上端を下端より後ろに置けない。押し出す形で下端も動かす
-            if (hour >= _dayEndHour) Write(ref _dayEndHour, Math.Min(hour + 1, 24), DayEndKey);
+            // 上端を下端より後ろに置けない。押し出す形で下端も動かす。
+            // 2つとも書いてから変更通知は1回だけ（2回出すと、画面は組み直しを2回走らせる）
+            var pushed = hour >= _dayEndHour && Store(ref _dayEndHour, Math.Min(hour + 1, 24), DayEndKey);
+            var changed = Store(ref _dayStartHour, hour, DayStartKey);
 
-            Write(ref _dayStartHour, hour, DayStartKey);
+            if (pushed || changed) Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -211,9 +239,10 @@ public sealed class AppSettings
         {
             var hour = Math.Clamp(value, 1, 24);
 
-            if (hour <= _dayStartHour) Write(ref _dayStartHour, Math.Max(hour - 1, 0), DayStartKey);
+            var pushed = hour <= _dayStartHour && Store(ref _dayStartHour, Math.Max(hour - 1, 0), DayStartKey);
+            var changed = Store(ref _dayEndHour, hour, DayEndKey);
 
-            Write(ref _dayEndHour, hour, DayEndKey);
+            if (pushed || changed) Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -718,11 +747,17 @@ public sealed class AppSettings
 
     private void Write<T>(ref T field, T value, string key) where T : struct
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        if (Store(ref field, value, key)) Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>値を書いて保存する。変更通知は出さない。変わったら true。</summary>
+    private bool Store<T>(ref T field, T value, string key) where T : struct
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
 
         field = value;
         Save(key, Text(value));
-        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     private static string Text<T>(T value) where T : struct =>

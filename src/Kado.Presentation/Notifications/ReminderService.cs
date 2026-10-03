@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Core.WorkingDays;
+using Kado.Data.Models;
 using Kado.Presentation.Settings;
 
 namespace Kado.Presentation.Notifications;
@@ -20,8 +21,18 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
     private readonly AppSettings _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     private readonly INotifier _notifier = notifier ?? NullNotifier.Instance;
 
-    /// <summary>もう知らせたもの。同じ予定を何度も知らせない。</summary>
-    private readonly HashSet<string> _notified = new(StringComparer.Ordinal);
+    /// <summary>
+    /// もう知らせたもの（予定の ID と、その回の日付）。同じ予定を何度も知らせない。
+    /// <para>
+    /// 片付けは朝のまとめとは切り離し、<b>記録の日付</b>で行う（<see cref="Prune"/>）。
+    /// まとめの送信日に結ぶと、日が変わってからまとめの時刻までは毎分消えて、
+    /// その間の予定の通知が毎分出た。まとめを切っていると逆に一度も消えず、溜まり続けた。
+    /// </para>
+    /// </summary>
+    private readonly HashSet<(string Id, DateOnly Date)> _notified = [];
+
+    /// <summary>知らせた記録の件数（テスト用）。</summary>
+    internal int NotifiedCount => _notified.Count;
 
     private DateOnly? _summarySentOn;
 
@@ -35,11 +46,24 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         var today = DateOnly.FromDateTime(now);
 
-        // 日をまたいだら、知らせた記録を捨てる。溜め続ける意味がない
-        if (_summarySentOn is { } sent && sent != today) _notified.Clear();
+        Prune(today);
 
         if (_settings.SummaryEnabled) CheckSummary(now, today);
         if (_settings.NotifyEnabled) CheckUpcoming(now, today);
+    }
+
+    /// <summary>
+    /// 昨日より前の日付の記録を捨てる。
+    /// <para>
+    /// 昨日のぶんは残す。23:55 に知らせた翌 0:05 の予定の記録は日付が「明日」なので
+    /// 0 時を過ぎても残るが、念のため、日付が変わった直後に見る範囲（今日・明日）の
+    /// ひとつ手前まで持つ。
+    /// </para>
+    /// </summary>
+    private void Prune(DateOnly today)
+    {
+        var oldest = today.AddDays(-1);
+        _notified.RemoveWhere(key => key.Date < oldest);
     }
 
     /// <summary>朝のまとめ。指定した時刻を過ぎていれば、その日は1回だけ出す。</summary>
@@ -56,9 +80,10 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
         // <b>「知らせない」設定までは見ない。</b>あれは予定ごとの通知を止める指定で、
         // 朝のまとめは「その日に何があるか」を並べるもの。両方に効かせたら、まとめが
         // 空になった。
+        var calendars = _workspace.Sources.Calendars();
         var items = _workspace.Schedule.EventsInRange(today, today)
             .Where(e => !CalendarWorkspace.IsMilestoneMark(e.Source))
-            .Where(e => _workspace.ShowsEvent(e.Source))
+            .Where(e => CalendarWorkspace.ShowsEvent(e.Source, calendars))
             .DistinctBy(e => (e.Source.StartTime, e.Source.Title))
             .OrderBy(e => e.Source.StartTime ?? TimeOnly.MinValue)
             .ThenBy(e => e.Source.Title, StringComparer.Ordinal)
@@ -135,6 +160,9 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
     {
         var lead = TimeSpan.FromMinutes(_settings.NotifyLeadMinutes);
 
+        // カレンダー一覧は、知らせる候補が出てから1回だけ読む（予定ごとに DB を読まない）
+        IReadOnlyList<CalendarSource>? calendars = null;
+
         // 明日の朝いちの予定も拾えるよう、日をまたぐぶんまで見る
         foreach (var scheduled in _workspace.Schedule.EventsInRange(today, today.AddDays(1)))
         {
@@ -148,10 +176,13 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
             // 知らせる時刻を過ぎていて、まだ予定が始まっていないものだけ
             if (when > now || at <= now) continue;
 
-            if (!_workspace.NotifiesFor(value)) continue;
+            var key = (value.Id, scheduled.Date);
+            if (_notified.Contains(key)) continue;
 
-            var key = $"{value.Id}|{scheduled.Date:yyyy-MM-dd}";
-            if (!_notified.Add(key)) continue;
+            calendars ??= _workspace.Sources.Calendars();
+            if (!CalendarWorkspace.NotifiesFor(value, calendars)) continue;
+
+            _notified.Add(key);
 
             _notifier.Notify(value.Title, Detail(value, start), _settings.NotifySound);
         }

@@ -250,17 +250,20 @@ public sealed class YearViewModel : ObservableObject
     private double _dayHeight = DefaultDayWidth * 1.5;
     private int _gridColumns = 4;
 
+    // selected: 最初に選んでいる日。省けば今日。その日を含む年度から始める。今日の年度で
+    // 組み立ててから移すと、12か月ぶんの重い組み立てがコンストラクタの中で2回走る。
     public YearViewModel(
         CalendarWorkspace workspace, DateOnly today, YearLayout layout = YearLayout.Grid,
-        ICalendarSources? sources = null, DayOfWeek weekStart = DayOfWeek.Sunday)
+        ICalendarSources? sources = null, DayOfWeek weekStart = DayOfWeek.Sunday,
+        DateOnly? selected = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _sources = sources;
         _today = today;
-        _selectedDate = today;
+        _selectedDate = selected ?? today;
         _layout = layout;
         _weekStart = weekStart;
-        _fiscalYear = FiscalYearOf(today);
+        _fiscalYear = FiscalYearOf(selected ?? today);
 
         // 見出しは週の開始曜日から順に回す。月ビューと同じ設定を見る（要件書 5.5）
         WeekDayHeaders = Enumerable.Range(0, 7)
@@ -522,9 +525,14 @@ public sealed class YearViewModel : ObservableObject
     /// <summary>その日を含む年度へ移す。</summary>
     public void GoTo(DateOnly date) => FiscalYear = FiscalYearOf(date);
 
+    /// <summary>組み立てた回数（テスト用）。重い組み立てが余分に走っていないかを見る。</summary>
+    internal int RefreshCount { get; private set; }
+
     /// <summary>データを読み直して組み直す。</summary>
     public void Refresh()
     {
+        RefreshCount++;
+
         var workingDays = _workspace.WorkingDays;
         var from = new DateOnly(_fiscalYear, FiscalStartMonth, 1);
         var to = from.AddYears(1).AddDays(-1);

@@ -35,6 +35,16 @@ public interface IGoogleSync
     Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 直前の同期が中止・失敗で途中から抜けたとき、そこまでに手元へ書き込んだかもしれないか。
+    /// <para>
+    /// 同期は別の接続で書くので、画面は書いたことを自分では知らない。true なら画面を読み直す。
+    /// 既定は <b>true</b>（分からないときは読み直す側に倒す）。実物は、最初の通信の前に
+    /// 転んだだけのとき（回線が無いなど）を false で返し、むだな読み直しを省く。
+    /// </para>
+    /// </summary>
+    bool MayHaveWrittenBeforeInterruption => true;
+
+    /// <summary>
     /// いまの接続に、添付をアップロードするための権限（<c>drive.file</c>）があるか。
     /// <para>繋いでいなければ false。API を呼ばずに済む場面（ボタンの出し分けなど）で使う。</para>
     /// </summary>

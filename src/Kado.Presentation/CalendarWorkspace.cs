@@ -904,9 +904,24 @@ public sealed class CalendarWorkspace
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        // 予定ごとの指定があれば、カレンダー一覧は読まない
         if (value.Notify is { } chosen) return chosen;
 
-        return Sources.Calendars()
+        return NotifiesFor(value, Sources.Calendars());
+    }
+
+    /// <summary>
+    /// <see cref="NotifiesFor(CalendarEvent)"/> の、読んであるカレンダー一覧を使う版。
+    /// 1分ごとの通知の確認で予定ごとに DB を読まないための入口。
+    /// </summary>
+    public static bool NotifiesFor(CalendarEvent value, IReadOnlyList<CalendarSource> calendars)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(calendars);
+
+        if (value.Notify is { } chosen) return chosen;
+
+        return calendars
             .FirstOrDefault(c => string.Equals(c.Id, value.CalendarId, StringComparison.Ordinal))
             ?.NotifyDefault ?? true;
     }
@@ -919,7 +934,16 @@ public sealed class CalendarWorkspace
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        return Sources.Calendars()
+        return ShowsEvent(value, Sources.Calendars());
+    }
+
+    /// <summary><see cref="ShowsEvent(CalendarEvent)"/> の、読んであるカレンダー一覧を使う版。</summary>
+    public static bool ShowsEvent(CalendarEvent value, IReadOnlyList<CalendarSource> calendars)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(calendars);
+
+        return calendars
             .FirstOrDefault(c => string.Equals(c.Id, value.CalendarId, StringComparison.Ordinal))
             ?.IsVisible ?? true;
     }

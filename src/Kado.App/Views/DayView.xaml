@@ -224,7 +224,7 @@
         <!-- 時間軸 -->
         <!-- 選んだ時間帯を、ここで測った高さに割り付ける -->
         <!-- バーは常に出す。上の段はこの幅ぶんを空けてあり、消えると列がずれる -->
-        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled"
+        <ScrollViewer x:Name="Timeline" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled"
                       SizeChanged="OnTimelineResized" PreviewMouseWheel="OnTimelineWheel">
             <Grid Height="{Binding TimelineHeight}">
                 <DockPanel>

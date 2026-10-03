@@ -18,6 +18,11 @@ public partial class DayView : UserControl
     {
         InitializeComponent();
         _settle = new Settle(ApplyViewportHeight);
+
+        // 設定の変更で日ビューの実体そのものが作り直される。作りたての実体は既定の
+        // 1時間の高さを持っていて、SizeChanged は来ない。実体を受け取ったところで、
+        // いまの高さを測って渡す（月・年と同じ）
+        DataContextChanged += (_, _) => MeasureAgain();
     }
 
     /// <summary>終日レーンの予定を2回押すと開く。</summary>
@@ -65,6 +70,15 @@ public partial class DayView : UserControl
 
         _pendingViewportHeight = e.NewSize.Height;
         _settle.Poke();
+    }
+
+    /// <summary>いまの時間軸の高さを測り直して、すぐ ViewModel へ渡す。まだ大きさが無ければ何もしない。</summary>
+    private void MeasureAgain()
+    {
+        if (Timeline.ActualHeight <= 0) return;
+
+        _pendingViewportHeight = Timeline.ActualHeight;
+        _settle.Now();
     }
 
     private void ApplyViewportHeight()
