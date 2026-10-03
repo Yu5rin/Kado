@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Data.Repositories;
+using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.Settings;
 
@@ -162,9 +163,16 @@ public sealed class DockPlacementStore(SettingsRepository store)
 
         if (legacyDocked is { Length: > 0 })
         {
-            // 引き継いだので、古いキーはもう要らない
-            _store.Set(WidthKey, width.ToString("R", CultureInfo.InvariantCulture));
-            _store.Remove(LegacyDockedWidthKey);
+            // 引き継いだので、古いキーはもう要らない。書けなくても（ロック・ディスクいっぱい）
+            // 起動は止めない。古いキーが残るだけで、次の起動でもう一度引き継ぐ
+            try
+            {
+                _store.Set(WidthKey, width.ToString("R", CultureInfo.InvariantCulture));
+                _store.Remove(LegacyDockedWidthKey);
+            }
+            catch (SqliteException)
+            {
+            }
         }
 
         var placement = new DockPlacement(
@@ -188,13 +196,22 @@ public sealed class DockPlacementStore(SettingsRepository store)
     /// </summary>
     public void Save(DockPlacement placement)
     {
-        _store.SetMany(new Dictionary<string, string>
+        try
         {
-            [ModeKey] = placement.Mode.ToString(),
-            [EdgeKey] = placement.Edge.ToString(),
-            [WidthKey] = placement.Width.ToString("R", CultureInfo.InvariantCulture),
-            [MonitorKey] = placement.MonitorId ?? string.Empty,
-        });
+            _store.SetMany(new Dictionary<string, string>
+            {
+                [ModeKey] = placement.Mode.ToString(),
+                [EdgeKey] = placement.Edge.ToString(),
+                [WidthKey] = placement.Width.ToString("R", CultureInfo.InvariantCulture),
+                [MonitorKey] = placement.MonitorId ?? string.Empty,
+            });
+        }
+        catch (SqliteException)
+        {
+            // 居場所の記憶は、モードを切り替えるたびにイベントから呼ばれる。ロックやディスクいっぱいで
+            // 書けなくても、いまの居かたは変わらない（次の起動で前回の位置に戻らないだけ）。
+            // ここで例外を出すと、切り替えの操作ごとアプリが終わる
+        }
     }
 
     /// <summary>
@@ -211,6 +228,16 @@ public sealed class DockPlacementStore(SettingsRepository store)
     /// その隙に落ちたときに記録が残らない。
     /// </para>
     /// </summary>
-    public void SetWorkAreaReserved(bool reserved) =>
-        _store.Set(ReservedKey, reserved ? bool.TrueString : bool.FalseString);
+    public void SetWorkAreaReserved(bool reserved)
+    {
+        try
+        {
+            _store.Set(ReservedKey, reserved ? bool.TrueString : bool.FalseString);
+        }
+        catch (SqliteException)
+        {
+            // DB を介さない印（WorkAreaGuard.MarkReserved）が別にあり、そちらが最後の砦。
+            // こちらが書けないことでドックの操作を止めるほうが害が大きい
+        }
+    }
 }

@@ -52,8 +52,11 @@ public sealed class UndoStack
     {
         if (_done.Last is not { } node) return null;
 
-        _done.RemoveLast();
+        // 戻す処理が成功してから履歴を動かす。先に外すと、書き込みで転んだ（ディスクいっぱい・
+        // ロック）ときに、その編集が「戻せるもの」からも「やり直せるもの」からも消えてしまう
         node.Value.Revert();
+
+        _done.RemoveLast();
         _undone.Push(node.Value);
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -66,8 +69,11 @@ public sealed class UndoStack
     {
         if (_undone.Count == 0) return null;
 
-        var edit = _undone.Pop();
+        // やり直しも同じ。成功してから履歴を動かす
+        var edit = _undone.Peek();
         edit.Apply();
+
+        _undone.Pop();
         _done.AddLast(edit);
 
         Changed?.Invoke(this, EventArgs.Empty);

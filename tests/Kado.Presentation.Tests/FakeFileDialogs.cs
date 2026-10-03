@@ -22,6 +22,13 @@ internal sealed class FakeFileDialogs : IFileDialogs
 
     public string? LastReportTitle { get; private set; }
 
+    /// <summary>これまでに出した結果を忘れる。「2度目は出さない」ことを確かめるときに使う。</summary>
+    public void ResetReport()
+    {
+        LastReport = null;
+        LastReportTitle = null;
+    }
+
     /// <summary>ファイルを選ばせようとしたか。</summary>
     public bool WasAskedForFile { get; private set; }
 

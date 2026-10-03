@@ -316,18 +316,39 @@ public sealed class SyncViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Google 側の許可の取り消しが届かなかったときの案内。
+    /// <para>こちらの接続は切れている。向こうに許可が残っているので、手で外してもらう。</para>
+    /// </summary>
+    public const string RevocationNotDeliveredMessage =
+        "接続は切りました。ただし、Google 側の許可の取り消しは届きませんでした。"
+        + "Google アカウントの設定（セキュリティ → サードパーティのアプリとサービス）から Kado を外してください。";
+
+    /// <summary>切ったが、Google 側の取り消しが届かなかったときに呼ばれる。案内を出す先。</summary>
+    public event EventHandler? RevocationNotDelivered;
+
     /// <summary>切る。</summary>
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         if (_google is null) return;
 
+        var revoked = true;
         try
         {
-            await _google.DisconnectAsync(cancellationToken).ConfigureAwait(true);
+            revoked = await _google.DisconnectAsync(cancellationToken).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is OAuthException or HttpRequestException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // 取り消しに失敗しても、こちらの控えは消えている。繋いでいない扱いでよい
+            // 取り消しの通信の失敗は、実物の側が受けて戻り値で返す。ここへ来るのは、
+            // 控えを消す段で転んだ場合など。控えが消えていれば切れている（取り消しは届いていない扱い）
+            revoked = false;
+
+            // 控えが残っているのに「切った」と見せると、裏の同期が勝手に再開する。正直に失敗にする
+            if (_google.IsConnected)
+            {
+                Fail("切断できませんでした");
+                return;
+            }
         }
 
         LastReport = null;
@@ -340,6 +361,8 @@ public sealed class SyncViewModel : ObservableObject
         State = SyncState.Disconnected;
 
         Synced?.Invoke(this, EventArgs.Empty);
+
+        if (!revoked) RevocationNotDelivered?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>一度だけ同期する。</summary>

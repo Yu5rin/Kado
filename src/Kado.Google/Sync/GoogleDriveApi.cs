@@ -109,7 +109,10 @@ public sealed class GoogleDriveApi(HttpClient http, IAccessTokenSource tokens)
 
         if (string.IsNullOrWhiteSpace(text)) return default;
 
-        return JsonDocument.Parse(text).RootElement.Clone();
+        // 読み終えた文書は返す（Clone した要素は文書と切り離されている）。
+        // JSON でない本文（プロキシの HTML など）は JsonException になる。呼び出し側が文言にする
+        using var document = JsonDocument.Parse(text);
+        return document.RootElement.Clone();
     }
 
     private static async Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken)

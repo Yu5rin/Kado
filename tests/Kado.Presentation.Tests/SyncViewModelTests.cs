@@ -46,10 +46,25 @@ public class SyncViewModelTests
             return Task.CompletedTask;
         }
 
-        public Task DisconnectAsync(CancellationToken cancellationToken = default)
+        /// <summary>切るときに投げさせる。控えを消したあとで転ぶ場面を作る。</summary>
+        public Exception? ThrowOnDisconnect { get; set; }
+
+        /// <summary>Google 側の取り消しが届いたことにするか。</summary>
+        public bool RevocationReaches { get; set; } = true;
+
+        /// <summary>true なら、投げる前に控えを消す（実物の finally と同じ）。</summary>
+        public bool ClearsBeforeThrowing { get; set; } = true;
+
+        public Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
         {
+            if (ThrowOnDisconnect is { } error)
+            {
+                if (ClearsBeforeThrowing) IsConnected = false;
+                throw error;
+            }
+
             IsConnected = false;
-            return Task.CompletedTask;
+            return Task.FromResult(RevocationReaches);
         }
 
         public async Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default)

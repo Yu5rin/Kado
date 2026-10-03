@@ -82,15 +82,23 @@ public partial class UpdateWindow : Window
             Say("入れ替えています…");
             _applying = true;
 
-            if (_updater.Apply(downloaded))
+            // 入れ替えは途中で止められない。押しても何も起きないボタンを残さない
+            LaterButton.IsEnabled = false;
+
+            // 70MB のコピーは別スレッドで行う。待つあいだに画面が描かれ、「入れ替えています…」が見える
+            var swap = await _updater.ApplyAsync(downloaded);
+
+            if (swap.Succeeded)
             {
                 // 新しいほうがもう立ち上がっている。こちらは速やかに終わる
                 _shutdown();
                 return;
             }
 
+            // ここは入れ替えの失敗。「ダウンロードできなかった」とは言わない（落とせたあとの話）。
+            // 新しい exe を起動できなかったときは、元の版へ戻してある
             _applying = false;
-            Say("入れ替えられませんでした。元の版のままです。リリースのページから手で差し替えてください。");
+            Say(swap.Message);
         }
         catch (OperationCanceledException)
         {
@@ -98,7 +106,9 @@ public partial class UpdateWindow : Window
         }
         catch (Exception ex)
         {
-            // 例外の型名やメッセージは出さず、理由に合わせた文言にする。詳細は shell.log にある
+            // 例外の型名やメッセージは出さず、理由に合わせた文言にする。詳細は shell.log にある。
+            // 入れ替えの失敗は ApplyAsync が結果で返す（ここへは来ない）ので、
+            // ここへ来るのは落とす段階の失敗
             Say(UpdateFailure.DownloadMessage(ex));
         }
         finally
@@ -108,6 +118,7 @@ public partial class UpdateWindow : Window
 
             Progress.Visibility = Visibility.Collapsed;
             LaterButton.Content = "閉じる";
+            LaterButton.IsEnabled = true;
             UpdateButton.IsEnabled = true;
         }
     }
@@ -135,7 +146,16 @@ public partial class UpdateWindow : Window
             return;
         }
 
-        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // 既定のブラウザが無い・起動を止められた。更新の窓ごと終わらせず、理由を出す
+            Say("リリースのページを開けませんでした。ブラウザの設定を確かめるか、"
+                + "次のアドレスをブラウザに貼って開いてください。\n" + url);
+        }
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

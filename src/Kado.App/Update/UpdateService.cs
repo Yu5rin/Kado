@@ -34,7 +34,7 @@ public sealed class UpdateService
     /// </summary>
     public static readonly TimeSpan AfterUpdateWait = TimeSpan.FromSeconds(30);
 
-    private const string OldSuffix = ".old";
+    private const string OldSuffix = ExecutableSwap.OldSuffix;
 
     /// <summary>
     /// 落とすときの、読み取りが止まったとみなす長さ。
@@ -297,69 +297,44 @@ public sealed class UpdateService
 
     /// <summary>
     /// 落としたものと入れ替えて、新しいほうを起動する。
-    /// <para>うまくいったら、呼んだ側はすぐアプリを終わらせること。</para>
+    /// <para>うまくいったら（<see cref="SwapResult.Succeeded"/>）、呼んだ側はすぐアプリを終わらせること。</para>
+    /// <para>
+    /// 70MB のコピーなので<b>別スレッドで行う</b>。画面のスレッドで行うと、その間
+    /// 「入れ替えています…」が描かれないまま固まって見える。例外は投げず、結果の種類と文言で返す。
+    /// 起動に失敗したときも元の版へ巻き戻す（<see cref="ExecutableSwap"/>）。
+    /// </para>
     /// </summary>
-    /// <returns>入れ替えられたら true。失敗したら元に戻して false。</returns>
-    public bool Apply(string downloadedExe)
+    internal Task<SwapResult> ApplyAsync(string downloadedExe) => Task.Run(() => Apply(downloadedExe));
+
+    private SwapResult Apply(string downloadedExe)
     {
         if (Environment.ProcessPath is not { Length: > 0 } current)
         {
             _log("更新の入れ替え: いまの exe の場所が分かりませんでした");
-            return false;
+
+            return new SwapResult(
+                SwapOutcome.FailedUnchanged, new InvalidOperationException("exe の場所が不明"), string.Empty, string.Empty);
         }
 
-        var backup = current + OldSuffix;
-        var renamed = false;
+        return ExecutableSwap.Run(current, downloadedExe, Launch, _log);
+    }
 
-        try
-        {
-            // 前回の入れ替えで残ったものを先に片付ける
-            TryDelete(backup);
-
-            // 実行中の exe は上書きできないが、名前は変えられる
-            File.Move(current, backup);
-            renamed = true;
-
-            File.Copy(downloadedExe, current, overwrite: true);
-
-            // 前のプロセスがまだ終わっていないので、新しいほうには待つよう伝える
-            var start = new ProcessStartInfo(current) { UseShellExecute = true };
-            start.ArgumentList.Add(AfterUpdateArgument);
-            Process.Start(start);
-
-            TryDelete(downloadedExe);
-
-            _log("更新の入れ替え: 新しい版に入れ替えて起動しました");
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            _log($"更新の入れ替え: 失敗。{UpdateDiagnostics.Summarize(ex)}");
-
-            // 途中で転んだなら、名前を戻して元の版で動けるようにする
-            if (renamed)
-            {
-                try
-                {
-                    TryDelete(current);
-                    File.Move(backup, current);
-                    _log("更新の入れ替え: 元の版に戻しました");
-                }
-                catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
-                {
-                    _log($"更新の入れ替え: 元に戻すのにも失敗。{UpdateDiagnostics.Summarize(rollback)}。" +
-                                $"{backup} を {current} に手で戻してください");
-                }
-            }
-
-            return false;
-        }
+    /// <summary>入れ替えた exe を起動する。前のプロセスがまだ終わっていないので、待つよう伝える。</summary>
+    private static void Launch(string exe)
+    {
+        var start = new ProcessStartInfo(exe) { UseShellExecute = true };
+        start.ArgumentList.Add(AfterUpdateArgument);
+        Process.Start(start);
     }
 
     /// <summary>前回の入れ替えで残ったものを片付ける。起動時に呼ぶ。</summary>
     public void CleanupOldFiles()
     {
-        if (Environment.ProcessPath is { Length: > 0 } current) TryDelete(current + OldSuffix);
+        if (Environment.ProcessPath is { Length: > 0 } current)
+        {
+            TryDelete(current + OldSuffix);
+            TryDelete(current + ExecutableSwap.FailedSuffix);
+        }
 
         try
         {

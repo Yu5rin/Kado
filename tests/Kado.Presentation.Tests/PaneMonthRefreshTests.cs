@@ -351,7 +351,7 @@ public class PaneMonthRefreshTests
 
         public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task DisconnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> DisconnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(report);

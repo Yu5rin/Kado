@@ -59,20 +59,33 @@ public class GoogleDriveAttachmentUploaderTests : IDisposable
 
         public bool ScopeGrantedOnDemand { get; set; }
 
+        /// <summary>追加認可を求めたときに投げさせる。</summary>
+        public Exception? ThrowOnEnsureScope { get; set; }
+
+        /// <summary>ドライブ API を組み立てるときに投げさせる（クライアント設定が無いときの Provider()）。</summary>
+        public Exception? ThrowOnCreateApi { get; set; }
+
         public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task DisconnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> DisconnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<SyncReport?>(null);
 
         public Task<bool> EnsureDriveAttachmentScopeAsync(CancellationToken cancellationToken = default)
         {
+            if (ThrowOnEnsureScope is { } error) throw error;
+
             HasDriveAttachmentScope = ScopeGrantedOnDemand;
             return Task.FromResult(HasDriveAttachmentScope);
         }
 
-        public GoogleDriveApi CreateDriveApi() => new(new HttpClient(handler), new FixedToken());
+        public GoogleDriveApi CreateDriveApi()
+        {
+            if (ThrowOnCreateApi is { } error) throw error;
+
+            return new GoogleDriveApi(new HttpClient(handler), new FixedToken());
+        }
     }
 
     private static string TempFile(string name = "資料.pdf")
@@ -196,6 +209,260 @@ public class GoogleDriveAttachmentUploaderTests : IDisposable
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 例外を漏らさない（画面の async void から呼ばれるので、漏れるとアプリごと終わる）
+    // ------------------------------------------------------------------
+
+    private static RoutingHandler FolderThenFileHandler() => new(request =>
+    {
+        var url = request.RequestUri!.ToString();
+
+        if (url.Contains("/files", StringComparison.Ordinal) && !url.Contains("upload", StringComparison.Ordinal))
+        {
+            return (HttpStatusCode.OK, """{"id":"folder-1","name":"Kado"}""");
+        }
+
+        return (HttpStatusCode.OK, """{"id":"file-1","name":"資料.pdf"}""");
+    });
+
+    private async Task<AttachmentUploadResult> UploadWith(FakeGoogleSync google, string? path = null)
+    {
+        var uploader = new GoogleDriveAttachmentUploader(google, Settings);
+        var file = path ?? TempFile();
+
+        try
+        {
+            return await uploader.UploadAsync(file);
+        }
+        finally
+        {
+            if (path is null) File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task 追加認可でトークン更新に失敗しても例外を漏らさない()
+    {
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            HasDriveAttachmentScope = false,
+            ThrowOnEnsureScope = new OAuthException("Google との連携が切れました。接続し直してください。"),
+        };
+
+        var result = await UploadWith(google);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("接続し直してください", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task クライアント設定が無くてAPIを組み立てられなくても例外を漏らさない()
+    {
+        // GoogleConnection.Provider() が OAuthException を投げる。以前は try の外だった
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            ThrowOnCreateApi = new OAuthException("Google のクライアント設定がありません。"),
+        };
+
+        var result = await UploadWith(google);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("クライアント設定", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task プロキシがHTMLを返しても例外を漏らさない()
+    {
+        // 200 で HTML。JSON として読めず JsonException になる
+        var handler = new RoutingHandler(_ => (HttpStatusCode.OK, "<html><body>認証してください</body></html>"));
+
+        var result = await UploadWith(new FakeGoogleSync(handler));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("応答を読み取れません", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonException", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 応答にidが無くても例外を漏らさない()
+    {
+        var handler = new RoutingHandler(_ => (HttpStatusCode.OK, "{}"));
+
+        var result = await UploadWith(new FakeGoogleSync(handler));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("情報が含まれていません", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 空の応答でも例外を漏らさない()
+    {
+        // 本文が空だと JsonElement が default になり、GetProperty が InvalidOperationException になる
+        var handler = new RoutingHandler(_ => (HttpStatusCode.OK, string.Empty));
+
+        var result = await UploadWith(new FakeGoogleSync(handler));
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task 読めないファイルでも例外を漏らさない()
+    {
+        // フォルダのパスを渡すと、開こうとして UnauthorizedAccessException になる（Linux）。
+        // 実機では、権限が無い・別のアプリが掴んでいるファイルに当たる
+        var directory = Directory.CreateTempSubdirectory("kado-attach-").FullName;
+        try
+        {
+            var result = await UploadWith(new FakeGoogleSync(FolderThenFileHandler()), directory);
+
+            Assert.False(result.Succeeded);
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+        }
+        finally
+        {
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ブラウザを起動できなくても例外を漏らさない()
+    {
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            HasDriveAttachmentScope = false,
+            ThrowOnEnsureScope = new System.ComponentModel.Win32Exception(1260),
+        };
+
+        var result = await UploadWith(google);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("ブラウザを開けません", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 認可の受け口を開けなくても例外を漏らさない()
+    {
+        // HttpListenerException は Win32Exception の一種。ブラウザの案内と取り違えない
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            HasDriveAttachmentScope = false,
+            ThrowOnEnsureScope = new HttpListenerException(5),
+        };
+
+        var result = await UploadWith(google);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("認可を受け取る準備", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 利用者の取り消しは失敗にせず取り消しのまま返す()
+    {
+        using var cts = new CancellationTokenSource();
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            HasDriveAttachmentScope = false,
+            ThrowOnEnsureScope = new OperationCanceledException(cts.Token),
+        };
+        cts.Cancel();
+
+        var uploader = new GoogleDriveAttachmentUploader(google, Settings);
+        var path = TempFile();
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => uploader.UploadAsync(path, cts.Token));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task 通信の時間切れは取り消しではなく失敗として返す()
+    {
+        // 呼び出し側は取り消していない（HttpClient のタイムアウトで TaskCanceledException）
+        var google = new FakeGoogleSync(FolderThenFileHandler())
+        {
+            HasDriveAttachmentScope = false,
+            ThrowOnEnsureScope = new TaskCanceledException("timeout"),
+        };
+
+        var result = await UploadWith(google);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("タイムアウト", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 設定の読み書きは呼ばれたスレッドへ戻ってから行う()
+    {
+        // 画面側の接続は呼んだスレッドで使うもの。通信から戻ったスレッドプール上で触ってはいけない。
+        // 設定表への書き込みのたびに、書き込んだスレッドを控える仕掛け（SQLite の関数＋トリガー）を置く
+        using var ui = new SyncThreadTests.SingleThreadContext();
+        var writerThreads = new List<int>();
+
+        _connection.CreateFunction("kado_probe", () =>
+        {
+            lock (writerThreads) writerThreads.Add(Environment.CurrentManagedThreadId);
+            return 1;
+        });
+        using (var command = _connection.CreateCommand())
+        {
+            command.CommandText =
+                "CREATE TRIGGER probe_settings BEFORE INSERT ON settings BEGIN SELECT kado_probe(); END;";
+            command.ExecuteNonQuery();
+        }
+
+        var handler = new ThreadHoppingHandler(request =>
+        {
+            var url = request.RequestUri!.ToString();
+
+            return url.Contains("/files", StringComparison.Ordinal) && !url.Contains("upload", StringComparison.Ordinal)
+                ? """{"id":"folder-1","name":"Kado"}"""
+                : """{"id":"file-1","name":"資料.pdf"}""";
+        });
+
+        var google = new FakeGoogleSync(handler);
+        var uploader = new GoogleDriveAttachmentUploader(google, Settings);
+        var path = TempFile();
+
+        try
+        {
+            AttachmentUploadResult? result = null;
+            await ui.RunAsync(async () => result = await uploader.UploadAsync(path));
+
+            Assert.True(result!.Succeeded);
+
+            // フォルダ ID の控えを書いたのは1回。そのスレッドが、呼んだスレッドであること
+            Assert.Single(writerThreads);
+            Assert.Equal(ui.ThreadId, writerThreads[0]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>応答を別のスレッドで返す。実際の通信と同じく、呼んだスレッドから離れる。</summary>
+    private sealed class ThreadHoppingHandler(Func<HttpRequestMessage, string> respond) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // 要求を出したスレッドで中身を決め、そのあと別のスレッドへ移ってから返す
+            var body = respond(request);
+
+            await Task.Run(() => Thread.Sleep(5), cancellationToken).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+            };
         }
     }
 }

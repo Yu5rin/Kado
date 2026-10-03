@@ -429,8 +429,21 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     }
 
     /// <summary>ベルを押したとき。表のほうにも控える。</summary>
-    private void OnCalendarNotifyToggled(SourceListItemViewModel item) =>
-        _workspace.SetCalendarNotify(item.Id, item.Notifies);
+    private void OnCalendarNotifyToggled(SourceListItemViewModel item)
+    {
+        try
+        {
+            _workspace.SetCalendarNotify(item.Id, item.Notifies);
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            // ベルのクリックから呼ばれる。書けなかったことは画面側が伝える（アプリは落とさない）
+            SaveFailed?.Invoke(this, ex);
+        }
+    }
+
+    /// <summary>通知の印などを書けなかったとき。</summary>
+    public event EventHandler<Microsoft.Data.Sqlite.SqliteException>? SaveFailed;
 
     /// <summary>一覧を読み直す。チェックの状態は引き継ぐ。</summary>
     public void Refresh()

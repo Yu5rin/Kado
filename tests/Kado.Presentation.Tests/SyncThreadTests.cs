@@ -22,7 +22,7 @@ public class SyncThreadTests
     /// <summary>
     /// 1本の決まったスレッドで実行する。WPF の UI スレッドに相当する。
     /// </summary>
-    private sealed class SingleThreadContext : SynchronizationContext, IDisposable
+    internal sealed class SingleThreadContext : SynchronizationContext, IDisposable
     {
         private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback Work, object? State)>
             _queue = new();
@@ -85,8 +85,8 @@ public class SyncThreadTests
             return Task.Run(() => Thread.Sleep(10), cancellationToken);
         }
 
-        public Task DisconnectAsync(CancellationToken cancellationToken = default) =>
-            Task.Run(() => Thread.Sleep(10), cancellationToken);
+        public Task<bool> DisconnectAsync(CancellationToken cancellationToken = default) =>
+            Task.Run(() => { Thread.Sleep(10); return true; }, cancellationToken);
 
         public Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default) =>
             Task.Run<SyncReport?>(

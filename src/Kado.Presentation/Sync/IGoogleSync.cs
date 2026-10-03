@@ -20,8 +20,16 @@ public interface IGoogleSync
     /// <summary>認可を受けて繋ぐ。ブラウザが開く。</summary>
     Task ConnectAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>接続を切る。Google 側の許可も取り消す。</summary>
-    Task DisconnectAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// 接続を切る。Google 側の許可も取り消す。
+    /// <para>
+    /// 取り消しの通信が失敗しても、こちらの控え（トークン）と同期の状態は必ず消す。
+    /// 取り消しが Google に届いたかは戻り値で返す（false なら、Google アカウントの設定から
+    /// 手で外してもらう）。控えを消せなかったときだけ例外になる。
+    /// </para>
+    /// </summary>
+    /// <returns>Google 側の取り消しが届いたか（取り消すものが無かったときも true）。</returns>
+    Task<bool> DisconnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>一度だけ同期する。すでに走っていれば null。</summary>
     Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default);

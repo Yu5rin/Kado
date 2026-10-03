@@ -23,11 +23,40 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
     /// <summary>作るフォルダの名前。</summary>
     public const string FolderName = "Kado";
 
+    /// <summary>
+    /// 上げる。<b>失敗はすべて理由の文言にして返し、例外は投げない</b>（取り消しだけは別）。
+    /// <para>
+    /// 呼び出しは画面の <c>async void</c> で、ここから漏れた例外はアプリごと終わらせる。
+    /// 認可（トークンの更新・ブラウザの起動・localhost の受け口）、通信、応答の読み取り、
+    /// ファイルの読み取り、フォルダ ID の控え（設定の書き込み）のどこで転んでも、
+    /// <see cref="AttachmentFailure.Describe"/> で文言にする。
+    /// </para>
+    /// <para>
+    /// <b>待ち合わせのあとは、呼ばれた場所へ戻る（<c>ConfigureAwait(true)</c>）。</b>
+    /// フォルダ ID の控えは画面側の接続（<c>settings</c>）に読み書きする。接続は呼んだ
+    /// スレッドで使うものなので、<c>ConfigureAwait(false)</c> で別のスレッドへ流れたまま
+    /// 触らない。
+    /// </para>
+    /// </summary>
     public async Task<AttachmentUploadResult> UploadAsync(
         string localFilePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(localFilePath);
 
+        try
+        {
+            return await UploadCoreAsync(localFilePath, cancellationToken).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (!AttachmentFailure.IsCancellation(ex, cancellationToken)
+                                   && ex is not OutOfMemoryException)
+        {
+            return AttachmentUploadResult.Failure(AttachmentFailure.Describe(ex));
+        }
+    }
+
+    private async Task<AttachmentUploadResult> UploadCoreAsync(
+        string localFilePath, CancellationToken cancellationToken)
+    {
         if (!google.IsConnected)
         {
             return AttachmentUploadResult.Failure("Google に接続していません。");
@@ -35,19 +64,7 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
 
         if (!google.HasDriveAttachmentScope)
         {
-            bool granted;
-            try
-            {
-                granted = await google.EnsureDriveAttachmentScopeAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Kado.Google.OAuth.OAuthException ex)
-            {
-                return AttachmentUploadResult.Failure($"権限を確かめられませんでした: {ex.Message}");
-            }
-            catch (HttpRequestException)
-            {
-                return AttachmentUploadResult.Failure("通信できませんでした。オフラインの可能性があります。");
-            }
+            var granted = await google.EnsureDriveAttachmentScopeAsync(cancellationToken).ConfigureAwait(true);
 
             if (!granted)
             {
@@ -60,53 +77,23 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
 
         try
         {
-            var folderId = await EnsureFolderAsync(api, cancellationToken).ConfigureAwait(false);
+            var folderId = await EnsureFolderAsync(api, cancellationToken).ConfigureAwait(true);
             var uploaded = await UploadOnceAsync(api, folderId, localFilePath, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
 
             return AttachmentUploadResult.Success(uploaded);
         }
         catch (GoogleApiException ex) when (ex.IsMissing)
         {
             // 控えていたフォルダが無い（利用者がドライブ側で消したなど）。控えを捨てて
-            // 作り直し、1回だけやり直す
+            // 作り直し、1回だけやり直す。やり直しの失敗は、呼び出し元の UploadAsync が文言にする
             settings.Remove(FolderIdKey);
 
-            try
-            {
-                var recreated = await EnsureFolderAsync(api, cancellationToken).ConfigureAwait(false);
-                var uploaded = await UploadOnceAsync(api, recreated, localFilePath, cancellationToken)
-                    .ConfigureAwait(false);
+            var recreated = await EnsureFolderAsync(api, cancellationToken).ConfigureAwait(true);
+            var uploaded = await UploadOnceAsync(api, recreated, localFilePath, cancellationToken)
+                .ConfigureAwait(true);
 
-                return AttachmentUploadResult.Success(uploaded);
-            }
-            catch (GoogleApiException retry)
-            {
-                return AttachmentUploadResult.Failure($"アップロードできませんでした: {retry.Reason}");
-            }
-            catch (HttpRequestException)
-            {
-                return AttachmentUploadResult.Failure("通信できませんでした。オフラインの可能性があります。");
-            }
-        }
-        catch (GoogleApiException ex)
-        {
-            return AttachmentUploadResult.Failure($"アップロードできませんでした: {ex.Reason}");
-        }
-        catch (IOException ex)
-        {
-            // ファイルが読めない等。壊さずに理由を出す
-            return AttachmentUploadResult.Failure($"ファイルを読めませんでした: {ex.Message}");
-        }
-        catch (HttpRequestException)
-        {
-            // オフラインなど、通信そのものが失敗した場面。落とさずに理由を出す
-            return AttachmentUploadResult.Failure("通信できませんでした。オフラインの可能性があります。");
-        }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            // 呼び出し側が止めたのではなく、通信がタイムアウトした
-            return AttachmentUploadResult.Failure("通信がタイムアウトしました。");
+            return AttachmentUploadResult.Success(uploaded);
         }
     }
 
@@ -117,10 +104,9 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
 
         var uploaded = await api
             .UploadFileAsync(folderId, localFilePath, mimeType, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
-        var fileId = uploaded.GetProperty("id").GetString()
-            ?? throw new GoogleApiException(System.Net.HttpStatusCode.InternalServerError, "no-id");
+        var fileId = ReadId(uploaded);
 
         var fileUrl = uploaded.TryGetProperty("webViewLink", out var link) && link.GetString() is { Length: > 0 } url
             ? url
@@ -139,11 +125,30 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
     {
         if (settings.Get(FolderIdKey) is { Length: > 0 } cached) return cached;
 
-        var created = await api.CreateFolderAsync(FolderName, cancellationToken).ConfigureAwait(false);
-        var id = created.GetProperty("id").GetString()
-            ?? throw new GoogleApiException(System.Net.HttpStatusCode.InternalServerError, "no-id");
+        var created = await api.CreateFolderAsync(FolderName, cancellationToken).ConfigureAwait(true);
+        var id = ReadId(created);
 
         settings.Set(FolderIdKey, id);
         return id;
+    }
+
+    /// <summary>
+    /// 応答から id を取る。無ければ <see cref="InvalidOperationException"/>。
+    /// <para>
+    /// 空の応答（<c>default</c> の <see cref="System.Text.Json.JsonElement"/>）や、id の無い応答に
+    /// <c>GetProperty</c> を当てると、型の違う例外がばらばらに漏れる。ここで1つにそろえる。
+    /// </para>
+    /// </summary>
+    private static string ReadId(System.Text.Json.JsonElement body)
+    {
+        if (body.ValueKind == System.Text.Json.JsonValueKind.Object
+            && body.TryGetProperty("id", out var id)
+            && id.ValueKind == System.Text.Json.JsonValueKind.String
+            && id.GetString() is { Length: > 0 } text)
+        {
+            return text;
+        }
+
+        throw new InvalidOperationException("応答に id がありません");
     }
 }

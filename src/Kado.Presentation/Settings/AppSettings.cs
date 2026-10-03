@@ -2,6 +2,7 @@ using System.Globalization;
 using Kado.Core.WorkingDays;
 using Kado.Data.Repositories;
 using Kado.Presentation.ViewModels;
+using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.Settings;
 
@@ -151,6 +152,28 @@ public sealed class AppSettings
     /// <summary>どれかが変わったときに呼ばれる。画面はこれを見て組み直す。</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// 設定を書けなかったときに呼ばれる（ディスクいっぱい・5秒待っても取れないロック）。
+    /// <para>
+    /// 値はこの実行のあいだは効く（メモリ上は変えてある）が、次の起動には残らない。
+    /// 例外はここで止めて、アプリを終わらせない。伝える先は画面側。
+    /// </para>
+    /// </summary>
+    public event EventHandler<SqliteException>? SaveFailed;
+
+    /// <summary>設定を1件書く。失敗は <see cref="SaveFailed"/> で伝え、投げない。</summary>
+    private void Save(string key, string value)
+    {
+        try
+        {
+            _store.Set(key, value);
+        }
+        catch (SqliteException ex)
+        {
+            SaveFailed?.Invoke(this, ex);
+        }
+    }
+
     /// <summary>配色。</summary>
     public ThemeChoice Theme
     {
@@ -217,7 +240,7 @@ public sealed class AppSettings
             if (_countInCalendarDays == value) return;
 
             _countInCalendarDays = value;
-            _store.Set(CountInCalendarDaysKey, value ? "true" : "false");
+            Save(CountInCalendarDaysKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -238,7 +261,7 @@ public sealed class AppSettings
             if (_hourHeight == clamped) return;
 
             _hourHeight = clamped;
-            _store.Set(HourHeightKey, clamped.ToString(CultureInfo.InvariantCulture));
+            Save(HourHeightKey, clamped.ToString(CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -264,7 +287,7 @@ public sealed class AppSettings
             if (trimmed.Length > 0 && !IsUsableFeedUrl(trimmed)) return;
 
             _feedUrl = trimmed;
-            _store.Set(FeedUrlKey, trimmed);
+            Save(FeedUrlKey, trimmed);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -278,7 +301,7 @@ public sealed class AppSettings
             if (_feedAuto == value) return;
 
             _feedAuto = value;
-            _store.Set(FeedAutoKey, value ? "true" : "false");
+            Save(FeedAutoKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -289,7 +312,7 @@ public sealed class AppSettings
         get => DateOnly.TryParseExact(
             _store.Get(FeedCheckedKey), "yyyy-MM-dd", CultureInfo.InvariantCulture,
             DateTimeStyles.None, out var date) ? date : null;
-        set => _store.Set(
+        set => Save(
             FeedCheckedKey, value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty);
     }
 
@@ -316,7 +339,7 @@ public sealed class AppSettings
             if (_notifyEnabled == value) return;
 
             _notifyEnabled = value;
-            _store.Set(NotifyKey, value ? "true" : "false");
+            Save(NotifyKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -331,7 +354,7 @@ public sealed class AppSettings
             if (_notifyLeadMinutes == clamped) return;
 
             _notifyLeadMinutes = clamped;
-            _store.Set(NotifyLeadKey, clamped.ToString(CultureInfo.InvariantCulture));
+            Save(NotifyLeadKey, clamped.ToString(CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -346,14 +369,14 @@ public sealed class AppSettings
     public string WindowPanes
     {
         get => _store.Get(WindowPanesKey) ?? string.Empty;
-        set => _store.Set(WindowPanesKey, value);
+        set => Save(WindowPanesKey, value);
     }
 
     /// <summary>画面端に寄せている（スライド・固定）ときに出していたパネル。</summary>
     public string EdgePanes
     {
         get => _store.Get(EdgePanesKey) ?? string.Empty;
-        set => _store.Set(EdgePanesKey, value);
+        set => Save(EdgePanesKey, value);
     }
 
     /// <summary>
@@ -381,7 +404,7 @@ public sealed class AppSettings
             var json = WorkdayOffsetPlanStore.Write(value);
             if (string.Equals(_store.Get(WorkdayOffsetPlansKey), json, StringComparison.Ordinal)) return;
 
-            _store.Set(WorkdayOffsetPlansKey, json);
+            Save(WorkdayOffsetPlansKey, json);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -394,7 +417,7 @@ public sealed class AppSettings
         {
             if (string.Equals(SelectedWorkdayOffsetPlanId, value, StringComparison.Ordinal)) return;
 
-            _store.Set(WorkdaySelectedPlanKey, value ?? string.Empty);
+            Save(WorkdaySelectedPlanKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -421,7 +444,7 @@ public sealed class AppSettings
 
             _paneShare = share;
             _hasPaneShare = true;
-            _store.Set(PaneShareKey, share.ToString("R", CultureInfo.InvariantCulture));
+            Save(PaneShareKey, share.ToString("R", CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -480,7 +503,7 @@ public sealed class AppSettings
             if (_paneCalendarCollapsed == value) return;
 
             _paneCalendarCollapsed = value;
-            _store.Set(PaneCalendarCollapsedKey, value ? "true" : "false");
+            Save(PaneCalendarCollapsedKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -514,7 +537,7 @@ public sealed class AppSettings
             if (_minWidth == width) return;
 
             _minWidth = width;
-            _store.Set(MinWidthKey, width.ToString(CultureInfo.InvariantCulture));
+            Save(MinWidthKey, width.ToString(CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -531,7 +554,7 @@ public sealed class AppSettings
             if (_notifySound == value) return;
 
             _notifySound = value;
-            _store.Set(NotifySoundKey, value ? "true" : "false");
+            Save(NotifySoundKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -545,7 +568,7 @@ public sealed class AppSettings
             if (_summaryEnabled == value) return;
 
             _summaryEnabled = value;
-            _store.Set(SummaryKey, value ? "true" : "false");
+            Save(SummaryKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -559,7 +582,7 @@ public sealed class AppSettings
             if (_summaryTime == value) return;
 
             _summaryTime = value;
-            _store.Set(SummaryTimeKey, value.ToString("HH:mm", CultureInfo.InvariantCulture));
+            Save(SummaryTimeKey, value.ToString("HH:mm", CultureInfo.InvariantCulture));
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -577,7 +600,7 @@ public sealed class AppSettings
         {
             if (string.Equals(DefaultCalendarId, value, StringComparison.Ordinal)) return;
 
-            _store.Set(DefaultCalendarKey, value ?? string.Empty);
+            Save(DefaultCalendarKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -597,7 +620,7 @@ public sealed class AppSettings
         {
             if (string.Equals(DefaultTaskListId, value, StringComparison.Ordinal)) return;
 
-            _store.Set(DefaultTaskListKey, value ?? string.Empty);
+            Save(DefaultTaskListKey, value ?? string.Empty);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -632,7 +655,7 @@ public sealed class AppSettings
             if (_closeToTray == value) return;
 
             _closeToTray = value;
-            _store.Set(CloseToTrayKey, value ? "true" : "false");
+            Save(CloseToTrayKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -656,7 +679,7 @@ public sealed class AppSettings
             if (_slideOutOnLeave == value) return;
 
             _slideOutOnLeave = value;
-            _store.Set(SlideOutOnLeaveKey, value ? "true" : "false");
+            Save(SlideOutOnLeaveKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -677,7 +700,7 @@ public sealed class AppSettings
             if (_checkForUpdateOnStartup == value) return;
 
             _checkForUpdateOnStartup = value;
-            _store.Set(CheckForUpdateOnStartupKey, value ? "true" : "false");
+            Save(CheckForUpdateOnStartupKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -696,7 +719,7 @@ public sealed class AppSettings
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
 
         field = value;
-        _store.Set(key, Text(value));
+        Save(key, Text(value));
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

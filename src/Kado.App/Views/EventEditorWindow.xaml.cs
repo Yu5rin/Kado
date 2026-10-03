@@ -151,7 +151,22 @@ public partial class EventEditorWindow : Window
     // ------------------------------------------------------------------
 
     /// <summary>ファイルを選んでドライブへ上げる。上げ終わるまでボタンは押せなくなる（IsUploadingAttachment）。</summary>
-    private async void OnAddAttachmentClick(object sender, RoutedEventArgs e) => await _editor.AddAttachmentAsync();
+    private async void OnAddAttachmentClick(object sender, RoutedEventArgs e)
+    {
+        // async void から例外が漏れるとアプリごと終わる。AddAttachmentAsync も受けているが、
+        // ここは最後の砦として、どんな例外も画面の文言にして止める（取り消しは何も出さない）
+        try
+        {
+            await _editor.AddAttachmentAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _editor.ReportAttachmentFailure(ex);
+        }
+    }
 
     private void OnRemoveAttachmentClick(object sender, RoutedEventArgs e)
     {

@@ -41,6 +41,14 @@
     <!-- AppBar が外れたときの受け方と終了印。WPF/Win32 に触れない部品だけ切り出してある -->
     <Compile Include="..\..\src\Kado.App\Shell\UndockReaction.cs" Link="Shell\UndockReaction.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\WorkAreaMarker.cs" Link="Shell\WorkAreaMarker.cs" />
+    <!-- 落ちる・使えなくなる筋を塞ぐ部品のうち、WPF に触れない判断だけを切り出したもの -->
+    <Compile Include="..\..\src\Kado.App\Update\ExecutableSwap.cs" Link="Update\ExecutableSwap.cs" />
+    <Compile Include="..\..\src\Kado.App\ActivationPipe.cs" Link="ActivationPipe.cs" />
+    <Compile Include="..\..\src\Kado.App\StartupArguments.cs" Link="StartupArguments.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\TrayPolicy.cs" Link="Shell\TrayPolicy.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\SessionEndRules.cs" Link="Shell\SessionEndRules.cs" />
+    <Compile Include="..\..\src\Kado.App\Shell\FrontMessageBox.cs" Link="Shell\FrontMessageBox.cs" />
+    <Compile Include="..\..\src\Kado.App\Google\TokenFileQuarantine.cs" Link="Google\TokenFileQuarantine.cs" />
     <!-- 編集ウィンドウを帯の隣へ置く位置計算。Window/Win32 に依存しないので同じ手が使える -->
     <Compile Include="..\..\src\Kado.App\Editing\EditorWindowPlacement.cs" Link="Editing\EditorWindowPlacement.cs" />
   </ItemGroup>

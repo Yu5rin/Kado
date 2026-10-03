@@ -37,12 +37,43 @@ public sealed class GoogleConnection(
         await Provider().ConnectAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        await Provider().DisconnectAsync(cancellationToken).ConfigureAwait(false);
+        var revoked = false;
 
-        // 差分の印も捨てる。繋ぎ直したとき、古い印で呼ぶと 410 になる
-        workspace.Settings.ClearSyncState();
+        try
+        {
+            // クライアント設定のファイルが消えていると Provider() が作れず、取り消しを送れない。
+            // それでも控えは消せないといけない（下の finally）
+            GoogleTokenProvider? provider = null;
+            try
+            {
+                provider = Provider();
+            }
+            catch (OAuthException)
+            {
+            }
+
+            revoked = provider is not null
+                ? await provider.DisconnectAsync(cancellationToken).ConfigureAwait(false)
+                : tokens.Load() is null;
+        }
+        finally
+        {
+            // 取り消しの通信が転んでも（あるいは止められても）、控えと同期の印は必ず消す。
+            // 控えを残すと繋がったままに見え、裏の同期が再開する
+            try
+            {
+                tokens.Clear();
+            }
+            finally
+            {
+                // 差分の印も捨てる。繋ぎ直したとき、古い印で呼ぶと 410 になる
+                workspace.Settings.ClearSyncState();
+            }
+        }
+
+        return revoked;
     }
 
     public async Task<SyncReport?> SyncAsync(CancellationToken cancellationToken = default)

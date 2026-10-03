@@ -137,6 +137,12 @@ internal static class NativeMethods
     // トレイ（Shell_NotifyIcon）
     // ------------------------------------------------------------------
 
+    // 受け皿のウィンドウの作り（メッセージ専用ではない、見えないトップレベル窓）。
+    // HWND_MESSAGE の窓は、全窓へ送られるブロードキャスト（TaskbarCreated）を受けられない
+    internal const uint WS_POPUP = 0x80000000;
+    internal const int WS_EX_TOOLWINDOW = 0x00000080;
+    internal const int WS_EX_NOACTIVATE = 0x08000000;
+
     internal const int NIM_ADD = 0x00000000;
     internal const int NIM_MODIFY = 0x00000001;
     internal const int NIM_DELETE = 0x00000002;
@@ -219,6 +225,8 @@ internal static class NativeMethods
     internal const uint MOD_SHIFT = 0x0004;
     internal const uint MOD_NOREPEAT = 0x4000;
 
+    internal const int WM_QUERYENDSESSION = 0x0011;
+    internal const int WM_ENDSESSION = 0x0016;
     internal const int WM_HOTKEY = 0x0312;
     internal const int WM_DISPLAYCHANGE = 0x007E;
 
