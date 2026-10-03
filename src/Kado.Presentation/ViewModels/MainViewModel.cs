@@ -336,17 +336,18 @@ public sealed class MainViewModel : ObservableObject
 
         QuickCommand = new RelayCommand(CommitQuick, () => CanCommitQuick);
 
+        // 読み取り専用と「Google から外れた」ものは入れ先にできない（メニューも押せなくする）
         SetDefaultCalendarCommand = new RelayCommand<SourceListItemViewModel?>(item =>
         {
             SourceLists.SetDefaultCalendar(item);
             if (item is not null) StatusMessage = $"新しい予定は「{item.Name}」に入ります";
-        });
+        }, item => item is { CanReceive: true });
 
         SetDefaultTaskListCommand = new RelayCommand<SourceListItemViewModel?>(item =>
         {
             SourceLists.SetDefaultTaskList(item);
             if (item is not null) StatusMessage = $"新しいタスクは「{item.Name}」に入ります";
-        });
+        }, item => item is { CanReceive: true });
 
         RemoveDuplicatesCommand = new RelayCommand(RemoveDuplicates);
 
@@ -392,7 +393,8 @@ public sealed class MainViewModel : ObservableObject
         // 右上の表示は Sync が持つ。こちらは伝えるだけ
         Sync.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName is nameof(SyncViewModel.StatusText) or nameof(SyncViewModel.State))
+            if (args.PropertyName is nameof(SyncViewModel.StatusText) or nameof(SyncViewModel.State)
+                or nameof(SyncViewModel.DetailText))
             {
                 Raise(nameof(SyncStatusText), nameof(IsSynced));
             }
@@ -1369,6 +1371,14 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
+            // 入れられるカレンダーが1つも無い（読み取り専用と、Google から外れたものしか無い）。
+            // 所属の無い予定として入れると、送れずに手元へ溜まる
+            if (QuickCalendarId is not { Length: > 0 } quickCalendar)
+            {
+                StatusMessage = "予定を入れられるカレンダーがありません（読み取り専用のものしかありません）";
+                return;
+            }
+
             _workspace.AddEvent(new CalendarEvent
             {
                 Id = Guid.NewGuid().ToString("N")[..15],
@@ -1379,7 +1389,7 @@ public sealed class MainViewModel : ObservableObject
                 // 終わりを書いていなければ1時間。時刻を書いていなければ終日のまま
                 EndTime = entry.End ?? (entry.Start is { } start ? start.AddHours(1) : null),
                 Location = entry.Location,
-                CalendarId = QuickCalendarId,
+                CalendarId = quickCalendar,
                 UpdatedAt = DateTimeOffset.Now,
             });
         }
@@ -1503,7 +1513,7 @@ public sealed class MainViewModel : ObservableObject
     /// 同期できているのかどうかが読み取れなくなる。
     /// </para>
     /// </summary>
-    public string SyncStatusText => Sync.StatusText;
+    public string SyncStatusText => Sync.DetailText;
 
     /// <summary>同期できているか。丸印の色を変える。</summary>
     public bool IsSynced => Sync.IsConnected;
@@ -1973,13 +1983,24 @@ public sealed class MainViewModel : ObservableObject
     /// 素通りするため）。消えたように見えて消えていない、いちばん分かりにくい形になる。
     /// </para>
     /// <para>見せたくないだけなら、左パネルのチェックを外せばよい。</para>
+    /// <para>
+    /// 例外は「Google から外れた」もの（<see cref="SourceListItemViewModel.IsDetached"/>）。
+    /// 一覧から消えているので、手元から消しても戻ってこない。送っていない中身を確かめたあとで、
+    /// 中の予定・タスクごと手元から消せる（Google には何も送らない）。
+    /// </para>
     /// </summary>
     private static bool CanDeleteSource(SourceListItemViewModel? target) =>
-        target is not null && !target.IsGoogle;
+        target is not null && target.CanDelete;
 
     private void DeleteSource(SourceListItemViewModel? target)
     {
         if (target is null) return;
+
+        if (target.IsDetached)
+        {
+            DiscardDetachedSource(target);
+            return;
+        }
 
         var isTaskList = IsTaskList(target);
         var count = isTaskList
@@ -2011,6 +2032,39 @@ public sealed class MainViewModel : ObservableObject
             0 => $"{kind}「{target.Name}」を削除しました",
             var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を「{destination}」へ移しました",
         };
+    }
+
+    /// <summary>
+    /// 「Google から外れた」カレンダー・タスクリストを、中身ごと手元から削除する。
+    /// <para>
+    /// 通常の削除（中身を別のカレンダーへ移す）とは違う。向こうにはもう無いので、移す先が無い。
+    /// 残しておいた中身を捨てることになるので、件数を出して確かめる。Google には何も送らない。
+    /// </para>
+    /// </summary>
+    private void DiscardDetachedSource(SourceListItemViewModel target)
+    {
+        var isTaskList = IsTaskList(target);
+        var kind = isTaskList ? "タスクリスト" : "カレンダー";
+        var contents = isTaskList ? "タスク" : "予定";
+
+        var count = isTaskList
+            ? _workspace.Sources.TaskCountIn(target.Id)
+            : _workspace.Sources.EventCountIn(target.Id);
+
+        var message =
+            $"{kind}「{target.Name}」は Google の一覧から外れています。{Environment.NewLine}{Environment.NewLine}" +
+            $"手元に残してある{contents} {count} 件ごと削除します。Google には何も送りません。" +
+            "削除すると元に戻せません。";
+
+        if (!_editors.Confirm($"{kind}の削除", message)) return;
+
+        var removed = isTaskList
+            ? _workspace.DiscardDetachedTaskList(target.Id)
+            : _workspace.DiscardDetachedCalendar(target.Id);
+
+        StatusMessage = removed is null
+            ? "見つかりませんでした"
+            : $"{kind}「{target.Name}」を{contents} {removed} 件ごと手元から削除しました";
     }
 
     /// <summary>
@@ -2486,9 +2540,9 @@ public sealed class MainViewModel : ObservableObject
 
         // 読み取り専用のカレンダーには送れない。複製で入れても、その複製先が
         // 書けないままなので、複製かどうかに関わらず止める
-        if (IsInReadOnlyCalendar(found))
+        if (UnsendableMessage(found) is { } unsendable)
         {
-            StatusMessage = ReadOnlyCalendarMessage;
+            StatusMessage = unsendable;
             return false;
         }
 
@@ -2640,7 +2694,49 @@ public sealed class MainViewModel : ObservableObject
         _workspace.Sources.FindCalendar(id) is { IsReadOnly: true };
 
     private const string ReadOnlyCalendarMessage =
-        "このカレンダーは読み取り専用のため、変えられません（削除・移動もできません）";
+        "このカレンダーは読み取り専用のため、変えられません（Google から受け取った予定は削除もできません）";
+
+    private const string DetachedCalendarMessage =
+        "このカレンダーは Google の一覧から外れているため、変えられません（手元からの削除はできます）";
+
+    /// <summary>
+    /// 送れないカレンダー（読み取り専用・Google から外れた）に入っている予定を、変えさせない理由。
+    /// 送れるなら null。
+    /// <para>
+    /// 変えても Google へは伝わらず、こちらだけ食い違う。「Google から外れた」カレンダーは
+    /// 同期が止まっているので、同じく変えさせない。見ることと、手元だけの削除はできる
+    /// （<see cref="CanDeleteLocallyOnly"/>）。
+    /// </para>
+    /// </summary>
+    private string? UnsendableMessage(CalendarEvent value)
+    {
+        if (value.CalendarId is not { Length: > 0 } id || _workspace.Sources.FindCalendar(id) is not { } calendar)
+        {
+            return null;
+        }
+
+        if (calendar.IsDetached) return DetachedCalendarMessage;
+
+        return calendar.IsReadOnly ? ReadOnlyCalendarMessage : null;
+    }
+
+    /// <summary>
+    /// 手元だけで削除してよい予定か（Google には何も送らない）。
+    /// <para>
+    /// 「Google から外れた」カレンダーの中身はすべて。読み取り専用のカレンダーでは、まだ Google に
+    /// 一度も送っていない予定（1行入力などで入ってしまい、送れずに残ったもの）だけ。Google から受け取った
+    /// 予定を手元だけ消しても、Google には残るので、これまでどおり止める。
+    /// </para>
+    /// </summary>
+    private bool CanDeleteLocallyOnly(CalendarEvent value)
+    {
+        if (value.CalendarId is not { Length: > 0 } id || _workspace.Sources.FindCalendar(id) is not { } calendar)
+        {
+            return false;
+        }
+
+        return calendar.IsDetached || (calendar.IsReadOnly && value.GoogleEventId is not { Length: > 0 });
+    }
 
     private void AddEvent()
     {
@@ -2694,9 +2790,9 @@ public sealed class MainViewModel : ObservableObject
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
         if (_workspace.Events.Find(id) is not { } stored) return;
 
-        if (IsInReadOnlyCalendar(stored))
+        if (UnsendableMessage(stored) is { } unsendable)
         {
-            StatusMessage = ReadOnlyCalendarMessage;
+            StatusMessage = unsendable;
             return;
         }
 
@@ -2759,9 +2855,19 @@ public sealed class MainViewModel : ObservableObject
         // Google 側で内容を変えられない予定（メールから起こされた予約など）は
         // 消すことができる（LockedMessage 参照）が、読み取り専用のカレンダーは
         // それ自体に書き込めないので、削除も止める
-        if (_workspace.Events.Find(id) is { } target && IsInReadOnlyCalendar(target))
+        if (_workspace.Events.Find(id) is { } target && UnsendableMessage(target) is { } unsendable)
         {
-            StatusMessage = ReadOnlyCalendarMessage;
+            // すでに入ってしまった送れない予定は、手元だけで消せる。Google には何も送らない
+            // （削除の記録を残さない）。残したままだと、見えるのに消せない予定になる
+            if (CanDeleteLocallyOnly(target))
+            {
+                StatusMessage = _workspace.DeleteEventLocally(id)
+                    ? "予定を手元だけで削除しました（Google には何も送りません）"
+                    : "予定が見つかりませんでした";
+                return;
+            }
+
+            StatusMessage = unsendable;
             return;
         }
 
@@ -2782,7 +2888,9 @@ public sealed class MainViewModel : ObservableObject
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
 
-        var editor = new TaskEditorViewModel(stored, TaskListChoicesFor(stored), _today);
+        var editor = new TaskEditorViewModel(
+            stored, TaskListChoicesFor(stored), _today,
+            hasChildren: TaskMapper.HasChildren(stored, _workspace.Tasks.All()));
 
         while (true)
         {
@@ -3025,7 +3133,8 @@ public sealed class MainViewModel : ObservableObject
             .Where(c =>
                 string.Equals(c.Id, currentId, StringComparison.Ordinal) ||
                 _workspace.IsWorkingDayCalendarId(c.Id) ||
-                (!(_workspace.Sources.FindCalendar(c.Id)?.IsReadOnly ?? false) && (!isGoogleLinked || c.IsGoogle)))
+                // 読み取り専用と「Google から外れた」ものは、入れても送れない
+                (c.CanReceive && (!isGoogleLinked || c.IsGoogle)))
             .Select(c => new SourceChoice(c.Id, c.Name, c.Notifies))
             .ToArray();
     }
@@ -3040,7 +3149,8 @@ public sealed class MainViewModel : ObservableObject
         var currentId = existing?.TaskListId;
 
         return SourceLists.TaskLists
-            .Where(t => string.Equals(t.Id, currentId, StringComparison.Ordinal) || !isGoogleLinked || t.IsGoogle)
+            .Where(t => string.Equals(t.Id, currentId, StringComparison.Ordinal) ||
+                        (t.CanReceive && (!isGoogleLinked || t.IsGoogle)))
             .Select(t => new SourceChoice(t.Id, t.Name))
             .ToArray();
     }

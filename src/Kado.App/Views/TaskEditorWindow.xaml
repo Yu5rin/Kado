@@ -114,7 +114,14 @@
                           Style="{StaticResource FieldComboBoxStyle}"
                           ItemsSource="{Binding TaskLists}"
                           SelectedValuePath="Id"
-                          SelectedValue="{Binding TaskListId}" />
+                          SelectedValue="{Binding TaskListId}"
+                          IsEnabled="{Binding CanChangeTaskList}"
+                          ToolTip="{Binding TaskListLockReason}" />
+
+                <!-- サブタスクと、サブタスクを持つタスクは Google でリストをまたいで移せない -->
+                <TextBlock Text="{Binding TaskListLockReason}" Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap" Margin="0,3,0,0"
+                           Visibility="{Binding TaskListLockReason, Converter={StaticResource NullToVisibility}}" />
             </StackPanel>
 
             <TextBlock Text="詳細" Style="{StaticResource FieldLabelStyle}" />

@@ -1,4 +1,5 @@
 using Kado.Data.Models;
+using Kado.Google.Mapping;
 using Kado.Presentation.Infrastructure;
 
 namespace Kado.Presentation.Editing;
@@ -37,6 +38,9 @@ public sealed class TaskEditorViewModel : ObservableObject
     private readonly TaskItem? _original;
     private readonly DateOnly _today;
 
+    /// <summary>手元で、このタスクを親として指しているタスクがあるか（サブタスクを持つ親か）。</summary>
+    private readonly bool _hasChildren;
+
     private string _title = string.Empty;
     private bool _hasDue = true;
     private DateOnly _due;
@@ -62,11 +66,20 @@ public sealed class TaskEditorViewModel : ObservableObject
     }
 
     /// <summary>すでにあるタスクを直す。</summary>
-    public TaskEditorViewModel(TaskItem value, IReadOnlyList<SourceChoice> taskLists, DateOnly today)
+    /// <param name="value">直すタスク。</param>
+    /// <param name="taskLists">選べるタスクリスト。</param>
+    /// <param name="today">今日。期限なしのタスクに期限を付けるときの初期値。</param>
+    /// <param name="hasChildren">
+    /// サブタスクを持つ親か。親子のタスクは Google でリストをまたいで移せないので、
+    /// リスト欄を変えさせない（<see cref="TaskListLockReason"/>）。
+    /// </param>
+    public TaskEditorViewModel(TaskItem value, IReadOnlyList<SourceChoice> taskLists, DateOnly today,
+        bool hasChildren = false)
     {
         ArgumentNullException.ThrowIfNull(value);
 
         _original = value;
+        _hasChildren = hasChildren;
         TaskLists = taskLists;
         _today = today;
 
@@ -184,8 +197,26 @@ public sealed class TaskEditorViewModel : ObservableObject
     public string? TaskListId
     {
         get => _taskListId;
-        set => Set(ref _taskListId, value);
+        set
+        {
+            if (!CanChangeTaskList) return;
+
+            Set(ref _taskListId, value);
+        }
     }
+
+    /// <summary>
+    /// タスクリスト欄を変えられるか。
+    /// <para>
+    /// サブタスクと、サブタスクを持つタスクは、Google でリストをまたいで移せない。変えさせても
+    /// 同期のたびに断られるだけなので、ここで止めて理由を出す。
+    /// </para>
+    /// </summary>
+    public bool CanChangeTaskList => TaskListLockReason is null;
+
+    /// <summary>タスクリスト欄を変えられない理由。変えられるなら null。</summary>
+    public string? TaskListLockReason =>
+        _original is null ? null : TaskMapper.MoveBlockReason(_original, _hasChildren);
 
     public bool CanSave => ValidationMessage is null;
 

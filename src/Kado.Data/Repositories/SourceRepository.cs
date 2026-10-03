@@ -26,6 +26,7 @@ public sealed class SourceRepository(SqliteConnection connection)
 
     private const string TaskListColumns = """
         id AS Id, title AS Title, is_visible AS IsVisible, sort_order AS SortOrder,
+        google_detached AS IsDetached,
         google_raw AS GoogleRaw, updated_at AS UpdatedAt
         """;
 
@@ -234,6 +235,35 @@ public sealed class SourceRepository(SqliteConnection connection)
         _connection.Execute(
             "UPDATE calendars SET google_detached = @isDetached WHERE id = @id;",
             new { id, isDetached }) > 0;
+
+    /// <summary>タスクリスト版。<see cref="SetCalendarDetached"/> と同じ。</summary>
+    public bool SetTaskListDetached(string id, bool isDetached) =>
+        _connection.Execute(
+            "UPDATE task_lists SET google_detached = @isDetached WHERE id = @id;",
+            new { id, isDetached }) > 0;
+
+    /// <summary>
+    /// Google から消えたタスクリストを、中のタスクごと片付ける。
+    /// <para>
+    /// <see cref="DeleteTaskList"/> と違い、<b>タスクも一緒に消す</b>（理由は
+    /// <see cref="DropRemovedCalendar"/> と同じ）。
+    /// </para>
+    /// </summary>
+    /// <returns>消したタスクの件数。</returns>
+    public int DropRemovedTaskList(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        using var transaction = _connection.BeginTransaction();
+
+        var removed = _connection.Execute(
+            "DELETE FROM tasks WHERE task_list_id = @id;", new { id }, transaction);
+
+        _connection.Execute("DELETE FROM task_lists WHERE id = @id;", new { id }, transaction);
+        transaction.Commit();
+
+        return removed;
+    }
 
     public bool SetTaskListVisible(string id, bool isVisible) =>
         _connection.Execute(

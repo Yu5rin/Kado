@@ -114,8 +114,15 @@ public static class EventMapper
             // こちらの希望（CalendarId）と食い違っていれば、次の送信で events.move を使う
             GoogleCalendarId = actualGoogleCalendarId,
 
-            // 表せない繰り返しは null。控えた生データが残るので、書き戻さなければ無傷
-            Recurrence = RecurrenceConverter.FromGoogle(element.TextArray("recurrence")),
+            // 表せない繰り返しは null。控えた生データが残るので、書き戻さなければ無傷。
+            //
+            // 例外回のために手元で足した除外日（Google の行に無い EXDATE）は引き継ぐ。
+            // 引き継がないと、親を送った応答の取り込みで消え、動かした回が元の日にも出る・
+            // 中止した回が復活して見える
+            Recurrence = RecurrenceConverter.KeepLocalExceptionDates(
+                RecurrenceConverter.FromGoogle(element.TextArray("recurrence")),
+                existing?.Recurrence,
+                existing is null ? null : ReadOriginalRecurrenceLines(existing)),
 
             Status = element.Text("status"),
             GoogleRaw = GoogleJson.Normalize(element),
@@ -191,6 +198,112 @@ public static class EventMapper
     }
 
     /// <summary>
+    /// Google 側にしか無い情報（ゲスト・会議 URL・添付）を持つか、他人が主催する予定か。
+    /// <para>
+    /// 手元の行を消すと、これらは取り戻せない（Google からも消える）。重複の整理が、
+    /// 「場所やメモが空で軽い」というだけでこちらを消さないために見る。
+    /// 送る前の添付の指定（<see cref="CalendarEvent.PendingAttachments"/>）も含める。
+    /// </para>
+    /// </summary>
+    public static bool HoldsGoogleOnlyData(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (ParseAttachmentsJson(value.PendingAttachments ?? "[]").Count > 0) return true;
+        if (value.GoogleRaw is not { Length: > 0 } raw) return false;
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonObject original) return false;
+
+            return NotEmpty(original["attendees"]) ||
+                   NotEmpty(original["conferenceData"]) ||
+                   NotEmpty(original["hangoutLink"]) ||
+                   NotEmpty(original["attachments"]) ||
+                   OrganizedByOtherPerson(original);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        static bool NotEmpty(JsonNode? node) => node switch
+        {
+            null => false,
+            JsonArray array => array.Count > 0,
+            JsonObject obj => obj.Count > 0,
+            JsonValue v => v.TryGetValue<string>(out var text) && text.Length > 0,
+            _ => true,
+        };
+
+        static bool OrganizedByOtherPerson(JsonObject original) =>
+            original["organizer"] is JsonObject organizer
+            && organizer["self"] is JsonValue self
+            && self.TryGetValue<bool>(out var isSelf)
+            && !isSelf;
+    }
+
+    /// <summary>
+    /// カレンダーを移せない理由。移せるなら null。
+    /// <para>
+    /// Google の <c>events.move</c> が受け付けないものを、送る前に見分ける。送ると断られ、
+    /// 同期のたびに同じ失敗を繰り返す（しかも一緒に直した内容の送信まで止まっていた）。
+    /// </para>
+    /// <list type="bullet">
+    /// <item>繰り返しのうち1回だけを差し替えた回（<c>recurringEventId</c> を持つ子）</item>
+    /// <item>他人が主催する予定（<c>organizer.self</c> が false）。<c>guestsCanModify</c> が立っていても、
+    /// move は主催者しかできない（内容の編集とは別）</item>
+    /// <item><c>eventType</c> が default 以外（focusTime・outOfOffice・workingLocation・fromGmail・birthday）</item>
+    /// </list>
+    /// </summary>
+    public static string? MoveBlockReason(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (IsRecurringInstance(value)) return RecurringInstanceMoveReason;
+
+        if (value.GoogleRaw is not { Length: > 0 } raw) return null;
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonObject original) return null;
+
+            if (original["organizer"] is JsonObject organizer
+                && organizer["self"] is JsonValue self
+                && self.TryGetValue<bool>(out var isSelf)
+                && !isSelf)
+            {
+                return "他の人が主催する予定は、カレンダーを移せません（Google 側の制約）";
+            }
+
+            if (Text(original, "eventType") is { } type && !string.Equals(type, "default", StringComparison.Ordinal))
+            {
+                var name = type switch
+                {
+                    "focusTime" => "集中時間",
+                    "outOfOffice" => "不在",
+                    "workingLocation" => "勤務場所",
+                    "fromGmail" => "メールから作られた",
+                    "birthday" => "誕生日",
+                    _ => type,
+                };
+
+                return $"「{name}」の予定は、カレンダーを移せません（Google 側の制約）";
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>繰り返しの1回だけを差し替えた予定を、移せない理由。</summary>
+    public const string RecurringInstanceMoveReason =
+        "繰り返しの1回だけを差し替えた予定は、カレンダーを移せません（Google 側の制約）";
+
+    /// <summary>
     /// 書き戻す本文を作る。
     /// <para>
     /// <c>patch</c> に渡す前提で、<b>こちらが扱う項目だけ</b>を入れる。欄の無いものは
@@ -201,6 +314,12 @@ public static class EventMapper
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        // 控えた姿は1回だけ読む（NeedsPush が全件に対して毎回呼ぶので、項目ごとに読み直さない）
+        var original = ParseReceived(value);
+
+        var start = WriteStart(value, original);
+        var end = WriteEnd(value, original);
+
         var body = new JsonObject
         {
             ["summary"] = value.Title,
@@ -208,14 +327,17 @@ public static class EventMapper
             // null を送ると「消す」意味になる。空欄はそれで正しい
             ["description"] = value.Note,
             ["location"] = value.Location,
-            ["start"] = WriteStart(value),
-            ["end"] = WriteEnd(value),
+            ["start"] = start,
+            ["end"] = end,
         };
 
-        // source は url と title が揃って初めて意味を持つ。片方だけだと Google に弾かれる
-        body["source"] = value.Url is { Length: > 0 } url
-            ? new JsonObject { ["url"] = url, ["title"] = value.SourceTitle ?? value.Title }
-            : null;
+        // source は使う人が URL を変えたときだけ送る。url と title が揃って初めて意味を持つので、
+        // 送るときは両方を書く。変えていないのに毎回送ると、ほかの道具が付けた source.title
+        // （メールの件名など）まで、予定の題に書き換えてしまう
+        if (TryChangeSource(value, original, out var source))
+        {
+            body["source"] = source;
+        }
 
         // 空の配列は「繰り返しを外す」。ただし、RDATE・EXRULE など<b>こちらで表せない
         // 繰り返しを控えているだけ</b>の場合に空の配列を送ると、Google 側の繰り返しが
@@ -225,7 +347,8 @@ public static class EventMapper
         if (value.Recurrence is not null || !HoldsUnrepresentableRecurrence(value))
         {
             var lines = new JsonArray();
-            foreach (var line in RecurrenceConverter.BuildOutgoing(value.Recurrence, ReadOriginalRecurrenceLines(value)))
+            foreach (var line in RecurrenceConverter.BuildOutgoing(
+                         value.Recurrence, ReadOriginalRecurrenceLines(value), SeriesStartChangeOf(original, start)))
             {
                 lines.Add(line);
             }
@@ -585,11 +708,6 @@ public static class EventMapper
             : Same(wanted, original);
     }
 
-    private static string? Text(JsonObject node, string name) =>
-        node[name] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 0
-            ? text
-            : null;
-
     /// <summary>中身が無いとみなせるか。null、空の配列、空文字。</summary>
     private static bool IsBlank(JsonNode? node) => node switch
     {
@@ -650,14 +768,13 @@ public static class EventMapper
         return (timed && endDate > start ? endDate : null, endTime);
     }
 
-    private static JsonObject WriteStart(CalendarEvent value)
+    private static JsonObject WriteStart(CalendarEvent value, JsonObject? original)
     {
         if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.Date) };
 
-        var body = new JsonObject { ["dateTime"] = FormatDateTime(value.Date, value.StartTime!.Value) };
-        if (LocalIanaTimeZoneId.Value is { } zone) body["timeZone"] = zone;
+        var clock = value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
 
-        return body;
+        return WriteMoment(clock, OriginalTimeZoneId(original, "start"));
     }
 
     /// <summary>
@@ -673,7 +790,7 @@ public static class EventMapper
     /// 同じ長さで、送ったあとは相手からその終了時刻が戻ってくる。
     /// </para>
     /// </summary>
-    private static JsonObject WriteEnd(CalendarEvent value)
+    private static JsonObject WriteEnd(CalendarEvent value, JsonObject? original)
     {
         if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.LastDate.AddDays(1)) };
 
@@ -685,13 +802,135 @@ public static class EventMapper
 
         if (endAt <= startAt) endAt = startAt.AddHours(1);
 
+        return WriteMoment(endAt, OriginalTimeZoneId(original, "end"));
+    }
+
+    /// <summary>
+    /// 手元の時刻（この PC で見た時刻）を、送る形にする。
+    /// <para>
+    /// <b>元の予定に timeZone があれば、それを保つ。</b>この PC の時差へ書き換えると、
+    /// America/New_York などで作られた予定の timeZone が Asia/Tokyo に変わり、
+    /// 繰り返しの回の時刻が夏時間でずれる。手元の時刻は同じ瞬間を元の timeZone で表した
+    /// 時刻に直して送る。元に timeZone が無い（新規など）ときだけ、この PC の地域を使う。
+    /// </para>
+    /// </summary>
+    private static JsonObject WriteMoment(DateTime localClock, string? originalZoneId)
+    {
+        if (originalZoneId is { Length: > 0 } id && FindZone(id) is { } zone)
+        {
+            var instant = new DateTimeOffset(localClock, TimeZoneInfo.Local.GetUtcOffset(localClock));
+            var inZone = TimeZoneInfo.ConvertTime(instant, zone);
+
+            return new JsonObject
+            {
+                ["dateTime"] = inZone.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture),
+                ["timeZone"] = id,
+            };
+        }
+
         var body = new JsonObject
         {
-            ["dateTime"] = FormatDateTime(DateOnly.FromDateTime(endAt), TimeOnly.FromDateTime(endAt)),
+            ["dateTime"] = FormatDateTime(DateOnly.FromDateTime(localClock), TimeOnly.FromDateTime(localClock)),
         };
-        if (LocalIanaTimeZoneId.Value is { } zone) body["timeZone"] = zone;
+        if (LocalIanaTimeZoneId.Value is { } local) body["timeZone"] = local;
 
         return body;
+    }
+
+    /// <summary>最後に受け取った姿（<see cref="CalendarEvent.GoogleRaw"/>）。無い・壊れていれば null。</summary>
+    private static JsonObject? ParseReceived(CalendarEvent value)
+    {
+        if (value.GoogleRaw is not { Length: > 0 } raw) return null;
+
+        try
+        {
+            return JsonNode.Parse(raw) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 最後に受け取った姿の start / end が持つ timeZone。終了に無ければ開始のものを使う。無ければ null。
+    /// </summary>
+    private static string? OriginalTimeZoneId(JsonObject? original, string key)
+    {
+        if (original is null) return null;
+
+        return Text(original[key] as JsonObject, "timeZone")
+               ?? (key == "end" ? Text(original["start"] as JsonObject, "timeZone") : null);
+    }
+
+    private static string? Text(JsonObject? node, string name) =>
+        node is not null && node[name] is JsonValue v && v.TryGetValue<string>(out var text) && text.Length > 0
+            ? text
+            : null;
+
+    /// <summary>IANA 名（Windows の名前も）から時差の定義を引く。引けなければ null。</summary>
+    private static TimeZoneInfo? FindZone(string id)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException
+                                       or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 送る <c>source</c>。使う人が URL を変えたときだけ値を返す（変えていなければ null ＝ 送らない）。
+    /// <para>
+    /// 新規は <c>url</c> と、題（<see cref="CalendarEvent.SourceTitle"/> ／ 予定の題）を書く。
+    /// 受け取った予定の URL を変えたときは、元の source.title を保つ。URL を空にしたときは
+    /// 外す意思として <c>null</c> を送る。
+    /// </para>
+    /// </summary>
+    private static bool TryChangeSource(CalendarEvent value, JsonObject? original, out JsonNode? source)
+    {
+        source = null;
+
+        if (original is null)
+        {
+            if (value.Url is not { Length: > 0 } fresh) return false;
+
+            source = new JsonObject { ["url"] = fresh, ["title"] = value.SourceTitle ?? value.Title };
+            return true;
+        }
+
+        var originalSource = original["source"] as JsonObject;
+        var originalUrl = Text(originalSource, "url");
+        var wantedUrl = value.Url is { Length: > 0 } text ? text : null;
+
+        // 変えていない。送らない
+        if (string.Equals(originalUrl, wantedUrl, StringComparison.Ordinal)) return false;
+
+        // 空にした。外す意思として null を送る
+        if (wantedUrl is null) return true;
+
+        var title = Text(originalSource, "title") ?? value.SourceTitle ?? value.Title;
+        source = new JsonObject { ["url"] = wantedUrl, ["title"] = title };
+        return true;
+    }
+
+    /// <summary>
+    /// 系列の開始時刻が、最後に受け取った姿から動いたか。動いていれば前後の瞬間を返す。
+    /// <para>終日・まだ受け取っていない・動いていないときは null。</para>
+    /// </summary>
+    private static RecurrenceConverter.SeriesStartChange? SeriesStartChangeOf(JsonObject? original, JsonObject newStart)
+    {
+        if (original?["start"] is not JsonObject oldStart) return null;
+
+        var before = ParseDateTime(Text(oldStart, "dateTime"));
+        var after = ParseDateTime(Text(newStart, "dateTime"));
+        if (before is null || after is null) return null;
+        if (before.Value.ToUniversalTime() == after.Value.ToUniversalTime()) return null;
+
+        return new RecurrenceConverter.SeriesStartChange(before.Value, after.Value);
     }
 
     /// <summary>

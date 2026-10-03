@@ -479,11 +479,17 @@ public class DragMoveTests
     }
 
     [Fact]
-    public void 読み取り専用カレンダーの予定は削除もできない()
+    public void 読み取り専用カレンダーでGoogleから受け取った予定は削除もできない()
     {
+        // Google に一度も送っていない予定（送れずに残ったもの）は、手元だけで削除できるようにした
+        // （UnsendableCalendarTests）。Google から受け取った予定を手元だけ消しても Google には残るので、
+        // これまでどおり止める。そのため、この試験の予定は Google の ID を持たせる
         using var test = TestWorkspace.Create();
         test.Workspace.Sources.Upsert(ReadOnlyCalendar());
-        test.Workspace.AddEvent(Event("e1", Today) with { CalendarId = "cal-ro" });
+        test.Workspace.AddEvent(Event("e1", Today) with
+        {
+            CalendarId = "cal-ro", GoogleEventId = "g1", GoogleCalendarId = "cal-ro",
+        });
 
         var main = Create(test);
         var chip = main.Month.Cells.Single(c => c.Date == Today).Events.Single();

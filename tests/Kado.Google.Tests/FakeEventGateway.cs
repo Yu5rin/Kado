@@ -32,6 +32,9 @@ internal sealed class FakeEventGateway : IEventGateway
     /// <summary>消された Google の ID。</summary>
     public List<string> Deleted { get; } = [];
 
+    /// <summary>一覧が取る期間の始まり（timeMin）。無ければ全期間。</summary>
+    public DateTimeOffset? ListFrom { get; set; }
+
     /// <summary>一度だけ 410 を返す。syncToken が古くなった場面を作る。</summary>
     public bool FailNextWithGone { get; set; }
 

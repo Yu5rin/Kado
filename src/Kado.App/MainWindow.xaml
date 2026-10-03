@@ -90,15 +90,16 @@
             <!--
                 Google のものには削除を出さない。手元から消しても次の同期で戻ってくるうえ、
                 中の予定は別のカレンダーへ移ったまま取り残される。見せない相手には
-                チェックを外してもらう
+                チェックを外してもらう。ただし「Google から外れた」ものは戻ってこないので出す
+                （CanDelete）。中身ごと手元から消す
             -->
-            <Separator Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+            <Separator Visibility="{Binding PlacementTarget.DataContext.CanDelete,
                                     RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                    Converter={StaticResource InverseBoolToVisibility}}" />
+                                    Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Header="削除"
-                      Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                      Visibility="{Binding PlacementTarget.DataContext.CanDelete,
                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                   Converter={StaticResource InverseBoolToVisibility}}"
+                                   Converter={StaticResource BoolToVisibility}}"
                       Command="{Binding PlacementTarget.Tag.DeleteSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
@@ -123,13 +124,13 @@
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+            <Separator Visibility="{Binding PlacementTarget.DataContext.CanDelete,
                                     RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                    Converter={StaticResource InverseBoolToVisibility}}" />
+                                    Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Header="削除"
-                      Visibility="{Binding PlacementTarget.DataContext.IsGoogle,
+                      Visibility="{Binding PlacementTarget.DataContext.CanDelete,
                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                   Converter={StaticResource InverseBoolToVisibility}}"
+                                   Converter={StaticResource BoolToVisibility}}"
                       Command="{Binding PlacementTarget.Tag.DeleteSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
@@ -156,7 +157,7 @@
                           DragOver="OnSourceRowDragOver"
                           DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
-                          ToolTip="{Binding Name}"
+                          ToolTip="{Binding RowToolTip}"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"
                           ContextMenu="{StaticResource SourceRowMenu}" />
@@ -171,7 +172,7 @@
                           DragOver="OnSourceRowDragOver"
                           DragLeave="OnSourceRowDragLeave"
                           Drop="OnSourceRowDropped"
-                          ToolTip="{Binding Name}"
+                          ToolTip="{Binding RowToolTip}"
                           Tag="{Binding DataContext,
                                 RelativeSource={RelativeSource AncestorType=Window}}"
                           ContextMenu="{StaticResource TaskListRowMenu}" />
@@ -713,6 +714,13 @@
                 <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,2"
                         Visibility="{Binding ShowsSyncStatus, Converter={StaticResource BoolToVisibility}}"
                         ToolTip="{Binding Sync.ActionToolTip}">
+                    <!-- 警告は件数だけが出る。全文は状態の文字のツールチップか、⚙の接続の状態で読む。右クリックで読んだことにする -->
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="警告を確認した（消す）"
+                                      Command="{Binding Sync.AcknowledgeWarningsCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource SyncStatusButtonStyle}">
                             <Setter Property="Command" Value="{Binding Sync.SyncNowCommand}" />
