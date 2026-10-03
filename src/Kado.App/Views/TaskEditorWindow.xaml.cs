@@ -20,8 +20,13 @@ public partial class TaskEditorWindow : Window
 
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
         DeleteCommand = new RelayCommand(Delete, () => !editor.IsNew);
+        RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);
 
-        editor.PropertyChanged += (_, _) => SaveCommand.RaiseCanExecuteChanged();
+        editor.PropertyChanged += (_, _) =>
+        {
+            SaveCommand.RaiseCanExecuteChanged();
+            RecreateCommand.RaiseCanExecuteChanged();
+        };
 
         Loaded += (_, _) => TitleBox.Focus();
     }
@@ -30,6 +35,19 @@ public partial class TaskEditorWindow : Window
 
     /// <summary>削除を求めて閉じる。既存のタスクを編集しているときだけボタンを出す。</summary>
     public RelayCommand DeleteCommand { get; }
+
+    /// <summary>
+    /// 「Google に新しく作り直す」。保存と一緒に、結び付きを外して新規として送る指定を残す。
+    /// 「Google 上で見つからない」印が付いたタスクにだけボタンを出す。
+    /// </summary>
+    public RelayCommand RecreateCommand { get; }
+
+    /// <summary>作り直しを ViewModel に求めて、保存して閉じる。</summary>
+    private void Recreate()
+    {
+        _editor.RequestRecreate();
+        Save();
+    }
 
     /// <summary>「今日」「明日」「来週」。期限が付いていなければ一緒に付ける。</summary>
     private void OnDuePresetClicked(object sender, RoutedEventArgs e)

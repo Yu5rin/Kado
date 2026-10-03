@@ -211,6 +211,29 @@ public class GoogleCalendarApiTests
         Assert.Contains("calendarList", seen[0].RequestUri!.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task カレンダー一覧は一覧から隠したものも取る()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"items":[]}"""));
+
+        await api.ListCalendarsAsync();
+
+        // 付けないと、隠しただけのカレンダーが返ってこず、「消えた」と取り違える
+        Assert.Contains("showHidden=true", seen[0].RequestUri!.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task イベントを1件取る()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"id":"e1","summary":"棚卸し"}"""));
+
+        var element = await api.GetEventAsync("cal-b", "e1");
+
+        Assert.Equal(HttpMethod.Get, seen[0].Method);
+        Assert.EndsWith("/calendars/cal-b/events/e1", seen[0].RequestUri!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Equal("棚卸し", element.GetProperty("summary").GetString());
+    }
+
     // ------------------------------------------------------------------
     // カレンダーの移し替え・添付
     // ------------------------------------------------------------------

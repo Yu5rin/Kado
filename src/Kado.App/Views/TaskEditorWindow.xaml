@@ -56,6 +56,23 @@
         </Border>
 
         <StackPanel Margin="16,14">
+            <!--
+                同期で「Google 上で見つからない」印が付いたタスクにだけ出す。以後は Google へ送られない。
+                作り直すのは使う人が選んだときだけ（結び付きを外して新規として送る）
+            -->
+            <Border Margin="0,0,0,12" Padding="10,8" CornerRadius="5"
+                    BorderThickness="1" BorderBrush="{DynamicResource SundayBrush}"
+                    Visibility="{Binding MissingOnGoogleMessage, Converter={StaticResource NullToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding MissingOnGoogleMessage}" Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource SundayBrush}" />
+                    <Button Content="Google に新しく作り直す" Style="{StaticResource GhostButtonStyle}"
+                            HorizontalAlignment="Left" Margin="0,6,0,0" IsEnabled="{Binding CanSave}"
+                            ToolTip="結び付きを外して、新しいタスクとして Google に送ります（保存も一緒に行います）"
+                            Command="{Binding RecreateCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="タイトル" Style="{StaticResource FieldLabelStyle}" />
             <TextBox x:Name="TitleBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
                      Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />

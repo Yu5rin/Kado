@@ -15,6 +15,12 @@ public interface IEventGateway
     Task<GooglePage> ListAsync(
         string calendarId, string? syncToken, string? pageToken, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// イベントを1件取る。無ければ 404（<see cref="GoogleApiException.IsMissing"/>）。
+    /// 移す指示を出していた予定が、移し先に本当にあるかを確かめるのに使う。
+    /// </summary>
+    Task<JsonElement> GetAsync(string calendarId, string eventId, CancellationToken cancellationToken);
+
     Task<JsonElement> InsertAsync(string calendarId, JsonObject body, CancellationToken cancellationToken);
 
     Task<JsonElement> PatchAsync(
@@ -37,6 +43,10 @@ public sealed class CalendarApiGateway(GoogleCalendarApi api, DateTimeOffset? fr
     public Task<GooglePage> ListAsync(
         string calendarId, string? syncToken, string? pageToken, CancellationToken cancellationToken) =>
         api.ListEventsAsync(calendarId, syncToken, pageToken, from, cancellationToken);
+
+    public Task<JsonElement> GetAsync(
+        string calendarId, string eventId, CancellationToken cancellationToken) =>
+        api.GetEventAsync(calendarId, eventId, cancellationToken);
 
     public Task<JsonElement> InsertAsync(
         string calendarId, JsonObject body, CancellationToken cancellationToken) =>
@@ -75,8 +85,11 @@ public sealed class EventSyncEngine(
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
-    /// <summary>このカレンダーの差分の印を覚えておくキー。</summary>
-    private static string TokenKey(string calendarId) => $"calendar:{calendarId}:syncToken";
+    /// <summary>
+    /// このカレンダーの差分の印を覚えておくキー。
+    /// <para>印を捨てて全件取り直させたいとき（一覧から外れて戻った、など）に、呼び出し側も使う。</para>
+    /// </summary>
+    public static string TokenKey(string calendarId) => $"calendar:{calendarId}:syncToken";
 
     /// <summary>
     /// 同期する。
@@ -186,8 +199,10 @@ public sealed class EventSyncEngine(
         var created = 0;
         var updated = 0;
         var deleted = 0;
+        var relinked = 0;
         var now = _clock.GetUtcNow();
         var overwritten = new List<string>();
+        var warnings = new List<string>();
 
         // 例外回は必ず親のあとに処理する。先に処理すると、そのあと親を取り込んだときに
         // 足した除外日が消え、同じ日に二重に出たままになる
@@ -211,7 +226,13 @@ public sealed class EventSyncEngine(
                     // ただし、こちらがすでに別のカレンダーへ移したと分かっているなら、
                     // この cancelled は「削除された」ではなく「(移す前の)ここから居なくなった」
                     // だけの合図。誤って消さない（ShouldDeleteOnCancel を見よ）
-                    if (ShouldDeleteOnCancel(existing, calendarId) && events.Delete(existing!.Id)) deleted++;
+                    if (ShouldDeleteOnCancel(existing, calendarId) &&
+                        await DeleteLocalAsync(existing!, calendarId, now, warnings, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        deleted++;
+                    }
+
                     continue;
                 }
             }
@@ -225,7 +246,13 @@ public sealed class EventSyncEngine(
                 // 限らない。こちらで入れ先を別のカレンダーへ変え、すでに events.move で
                 // 移したあとにも、元のカレンダー（このカレンダー）側では同じ知らせが返る
                 // （ShouldDeleteOnCancel を見よ）
-                if (ShouldDeleteOnCancel(existing, calendarId) && events.Delete(existing!.Id)) deleted++;
+                if (ShouldDeleteOnCancel(existing, calendarId) &&
+                    await DeleteLocalAsync(existing!, calendarId, now, warnings, cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    deleted++;
+                }
+
                 continue;
             }
 
@@ -237,6 +264,14 @@ public sealed class EventSyncEngine(
             if (existing is not null &&
                 GoogleJson.SameContent(existing.GoogleRaw, GoogleJson.Normalize(item)))
             {
+                // 「Google 上で見つからない」印が付いていたものが、また見つかった（別の
+                // カレンダーにいた、など）。内容は触らず、印だけを外して結び直す
+                if (existing.GoogleMissing)
+                {
+                    events.Upsert(existing with { GoogleMissing = false, GoogleCalendarId = calendarId });
+                    relinked++;
+                }
+
                 continue;
             }
 
@@ -252,7 +287,7 @@ public sealed class EventSyncEngine(
             if (existing is null)
             {
                 // 同じ予定が2件に増えないよう、結び付いていないものを探して引き受ける
-                if (FindUnlinkedMatch(mapped) is { } orphan)
+                if (FindUnlinkedMatch(mapped, localCalendarId) is { } orphan)
                 {
                     events.Upsert(mapped with { Id = orphan.Id });
                     updated++;
@@ -276,9 +311,82 @@ public sealed class EventSyncEngine(
             CreatedLocal = created,
             UpdatedLocal = updated,
             DeletedLocal = deleted,
+            Relinked = relinked,
             FullResync = fullResync,
-            Warnings = SummarizeOverwritten(overwritten),
+            Warnings = [.. warnings, .. SummarizeOverwritten(overwritten)],
         };
+    }
+
+    /// <summary>
+    /// 相手の取り消し（cancelled）を受けて、こちらの行を消す。
+    /// <para>
+    /// <b>消す前に2つ確かめる。</b>
+    /// </para>
+    /// <para>
+    /// 1つ目。こちらで入れ先を変えて移す指示を出していて（<see cref="CalendarEvent.CalendarId"/> と
+    /// <see cref="CalendarEvent.GoogleCalendarId"/> が食い違う）、その cancelled が元のカレンダーから
+    /// 来たときは、「移し先に確かにあるか」を見る。<c>events.move</c> が Google で通ったのに応答を
+    /// 受け取る前に切れると、手元はまだ元のカレンダーにいると思っている。そこへ元からの
+    /// cancelled が来て消すと、移し先に生きている予定を手元から失い、未送信の編集も一緒に消える。
+    /// あれば「移動は済んでいた」として入れ先だけを直し、消さない。
+    /// </para>
+    /// <para>
+    /// 2つ目。こちらに未送信の編集があるまま消すときは、捨てたことを警告に残す。
+    /// 黙って消えると、Google 側で消されたことにも自分の編集が無くなったことにも気づけない。
+    /// </para>
+    /// </summary>
+    /// <returns>消したら true。</returns>
+    private async Task<bool> DeleteLocalAsync(
+        CalendarEvent existing, string calendarId, DateTimeOffset now, List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (await IsAlreadyMovedAsync(existing, cancellationToken).ConfigureAwait(false))
+        {
+            events.Upsert(existing with { GoogleCalendarId = existing.CalendarId, UpdatedAt = now });
+            return false;
+        }
+
+        if (HasUnsentChanges(existing))
+        {
+            warnings.Add(
+                "Google 側で削除されたため、こちらの未送信の変更を捨てました：" +
+                (existing.Title is { Length: > 0 } title ? title : "(無題)"));
+        }
+
+        return events.Delete(existing.Id);
+    }
+
+    /// <summary>まだ Google に送っていない編集（内容・添付）を持っているか。</summary>
+    private static bool HasUnsentChanges(CalendarEvent value) =>
+        EventMapper.NeedsPush(value) || value.PendingAttachments is not null;
+
+    /// <summary>
+    /// 移す指示を出していた予定が、移し先に本当にあるか。
+    /// <para>
+    /// 移す指示が無ければ（入れ先の希望と実際の場所が同じ、または実際の場所が分からない）確かめない。
+    /// 移し先が見つからない・調べられない種類の失敗（宛先が Google のものではない、など）は
+    /// 「ない」として扱う。出し直せば直る失敗（呼びすぎ・サーバー側）だけは上へ返し、次の同期で
+    /// cancelled をもう一度受け取って判断し直す。
+    /// </para>
+    /// </summary>
+    private async Task<bool> IsAlreadyMovedAsync(CalendarEvent existing, CancellationToken cancellationToken)
+    {
+        if (existing.GoogleEventId is not { Length: > 0 } googleId) return false;
+        if (existing.GoogleCalendarId is not { Length: > 0 } origin) return false;
+        if (existing.CalendarId is not { Length: > 0 } destination) return false;
+        if (string.Equals(origin, destination, StringComparison.Ordinal)) return false;
+
+        try
+        {
+            var found = await gateway.GetAsync(destination, googleId, cancellationToken).ConfigureAwait(false);
+
+            // 消された予定は 404 ではなく cancelled で返ることがある。それは「ある」ではない
+            return !EventMapper.IsCancelled(found);
+        }
+        catch (GoogleApiException ex) when (!ex.IsTransient)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -377,11 +485,19 @@ public sealed class EventSyncEngine(
     /// こちらで入れた予定を相手へ送ったあと、応答を受け取る前に落ちると、
     /// 次の同期で同じものが降ってくる。結び直さないと2件に増える。
     /// </para>
+    /// <para>
+    /// 探す範囲は、取り込み先のカレンダー（<paramref name="localCalendarId"/>）の中だけ。
+    /// </para>
     /// </summary>
-    private CalendarEvent? FindUnlinkedMatch(CalendarEvent incoming) =>
+    private CalendarEvent? FindUnlinkedMatch(CalendarEvent incoming, string localCalendarId) =>
         events.InRange(incoming.Date, incoming.LastDate)
             .FirstOrDefault(e =>
                 e.GoogleEventId is null &&
+                // 探すのは、いま取り込んでいる Google のカレンダーに対応する、こちらのカレンダーの中だけ。
+                // 範囲を絞らないと、このアプリの中だけのカレンダーの予定や、別のカレンダーに送る
+                // つもりの未送信の予定が、たまたま同じ題・日付・開始時刻というだけで吸い込まれ、
+                // 相手の内容で上書きされる
+                string.Equals(e.CalendarId, localCalendarId, StringComparison.Ordinal) &&
                 string.Equals(e.Title, incoming.Title, StringComparison.Ordinal) &&
                 e.Date == incoming.Date &&
                 e.StartTime == incoming.StartTime);
@@ -395,7 +511,6 @@ public sealed class EventSyncEngine(
     {
         var created = 0;
         var updated = 0;
-        var relinked = 0;
         var moved = 0;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
@@ -406,7 +521,10 @@ public sealed class EventSyncEngine(
         // 全件を読んでから絞ると、カレンダーが増えるほど無駄が積み重なる
         // （同期はカレンダーごとに回るので、他所の予定まで毎回読むことになる）。
         // DB 側でこのカレンダーの分だけに絞る（EventRepository.ByCalendarId）
+        //
+        // 「Google 上で見つからない」印が付いたものは送らない（下の catch を見よ）
         var mine = events.ByCalendarId(localCalendarId)
+            .Where(e => !e.GoogleMissing)
             .Where(e => EventMapper.NeedsPush(e) || NeedsMove(e, calendarId))
             .ToArray();
 
@@ -487,13 +605,18 @@ public sealed class EventSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsMissing && value.GoogleEventId is not null)
             {
-                // 相手から消えていた（移す先で、または元のカレンダーで）。結びを外して、
-                // 次の同期で作り直させる
-                events.Upsert(value with
-                {
-                    GoogleEventId = null, GoogleCalendarId = null, GoogleRaw = null, UpdatedAt = now,
-                });
-                relinked++;
+                // 相手が「無い」と言った。<b>黙って作り直さない。</b>結び付きを外して次の同期で
+                // insert すると、別の場所へ移っていただけのものが二重になり、ゲスト・会議 URL・
+                // 添付の無い写しが増える。印だけを付けて、以後は送らない。
+                //
+                // 取り込みで見つかれば印は外れる。使う人が編集画面で「Google に新しく作り直す」を
+                // 選んだときだけ、結び付きを外して新規として送る
+                // （途中の move で行が書き換わっていることがあるので、読み直してから印を付ける）
+                events.Upsert((events.Find(value.Id) ?? value) with { GoogleMissing = true });
+
+                warnings.Add(
+                    $"Google 上で見つからないため送りません（{value.Title}）。" +
+                    "編集画面から「Google に新しく作り直す」を選べます");
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {
@@ -514,7 +637,6 @@ public sealed class EventSyncEngine(
         {
             CreatedRemote = created,
             UpdatedRemote = updated,
-            Relinked = relinked,
             Moved = moved,
             Warnings = warnings,
         };

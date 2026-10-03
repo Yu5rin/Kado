@@ -29,6 +29,13 @@ public interface IEditorPresenter
     /// <returns>進めてよければ true。</returns>
     bool Confirm(string title, string message);
 
+    /// <summary>
+    /// 編集中に Google 側で内容が変わっていたとき、こちらの内容で上書きしてよいか尋ねる。
+    /// <para>「はい」「いいえ」で答えさせる。いいえなら編集画面に戻る。</para>
+    /// </summary>
+    /// <returns>上書きしてよければ true。</returns>
+    bool ConfirmOverwrite(string title, string message);
+
     /// <summary>設定画面を出す。変えたその場で効くので、結果は返さない。</summary>
     void ShowSettings(ViewModels.SettingsViewModel settings);
 
@@ -55,6 +62,8 @@ public sealed class NullEditorPresenter : IEditorPresenter
     public bool ConfirmDelete(string title) => false;
 
     public bool Confirm(string title, string message) => false;
+
+    public bool ConfirmOverwrite(string title, string message) => false;
 
     public void ShowSettings(ViewModels.SettingsViewModel settings) { }
 

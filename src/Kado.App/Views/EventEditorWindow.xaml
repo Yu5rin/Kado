@@ -63,12 +63,29 @@
         </Border>
 
         <StackPanel Margin="16,14">
+            <!--
+                同期で「Google 上で見つからない」印が付いた予定にだけ出す。以後は Google へ送られない。
+                作り直すのは使う人が選んだときだけ（結び付きを外して新規として送る）
+            -->
+            <Border Margin="0,0,0,12" Padding="10,8" CornerRadius="5"
+                    BorderThickness="1" BorderBrush="{DynamicResource SundayBrush}"
+                    Visibility="{Binding MissingOnGoogleMessage, Converter={StaticResource NullToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding MissingOnGoogleMessage}" Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource SundayBrush}" />
+                    <Button Content="Google に新しく作り直す" Style="{StaticResource GhostButtonStyle}"
+                            HorizontalAlignment="Left" Margin="0,6,0,0" IsEnabled="{Binding CanSave}"
+                            ToolTip="結び付きを外して、新しい予定として Google に送ります（保存も一緒に行います）"
+                            Command="{Binding RecreateCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="タイトル" Style="{StaticResource FieldLabelStyle}" />
             <TextBox x:Name="TitleBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
                      Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <CheckBox Content="終日" IsChecked="{Binding IsAllDay}" />
+                <CheckBox Content="終日" IsChecked="{Binding IsAllDay}" IsEnabled="{Binding CanChangeSchedule}" />
             </StackPanel>
 
             <!--
@@ -80,12 +97,14 @@
                 <StackPanel Margin="0,0,8,0">
                     <TextBlock Text="開始日" Style="{StaticResource FieldLabelStyle}" />
                     <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
+                                IsEnabled="{Binding CanChangeSchedule}"
                                 SelectedDate="{Binding Date, Converter={StaticResource DateOnlyToDateTime}}" />
                 </StackPanel>
 
                 <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="終了日" Style="{StaticResource FieldLabelStyle}" />
                     <DatePicker Width="128" Style="{StaticResource FieldDatePickerStyle}"
+                                IsEnabled="{Binding CanChangeSchedule}"
                                 SelectedDate="{Binding EndDate, Converter={StaticResource DateOnlyToDateTime}}"
                                 ToolTip="開始と同じ日なら1日の予定。後ろの日にすると、その日までまたがります" />
                 </StackPanel>
@@ -97,6 +116,7 @@
                 <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="開始" Style="{StaticResource FieldLabelStyle}" />
                     <ComboBox Width="110" Style="{StaticResource TimeComboBoxStyle}"
+                              IsEnabled="{Binding CanChangeSchedule}"
                               ItemsSource="{Binding StartTimeOptions}"
                               Text="{Binding StartTimeText, UpdateSourceTrigger=LostFocus}"
                               SelectionChanged="OnTimeSelected"
@@ -112,6 +132,7 @@
                         幅を食い、時刻のほうが見切れる
                     -->
                     <ComboBox Tag="End" Width="110" Style="{StaticResource TimeComboBoxStyle}"
+                              IsEnabled="{Binding CanChangeSchedule}"
                               ItemsSource="{Binding EndTimeOptions}" DisplayMemberPath="Label"
                               TextSearch.TextPath="Time"
                               Text="{Binding EndTimeText, UpdateSourceTrigger=LostFocus}"
@@ -137,6 +158,8 @@
                     <ComboBox Style="{StaticResource FieldComboBoxStyle}"
                               ItemsSource="{Binding RecurrenceOptions}"
                               DisplayMemberPath="Label" SelectedValuePath="Kind"
+                              IsEnabled="{Binding CanChangeSchedule}"
+                              ToolTip="{Binding ScheduleLockReason}"
                               SelectedValue="{Binding Recurrence}" />
                 </StackPanel>
 
@@ -156,6 +179,11 @@
                                Visibility="{Binding CalendarLockReason, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
             </Grid>
+
+            <!-- Kado では表せない繰り返し（RDATE など）の予定。日時と繰り返しは Google で編集してもらう -->
+            <TextBlock Text="{Binding ScheduleLockReason}" Style="{StaticResource CaptionTextStyle}"
+                       TextWrapping="Wrap" Margin="0,-6,0,12"
+                       Visibility="{Binding ScheduleLockReason, Converter={StaticResource NullToVisibility}}" />
 
             <StackPanel Margin="0,0,0,12">
                 <TextBlock Text="通知" Style="{StaticResource FieldLabelStyle}" />

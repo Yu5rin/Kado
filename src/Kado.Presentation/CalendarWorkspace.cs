@@ -795,8 +795,9 @@ public sealed class CalendarWorkspace
             // 同期先にも伝える。残さないと次の同期で相手から戻ってくる
             if (value.GoogleEventId is { Length: > 0 } googleId)
             {
+                // 持ち主は Google で実際にいるカレンダー（移す指示だけ出して送っていないことがある）
                 Tombstones.Record(
-                    value.Id, TombstoneRepository.EventKind, googleId, now, value.CalendarId, transaction);
+                    value.Id, TombstoneRepository.EventKind, googleId, now, SyncLinks.OwnerOf(value), transaction);
             }
         }
 
@@ -972,7 +973,7 @@ public sealed class CalendarWorkspace
     // ------------------------------------------------------------------
 
     /// <summary>予定を追加する。</summary>
-    public void AddEvent(CalendarEvent value) => Run(new AddEventEdit(Events, value));
+    public void AddEvent(CalendarEvent value) => Run(new AddEventEdit(Events, value, Tombstones));
 
     /// <summary>
     /// 予定を書き換える。
@@ -1000,6 +1001,34 @@ public sealed class CalendarWorkspace
     }
 
     /// <summary>
+    /// 「Google 上で見つからない」予定を、Google に新しく作り直す。
+    /// <para>
+    /// 結び付き（ID・入れ先・控えた生データ）を外して新規として送る。<b>使う人が選んだときだけ</b>
+    /// 呼ぶ。印が付いていない予定には効かない（向こうに本物があるのに新規として送ると二重になる）。
+    /// 同期の結び付きを書き換える操作なので、Undo には積まない（取り込みや送信と同じ扱い）。
+    /// </para>
+    /// </summary>
+    /// <returns>作り直す状態にしたら true。</returns>
+    public bool RecreateEventOnGoogle(string id)
+    {
+        if (Events.Find(id) is not { GoogleMissing: true } found) return false;
+
+        Events.Upsert(SyncLinks.AsNew(found) with { UpdatedAt = DateTimeOffset.Now });
+        NotifyChanged();
+        return true;
+    }
+
+    /// <summary>タスク版。<see cref="RecreateEventOnGoogle"/> と同じ。</summary>
+    public bool RecreateTaskOnGoogle(string id)
+    {
+        if (Tasks.Find(id) is not { GoogleMissing: true } found) return false;
+
+        Tasks.Upsert(SyncLinks.AsNew(found) with { UpdatedAt = DateTimeOffset.Now });
+        NotifyChanged();
+        return true;
+    }
+
+    /// <summary>
     /// タスクを追加する。
     /// <para>
     /// 作成日時と並び順はここで決める。クイック入力・編集画面・複製のどれから
@@ -1019,7 +1048,7 @@ public sealed class CalendarWorkspace
             SortOrder = Tasks.NextSortOrder(value.Due),
         };
 
-        Run(new AddTaskEdit(Tasks, prepared));
+        Run(new AddTaskEdit(Tasks, prepared, Tombstones));
     }
 
     /// <summary>タスクを書き換える。</summary>

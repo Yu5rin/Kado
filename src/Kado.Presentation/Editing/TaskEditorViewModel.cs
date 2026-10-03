@@ -89,6 +89,27 @@ public sealed class TaskEditorViewModel : ObservableObject
 
     public bool IsNew => _original is null;
 
+    /// <summary>
+    /// 同期で「Google 上で見つからない」印が付いたタスクか。
+    /// <para>理由と扱いは <see cref="EventEditorViewModel.IsMissingOnGoogle"/> と同じ。</para>
+    /// </summary>
+    public bool IsMissingOnGoogle => _original?.GoogleMissing == true;
+
+    /// <summary>印が付いているときに、編集画面に出す説明。無ければ null。</summary>
+    public string? MissingOnGoogleMessage => IsMissingOnGoogle
+        ? "Google 上でこのタスクが見つかりません（別のリストへ移された、削除された、など）。" +
+          "このままでは変更が Google に送られません。"
+        : null;
+
+    /// <summary>「Google に新しく作り直す」を求めて保存したか。</summary>
+    public bool RecreateRequested { get; private set; }
+
+    /// <summary>「Google に新しく作り直す」を選ぶ。印が付いたタスクのときだけ効く。</summary>
+    public void RequestRecreate()
+    {
+        if (IsMissingOnGoogle) RecreateRequested = true;
+    }
+
     public string HeaderText => IsNew ? "タスクの追加" : "タスクの編集";
 
     /// <summary>
@@ -201,10 +222,18 @@ public sealed class TaskEditorViewModel : ObservableObject
             Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
             TaskListId = _taskListId,
 
-            // Google 側の情報は編集画面で触らない
+            // Google 側の情報は編集画面で触らない。消さずに引き継ぐ。
+            //
+            // 落とすと、保存のたびに「Google から一度も受け取っていない」状態に戻り、親子関係と
+            // 並び順（Google が持つ値）も空になる。保存の時点では CalendarWorkspace が最新の行から
+            // あらためて採り直すので、ここの値は開いた時点のもの
             GoogleTaskId = _original?.GoogleTaskId,
             GoogleTaskListId = _original?.GoogleTaskListId,
             GoogleUpdated = _original?.GoogleUpdated,
+            GoogleRaw = _original?.GoogleRaw,
+            GoogleMissing = _original?.GoogleMissing ?? false,
+            ParentId = _original?.ParentId,
+            Position = _original?.Position,
             Source = _original?.Source,
             UpdatedAt = DateTimeOffset.Now,
 

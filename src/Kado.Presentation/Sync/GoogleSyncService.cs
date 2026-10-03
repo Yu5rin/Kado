@@ -50,7 +50,9 @@ public sealed class GoogleSyncService(
 
             // 1つが読めないだけで全体を止めない。誕生日のような特殊なカレンダーは
             // 一覧に出ても中身を取れないことがある。そこで止まると、他の予定まで入らない
-            foreach (var calendar in workspace.Sources.Calendars().Where(c => IsOnGoogle(c.GoogleRaw)))
+            // 一覧から外れたもの（送っていない中身を残してあるだけ）は同期しない
+            foreach (var calendar in workspace.Sources.Calendars()
+                         .Where(c => IsOnGoogle(c.GoogleRaw) && !c.IsDetached))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -297,6 +299,19 @@ public sealed class GoogleSyncService(
 
                     var existing = workspace.Sources.FindCalendar(id);
 
+                    // 一覧から外れていたものが戻った、または隠していたものを表示に戻した。
+                    // 見ていない間の変更は、古い差分の印では取れない。印を捨てて全件取り直す
+                    if (existing is not null && ReturnedToList(existing, item))
+                    {
+                        workspace.Settings.SetSyncState(EventSyncEngine.TokenKey(id), string.Empty);
+
+                        if (existing.IsDetached)
+                        {
+                            workspace.Sources.SetCalendarDetached(id, false);
+                            updated++;
+                        }
+                    }
+
                     // こちらで名前や色を変えていたら、先に相手へ送る。
                     // 送る前に上書きすると、変えたことが消えてしまう
                     var pushedSettings = existing is null
@@ -377,23 +392,47 @@ public sealed class GoogleSyncService(
 
         if (listed && seen.Count > 0)
         {
-            var removed = workspace.Sources.Calendars()
+            var gone = workspace.Sources.Calendars()
                 .Where(c => IsOnGoogle(c.GoogleRaw) && !seen.Contains(c.Id))
                 .ToArray();
 
-            foreach (var calendar in removed)
+            var dropped = new List<CalendarSource>();
+
+            foreach (var calendar in gone)
             {
+                // 本当に一覧から消えた（購読解除・削除）カレンダーでも、まだ送っていない
+                // 予定・編集・削除の記録があるなら、捨てない。捨てると使う人の入力が、
+                // 知らせもなく消える。中身を残して同期を止め、確かめてから消してもらう
+                var unsent = CountUnsent(calendar);
+
+                if (unsent > 0)
+                {
+                    if (!calendar.IsDetached)
+                    {
+                        workspace.Sources.SetCalendarDetached(calendar.Id, true);
+                        removedCount++;
+
+                        warnings.Add(
+                            $"「{calendar.DisplayName}」が Google の一覧から外れました（購読解除や削除など）。" +
+                            $"まだ送っていない予定・変更が {unsent} 件あるため、中身を残して同期を止めました。" +
+                            "確かめてから、カレンダーごと消してください");
+                    }
+
+                    continue;
+                }
+
                 workspace.Sources.DropRemovedCalendar(calendar.Id);
                 workspace.Tombstones.ForgetSource(calendar.Id);
+                dropped.Add(calendar);
             }
 
-            removedCount = removed.Length;
+            removedCount += dropped.Count;
 
-            if (removed.Length > 0)
+            if (dropped.Count > 0)
             {
-                warnings.Add(removed.Length == 1
-                    ? $"Google から消えた「{removed[0].DisplayName}」を一覧から外しました"
-                    : $"Google から消えたカレンダー {removed.Length} 件を一覧から外しました");
+                warnings.Add(dropped.Count == 1
+                    ? $"Google から消えた「{dropped[0].DisplayName}」を一覧から外しました"
+                    : $"Google から消えたカレンダー {dropped.Count} 件を一覧から外しました");
             }
         }
 
@@ -408,6 +447,63 @@ public sealed class GoogleSyncService(
             Warnings = warnings,
         };
     }
+
+    /// <summary>
+    /// 一覧に戻ってきた（または表示に戻した）カレンダーか。
+    /// <para>
+    /// 一覧から外れた印が付いていたもの、または前回は Google 側で隠れていた
+    /// （<c>hidden</c>）のに今回は隠れていないもの。
+    /// </para>
+    /// </summary>
+    private static bool ReturnedToList(CalendarSource existing, JsonElement item) =>
+        existing.IsDetached || (IsHiddenOnGoogle(existing.GoogleRaw) && !item.Flag("hidden"));
+
+    /// <summary>控えてある一覧の姿で、Google 側で隠れていたか。</summary>
+    private static bool IsHiddenOnGoogle(string? googleRaw)
+    {
+        if (googleRaw is not { Length: > 0 }) return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(googleRaw);
+
+            return document.RootElement.TryGetProperty("hidden", out var hidden) &&
+                   hidden.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// まだ Google に送っていない中身の件数。予定と、まだ伝えていない削除の記録。
+    /// <para>
+    /// 読むだけのカレンダーは送れないので数えない。実働日データから起こした印
+    /// （休業日・特別出勤・マイルストーン）は、取り込み直せば戻るので数えない。
+    /// 削除の記録は、持ち主がこのカレンダーと分かっているものだけ数える。
+    /// </para>
+    /// </summary>
+    private int CountUnsent(CalendarSource calendar)
+    {
+        if (calendar.IsReadOnly) return 0;
+
+        var events = workspace.Events.ByCalendarId(calendar.Id)
+            .Count(e => !IsRebuiltMark(e.Id) &&
+                        (e.GoogleEventId is null ||
+                         EventMapper.NeedsPush(e) ||
+                         e.PendingAttachments is not null));
+
+        var deletions = workspace.Tombstones.Pending(Kado.Data.Repositories.TombstoneRepository.EventKind, calendar.Id)
+            .Count(t => string.Equals(t.SourceId, calendar.Id, StringComparison.Ordinal));
+
+        return events + deletions;
+    }
+
+    private static bool IsRebuiltMark(string id) =>
+        CalendarWorkspace.IsMilestoneId(id) ||
+        CalendarWorkspace.IsClosedDayId(id) ||
+        CalendarWorkspace.IsOpenDayId(id);
 
     /// <summary>
     /// こちらで変えた名前と色を相手へ送る。

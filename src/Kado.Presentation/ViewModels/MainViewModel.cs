@@ -2506,7 +2506,10 @@ public sealed class MainViewModel : ObservableObject
         // 複製でも規則をそのまま引き継ぐと複製先で同じことが起きるので、
         // copy かどうかに関わらず止める。「この回だけ／以降／すべて」を選ばせる
         // 仕組みは次の版で用意する
-        if (found.IsRecurring)
+        //
+        // Kado では表せない繰り返し（RDATE など）の予定も同じ。こちらでは Recurrence が空だが、
+        // 向こうでは繰り返しの予定で、開始日だけを動かすと系列の開始がずれる
+        if (found.IsRecurring || EventMapper.HoldsUnrepresentableRecurrence(found))
         {
             StatusMessage = "繰り返しの予定は編集画面から変えてください";
             return false;
@@ -2549,6 +2552,8 @@ public sealed class MainViewModel : ObservableObject
             GoogleEventId = null,
             GoogleRaw = null,
             GoogleUpdated = null,
+            GoogleCalendarId = null,
+            GoogleMissing = false,
         });
 
         StatusMessage = "予定を複製しました";
@@ -2596,7 +2601,12 @@ public sealed class MainViewModel : ObservableObject
         {
             Id = Guid.NewGuid().ToString("N")[..15],
             GoogleTaskId = null,
+            GoogleTaskListId = null,
             GoogleRaw = null,
+            GoogleUpdated = null,
+            GoogleMissing = false,
+            ParentId = null,
+            Position = null,
         });
 
         StatusMessage = "タスクを複製しました";
@@ -2697,16 +2707,39 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var editor = new EventEditorViewModel(stored, CalendarChoicesFor(stored), _attachmentUploader, _files);
-        if (!_editors.ShowEventEditor(editor))
+
+        while (true)
         {
-            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
-            if (editor.Deleted) DeleteEventBy(id);
+            if (!_editors.ShowEventEditor(editor))
+            {
+                // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
+                if (editor.Deleted) DeleteEventBy(id);
+                return;
+            }
+
+            // 裏の同期は編集画面を開いている間も走る。保存の前に、開いた時点と今を見比べる
+            switch (EditConflict.Check(stored, _workspace.Events.Find(id)))
+            {
+                case EditConflictKind.Deleted:
+                    // 行を作り直すと、Google が消したものを手元だけが生き返らせてしまう
+                    StatusMessage = "編集中にこの予定が Google 側で消えたため、保存しませんでした";
+                    return;
+
+                case EditConflictKind.GoogleChanged
+                    when !_editors.ConfirmOverwrite(
+                        "予定の保存", "編集中に Google 側でこの予定が変わりました。こちらの内容で上書きしますか？"):
+                    // いいえ。同じ入力のまま編集画面に戻る
+                    continue;
+            }
+
+            // Google との結び付きは、保存の時点の最新の行から採られる（UpdateEventEdit）
+            var saved = _workspace.UpdateEvent(editor.ToModel());
+
+            if (saved && editor.RecreateRequested) _workspace.RecreateEventOnGoogle(id);
+
+            StatusMessage = saved ? "予定を変更しました" : "予定が見つかりませんでした";
             return;
         }
-
-        StatusMessage = _workspace.UpdateEvent(editor.ToModel())
-            ? "予定を変更しました"
-            : "予定が見つかりませんでした";
     }
 
     /// <summary>
@@ -2735,7 +2768,9 @@ public sealed class MainViewModel : ObservableObject
         // 繰り返しの回を選ばず、系列ごと消える。黙って消えると気づきにくいので、
         // 「すべての回」を消したことが分かる文言にする（確認ダイアログは増やさない。
         // Ctrl＋Z で戻せるため）
-        var isRecurring = _workspace.Events.Find(id)?.IsRecurring == true;
+        // （Kado では表せない繰り返しの予定も、向こうでは繰り返しの予定）
+        var isRecurring = _workspace.Events.Find(id) is { } found &&
+                          (found.IsRecurring || EventMapper.HoldsUnrepresentableRecurrence(found));
 
         StatusMessage = _workspace.DeleteEvent(id)
             ? isRecurring ? "繰り返しの予定をすべての回、削除しました" : "予定を削除しました"
@@ -2748,16 +2783,36 @@ public sealed class MainViewModel : ObservableObject
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
 
         var editor = new TaskEditorViewModel(stored, TaskListChoicesFor(stored), _today);
-        if (!_editors.ShowTaskEditor(editor))
+
+        while (true)
         {
-            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
-            if (editor.Deleted) DeleteTaskBy(id);
+            if (!_editors.ShowTaskEditor(editor))
+            {
+                // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
+                if (editor.Deleted) DeleteTaskBy(id);
+                return;
+            }
+
+            // 予定と同じ。保存の前に、開いた時点と今を見比べる
+            switch (EditConflict.Check(stored, _workspace.Tasks.Find(id)))
+            {
+                case EditConflictKind.Deleted:
+                    StatusMessage = "編集中にこのタスクが Google 側で消えたため、保存しませんでした";
+                    return;
+
+                case EditConflictKind.GoogleChanged
+                    when !_editors.ConfirmOverwrite(
+                        "タスクの保存", "編集中に Google 側でこのタスクが変わりました。こちらの内容で上書きしますか？"):
+                    continue;
+            }
+
+            var saved = _workspace.UpdateTask(editor.ToModel());
+
+            if (saved && editor.RecreateRequested) _workspace.RecreateTaskOnGoogle(id);
+
+            StatusMessage = saved ? "タスクを変更しました" : "タスクが見つかりませんでした";
             return;
         }
-
-        StatusMessage = _workspace.UpdateTask(editor.ToModel())
-            ? "タスクを変更しました"
-            : "タスクが見つかりませんでした";
     }
 
     /// <inheritdoc cref="EditEventBy"/>
@@ -2806,19 +2861,8 @@ public sealed class MainViewModel : ObservableObject
     private void EditTask(TaskListItemViewModel? target)
     {
         if (target is null) return;
-        if (_workspace.Tasks.Find(target.Id) is not { } stored) return;
 
-        var editor = new TaskEditorViewModel(stored, TaskListChoicesFor(stored), _today);
-        if (!_editors.ShowTaskEditor(editor))
-        {
-            // 編集画面の「削除」から閉じたときは、保存はされていないが削除は行う
-            if (editor.Deleted) DeleteTask(target);
-            return;
-        }
-
-        StatusMessage = _workspace.UpdateTask(editor.ToModel())
-            ? "タスクを変更しました"
-            : "タスクが見つかりませんでした";
+        EditTaskBy(target.Id);
     }
 
     private void DeleteTask(TaskListItemViewModel? target)

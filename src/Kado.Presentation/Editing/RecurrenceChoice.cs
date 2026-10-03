@@ -48,6 +48,9 @@ public sealed record RecurrenceOption(RecurrenceKind Kind, string Label)
 /// </summary>
 public static class RecurrenceChoice
 {
+    /// <summary>向こうの繰り返しがこちらでは表せない予定の、繰り返し欄の文言。</summary>
+    public const string UnrepresentableLabel = "Kado では表せない繰り返し（Google で編集してください）";
+
     private static readonly string[] DayCodes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
     private static readonly string[] DayNames = ["日", "月", "火", "水", "木", "金", "土"];
@@ -66,8 +69,12 @@ public static class RecurrenceChoice
     /// 読めなかったときだけ、これまでどおりの文言に戻る。
     /// </para>
     /// </param>
+    /// <param name="unrepresentable">
+    /// 向こうに表せない繰り返し（RDATE など）があるか。あれば「このまま」の文言を
+    /// <see cref="UnrepresentableLabel"/> にする（こちらでは編集できない）。
+    /// </param>
     public static IReadOnlyList<RecurrenceOption> OptionsFor(
-        DateOnly date, bool includeCustom, string? spec = null)
+        DateOnly date, bool includeCustom, string? spec = null, bool unrepresentable = false)
     {
         var options = new List<RecurrenceOption>(6)
         {
@@ -78,7 +85,11 @@ public static class RecurrenceChoice
             new(RecurrenceKind.Yearly, $"毎年 {date.ToString("M月d日", CultureInfo.InvariantCulture)}"),
         };
 
-        if (includeCustom) options.Add(new RecurrenceOption(RecurrenceKind.Custom, CustomLabel(date, spec)));
+        if (includeCustom)
+        {
+            options.Add(new RecurrenceOption(
+                RecurrenceKind.Custom, unrepresentable ? UnrepresentableLabel : CustomLabel(date, spec)));
+        }
 
         return options;
     }

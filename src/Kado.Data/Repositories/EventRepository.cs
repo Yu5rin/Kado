@@ -24,7 +24,7 @@ public sealed class EventRepository(SqliteConnection connection)
         calendar_id AS CalendarId, recurrence AS Recurrence, url AS Url,
         status AS Status, source_title AS SourceTitle, google_raw AS GoogleRaw,
         google_event_id AS GoogleEventId, google_calendar_id AS GoogleCalendarId,
-        google_updated AS GoogleUpdated,
+        google_updated AS GoogleUpdated, google_missing AS GoogleMissing,
         source AS Source, notify AS Notify, pending_attachments AS PendingAttachments,
         updated_at AS UpdatedAt
         """;
@@ -130,13 +130,13 @@ public sealed class EventRepository(SqliteConnection connection)
                 id, title, date, end_date, start_time, end_time,
                 location, note, color, calendar_id, recurrence, url,
                 status, source_title, google_raw,
-                google_event_id, google_calendar_id, google_updated, source, notify,
+                google_event_id, google_calendar_id, google_updated, google_missing, source, notify,
                 pending_attachments, updated_at
             ) VALUES (
                 @Id, @Title, @Date, @EndDate, @StartTime, @EndTime,
                 @Location, @Note, @Color, @CalendarId, @Recurrence, @Url,
                 @Status, @SourceTitle, @GoogleRaw,
-                @GoogleEventId, @GoogleCalendarId, @GoogleUpdated, @Source, @Notify,
+                @GoogleEventId, @GoogleCalendarId, @GoogleUpdated, @GoogleMissing, @Source, @Notify,
                 @PendingAttachments, @UpdatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -149,6 +149,7 @@ public sealed class EventRepository(SqliteConnection connection)
                 google_event_id = excluded.google_event_id,
                 google_calendar_id = excluded.google_calendar_id,
                 google_updated = excluded.google_updated,
+                google_missing = excluded.google_missing,
                 source = excluded.source, notify = excluded.notify,
                 pending_attachments = excluded.pending_attachments,
                 updated_at = excluded.updated_at;

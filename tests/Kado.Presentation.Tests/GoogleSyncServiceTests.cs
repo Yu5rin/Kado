@@ -406,10 +406,17 @@ public class GoogleSyncServiceTests : IDisposable
             GoogleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner"}""",
             UpdatedAt = DateTimeOffset.Now,
         });
-        _test.Workspace.AddEvent(new CalendarEvent
+        // Google と同期済みで、まだ送っていないものが無い予定。送っていない予定・編集・削除の
+        // 記録があるカレンダーは捨てない（消えたカレンダーにまだ送っていない…のテスト）
+        var synced = new CalendarEvent
         {
             Id = "e1", Title = "消えるはずの予定", Date = new DateOnly(2026, 9, 24),
-            CalendarId = "kieta@group.calendar.google.com",
+            CalendarId = "kieta@group.calendar.google.com", GoogleEventId = "g1",
+            GoogleCalendarId = "kieta@group.calendar.google.com",
+        };
+        _test.Workspace.AddEvent(synced with
+        {
+            GoogleRaw = Kado.Google.Mapping.EventMapper.ToGoogle(synced).ToJsonString(),
         });
 
         var handler = new RoutingHandler(Route);
@@ -667,4 +674,224 @@ public class GoogleSyncServiceTests : IDisposable
         request.Method == HttpMethod.Patch &&
         request.RequestUri!.ToString().Contains("calendarList", StringComparison.Ordinal);
 
+    // ------------------------------------------------------------------
+    // Google で一覧から隠したカレンダーを、消えたものとして予定ごと捨てない
+    // ------------------------------------------------------------------
+
+    private const string KietaId = "kieta@group.calendar.google.com";
+
+    /// <summary>Google から消えた（購読解除など）カレンダーが手元に残っている状態を作る。</summary>
+    private void SeedGoneCalendar(string googleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner"}""")
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = KietaId, Summary = "外れたカレンダー", GoogleRaw = googleRaw, UpdatedAt = DateTimeOffset.Now,
+        });
+    }
+
+    [Fact]
+    public async Task カレンダー一覧は隠したものも含めて取る()
+    {
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        await service.SyncAsync();
+
+        // 一覧から隠しただけのカレンダーは、既定では返ってこない。返ってこないと
+        // 「消えた」と取り違えて、中の予定ごと捨ててしまう
+        Assert.Contains(handler.Seen, url =>
+            url.Contains("calendarList", StringComparison.Ordinal) &&
+            url.Contains("showHidden=true", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 消えたカレンダーにまだ送っていない予定があれば捨てずに残して同期を止める()
+    {
+        SeedGoneCalendar();
+
+        // 一度も送っていない新規の予定
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "まだ送っていない予定", Date = new DateOnly(2026, 9, 24), CalendarId = KietaId,
+        });
+
+        var handler = new RoutingHandler(Route);
+        using var service = Create(handler);
+
+        var report = await service.SyncAsync();
+
+        // 予定は残る
+        Assert.NotNull(_test.Workspace.Events.Find("e1"));
+
+        // カレンダーも残り、「Google から外れた」状態になる
+        var calendar = Assert.Single(_test.Workspace.Sources.Calendars(), c => c.Id == KietaId);
+        Assert.True(calendar.IsDetached);
+
+        // 同期は止める。向こうに無いものを問い合わせに行くと、毎回 notFound になる
+        Assert.DoesNotContain(handler.Seen, url => url.Contains("kieta", StringComparison.Ordinal));
+
+        // 黙らせない。中身を確かめてから消せるよう知らせる
+        Assert.Contains(report!.Warnings, w =>
+            w.Contains("外れたカレンダー", StringComparison.Ordinal) &&
+            w.Contains("まだ送っていない", StringComparison.Ordinal));
+        Assert.True(report.SourcesChanged);
+    }
+
+    [Fact]
+    public async Task 消えたカレンダーに送っていない編集があっても捨てない()
+    {
+        SeedGoneCalendar();
+
+        // Google から受け取った姿とは違う内容に編集して、まだ送っていない
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "編集した題", Date = new DateOnly(2026, 9, 24), CalendarId = KietaId,
+            GoogleEventId = "g1", GoogleCalendarId = KietaId,
+            GoogleRaw = """{"id":"g1","summary":"元の題","start":{"date":"2026-09-24"},"end":{"date":"2026-09-25"}}""",
+        });
+
+        using var service = Create(new RoutingHandler(Route));
+        await service.SyncAsync();
+
+        Assert.NotNull(_test.Workspace.Events.Find("e1"));
+        Assert.True(_test.Workspace.Sources.FindCalendar(KietaId)!.IsDetached);
+    }
+
+    [Fact]
+    public async Task 消えたカレンダーにまだ伝えていない削除があれば捨てずに残す()
+    {
+        SeedGoneCalendar();
+
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "消した予定", Date = new DateOnly(2026, 9, 24), CalendarId = KietaId,
+            GoogleEventId = "g1", GoogleCalendarId = KietaId,
+            GoogleRaw = """{"id":"g1","summary":"消した予定","start":{"date":"2026-09-24"},"end":{"date":"2026-09-25"}}""",
+        });
+        _test.Workspace.DeleteEvent("e1");
+
+        using var service = Create(new RoutingHandler(Route));
+        await service.SyncAsync();
+
+        // 持ち主が無くなったからと記録を捨てると、削除を伝える機会が永久に無い
+        Assert.Single(_test.Workspace.Tombstones.Pending(Kado.Data.Repositories.TombstoneRepository.EventKind, KietaId));
+        Assert.True(_test.Workspace.Sources.FindCalendar(KietaId)!.IsDetached);
+    }
+
+    [Fact]
+    public async Task 外れたままの二度目の同期では同じ警告を出し直さない()
+    {
+        SeedGoneCalendar();
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "まだ送っていない予定", Date = new DateOnly(2026, 9, 24), CalendarId = KietaId,
+        });
+
+        using var service = Create(new RoutingHandler(Route));
+        await service.SyncAsync();
+        var second = await service.SyncAsync();
+
+        Assert.DoesNotContain(second!.Warnings, w => w.Contains("外れたカレンダー", StringComparison.Ordinal));
+        Assert.NotNull(_test.Workspace.Events.Find("e1"));
+    }
+
+    [Fact]
+    public async Task 外れたカレンダーの予定を使う人が片付けたら次の同期で外す()
+    {
+        SeedGoneCalendar();
+        _test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "まだ送っていない予定", Date = new DateOnly(2026, 9, 24), CalendarId = KietaId,
+        });
+
+        using var service = Create(new RoutingHandler(Route));
+        await service.SyncAsync();
+
+        // 中身を確かめて、自分で消した
+        _test.Workspace.DeleteEvent("e1");
+        await service.SyncAsync();
+
+        Assert.DoesNotContain(_test.Workspace.Sources.Calendars(), c => c.Id == KietaId);
+    }
+
+    [Fact]
+    public async Task 外れたカレンダーが一覧にまた現れたら同期を再開して全件取り直す()
+    {
+        SeedGoneCalendar();
+        _test.Workspace.Sources.SetCalendarDetached(KietaId, true);
+        _test.Workspace.Settings.SetSyncState($"calendar:{KietaId}:syncToken", "OLD-TOKEN");
+
+        var handler = new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, """
+                    {"items":[{"id":"kieta@group.calendar.google.com","summary":"外れたカレンダー",
+                               "accessRole":"owner"}]}
+                    """)
+                : url.Contains("kieta", StringComparison.Ordinal)
+                    ? (HttpStatusCode.OK, """{"items":[],"nextSyncToken":"NEW-TOKEN"}""")
+                    : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        Assert.False(_test.Workspace.Sources.FindCalendar(KietaId)!.IsDetached);
+
+        // 古い印で差分を取りに行かない。向こうでの動きを見ていない間の変更を取りこぼす
+        Assert.DoesNotContain(handler.Seen, url => url.Contains("syncToken=OLD-TOKEN", StringComparison.Ordinal));
+        Assert.Contains(handler.Seen, url =>
+            url.Contains("kieta", StringComparison.Ordinal) && url.Contains("/events", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 隠していたカレンダーを表示に戻したら同期の印を捨てて全件取り直す()
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = KietaId, Summary = "隠していたカレンダー", UpdatedAt = DateTimeOffset.Now,
+            GoogleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner","hidden":true}""",
+        });
+        _test.Workspace.Settings.SetSyncState($"calendar:{KietaId}:syncToken", "OLD-TOKEN");
+
+        var handler = new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, """
+                    {"items":[{"id":"kieta@group.calendar.google.com","summary":"隠していたカレンダー",
+                               "accessRole":"owner"}]}
+                    """)
+                : url.Contains("kieta", StringComparison.Ordinal)
+                    ? (HttpStatusCode.OK, """{"items":[],"nextSyncToken":"NEW-TOKEN"}""")
+                    : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        Assert.DoesNotContain(handler.Seen, url => url.Contains("syncToken=OLD-TOKEN", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task 隠したままのカレンダーは印を捨てない()
+    {
+        _test.Workspace.Sources.Upsert(new CalendarSource
+        {
+            Id = KietaId, Summary = "隠したカレンダー", UpdatedAt = DateTimeOffset.Now,
+            GoogleRaw = """{"id":"kieta@group.calendar.google.com","accessRole":"owner","hidden":true}""",
+        });
+        _test.Workspace.Settings.SetSyncState($"calendar:{KietaId}:syncToken", "OLD-TOKEN");
+
+        var handler = new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, """
+                    {"items":[{"id":"kieta@group.calendar.google.com","summary":"隠したカレンダー",
+                               "accessRole":"owner","hidden":true}]}
+                    """)
+                : url.Contains("kieta", StringComparison.Ordinal)
+                    ? (HttpStatusCode.OK, """{"items":[],"nextSyncToken":"NEW-TOKEN"}""")
+                    : Route(url));
+
+        using var service = Create(handler);
+        await service.SyncAsync();
+
+        // 隠したままなら、差分の印はそのまま使う
+        Assert.Contains(handler.Seen, url => url.Contains("syncToken=OLD-TOKEN", StringComparison.Ordinal));
+    }
 }

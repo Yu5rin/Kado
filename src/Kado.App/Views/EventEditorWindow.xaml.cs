@@ -24,10 +24,15 @@ public partial class EventEditorWindow : Window
 
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
         DeleteCommand = new RelayCommand(Delete, () => !editor.IsNew);
+        RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);
 
         // RelayCommand は CommandManager に乗っていないので、自分で知らせないと
         // 「保存できるようになったのにボタンが戻らない」状態のままになる
-        editor.PropertyChanged += (_, _) => SaveCommand.RaiseCanExecuteChanged();
+        editor.PropertyChanged += (_, _) =>
+        {
+            SaveCommand.RaiseCanExecuteChanged();
+            RecreateCommand.RaiseCanExecuteChanged();
+        };
 
         Loaded += (_, _) => TitleBox.Focus();
     }
@@ -37,6 +42,12 @@ public partial class EventEditorWindow : Window
 
     /// <summary>削除を求めて閉じる。既存の予定を編集しているときだけボタンを出す。</summary>
     public RelayCommand DeleteCommand { get; }
+
+    /// <summary>
+    /// 「Google に新しく作り直す」。保存と一緒に、結び付きを外して新規として送る指定を残す。
+    /// 「Google 上で見つからない」印が付いた予定にだけボタンを出す。
+    /// </summary>
+    public RelayCommand RecreateCommand { get; }
 
     /// <summary>
     /// 保存の先頭で、いま打ちかけの値を確定させる。
@@ -54,6 +65,13 @@ public partial class EventEditorWindow : Window
         if (!_editor.CanSave) return;
 
         DialogResult = true;
+    }
+
+    /// <summary>作り直しを ViewModel に求めて、保存して閉じる。実際の付け替えは呼び出し側が行う。</summary>
+    private void Recreate()
+    {
+        _editor.RequestRecreate();
+        Save();
     }
 
     /// <summary>削除を ViewModel に求めて閉じる。実際の削除は呼び出し側が行う。</summary>

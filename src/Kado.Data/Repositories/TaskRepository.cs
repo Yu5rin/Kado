@@ -19,7 +19,8 @@ public sealed class TaskRepository(SqliteConnection connection)
         completed_at AS CompletedAt, parent_id AS ParentId, position AS Position,
         google_raw AS GoogleRaw,
         google_task_id AS GoogleTaskId, google_task_list_id AS GoogleTaskListId,
-        google_updated AS GoogleUpdated, source AS Source, updated_at AS UpdatedAt,
+        google_updated AS GoogleUpdated, google_missing AS GoogleMissing,
+        source AS Source, updated_at AS UpdatedAt,
         created_at AS CreatedAt, sort_order AS SortOrder
         """;
 
@@ -136,12 +137,12 @@ public sealed class TaskRepository(SqliteConnection connection)
             INSERT INTO tasks (
                 id, title, due, is_done, note, task_list_id,
                 completed_at, parent_id, position, google_raw,
-                google_task_id, google_task_list_id, google_updated, source, updated_at,
+                google_task_id, google_task_list_id, google_updated, google_missing, source, updated_at,
                 created_at, sort_order
             ) VALUES (
                 @Id, @Title, @Due, @IsDone, @Note, @TaskListId,
                 @CompletedAt, @ParentId, @Position, @GoogleRaw,
-                @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @Source, @UpdatedAt,
+                @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @GoogleMissing, @Source, @UpdatedAt,
                 @CreatedAt, @SortOrder
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -152,6 +153,7 @@ public sealed class TaskRepository(SqliteConnection connection)
                 google_task_id = excluded.google_task_id,
                 google_task_list_id = excluded.google_task_list_id,
                 google_updated = excluded.google_updated,
+                google_missing = excluded.google_missing,
                 source = excluded.source, updated_at = excluded.updated_at,
                 created_at = excluded.created_at, sort_order = excluded.sort_order;
             """,

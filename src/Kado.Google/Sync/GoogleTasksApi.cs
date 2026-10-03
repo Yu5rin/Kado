@@ -95,6 +95,13 @@ public sealed class GoogleTasksApi(HttpClient http, IAccessTokenSource tokens)
             body, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>タスクを1件取る。消されたものは <c>deleted: true</c> で返ることがある。</summary>
+    public async Task<JsonElement> GetTaskAsync(
+        string taskListId, string taskId, CancellationToken cancellationToken = default) =>
+        await GetAsync(
+            $"{Root}/lists/{Uri.EscapeDataString(taskListId)}/tasks/{Uri.EscapeDataString(taskId)}",
+            cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// タスクを別のリストへ移す。
     /// <para>消して作り直すのではなく <c>move</c> を使う。並び順や親子関係を保てる。</para>

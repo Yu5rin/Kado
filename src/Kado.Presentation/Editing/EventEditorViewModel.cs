@@ -58,6 +58,10 @@ public sealed class EventEditorViewModel : ObservableObject
     private const int MaxAttachments = 25;
 
     private readonly CalendarEvent? _original;
+
+    /// <summary>向こうで表せない繰り返し（RDATE など）を持つ予定を開いているか。</summary>
+    private readonly bool _holdsUnrepresentableRecurrence;
+
     private readonly IAttachmentUploader _uploader;
     private readonly IFileDialogs _dialogs;
 
@@ -130,7 +134,13 @@ public sealed class EventEditorViewModel : ObservableObject
         _note = value.Note;
         _calendarId = value.CalendarId;
         _url = value.Url;
-        _recurrence = RecurrenceChoice.KindOf(value.Recurrence, value.Date);
+        _holdsUnrepresentableRecurrence = EventMapper.HoldsUnrepresentableRecurrence(value);
+
+        // 表せない繰り返しは「このまま」の1項目。欄を「繰り返さない」にすると、
+        // 開いただけで繰り返しが外れて見える
+        _recurrence = _holdsUnrepresentableRecurrence
+            ? RecurrenceKind.Custom
+            : RecurrenceChoice.KindOf(value.Recurrence, value.Date);
 
         if (value.StartTime is { } start) _startTimeText = TimeInput.Format(start);
         if (value.EndTime is { } end) _endTimeText = TimeInput.Format(end);
@@ -145,6 +155,60 @@ public sealed class EventEditorViewModel : ObservableObject
 
     /// <summary>新規か。見出しとボタンの文言を変える。</summary>
     public bool IsNew => _original is null;
+
+    // ------------------------------------------------------------------
+    // Google 上で見つからない予定
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 同期で「Google 上で見つからない」印が付いた予定か。
+    /// <para>
+    /// 送ろうとして 404 が返った。以後は送らないので、ここで直しても Google には伝わらない。
+    /// 取り込みで見つかれば印は外れる。使う人が「Google に新しく作り直す」を選べば、
+    /// 結び付きを外して新規として送る（<see cref="RequestRecreate"/>）。
+    /// </para>
+    /// </summary>
+    public bool IsMissingOnGoogle => _original?.GoogleMissing == true;
+
+    /// <summary>印が付いているときに、編集画面に出す説明。無ければ null。</summary>
+    public string? MissingOnGoogleMessage => IsMissingOnGoogle
+        ? "Google 上でこの予定が見つかりません（別のカレンダーへ移された、削除された、など）。" +
+          "このままでは変更が Google に送られません。"
+        : null;
+
+    /// <summary>
+    /// 「Google に新しく作り直す」を求めて保存したか。
+    /// <para>呼び出し側（<c>MainViewModel</c>）が保存のあとにこれを見て、結び付きを外す。</para>
+    /// </summary>
+    public bool RecreateRequested { get; private set; }
+
+    /// <summary>
+    /// 「Google に新しく作り直す」を選ぶ。印が付いた予定のときだけ効く。
+    /// <para>印が無いのに効かせると、向こうに本物があるのに新規として送って二重にしてしまう。</para>
+    /// </summary>
+    public void RequestRecreate()
+    {
+        if (IsMissingOnGoogle) RecreateRequested = true;
+    }
+
+    // ------------------------------------------------------------------
+    // Kado では表せない繰り返しの予定
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 繰り返しと日時を変えられるか。
+    /// <para>
+    /// 向こうで RDATE などの表せない繰り返しを持つ予定は、こちらでは <c>Recurrence</c> が空で、
+    /// 見た目は単発の予定になる。開始日を動かすと系列の開始がずれる。題・場所・メモ・通知・
+    /// カレンダーなどは直せる。
+    /// </para>
+    /// </summary>
+    public bool CanChangeSchedule => !_holdsUnrepresentableRecurrence;
+
+    /// <summary>繰り返しと日時を変えられない理由。変えられるなら null。</summary>
+    public string? ScheduleLockReason => CanChangeSchedule
+        ? null
+        : "Kado では表せない繰り返しの予定のため、日時と繰り返しは Google で編集してください";
 
     /// <summary>画面の見出し。</summary>
     public string HeaderText => IsNew ? "予定の追加" : "予定の編集";
@@ -183,6 +247,8 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _date;
         set
         {
+            if (!CanChangeSchedule) return;
+
             var span = _endDate.DayNumber - _date.DayNumber;
 
             if (!SetAndRevalidate(ref _date, value)) return;
@@ -243,7 +309,12 @@ public sealed class EventEditorViewModel : ObservableObject
     public bool IsAllDay
     {
         get => _isAllDay;
-        set => SetAndRevalidate(ref _isAllDay, value);
+        set
+        {
+            if (!CanChangeSchedule) return;
+
+            SetAndRevalidate(ref _isAllDay, value);
+        }
     }
 
     /// <summary>
@@ -255,6 +326,8 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _startTimeText;
         set
         {
+            if (!CanChangeSchedule) return;
+
             var before = TimeInput.Parse(_startTimeText);
             if (!SetAndRevalidate(ref _startTimeText, Tidy(value))) return;
 
@@ -269,6 +342,8 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _endTimeText;
         set
         {
+            if (!CanChangeSchedule) return;
+
             if (SetAndRevalidate(ref _endTimeText, Tidy(value))) Raise(nameof(DurationText));
         }
     }
@@ -331,6 +406,8 @@ public sealed class EventEditorViewModel : ObservableObject
         get => _endDate;
         set
         {
+            if (!CanChangeSchedule) return;
+
             var end = value < _date ? _date : value;
             if (!SetAndRevalidate(ref _endDate, end)) return;
 
@@ -342,7 +419,12 @@ public sealed class EventEditorViewModel : ObservableObject
     public RecurrenceKind Recurrence
     {
         get => _recurrence;
-        set => Set(ref _recurrence, value);
+        set
+        {
+            if (!CanChangeSchedule) return;
+
+            Set(ref _recurrence, value);
+        }
     }
 
     /// <summary>
@@ -355,7 +437,8 @@ public sealed class EventEditorViewModel : ObservableObject
     /// </summary>
     public IReadOnlyList<RecurrenceOption> RecurrenceOptions =>
         RecurrenceChoice.OptionsFor(
-            _date, includeCustom: _recurrence == RecurrenceKind.Custom, spec: _original?.Recurrence);
+            _date, includeCustom: _recurrence == RecurrenceKind.Custom, spec: _original?.Recurrence,
+            unrepresentable: _holdsUnrepresentableRecurrence);
 
     /// <summary>場所。Google Calendar の <c>location</c>。</summary>
     public string? Location
@@ -634,6 +717,7 @@ public sealed class EventEditorViewModel : ObservableObject
             GoogleCalendarId = _original?.GoogleCalendarId,
             GoogleUpdated = _original?.GoogleUpdated,
             GoogleRaw = _original?.GoogleRaw,
+            GoogleMissing = _original?.GoogleMissing ?? false,
             Status = _original?.Status,
             Source = _original?.Source,
 
