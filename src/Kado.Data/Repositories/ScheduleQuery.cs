@@ -1,4 +1,5 @@
 using System.Globalization;
+using Kado.Core;
 using Kado.Core.Recurrence;
 using Kado.Core.WorkingDays;
 using Kado.Data.Models;
@@ -98,12 +99,12 @@ public sealed class ScheduleQuery(EventRepository events, TaskRepository tasks, 
     /// <para>
     /// 作った時点の <see cref="TimeZoneInfo.Local"/> を握らない。何日も動き続けるあいだに端末の
     /// タイムゾーンが変わる（出張・夏時間・設定の変更）と、握ったままでは古いゾーンで日付を出し続ける。
-    /// 毎回 <see cref="TimeZoneInfo.Local"/> を見る（変更の通知を受けたアプリが
-    /// <see cref="TimeZoneInfo.ClearCachedData"/> を呼べば、次から新しいゾーンになる）。
-    /// 引数で渡されたときだけ、そのゾーンに固定する（テスト用）。
+    /// 毎回 <see cref="LocalZone.Current"/>（既定は <see cref="TimeZoneInfo.Local"/>）を見る
+    /// （変更の通知を受けたアプリが <see cref="TimeZoneInfo.ClearCachedData"/> を呼べば、
+    /// 次から新しいゾーンになる）。引数で渡されたときだけ、そのゾーンに固定する（テスト用）。
     /// </para>
     /// </summary>
-    private TimeZoneInfo TimeZone => timeZone ?? TimeZoneInfo.Local;
+    private TimeZoneInfo TimeZone => timeZone ?? LocalZone.Current;
 
     /// <summary>
     /// 期間に現れる予定を、日ごとに開いて返す。

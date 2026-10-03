@@ -67,9 +67,9 @@ public class StaleDisplayWiringTests
     {
         var query = File.ReadAllText(Path.Combine(AppDirectory, "..", "Kado.Data", "Repositories", "ScheduleQuery.cs"));
 
-        // 欄に入れず、毎回 TimeZoneInfo.Local を見る
-        Assert.DoesNotContain("_timeZone = timeZone ?? TimeZoneInfo.Local", query, StringComparison.Ordinal);
-        Assert.Contains("timeZone ?? TimeZoneInfo.Local", query, StringComparison.Ordinal);
+        // 欄に入れず、毎回 LocalZone.Current（既定は TimeZoneInfo.Local）を見る
+        Assert.DoesNotContain("_timeZone = timeZone ?? LocalZone.Current", query, StringComparison.Ordinal);
+        Assert.Contains("timeZone ?? LocalZone.Current", query, StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------------
