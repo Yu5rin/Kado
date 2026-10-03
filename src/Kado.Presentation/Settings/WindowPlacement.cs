@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Data.Repositories;
+using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.Settings;
 
@@ -130,11 +131,19 @@ public sealed class WindowPlacementStore(SettingsRepository store)
     /// <summary>置き場所を控える。</summary>
     public void Save(WindowPlacement placement)
     {
-        Set(LeftKey, placement.Left);
-        Set(TopKey, placement.Top);
-        Set(WidthKey, placement.Width);
-        Set(HeightKey, placement.Height);
-        _store.Set(MaximizedKey, placement.IsMaximized ? bool.TrueString : bool.FalseString);
+        try
+        {
+            Set(LeftKey, placement.Left);
+            Set(TopKey, placement.Top);
+            Set(WidthKey, placement.Width);
+            Set(HeightKey, placement.Height);
+            _store.Set(MaximizedKey, placement.IsMaximized ? bool.TrueString : bool.FalseString);
+        }
+        catch (SqliteException)
+        {
+            // 窓の置き場所の記憶は、閉じる・動かすたびに黙って書く。書けなくても
+            // 次の起動で前の位置に戻らないだけなので、断りは出さず、アプリも止めない
+        }
     }
 
     private double Number(string key) =>

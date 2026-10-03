@@ -286,6 +286,23 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
   （更新の確認・実働日の配信の取得）。DPAPI（`DpapiTokenStore`）も同じく、ドメイン参加の
   PC では最初の呼び出しが遅いことがある
 
+- **WPF は、終了の問い合わせ（`WM_QUERYENDSESSION`）を取り消さないと、自分で
+  `Application.Shutdown()` を呼ぶ。** 他のアプリがシャットダウンを取り消しても、Kado だけ終わっている。
+  `SessionEnding` で `Cancel` すれば止まるが、Windows のシャットダウンまで妨げる。窓の外の独立した
+  スレッド（`SessionEndWatcher`）が `WM_ENDSESSION` を見張り、取り消されたら立ち上げ直す。
+  AppBar を外す後片付けは、問い合わせの時ではなく、終わるとき（`OnExit`、`WM_ENDSESSION` の
+  wParam=TRUE）に行う
+- **メッセージ専用の窓（`HWND_MESSAGE`）には、ブロードキャストが届かない。** Explorer の再起動で
+  トレイのアイコンが消えたときに送られる `TaskbarCreated` を受けるには、見えないトップレベル窓
+  （`WS_EX_TOOLWINDOW`）にする
+- **WPF の `MessageBox` は、`MB_TOPMOST` を受け付けない**（未知のオプションは例外になる）。
+  親の窓が無い起動時のメッセージが他の窓の裏に隠れるので、Win32 の `MessageBox` を直に呼ぶ
+  （`FrontMessageBox`）。親にする見えない窓を作ると、それが最後の窓として閉じたときにアプリが終わる
+- **`async void` から漏れた例外は、アプリごと終わらせる。** 通信・認可・ファイルを伴う入口
+  （添付の追加）は、中で文言にして返し、`async void` のハンドラにも最後の `try/catch` を置く
+- **`ConfigureAwait(false)` のあとで、画面用の SQLite 接続を触らない。** 接続は呼んだスレッドで
+  使うもの。通信のあとに設定を読み書きするなら、`ConfigureAwait(true)` で戻ってから
+
 起動が遅いときは `shell.log` の `startup-timing`（印ごとの累計と区間）と
 `startup-slow`（起動中に100msを超えた処理）を見る。仕掛けは
 `Kado.Presentation.Infrastructure.StartupTrace`。

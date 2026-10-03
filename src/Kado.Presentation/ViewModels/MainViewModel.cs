@@ -12,6 +12,7 @@ using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
 using Kado.Presentation.Notifications;
 using Kado.Presentation.Settings;
+using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.ViewModels;
 
@@ -152,6 +153,9 @@ public sealed class MainViewModel : ObservableObject
 
         if (settings is not null)
         {
+            // 設定を書けなかった（ディスクいっぱい・ロック）。この実行のあいだは効くが、次には残らない
+            settings.SaveFailed += (_, ex) => OnSettingsSaveFailed(ex);
+
             workspace.CountInCalendarDays = settings.CountInCalendarDays;
 
             SourceLists.DefaultCalendarId = settings.DefaultCalendarId;
@@ -354,7 +358,7 @@ public sealed class MainViewModel : ObservableObject
         FetchWorkingDayFeedCommand = new AsyncRelayCommand(
             () => FetchFeedAsync(quiet: false),
             () => _settings is { FeedUrl.Length: > 0 },
-            ex => StatusMessage = $"配信元から取り込めませんでした（{ex.Message}）");
+            ex => StatusMessage = $"配信元から取り込めませんでした（{FailureReason(ex)}）");
 
         ExportWorkingDayFeedCommand = new RelayCommand(ExportFeed);
 
@@ -403,6 +407,16 @@ public sealed class MainViewModel : ObservableObject
         // 中止ボタンで止めたときだけ、下のステータス行に断りを出す（項目8）。
         // 失敗ではないので、Sync 側の赤い表示（StatusText）は使わない
         Sync.Cancelled += (_, _) => StatusMessage = "同期を中止しました";
+
+        SourceLists.SaveFailed += (_, ex) => ReportSaveFailure(ex);
+
+        // 切ったが、Google 側の許可の取り消しは届かなかった。向こうに許可が残るので、
+        // 手で外す場所を案内する（切断そのものは成功している）
+        Sync.RevocationNotDelivered += (_, _) =>
+        {
+            StatusMessage = "Google との接続を切りました（Google 側の許可は残っています）";
+            _files.ShowReport("Google との接続を切りました", SyncViewModel.RevocationNotDeliveredMessage);
+        };
 
         _workspace.Undo.Changed += (_, _) => RaiseUndoState();
         _workspace.DataChanged += (_, _) => RefreshViews();
@@ -616,7 +630,9 @@ public sealed class MainViewModel : ObservableObject
         if (!_showsOnboarding) return;
 
         _showsOnboarding = false;
-        _workspace.Settings.Set(OnboardingSeenKey, "1");
+
+        // 既読の印を書けなくても、案内は閉じる（次の起動でもう一度出るだけ）
+        RememberQuietly(() => _workspace.Settings.Set(OnboardingSeenKey, "1"));
         Raise(nameof(ShowsOnboarding), nameof(ShowsStatusPill));
     }
 
@@ -1092,8 +1108,96 @@ public sealed class MainViewModel : ObservableObject
         if (Math.Abs(rounded - field) < 0.5) return;
 
         field = rounded;
-        _workspace.Settings.Set(key, rounded.ToString(CultureInfo.InvariantCulture));
+
+        // 幅の控えは見た目の記憶だけ。書けなくても、いまの幅のまま使える
+        RememberQuietly(() => _workspace.Settings.Set(key, rounded.ToString(CultureInfo.InvariantCulture)));
         Raise(name);
+    }
+
+    // ------------------------------------------------------------------
+    // 書き込みの失敗（ディスクがいっぱい・ほかのアプリが使っている）を、落ちずに伝える
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 編集の入口を囲む。<see cref="SqliteException"/>（5秒待っても取れないロック、ディスクいっぱい）で
+    /// アプリごと終わらせず、「保存できませんでした」を出して続ける。
+    /// <para>
+    /// <b>元に戻す履歴との整合</b>：履歴に積むのは <c>edit.Apply()</c> が成功したあと
+    /// （<see cref="Kado.Presentation.Editing.UndoStack.Execute"/>）なので、失敗した編集は積まれない。
+    /// 入口の先頭で受けるので、呼び出し側の「そのあと」の処理（入力欄を空にする、
+    /// 選択日を動かす）も走らず、書けなかった入力は残る。
+    /// </para>
+    /// </summary>
+    private void Guard(Action write)
+    {
+        try
+        {
+            write();
+        }
+        catch (SqliteException ex)
+        {
+            ReportSaveFailure(ex);
+        }
+    }
+
+    /// <summary><see cref="Guard(Action)"/> の、結果を返す版。失敗したら <paramref name="failed"/> を返す。</summary>
+    private T Guard<T>(Func<T> write, T failed)
+    {
+        try
+        {
+            return write();
+        }
+        catch (SqliteException ex)
+        {
+            ReportSaveFailure(ex);
+            return failed;
+        }
+    }
+
+    /// <summary>
+    /// 見た目の記憶（幅・既読の印）を書く。失敗しても利用者に断りを出さない。
+    /// <para>ドラッグで幅を変えるあいだ何度も呼ばれる。そのたびに割り込むほどの失敗ではない。</para>
+    /// </summary>
+    private static void RememberQuietly(Action write)
+    {
+        try
+        {
+            write();
+        }
+        catch (SqliteException)
+        {
+        }
+    }
+
+    /// <summary>設定を書けなかったことが、すでに断り書きで伝わっているか。1回の起動で1度だけ割り込む。</summary>
+    private bool _settingsSaveFailureShown;
+
+    private void OnSettingsSaveFailed(SqliteException exception)
+    {
+        var message = Kado.Data.SqliteFailure.DescribeSaveFailure(exception);
+
+        StatusMessage = message;
+
+        // 設定の変更は連続して起きる（スライダーなど）。何度も止めない
+        if (_settingsSaveFailureShown) return;
+
+        _settingsSaveFailureShown = true;
+        _files.ShowReport("設定を保存できませんでした", message + "\n\n今の起動のあいだは変更が効きますが、次の起動には残りません。");
+    }
+
+    /// <summary>
+    /// 失敗の理由を、利用者に出す文にする。<see cref="SqliteException"/> は型の分かる言い方にして、
+    /// それ以外は例外が持っている文（こちらで書いた日本語や OS の説明）を使う。
+    /// </summary>
+    private static string FailureReason(Exception exception) =>
+        exception is SqliteException sqlite ? Kado.Data.SqliteFailure.DescribeReason(sqlite) : exception.Message;
+
+    private void ReportSaveFailure(SqliteException exception)
+    {
+        var message = Kado.Data.SqliteFailure.DescribeSaveFailure(exception);
+
+        StatusMessage = message;
+        _files.ShowReport("保存できませんでした", message);
     }
 
     /// <summary>保存されている幅を読む。読めなければ既定値。</summary>
@@ -1352,7 +1456,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>1行から予定を入れる。</summary>
     public RelayCommand QuickCommand { get; }
 
-    private void CommitQuick()
+    private void CommitQuick() => Guard(CommitQuickCore);
+
+    private void CommitQuickCore()
     {
         var entry = QuickParser.Parse(_quickText, _today, SelectedDate);
         if (!entry.CanCommit) return;
@@ -1931,7 +2037,9 @@ public sealed class MainViewModel : ObservableObject
     // Google に繋がなくても、このアプリだけで分類を作れる
     // ------------------------------------------------------------------
 
-    private void AddSource(bool isTaskList)
+    private void AddSource(bool isTaskList) => Guard(() => AddSourceCore(isTaskList));
+
+    private void AddSourceCore(bool isTaskList)
     {
         var used = isTaskList ? [] : SourceLists.Calendars.Select(c => (string?)c.SwatchColor);
         var editor = new CalendarEditorViewModel(isTaskList, used);
@@ -1950,7 +2058,9 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private void EditSource(SourceListItemViewModel? target)
+    private void EditSource(SourceListItemViewModel? target) => Guard(() => EditSourceCore(target));
+
+    private void EditSourceCore(SourceListItemViewModel? target)
     {
         if (target is null) return;
 
@@ -1992,7 +2102,9 @@ public sealed class MainViewModel : ObservableObject
     private static bool CanDeleteSource(SourceListItemViewModel? target) =>
         target is not null && target.CanDelete;
 
-    private void DeleteSource(SourceListItemViewModel? target)
+    private void DeleteSource(SourceListItemViewModel? target) => Guard(() => DeleteSourceCore(target));
+
+    private void DeleteSourceCore(SourceListItemViewModel? target)
     {
         if (target is null) return;
 
@@ -2041,7 +2153,9 @@ public sealed class MainViewModel : ObservableObject
     /// 残しておいた中身を捨てることになるので、件数を出して確かめる。Google には何も送らない。
     /// </para>
     /// </summary>
-    private void DiscardDetachedSource(SourceListItemViewModel target)
+    private void DiscardDetachedSource(SourceListItemViewModel target) => Guard(() => DiscardDetachedSourceCore(target));
+
+    private void DiscardDetachedSourceCore(SourceListItemViewModel target)
     {
         var isTaskList = IsTaskList(target);
         var kind = isTaskList ? "タスクリスト" : "カレンダー";
@@ -2154,7 +2268,9 @@ public sealed class MainViewModel : ObservableObject
     /// 消す前に件数を出して尋ねる。Google に繋いでいれば、次の同期で向こうからも消える。
     /// </para>
     /// </summary>
-    private void RemoveDuplicates()
+    private void RemoveDuplicates() => Guard(RemoveDuplicatesCore);
+
+    private void RemoveDuplicatesCore()
     {
         var extra = _workspace.FindDuplicateEvents();
         if (extra.Count == 0)
@@ -2240,9 +2356,10 @@ public sealed class MainViewModel : ObservableObject
 
             StatusMessage = $"実働日データを書き出しました（{Path.GetFileName(path)}）";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
+                                       or SqliteException)
         {
-            StatusMessage = $"書き出せませんでした（{ex.Message}）";
+            StatusMessage = $"書き出せませんでした（{FailureReason(ex)}）";
         }
     }
 
@@ -2262,9 +2379,11 @@ public sealed class MainViewModel : ObservableObject
             SaveBackup(path);
             StatusMessage = $"バックアップを書き出しました（{Path.GetFileName(path)}）";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SqliteException)
         {
-            StatusMessage = $"バックアップを書き出せませんでした（{ex.Message}）";
+            // 書き込めない保存先（読み取り専用・権限なし・ディスクいっぱい）は SqliteException で来る。
+            // 受けないとアプリごと終わる
+            StatusMessage = $"バックアップを書き出せませんでした（{FailureReason(ex)}）";
         }
     }
 
@@ -2302,9 +2421,10 @@ public sealed class MainViewModel : ObservableObject
         {
             RestoreBackup(path);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException
+                                       or SqliteException)
         {
-            StatusMessage = $"復元できませんでした（{ex.Message}）";
+            StatusMessage = $"復元できませんでした（{FailureReason(ex)}）";
         }
         finally
         {
@@ -2451,11 +2571,15 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
                                   or FormatException or InvalidDataException
-                                  or InvalidOperationException or JsonException)
+                                  or InvalidOperationException or JsonException
+                                  or SqliteException)
         {
-            // 「実行しています…」を出しっぱなしにしない
-            StatusMessage = $"{title}に失敗しました（{e.Message}）";
-            _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{e.Message}");
+            // 「実行しています…」を出しっぱなしにしない。
+            // 書き込み先のデータベースが書けない（ディスクいっぱい・ロック）ときは SqliteException
+            var reason = FailureReason(e);
+
+            StatusMessage = $"{title}に失敗しました（{reason}）";
+            _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{reason}");
         }
         finally
         {
@@ -2526,7 +2650,9 @@ public sealed class MainViewModel : ObservableObject
     /// </para>
     /// </summary>
     /// <returns>動かしたら true。</returns>
-    private bool MoveEvent(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy)
+    private bool MoveEvent(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy) => Guard(() => MoveEventCore(id, date, change, start, copy), false);
+
+    private bool MoveEventCore(string? id, DateOnly date, TimeChange change, TimeOnly? start, bool copy)
     {
         if (id is not { Length: > 0 } || _workspace.Events.Find(id) is not { } found) return false;
 
@@ -2636,7 +2762,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
     /// <returns>動かしたら true。</returns>
-    public bool MoveTaskTo(string? id, DateOnly date, bool copy = false)
+    public bool MoveTaskTo(string? id, DateOnly date, bool copy = false) => Guard(() => MoveTaskToCore(id, date, copy), false);
+
+    private bool MoveTaskToCore(string? id, DateOnly date, bool copy = false)
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } found) return false;
         if (found.Due == date && !copy) return false;
@@ -2738,7 +2866,9 @@ public sealed class MainViewModel : ObservableObject
         return calendar.IsDetached || (calendar.IsReadOnly && value.GoogleEventId is not { Length: > 0 });
     }
 
-    private void AddEvent()
+    private void AddEvent() => Guard(AddEventCore);
+
+    private void AddEventCore()
     {
         var editor = new EventEditorViewModel(
             SelectedDate, CalendarChoicesFor(null), NowTime, QuickCalendarId,
@@ -2757,7 +2887,9 @@ public sealed class MainViewModel : ObservableObject
     /// 動かすと終了も付いてくる（<c>EventEditorViewModel.StartTimeText</c>）。
     /// </para>
     /// </summary>
-    public void AddEventAt(DateOnly date, TimeOnly time)
+    public void AddEventAt(DateOnly date, TimeOnly time) => Guard(() => AddEventAtCore(date, time));
+
+    private void AddEventAtCore(DateOnly date, TimeOnly time)
     {
         SelectedDate = date;
 
@@ -2783,7 +2915,9 @@ public sealed class MainViewModel : ObservableObject
     /// 画面ごとに同じ処理を書くと、片方だけ直し忘れる。
     /// </para>
     /// </summary>
-    private void EditEventBy(string? id)
+    private void EditEventBy(string? id) => Guard(() => EditEventByCore(id));
+
+    private void EditEventByCore(string? id)
     {
         if (id is not { Length: > 0 }) return;
 
@@ -2848,7 +2982,9 @@ public sealed class MainViewModel : ObservableObject
     private void DeleteEvent(DayEventViewModel? target) => DeleteEventBy(target?.Id);
 
     /// <inheritdoc cref="EditEventBy"/>
-    private void DeleteEventBy(string? id)
+    private void DeleteEventBy(string? id) => Guard(() => DeleteEventByCore(id));
+
+    private void DeleteEventByCore(string? id)
     {
         if (id is not { Length: > 0 }) return;
 
@@ -2884,7 +3020,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <inheritdoc cref="EditEventBy"/>
-    private void EditTaskBy(string? id)
+    private void EditTaskBy(string? id) => Guard(() => EditTaskByCore(id));
+
+    private void EditTaskByCore(string? id)
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored) return;
 
@@ -2924,7 +3062,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <inheritdoc cref="EditEventBy"/>
-    private void DeleteTaskBy(string? id)
+    private void DeleteTaskBy(string? id) => Guard(() => DeleteTaskByCore(id));
+
+    private void DeleteTaskByCore(string? id)
     {
         if (id is not { Length: > 0 }) return;
 
@@ -2934,7 +3074,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
-    private void AddTask()
+    private void AddTask() => Guard(AddTaskCore);
+
+    private void AddTaskCore()
     {
         var editor = new TaskEditorViewModel(
             SelectedDate, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
@@ -2945,7 +3087,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>日を指定して予定を作る。工程逆算の行から呼ぶ。</summary>
-    private void CreateEventOn(DateOnly date)
+    private void CreateEventOn(DateOnly date) => Guard(() => CreateEventOnCore(date));
+
+    private void CreateEventOnCore(DateOnly date)
     {
         var editor = new EventEditorViewModel(
             date, CalendarChoicesFor(null), NowTime, QuickCalendarId, _attachmentUploader, _files);
@@ -2956,7 +3100,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>日を指定してタスクを作る。工程逆算の行から呼ぶ。</summary>
-    private void CreateTaskOn(DateOnly date)
+    private void CreateTaskOn(DateOnly date) => Guard(() => CreateTaskOnCore(date));
+
+    private void CreateTaskOnCore(DateOnly date)
     {
         var editor = new TaskEditorViewModel(
             date, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
@@ -2973,7 +3119,9 @@ public sealed class MainViewModel : ObservableObject
         EditTaskBy(target.Id);
     }
 
-    private void DeleteTask(TaskListItemViewModel? target)
+    private void DeleteTask(TaskListItemViewModel? target) => Guard(() => DeleteTaskCore(target));
+
+    private void DeleteTaskCore(TaskListItemViewModel? target)
     {
         if (target is null) return;
 
@@ -2983,7 +3131,9 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>チェックの入り切り。画面を開かずに切り替えられる。</summary>
-    private void ToggleTaskDone(TaskListItemViewModel? target)
+    private void ToggleTaskDone(TaskListItemViewModel? target) => Guard(() => ToggleTaskDoneCore(target));
+
+    private void ToggleTaskDoneCore(TaskListItemViewModel? target)
     {
         if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
 
@@ -2994,7 +3144,9 @@ public sealed class MainViewModel : ObservableObject
     /// 月・週・日ビューのタスクチップの右クリックメニューから、完了を切り替える。
     /// <para><see cref="ToggleTaskDone"/> と同じ動きを、<see cref="ScheduledTask"/> を持つ側にも提供する。</para>
     /// </summary>
-    private void ToggleTaskChipDone(ScheduledTask? target)
+    private void ToggleTaskChipDone(ScheduledTask? target) => Guard(() => ToggleTaskChipDoneCore(target));
+
+    private void ToggleTaskChipDoneCore(ScheduledTask? target)
     {
         if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
 
@@ -3155,12 +3307,16 @@ public sealed class MainViewModel : ObservableObject
             .ToArray();
     }
 
-    private void Undo()
+    private void Undo() => Guard(UndoCore);
+
+    private void UndoCore()
     {
         if (_workspace.UndoLast() is { } description) StatusMessage = $"{description}を元に戻しました";
     }
 
-    private void Redo()
+    private void Redo() => Guard(RedoCore);
+
+    private void RedoCore()
     {
         if (_workspace.RedoLast() is { } description) StatusMessage = $"{description}をやり直しました";
     }

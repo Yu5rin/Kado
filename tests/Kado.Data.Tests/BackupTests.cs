@@ -110,6 +110,107 @@ public class BackupTests : IDisposable
                                        Path.Combine(_work, "data.db")));
     }
 
+    [Fact]
+    public void 書き出しに失敗しても既にあるバックアップは壊さない()
+    {
+        // 閉じた接続からは書き出せない。以前は書き出し先を先に消していたので、良いバックアップまで失った
+        var backupPath = Path.Combine(_work, "backup.db");
+        File.WriteAllText(backupPath, "良いバックアップの中身");
+
+        var closed = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
+        closed.Dispose();
+
+        Assert.ThrowsAny<Exception>(() => DatabaseBackup.SaveTo(closed, backupPath));
+
+        Assert.Equal("良いバックアップの中身", File.ReadAllText(backupPath));
+        Assert.Empty(Directory.GetFiles(_work, "*.writing*"));
+    }
+
+    [Fact]
+    public void 書き出し先がフォルダなら失敗して一時ファイルを残さない()
+    {
+        var destination = Path.Combine(_work, "folder.db");
+        Directory.CreateDirectory(destination);
+
+        using var connection = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
+
+        Assert.ThrowsAny<Exception>(() => DatabaseBackup.SaveTo(connection, destination));
+
+        Assert.True(Directory.Exists(destination));
+        Assert.Empty(Directory.GetFiles(_work, "*.writing*"));
+    }
+
+    [Fact]
+    public void 読めないファイルでの復元はいまのデータに触れずに断る()
+    {
+        var databasePath = Path.Combine(_work, "data.db");
+        var garbage = Path.Combine(_work, "garbage.db");
+        File.WriteAllText(garbage, new string('x', 8192));
+
+        using (var connection = CalendarDatabase.OpenFile(databasePath).ConnectAndMigrate())
+        {
+            new EventRepository(connection).Upsert(Sample("e1"));
+        }
+
+        // 接続のプールを手放して、WAL を本体へ反映させてから比べる（RestoreFrom も同じことをする）
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var before = File.ReadAllBytes(databasePath);
+
+        var failure = Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(
+            () => DatabaseBackup.RestoreFrom(garbage, databasePath));
+
+        // SQLite のファイルではないという失敗で、本体にも .bak にも .restoring にも触れていない
+        Assert.True(SqliteFailure.IsCorrupt(failure));
+        Assert.Equal(before, File.ReadAllBytes(databasePath));
+        Assert.False(File.Exists(databasePath + ".bak"));
+        Assert.False(File.Exists(databasePath + ".restoring"));
+    }
+
+    [Fact]
+    public void 復元の途中で失敗しても本体は元のまま()
+    {
+        // 本体の隣に、復元の作業用の名前でフォルダがあると、コピーに失敗する
+        var databasePath = Path.Combine(_work, "data.db");
+        var backupPath = Path.Combine(_work, "backup.db");
+
+        using (var connection = CalendarDatabase.OpenFile(databasePath).ConnectAndMigrate())
+        {
+            new EventRepository(connection).Upsert(Sample("e1"));
+            DatabaseBackup.SaveTo(connection, backupPath);
+            new EventRepository(connection).Upsert(Sample("e2"));
+        }
+
+        Directory.CreateDirectory(databasePath + ".restoring");
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var before = File.ReadAllBytes(databasePath);
+
+        Assert.ThrowsAny<Exception>(() => DatabaseBackup.RestoreFrom(backupPath, databasePath));
+
+        Assert.Equal(before, File.ReadAllBytes(databasePath));
+    }
+
+    [Fact]
+    public void 復元元の確認は壊れていないデータベースを通す()
+    {
+        var backupPath = Path.Combine(_work, "backup.db");
+
+        using (var connection = CalendarDatabase.OpenInMemory().ConnectAndMigrate())
+        {
+            DatabaseBackup.SaveTo(connection, backupPath);
+        }
+
+        DatabaseBackup.EnsureReadableDatabase(backupPath);
+    }
+
+    [Fact]
+    public void 小さすぎるファイルはデータベースとして読めない()
+    {
+        var path = Path.Combine(_work, "tiny.db");
+        File.WriteAllText(path, "x");
+
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => DatabaseBackup.EnsureReadableDatabase(path));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_work, recursive: true); }

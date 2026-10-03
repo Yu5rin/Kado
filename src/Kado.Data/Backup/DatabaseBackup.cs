@@ -23,6 +23,9 @@ public static class DatabaseBackup
     /// </summary>
     /// <param name="connection">書き出し元の接続。</param>
     /// <param name="destinationPath">書き出し先。既にあれば上書きする。</param>
+    /// <exception cref="SqliteException">書き込めない場所・ディスクいっぱいなど。呼び出し側が受けて文言にする。</exception>
+    /// <exception cref="IOException">ファイルの操作に失敗した。</exception>
+    /// <exception cref="UnauthorizedAccessException">書き込む権限がない。</exception>
     public static void SaveTo(SqliteConnection connection, string destinationPath)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -32,28 +35,57 @@ public static class DatabaseBackup
         var directory = Path.GetDirectoryName(full);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        // 古い内容が残っていると、書き出し先のページ数が元より多い場合に差分が残る
-        if (File.Exists(full)) File.Delete(full);
+        // 一時ファイルへ書いてから置き換える。書き出し先へ直接書くと、途中で転んだとき
+        // （書き込めない場所・ディスクいっぱい）に、すでにあった良いバックアップまで失う
+        var temporary = full + ".writing";
+        DeleteIfExists(temporary);
 
         var destinationConnectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = full,
+            DataSource = temporary,
             Mode = SqliteOpenMode.ReadWriteCreate,
         }.ToString();
 
-        using (var destination = new SqliteConnection(destinationConnectionString))
+        try
         {
-            destination.Open();
-            connection.BackupDatabase(destination);
+            using (var destination = new SqliteConnection(destinationConnectionString))
+            {
+                destination.Open();
+                connection.BackupDatabase(destination);
+            }
+
+            // 書き出し先をプールに残すと、このあとファイルを開いたり消したりするときに掴まれたままになる
+            SqliteConnection.ClearPool(new SqliteConnection(destinationConnectionString));
+
+            // 黙って失敗していないか確かめる。バックアップは取れたつもりで中身が無いのが一番困る
+            if (!File.Exists(temporary) || new FileInfo(temporary).Length == 0)
+            {
+                throw new IOException($"バックアップを書き出せませんでした: {full}");
+            }
+
+            File.Move(temporary, full, overwrite: true);
         }
-
-        // 書き出し先をプールに残すと、このあとファイルを開いたり消したりするときに掴まれたままになる
-        SqliteConnection.ClearPool(new SqliteConnection(destinationConnectionString));
-
-        // 黙って失敗していないか確かめる。バックアップは取れたつもりで中身が無いのが一番困る
-        if (!File.Exists(full) || new FileInfo(full).Length == 0)
+        catch
         {
-            throw new IOException($"バックアップを書き出せませんでした: {full}");
+            // 書きかけを残さない
+            SqliteConnection.ClearPool(new SqliteConnection(destinationConnectionString));
+            DeleteIfExists(temporary);
+            DeleteIfExists(temporary + "-wal");
+            DeleteIfExists(temporary + "-shm");
+            DeleteIfExists(temporary + "-journal");
+            throw;
+        }
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 消せなくても、本来の失敗の理由のほうを優先して伝える
         }
     }
 
@@ -86,6 +118,7 @@ public static class DatabaseBackup
     /// <param name="backupPath">復元元。</param>
     /// <param name="databasePath">復元先。</param>
     /// <returns>退避した元ファイルのパス。元が無ければ null。</returns>
+    /// <exception cref="SqliteException">復元元が SQLite のデータベースとして読めない。このとき、いまのデータには触れていない。</exception>
     public static string? RestoreFrom(string backupPath, string databasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupPath);
@@ -101,19 +134,38 @@ public static class DatabaseBackup
             throw new FileNotFoundException($"復元元が見つかりません: {backupPath}", backupPath);
         }
 
+        // 何も動かす前に、選ばれたファイルが読めるデータベースかを確かめる。
+        // 違うファイルを選んでも、いまのデータには触れずに断る
+        EnsureReadableDatabase(backupPath);
+
         var target = Path.GetFullPath(databasePath);
         string? rescued = null;
-
-        if (File.Exists(target))
-        {
-            rescued = target + ".bak";
-            File.Copy(target, rescued, overwrite: true);
-        }
 
         var directory = Path.GetDirectoryName(target);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        File.Copy(backupPath, target, overwrite: true);
+        // 大きいコピー（ディスクいっぱいや権限で転びやすい）は、本体に触れる前に別名で済ませる。
+        // 本体へ直接コピーすると、途中で転んだとき本体が半端なまま残る
+        var staging = target + ".restoring";
+        DeleteIfExists(staging);
+
+        try
+        {
+            File.Copy(backupPath, staging, overwrite: true);
+
+            if (File.Exists(target))
+            {
+                rescued = target + ".bak";
+                File.Copy(target, rescued, overwrite: true);
+            }
+
+            File.Move(staging, target, overwrite: true);
+        }
+        catch
+        {
+            DeleteIfExists(staging);
+            throw;
+        }
 
         // 古い WAL が残っていると、差し替えた本体と食い違う
         foreach (var suffix in (string[])["-wal", "-shm"])
@@ -124,4 +176,64 @@ public static class DatabaseBackup
 
         return rescued;
     }
+
+    /// <summary>
+    /// ファイルが、読める SQLite のデータベースか確かめる（読み取り専用で開く）。
+    /// <para>
+    /// SQLite のファイルでなければ <see cref="SqliteException"/>（NOTADB）、
+    /// 壊れていれば <see cref="IOException"/> を投げる。復元の前に呼んで、
+    /// 違うファイルを選んだときにいまのデータへ触れないようにする。
+    /// </para>
+    /// </summary>
+    public static void EnsureReadableDatabase(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        // 先頭16バイトの印。SQLite のファイルでなければ、開く前にここで断る
+        var head = new byte[SqliteHeader.Length];
+        int read;
+
+        using (var stream = File.OpenRead(path))
+        {
+            read = stream.Read(head, 0, head.Length);
+        }
+
+        if (read < head.Length || !head.AsSpan().SequenceEqual(SqliteHeader))
+        {
+            throw new SqliteException("file is not a database", NotADatabaseCode);
+        }
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+        }.ToString();
+
+        try
+        {
+            using var connection = new SqliteConnection(connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check(1);";
+
+            if (command.ExecuteScalar() is not string result
+                || !string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException($"バックアップのファイルが壊れています: {path}");
+            }
+        }
+        catch (SqliteException ex) when (SqliteFailure.Classify(ex)
+                                         is SqliteFailureKind.Io or SqliteFailureKind.ReadOnly
+                                         or SqliteFailureKind.Busy)
+        {
+            // 読み取り専用の置き場など、中身の検査のために開けないだけ。印は確かめたので進める
+        }
+    }
+
+    private static readonly byte[] SqliteHeader = "SQLite format 3\0"u8.ToArray();
+
+    /// <summary>SQLITE_NOTADB。</summary>
+    private const int NotADatabaseCode = 26;
 }

@@ -666,6 +666,57 @@ public class EventEditorViewModelTests
     }
 
     [Fact]
+    public async Task アップロードが約束を破って例外を投げても画面に理由を出して落ちない()
+    {
+        var dialogs = new FakeFileDialogs { FileToPick = "/tmp/資料.pdf" };
+        var uploader = new FakeAttachmentUploader { Throws = new System.Text.Json.JsonException("<html>") };
+
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars, uploader: uploader, dialogs: dialogs)
+        {
+            Title = "会議",
+        };
+
+        await vm.AddAttachmentAsync();
+
+        Assert.Empty(vm.Attachments);
+        Assert.Contains("応答を読み取れません", vm.AttachmentError, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonException", vm.AttachmentError, StringComparison.Ordinal);
+
+        // 上げている最中の表示が残らず、もう一度押せる
+        Assert.False(vm.IsUploadingAttachment);
+        Assert.True(vm.CanAddAttachment);
+    }
+
+    [Fact]
+    public async Task 取り消されたときは理由を出さず何も足さない()
+    {
+        var dialogs = new FakeFileDialogs { FileToPick = "/tmp/資料.pdf" };
+        var uploader = new FakeAttachmentUploader { Throws = new OperationCanceledException() };
+
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars, uploader: uploader, dialogs: dialogs)
+        {
+            Title = "会議",
+        };
+
+        await vm.AddAttachmentAsync();
+
+        Assert.Empty(vm.Attachments);
+        Assert.Null(vm.AttachmentError);
+        Assert.False(vm.IsUploadingAttachment);
+    }
+
+    [Fact]
+    public void 画面の最後の砦から渡された例外も文言にする()
+    {
+        var vm = new EventEditorViewModel(D(2026, 9, 24), GoogleCalendars) { Title = "会議" };
+
+        vm.ReportAttachmentFailure(new System.ComponentModel.Win32Exception(1260));
+
+        Assert.Contains("ブラウザを開けません", vm.AttachmentError, StringComparison.Ordinal);
+        Assert.False(vm.IsUploadingAttachment);
+    }
+
+    [Fact]
     public void 添付を外すとPendingAttachmentsに反映される()
     {
         var attachment = new EventAttachment(
@@ -732,8 +783,11 @@ public class EventEditorViewModelTests
     {
         public AttachmentUploadResult Result { get; set; } = AttachmentUploadResult.Failure("未設定");
 
+        /// <summary>約束を破って投げる実装の代わり。画面の async void から漏れると、アプリごと終わる。</summary>
+        public Exception? Throws { get; set; }
+
         public Task<AttachmentUploadResult> UploadAsync(
             string localFilePath, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result);
+            Throws is { } error ? throw error : Task.FromResult(Result);
     }
 }

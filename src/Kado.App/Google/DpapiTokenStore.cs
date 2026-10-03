@@ -18,7 +18,7 @@ namespace Kado.App.Google;
 /// 復号できない</b>。ファイルごと別の PC へ写しても読めない。
 /// </para>
 /// </summary>
-public sealed class DpapiTokenStore(string path) : ITokenStore
+public sealed class DpapiTokenStore(string path, Action<string>? log = null) : ITokenStore
 {
     /// <summary>
     /// 復号の手がかり。暗号文だけを盗られても、この値を知らなければ戻せない。
@@ -28,13 +28,24 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
 
     private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
 
+    /// <summary>復号できなかった控えの扱い。一度の失敗では消さない（<see cref="TokenFileQuarantine"/>）。</summary>
+    private readonly TokenFileQuarantine _quarantine = new(
+        path ?? throw new ArgumentNullException(nameof(path)),
+        cipher => JsonSerializer.Deserialize<OAuthTokens>(
+            ProtectedData.Unprotect(cipher, Entropy, DataProtectionScope.CurrentUser)),
+        log);
+
     /// <summary>
-    /// 直前の <see cref="Load"/> が、保存されていた控えを復号できずに終わったか。
+    /// 保存されていた控えを、退避して読み直してもなお復号できなかったか（利用者に伝える段階か）。
     /// <para>
     /// Windows パスワードの強制リセットやプロファイル移行のあとは、保存していたトークンが
     /// 二度と復号できなくなる。<see cref="ITokenStore"/> の形は変えず（<c>Load</c> が
     /// <c>null</c> を返すのは「未接続」と区別しない）、この具象型だけにこの印を持たせて、
     /// 呼び出し側（<c>App.xaml.cs</c>）が理由を説明できるようにする。
+    /// </para>
+    /// <para>
+    /// <b>1度目の失敗では立てない。</b>ログオン直後などの一時的な失敗かもしれないので、控えを
+    /// 退避して次の起動で読み直し（<see cref="TokenFileQuarantine"/>）、それでも読めなかったときに立てる。
     /// </para>
     /// </summary>
     public bool DecryptionFailed { get; private set; }
@@ -46,6 +57,9 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
     /// <see cref="Save"/> と <see cref="Clear"/> では捨てる。
     /// </summary>
     private OAuthTokens? _loaded;
+
+    /// <summary>この起動で、控えを読めなかったと分かったか。</summary>
+    private bool _unreadableThisRun;
 
     /// <summary>
     /// 読み込みと控えの出し入れを1本にする。起動時に裏のスレッドで先に読んでおき
@@ -59,23 +73,19 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         {
             if (_loaded is not null) return _loaded;
 
+            // 読めなかったと分かったあとは、この起動のあいだ読み直さない。接続の有無の確認で
+            // 何度も呼ばれるので、そのたびに退避した控えを読み直すと、1回の起動の中で
+            // 「1度目」と「2度目」が続けて起きてしまう（読み直しは次の起動で行う）
+            if (_unreadableThisRun) return null;
+
             try
             {
-                if (!File.Exists(_path)) return null;
+                var (tokens, state) = _quarantine.Load();
 
-                var plain = ProtectedData.Unprotect(
-                    File.ReadAllBytes(_path), Entropy, DataProtectionScope.CurrentUser);
+                if (state == TokenLoadState.Persisting) DecryptionFailed = true;
+                if (state != TokenLoadState.Normal) _unreadableThisRun = true;
 
-                return _loaded = JsonSerializer.Deserialize<OAuthTokens>(plain);
-            }
-            catch (CryptographicException)
-            {
-                // 別のユーザーや別の PC の控え。読めないものは無いものとして扱い、繋ぎ直させる。
-                // 理由は DecryptionFailed で一度だけ伝える。ファイルは消しておかないと、
-                // 次に起動したときも同じ失敗を繰り返し、毎回この印が立ってしまう
-                DecryptionFailed = true;
-                TryDelete();
-                return null;
+                return _loaded = tokens;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -92,6 +102,7 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         {
             // 書き換えたら、覚えていた控えは古い。書けなかったときも読み直させる
             _loaded = null;
+            _unreadableThisRun = false;
 
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
 
@@ -102,6 +113,9 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
             var temporary = _path + ".tmp";
             File.WriteAllBytes(temporary, cipher);
             File.Move(temporary, _path, overwrite: true);
+
+            // つなぎ直した。読めなかった古い控えは、もう要らない
+            _quarantine.DeleteQuarantined();
         }
     }
 
@@ -111,6 +125,9 @@ public sealed class DpapiTokenStore(string path) : ITokenStore
         {
             _loaded = null;
             TryDelete();
+
+            // 切断。退避していた読めない控えも、こちらの都合で残さない
+            _quarantine.DeleteQuarantined();
         }
     }
 

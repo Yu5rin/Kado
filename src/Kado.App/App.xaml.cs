@@ -76,6 +76,20 @@ public partial class App : Application
     /// <summary>閉じるボタンで終わるのではなくトレイに入る（要件書 7.4）。</summary>
     private bool _reallyExiting;
 
+    /// <summary>
+    /// 立ち上げ直す・終わるために、接続を閉じ始めたか。
+    /// <para>閉じたあと終わるまでのわずかな間に画面のタイマーが読み込みを試みて失敗しても、予期しないエラーとして見せない。</para>
+    /// </summary>
+    private volatile bool _leaving;
+
+    /// <summary>終了の問い合わせ（<c>WM_QUERYENDSESSION</c>）を受けて、WPF が自分を終わらせにかかったか。</summary>
+    private volatile bool _sessionEndQueried;
+
+    private Shell.SessionEndWatcher? _sessionWatcher;
+
+    /// <summary>直近に「保存できませんでした」を出した時刻。同じ失敗の連続で窓を出し続けないための印。</summary>
+    private DateTimeOffset? _lastRecoverableNoticeAt;
+
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
         System.IO.Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "crash.log");
@@ -91,12 +105,12 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        // 入れ替え直後は、前のプロセスがまだ終わりきっていない。待たずに判定すると
-        // 「すでに起動しています」で即座に終わり、更新したのに起動しないように見える
-        var afterUpdate = e.Args.Contains(UpdateService.AfterUpdateArgument, StringComparer.Ordinal);
+        // 入れ替え直後・立ち上げ直しの直後は、前のプロセスがまだ終わりきっていない。待たずに判定すると
+        // 「すでに起動しています」で即座に終わり、更新したのに（復元したのに）起動しないように見える
+        var waitsForPrevious = StartupArguments.WaitsForPreviousProcess(e.Args);
 
         // 2本動くと同期が壊れる。同じデータベースを開き、同じカレンダーへ書き戻すため
-        _instance = SingleInstance.TryAcquire(afterUpdate ? UpdateService.AfterUpdateWait : TimeSpan.Zero);
+        _instance = SingleInstance.TryAcquire(waitsForPrevious ? StartupArguments.PreviousProcessWait : TimeSpan.Zero);
         if (_instance is null)
         {
             // すでに動いているほうを前に出して、こちらは静かに終わる
@@ -105,6 +119,10 @@ public partial class App : Application
             return;
         }
 
+        // 2本目の起動の合図は、できるだけ早く受け付ける。データベースを開く・案内を出す・窓を作る
+        // あいだに2本目を起動されても、前に出てこないままにしない（窓がまだ無ければ何もしない）
+        _instance.ListenForActivation(() => Dispatcher.InvokeAsync(BringToFront));
+
         // 拾わないと OS の「動作を停止しました」だけが出て、理由が何も残らない。
         //
         // あわせて AppBar を外す。外さずに落ちると、ワークエリアが削られたまま残り、
@@ -112,22 +130,52 @@ public partial class App : Application
         // 直らないので、ここで必ず戻す（要件書 2.3）
         DispatcherUnhandledException += (_, args) =>
         {
+            // 復元の後片付けで接続を閉じたあと、終わるまでのわずかな間に来たもの。
+            // これを「予期しないエラー」として見せると、復元できたのに失敗したように見える
+            if (_leaving)
+            {
+                args.Handled = true;
+                return;
+            }
+
+            // 画面のスレッドで漏れた、利用者の側で直せる失敗（ディスクがいっぱい・
+            // ほかのアプリが使っている）。アプリごと終わらせず、案内して続ける
+            if (UnhandledFailurePolicy.IsRecoverable(args.Exception))
+            {
+                args.Handled = true;
+                Shell.ShellDiagnosticsLog.Write($"書き込みの失敗を案内して続行: {args.Exception.GetType().Name}: {args.Exception.Message}");
+
+                // 画面のタイマーが同じ失敗を毎回漏らすことがある。続けて窓を出さない
+                var now = DateTimeOffset.Now;
+                if (UnhandledFailurePolicy.ShouldNotify(_lastRecoverableNoticeAt, now))
+                {
+                    _lastRecoverableNoticeAt = now;
+                    Shell.FrontMessageBox.Show(
+                        UnhandledFailurePolicy.Describe(args.Exception), Shell.FrontButtons.Ok, Shell.FrontIcon.Warning);
+                }
+
+                return;
+            }
+
             ReleaseShell();
             ReportFatal(args.Exception);
             args.Handled = true;
             Shutdown(1);
         };
 
-        // Dispatcher を通らないところ（バックグラウンドのスレッドなど）で落ちても外す
+        // Dispatcher を通らないところ（バックグラウンドのスレッドなど）で落ちても外す。
+        // ここは画面以外のスレッドで来る。ReleaseShell は画面のスレッドのものを触るので、
+        // 画面のスレッドへ渡し、終わるのを（時間を区切って）待つ
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            ReleaseShell();
+            ReleaseShellFromAnyThread();
 
             if (args.ExceptionObject is Exception fatal) ReportFatal(fatal);
         };
 
-        // 終了の合図（サインアウトやシャットダウン）でも外す
-        SessionEnding += (_, _) => ReleaseShell();
+        // 終了の合図（サインアウトやシャットダウン）。
+        // 保存と後片付けの準備だけをする。AppBar を外すのは、実際に終わるとき（OnExit）にする
+        SessionEnding += (_, args) => HandleSessionEnding(args);
 
         // あとから開く窓（編集画面・設定・ショートカットなど）にも当てる。
         // タイトルバーは OS が描くので、窓ごとに頼まないと白いまま残る
@@ -147,17 +195,14 @@ public partial class App : Application
         // 読めないので、ここが最後の砦になる（要件書 2.3）
         StartupTrace.Measure("WorkAreaGuard.RecoverIfNeeded", Shell.WorkAreaGuard.RecoverIfNeeded);
 
-        try
-        {
-            _connection = StartupTrace.Measure(
-                "DB接続・移行", () => CalendarDatabase.OpenDefault().ConnectAndMigrate());
-            StartupTrace.Mark("DB接続後");
-        }
-        catch (Exception ex) when (ex is SqliteException or InvalidOperationException or IOException)
-        {
-            HandleDatabaseOpenFailure(ex);
-            return;
-        }
+        // 見張りは、窓や接続より先に始める。ここから先で落ちても、取り消された終了の合図は受けられる
+        _sessionWatcher = new Shell.SessionEndWatcher(OnSessionResolved);
+        _sessionWatcher.Start();
+
+        _connection = StartupTrace.Measure("DB接続・移行", OpenDatabaseOrAskUser);
+        if (_connection is null) return;
+
+        StartupTrace.Mark("DB接続後");
 
         // 起動時の自動バックアップ（世代保存）。取り込み系は Undo に積まないので、
         // 戻したいときの拠り所がこれしか無い。裏の別接続で取るので起動は待たせず、
@@ -207,8 +252,9 @@ public partial class App : Application
             // DPAPI は会社の PC（ドメイン参加）だと最初の呼び出しが遅いことがある。以下のデータベースを開く・組み立てる処理と重ねられるよう、
             // 先に別スレッドで読み始める（DpapiTokenStore は読み込みを1本にして、復号できた
             // 控えを覚える。あとで画面のスレッドが呼んでも二重には復号しない）
-            var tokenStore = new DpapiTokenStore(Path.Combine(
-                Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"));
+            var tokenStore = new DpapiTokenStore(
+                Path.Combine(Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"),
+                Shell.ShellDiagnosticsLog.Write);
             _ = Task.Run(() => tokenStore.Load());
 
             // Google 同期には UI と別の接続・別の CalendarWorkspace を渡す（_syncConnection
@@ -329,22 +375,25 @@ public partial class App : Application
             window.Show();
             StartupTrace.Mark("Show終了");
 
-            // 保存されていたトークンが復号できなかったときだけ、理由を一度伝える。
-            // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
-            // プロファイル移行のあとに理由が分からなくなる。ファイルはこの時点で
-            // もう消えている（DpapiTokenStore.Load）ので、次回の起動では出ない
-            if (tokenStore.DecryptionFailed)
-            {
-                MessageBox.Show(
-                    window,
-                    "保存されていた接続情報を読めなくなりました。Google に接続し直してください。",
-                    "Kado", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-
             StartupTrace.Measure("SetUpShell", () => SetUpShell(window));
 
-            // 2本目が起動されたら、こちらを前に出す
-            _instance.ListenForActivation(() => Dispatcher.Invoke(BringToFront));
+            // 保存されていたトークンが、退避して読み直してもなお復号できなかったときだけ、理由を一度伝える
+            // （DpapiTokenStore.Load。1度目の失敗は一時的かもしれないので伝えない）。
+            // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
+            // プロファイル移行のあとに理由が分からなくなる。
+            //
+            // 案内は最初の画面が出て、トレイや2本目の起動の受け付けが整ったあとに回す。
+            // 先に出すと、その間に2本目を起動しても前に出てこない
+            if (tokenStore.DecryptionFailed)
+            {
+                Dispatcher.InvokeAsync(
+                    () => Shell.FrontMessageBox.Show(
+                        "保存されていた Google の接続情報を、何度か試しても読めませんでした。"
+                        + "Google に接続し直してください。\n\n"
+                        + "Windows のパスワードを変えた、または別の PC やプロファイルへ移したときに起こります。",
+                        Shell.FrontButtons.Ok, Shell.FrontIcon.Warning),
+                    DispatcherPriority.ApplicationIdle);
+            }
 
             // 前回の入れ替えで残ったものを片付ける。ファイルの削除（同期I/O）なので、
             // 最初の画面が出てからでよい。ApplicationIdle まで待たせば、初回描画の
@@ -426,9 +475,11 @@ public partial class App : Application
             // 記録できなくても、この下の表示だけは出す
         }
 
-        MessageBox.Show(
+        // 親の窓が無い（起動の途中・別のスレッド）ことも多い。裏に隠れて気づかれないまま
+        // 終わらないよう、前に出す
+        Shell.FrontMessageBox.Show(
             $"予期しないエラーで終了します。\n\n{ex.GetType().Name}: {ex.Message}\n\n記録先: {CrashLogPath}",
-            "Kado", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shell.FrontButtons.Ok, Shell.FrontIcon.Error);
     }
 
     /// <summary>
@@ -467,48 +518,51 @@ public partial class App : Application
         // 押して確かめたときは、待っていることが分かるようにする
         if (showWhenLatest) Mouse.OverrideCursor = Cursors.Wait;
 
+        UpdateCheckResult result;
         try
         {
-            var result = await _updater.CheckAsync().ConfigureAwait(true);
-
-            switch (result.Status)
-            {
-                case UpdateCheckStatus.AlreadyChecking:
-                    if (showWhenLatest)
-                    {
-                        MessageBox.Show(
-                            MainWindow,
-                            "いま確認しています。少し待ってからもう一度お試しください。",
-                            "Kado", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-
-                    return;
-
-                case UpdateCheckStatus.Failed:
-                    // 起動時の確認は黙って見送る（理由は shell.log に残っている）
-                    if (showWhenLatest) ShowUpdateFailure(result.Failure);
-
-                    return;
-
-                case UpdateCheckStatus.UpToDate:
-                    if (showWhenLatest)
-                    {
-                        MessageBox.Show(
-                            MainWindow,
-                            $"お使いの {UpdateService.CurrentVersion} が最新です。",
-                            "Kado", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-
-                    return;
-
-                case UpdateCheckStatus.UpdateAvailable:
-                    new UpdateWindow(_updater, result.Info!, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
-                    return;
-            }
+            result = await _updater.CheckAsync().ConfigureAwait(true);
         }
         finally
         {
+            // 待機カーソルは、通信を待つあいだだけ。結果の窓やメッセージを出す前に戻す。
+            // 更新の窓（ShowDialog）が閉じるまで残ると、窓の上で砂時計のままになる
             if (showWhenLatest) Mouse.OverrideCursor = null;
+        }
+
+        switch (result.Status)
+        {
+            case UpdateCheckStatus.AlreadyChecking:
+                if (showWhenLatest)
+                {
+                    MessageBox.Show(
+                        MainWindow,
+                        "いま確認しています。少し待ってからもう一度お試しください。",
+                        "Kado", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+
+                return;
+
+            case UpdateCheckStatus.Failed:
+                // 起動時の確認は黙って見送る（理由は shell.log に残っている）
+                if (showWhenLatest) ShowUpdateFailure(result.Failure);
+
+                return;
+
+            case UpdateCheckStatus.UpToDate:
+                if (showWhenLatest)
+                {
+                    MessageBox.Show(
+                        MainWindow,
+                        $"お使いの {UpdateService.CurrentVersion} が最新です。",
+                        "Kado", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+
+                return;
+
+            case UpdateCheckStatus.UpdateAvailable:
+                new UpdateWindow(_updater, result.Info!, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+                return;
         }
     }
 
@@ -574,25 +628,32 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// 認可のページを既定のブラウザで開く。
-    /// <para>
-    /// アプリの中に埋め込まない。認可はパスワードを入れる場面なので、利用者が
-    /// いつも使っているブラウザの画面で、URL を自分で確かめられるほうがよい。
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// バックアップで置き換えて、アプリを立ち上げ直す。
     /// <para>
     /// 置き換えは接続を閉じてから。開いたまま差し替えると、書き込み待ちの内容と
     /// 食い違って壊れる。読み直すには立ち上げ直すのが確実で、途中の状態も残らない。
     /// </para>
+    /// <para>
+    /// <b>半分止まった状態で動き続けない。</b>
+    /// 選ばれたファイルが読めるかは、何かを閉じる前に確かめる（読めなければ例外のまま返り、
+    /// 画面は何も閉じていないので、そのまま使える）。閉じたあとに置き換えが失敗したときは、
+    /// 元のデータのまま立ち上げ直す（<see cref="DatabaseBackup.RestoreFrom"/> は、本体へ触れる前に
+    /// 別名へ写してから置き換えるので、失敗しても元のデータは残っている）。
+    /// </para>
     /// </summary>
     private void RestoreAndRestart(string backupPath)
     {
+        // 何も壊す前に確かめる。違うファイルを選んでも、ここで例外になって画面に戻れる
+        DatabaseBackup.EnsureReadableDatabase(backupPath);
+
         // 復元の直前にも世代バックアップを1本残す（項目4）。復元は「いまの内容を
         // すべて置き換える」破壊的操作で、選んだファイルを取り違えても後戻りできない。
         // 接続を閉じる前、まだ読める間に取る。失敗しても復元そのものは止めない
         if (_connection is { } current) AutoBackupService.TryRun(current);
+
+        // ここから先は、画面が使う接続を閉じる。終わるまでのわずかな間に画面のタイマーが
+        // 読み込みを試みても、予期しないエラーとして見せない
+        _leaving = true;
 
         _background?.Dispose();
         _background = null;
@@ -603,11 +664,34 @@ public partial class App : Application
         _syncConnection?.Dispose();
         _syncConnection = null;
 
-        DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
+        try
+        {
+            DatabaseBackup.RestoreFrom(backupPath, CalendarDatabase.DefaultPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or FileNotFoundException or SqliteException)
+        {
+            // 接続を閉じたあとなので、このまま動き続けられない。元のデータのまま立ち上げ直す
+            Shell.ShellDiagnosticsLog.Write($"復元: 失敗。元のデータのまま立ち上げ直します。{ex.GetType().Name}: {ex.Message}");
+
+            Shell.FrontMessageBox.Show(
+                "バックアップから復元できませんでした。元のデータのまま、Kado を立ち上げ直します。\n\n"
+                + (ex is SqliteException sqlite ? SqliteFailure.DescribeReason(sqlite) : ex.Message),
+                Shell.FrontButtons.Ok, Shell.FrontIcon.Warning);
+        }
 
         RestartProcess();
     }
 
+    /// <summary>
+    /// 認可のページを既定のブラウザで開く。
+    /// <para>
+    /// アプリの中に埋め込まない。認可はパスワードを入れる場面なので、利用者が
+    /// いつも使っているブラウザの画面で、URL を自分で確かめられるほうがよい。
+    /// ブラウザを起動できないと <see cref="System.ComponentModel.Win32Exception"/> になる
+    /// （呼び出し側が文言にする）。
+    /// </para>
+    /// </summary>
     private static void OpenInBrowser(string url)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
@@ -616,18 +700,46 @@ public partial class App : Application
         });
     }
 
-    /// <summary>いまの exe をもう一度起動して、自分は終わる。</summary>
+    /// <summary>
+    /// いまの exe をもう一度起動して、自分は終わる。
+    /// <para>
+    /// <b>前のプロセスの終了を待つ引数を付ける。</b>付けないと、新しいほうの二重起動の判定が、
+    /// まだミューテックスを持っている自分と競合し、「すでに起動しています」で即座に終わる。
+    /// 起動できなかったときは理由を出す（黙って終わると、アプリが消えたように見える）。
+    /// </para>
+    /// </summary>
     private void RestartProcess()
     {
-        if (Environment.ProcessPath is { Length: > 0 } exe)
+        _leaving = true;
+
+        if (!TryLaunchSelf())
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
-            {
-                UseShellExecute = true,
-            });
+            Shell.FrontMessageBox.Show(
+                "Kado を自動で立ち上げ直せませんでした（セキュリティ ソフトなどに止められた可能性があります）。"
+                + "いったん終了します。もう一度、Kado を起動してください。",
+                Shell.FrontButtons.Ok, Shell.FrontIcon.Warning);
         }
 
         Shutdown();
+    }
+
+    /// <summary>自分の exe を、前のプロセスの終了を待つ引数つきで起動する。起動できたか。</summary>
+    private static bool TryLaunchSelf()
+    {
+        if (Environment.ProcessPath is not { Length: > 0 } exe) return false;
+
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true };
+            start.ArgumentList.Add(StartupArguments.AfterRestart);
+            System.Diagnostics.Process.Start(start);
+            return true;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Shell.ShellDiagnosticsLog.Write($"立ち上げ直し: 失敗。{ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -635,32 +747,80 @@ public partial class App : Application
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// データベースを開けなかったときの案内。
+    /// データベースを開く。開けなければ、理由に合わせて案内する。
     /// <para>
-    /// 黙って落とすと、利用者には何もできない。新しい版で作ったデータを古い版で
-    /// 開いた場合や、ファイルが壊れている場合に起こる。せめて「壊れたものをどけて
+    /// <b>「ロックされている」と「壊れている」を取り違えない。</b>ほかのプロセスが使っているだけなのに
+    /// 「壊れている」扱いにして、健全なデータを退避させてはいけない。
+    /// ロック・権限・ディスクの空きは、時間をおいてやり直すか終了を選ばせる（退避は勧めない）。
+    /// 本当に壊れているとき（SQLITE_CORRUPT・NOTADB）と新しい版のデータのときだけ、
+    /// 「どけて新しく始める」「バックアップから戻す」を選ばせる。
+    /// </para>
+    /// </summary>
+    /// <returns>開けた接続。開けなかった（終了・立ち上げ直しにした）なら null。</returns>
+    private SqliteConnection? OpenDatabaseOrAskUser()
+    {
+        while (true)
+        {
+            try
+            {
+                return CalendarDatabase.OpenDefault().ConnectAndMigrate();
+            }
+            catch (Exception ex) when (ex is SqliteException or InvalidOperationException
+                                           or IOException or UnauthorizedAccessException)
+            {
+                var kind = DatabaseOpenFailure.Classify(ex);
+
+                Shell.ShellDiagnosticsLog.Write($"データベースを開けません（{kind}）。{ex.GetType().Name}: {ex.Message}");
+
+                if (DatabaseOpenFailure.OffersSetAside(kind))
+                {
+                    HandleBrokenDatabase(kind, ex);
+                    return null;
+                }
+
+                var answer = Shell.FrontMessageBox.Show(
+                    DatabaseOpenFailure.Describe(kind, CalendarDatabase.DefaultPath)
+                    + $"\n\n詳細: {ex.Message}\n\n「再試行」: もう一度開きます。「キャンセル」: 終了します。",
+                    Shell.FrontButtons.RetryCancel, Shell.FrontIcon.Error);
+
+                if (answer != Shell.FrontResult.Retry)
+                {
+                    Shutdown(1);
+                    return null;
+                }
+
+                // 掴んだままのものを手放し、少し間をおいてから開き直す
+                SqliteConnection.ClearAllPools();
+                Thread.Sleep(1000);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 壊れている（または新しい版の）データベースの案内。
+    /// <para>
+    /// 黙って落とすと、利用者には何もできない。せめて「壊れたものをどけて
     /// 新しく始める」「バックアップから戻す」を選べるようにする。
     /// </para>
     /// </summary>
-    private void HandleDatabaseOpenFailure(Exception ex)
+    private void HandleBrokenDatabase(DatabaseOpenFailureKind kind, Exception ex)
     {
-        var choice = MessageBox.Show(
-            "データを開けませんでした。新しい版で作ったデータを古い版で開いた場合や、"
-            + "ファイルが壊れている場合に起こります。\n\n"
-            + "「はい」: 壊れたデータをどけて、新しく始めます（今までの予定・タスクは"
+        var choice = Shell.FrontMessageBox.Show(
+            DatabaseOpenFailure.Describe(kind, CalendarDatabase.DefaultPath) + "\n\n"
+            + "「はい」: データをどけて、新しく始めます（今までの予定・タスクは"
             + "戻せなくなりますが、ファイル自体は残るので後から取り出せます）。\n"
             + "「いいえ」: バックアップファイルから復元します。\n"
             + "「キャンセル」: 何もせず終了します。\n\n"
             + $"詳細: {ex.Message}\n保存先: {CalendarDatabase.DefaultPath}",
-            "Kado", MessageBoxButton.YesNoCancel, MessageBoxImage.Error);
+            Shell.FrontButtons.YesNoCancel, Shell.FrontIcon.Error);
 
         switch (choice)
         {
-            case MessageBoxResult.Yes:
+            case Shell.FrontResult.Yes:
                 SetAsideBrokenDatabaseAndRestart();
                 return;
 
-            case MessageBoxResult.No:
+            case Shell.FrontResult.No:
                 RestoreFromPickedBackupAndRestart();
                 return;
 
@@ -702,9 +862,9 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(
+            Shell.FrontMessageBox.Show(
                 $"壊れたデータをどけられませんでした。\n\n{ex.Message}",
-                "Kado", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shell.FrontButtons.Ok, Shell.FrontIcon.Error);
             Shutdown(1);
             return;
         }
@@ -732,11 +892,13 @@ public partial class App : Application
         {
             DatabaseBackup.RestoreFrom(dialog.FileName, CalendarDatabase.DefaultPath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or FileNotFoundException or SqliteException)
         {
-            MessageBox.Show(
-                $"復元できませんでした。\n\n{ex.Message}",
-                "Kado", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shell.FrontMessageBox.Show(
+                "復元できませんでした。\n\n"
+                + (ex is SqliteException sqlite ? SqliteFailure.DescribeReason(sqlite) : ex.Message),
+                Shell.FrontButtons.Ok, Shell.FrontIcon.Error);
             Shutdown(1);
             return;
         }
@@ -756,7 +918,68 @@ public partial class App : Application
         _connection?.Dispose();
         _syncConnection?.Dispose();
         _instance?.Dispose();
+
+        // 終了の問い合わせを受けていたなら、結果（本当に終わるのか、取り消されたのか）が届くまで
+        // 見張りを生かしておく。そうでなければ、ここで止める
+        _sessionWatcher?.Dispose();
+
         base.OnExit(e);
+    }
+
+    // ------------------------------------------------------------------
+    // シャットダウン・サインアウト
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 終了の問い合わせ（<c>WM_QUERYENDSESSION</c>）。
+    /// <para>
+    /// <b>ここでは保存と後片付けの準備だけをする。</b>AppBar を外すのは、実際に終わるとき
+    /// （<see cref="OnExit"/>、または見張りが <c>WM_ENDSESSION</c> の wParam=TRUE を受けたとき）。
+    /// ここで外すと、他のアプリが取り消したときにワークエリアだけが戻って、常駐が中途半端になる。
+    /// </para>
+    /// <para>
+    /// WPF はこの問い合わせを取り消さない限り、自分で <see cref="Application.Shutdown()"/> を呼ぶ。
+    /// 取り消せば Windows のシャットダウンを妨げてしまうので、取り消さない。そのかわり、
+    /// 他のアプリが取り消したときは <see cref="SessionEndWatcher"/> が立ち上げ直して常駐を続ける
+    /// （<see cref="OnSessionResolved"/>）。
+    /// </para>
+    /// </summary>
+    private void HandleSessionEnding(SessionEndingCancelEventArgs args)
+    {
+        _sessionEndQueried = true;
+
+        try
+        {
+            // 居かたを控える（終わるときに DB へ書き出す準備）
+            _shellController?.Save();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 保存できなくても、終了の邪魔はしない
+        }
+    }
+
+    /// <summary>
+    /// 終了の結果が届いた（見張りのスレッドから呼ばれる）。
+    /// </summary>
+    /// <param name="ending">本当に終わるか（<c>WM_ENDSESSION</c> の wParam）。</param>
+    private void OnSessionResolved(bool ending)
+    {
+        if (ending)
+        {
+            // 本当に終わる。この関数が返ると Windows がプロセスを終わらせるので、
+            // AppBar を外すのはここで済ませる（すでに外れていれば何もしない）
+            ReleaseShellFromAnyThread();
+            return;
+        }
+
+        // 他のアプリが取り消した。WPF は問い合わせの時点で終わりにかかっているので、
+        // 立ち上げ直して常駐を続ける。問い合わせを受けていなければ（まだ動いているなら）何もしない
+        if (_sessionEndQueried && !_reallyExiting)
+        {
+            Shell.ShellDiagnosticsLog.Write("シャットダウンが取り消されたので、立ち上げ直します");
+            TryLaunchSelf();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -942,10 +1165,12 @@ public partial class App : Application
     /// </summary>
     private void OnMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_reallyExiting || _tray is null) return;
+        // トレイにアイコンが出ていないあいだは隠さない。隠すと、窓を呼び戻す入口がどこにも無い。
+        // （Explorer の再起動やログオン直後の失敗で出ていないときは、そのまま閉じる＝終了する。
+        // 見えない常駐を残すよりよい）
+        var closeToTray = _settings is not { CloseToTray: false };
 
-        // 設定で切っていれば、そのまま終わる
-        if (_settings is { CloseToTray: false }) return;
+        if (!Shell.TrayPolicy.HidesOnClose(_reallyExiting, _tray?.IsShown == true, closeToTray)) return;
 
         e.Cancel = true;
         MainWindow?.Hide();
@@ -958,6 +1183,35 @@ public partial class App : Application
     /// してある。ここを通らずに落ちた場合は、次の起動で <c>WorkAreaGuard</c> が戻す。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// どのスレッドからでも、ワークエリアを元に戻す。
+    /// <para>
+    /// <see cref="AppDomain.UnhandledException"/> は、落ちたスレッド（多くは画面以外）で来る。
+    /// <c>ReleaseShell</c> は画面のスレッドのもの（AppBar と窓）を触るので、画面のスレッドへ渡して
+    /// <b>同期的に</b>行う。終わるのを待たないと、渡した処理が走る前にプロセスが終わる。
+    /// ただし画面のスレッドも止まっている（デッドロックなど）ことがあるので、<b>待つのは3秒まで</b>。
+    /// 間に合わなかったときは、次の起動で <c>WorkAreaGuard</c> が戻す（終了印が残っている）。
+    /// </para>
+    /// </summary>
+    private void ReleaseShellFromAnyThread()
+    {
+        try
+        {
+            if (Dispatcher.CheckAccess())
+            {
+                ReleaseShell();
+                return;
+            }
+
+            Dispatcher.Invoke(
+                ReleaseShell, DispatcherPriority.Send, CancellationToken.None, TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 画面のスレッドがもう無い（終わった）、渡せなかった。ここでの失敗は、元の落ちた理由を隠さない
+        }
+    }
+
     private void ReleaseShell()
     {
         try

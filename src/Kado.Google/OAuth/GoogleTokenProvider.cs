@@ -75,17 +75,44 @@ public sealed class GoogleTokenProvider(
         return true;
     }
 
-    /// <summary>接続を切る。Google 側の許可も取り消す。</summary>
-    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 接続を切る。Google 側の許可も取り消す。
+    /// <para>
+    /// <b>こちらの控え（トークン）は、取り消しの通信が転んでも必ず消す。</b>残すと、
+    /// 切ったつもりなのに繋がったままに見え、裏の同期が勝手に再開する。
+    /// 取り消しが届かなかったことは例外ではなく戻り値で伝える（切断そのものは成功している）。
+    /// 利用者が取り消しを求めて止めたとき（<see cref="OperationCanceledException"/>）も、
+    /// 控えを消してから例外を返す。
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// Google 側の取り消しが届いたか。控えが元から無く、取り消すものが無かったときも true。
+    /// 通信・応答の失敗で届かなかったときは false。
+    /// </returns>
+    public async Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_store.Load() is { } tokens)
+        var revoked = true;
+
+        try
         {
-            await _flow.RevokeAsync(tokens.RefreshToken ?? tokens.AccessToken, cancellationToken)
-                .ConfigureAwait(false);
+            if (_store.Load() is { } tokens)
+            {
+                await _flow.RevokeAsync(tokens.RefreshToken ?? tokens.AccessToken, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException
+                                   && !(ex is OperationCanceledException && cancellationToken.IsCancellationRequested))
+        {
+            // 通信できない・プロキシが HTML を返した・時間切れなど。切るのが目的なので止めない
+            revoked = false;
+        }
+        finally
+        {
+            _store.Clear();
         }
 
-        // 取り消しに失敗しても、こちらの控えは消す。残すと繋がっているように見える
-        _store.Clear();
+        return revoked;
     }
 
     /// <summary>API を呼ぶためのトークンを取る。必要なら取り直す。</summary>

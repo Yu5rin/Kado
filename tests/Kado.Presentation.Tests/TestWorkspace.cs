@@ -11,6 +11,9 @@ internal sealed class TestWorkspace : IDisposable
 
     public CalendarWorkspace Workspace { get; }
 
+    /// <summary>このワークスペースが使っている接続。書き込みを失敗させる仕掛け（トリガー）を足すのに使う。</summary>
+    public SqliteConnection Connection => _connection;
+
     private TestWorkspace(SqliteConnection connection, CalendarWorkspace workspace)
     {
         _connection = connection;

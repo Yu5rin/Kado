@@ -1,6 +1,7 @@
 using Kado.Data.Models;
 using Kado.Google.Mapping;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Sync;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.Presentation.Editing;
@@ -560,11 +561,34 @@ public sealed class EventEditorViewModel : ObservableObject
             _attachmentsDirty = true;
             Raise(nameof(Attachments), nameof(CanAddAttachment));
         }
+        catch (OperationCanceledException)
+        {
+            // 取り消し。失敗ではないので、何も足さず、エラーも出さない
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 口の約束は「例外を投げない」だが、画面の async void から呼ばれるので、
+            // 破られたときにアプリごと終わらないよう最後の砦を置く
+            AttachmentError = AttachmentFailure.Describe(ex);
+        }
         finally
         {
             IsUploadingAttachment = false;
             Raise(nameof(CanAddAttachment));
         }
+    }
+
+    /// <summary>
+    /// 添付の追加で漏れた例外を、画面の文言にして出す。
+    /// <para>画面の <c>async void</c> が最後の砦として呼ぶ。上げている最中の表示も戻す。</para>
+    /// </summary>
+    public void ReportAttachmentFailure(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        AttachmentError = AttachmentFailure.Describe(exception);
+        IsUploadingAttachment = false;
+        Raise(nameof(CanAddAttachment));
     }
 
     /// <summary>

@@ -156,6 +156,95 @@ public class GoogleTokenProviderTests
         Assert.Null(store.Load());
     }
 
+    // ------------------------------------------------------------------
+    // 切断（項目3）。取り消しの通信が転んでも、こちらの控えは必ず消す
+    // ------------------------------------------------------------------
+
+    private sealed class ThrowingHandler(Exception error) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw error;
+    }
+
+    private sealed class CancellationAwareHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
+    }
+
+    [Fact]
+    public async Task 取り消しが届いたら真を返す()
+    {
+        using var handler = new StubHttpHandler(_ => (HttpStatusCode.OK, "{}"));
+        using var http = new HttpClient(handler);
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.FromHours(1)));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        Assert.True(await provider.DisconnectAsync());
+        Assert.Null(store.Load());
+    }
+
+    [Fact]
+    public async Task 取り消しの通信が失敗しても控えを消し偽を返す()
+    {
+        // オフライン・プロキシの拒否。以前は例外が飛んで、控えを消す行まで届かなかった
+        using var http = new HttpClient(new ThrowingHandler(new HttpRequestException("offline")));
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.FromHours(1)));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        var revoked = await provider.DisconnectAsync();
+
+        Assert.False(revoked);
+        Assert.Null(store.Load());
+        Assert.False(provider.IsConnected);
+    }
+
+    [Fact]
+    public async Task 取り消しが時間切れでも控えを消す()
+    {
+        using var http = new HttpClient(new ThrowingHandler(new TaskCanceledException("timeout")));
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.FromHours(1)));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        Assert.False(await provider.DisconnectAsync());
+        Assert.Null(store.Load());
+    }
+
+    [Fact]
+    public async Task 利用者が止めたときも控えは消してから取り消しを返す()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        using var http = new HttpClient(new CancellationAwareHandler());
+        var store = new InMemoryTokenStore(Tokens("at-1", "rt-1", TimeSpan.FromHours(1)));
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.DisconnectAsync(cts.Token));
+
+        Assert.Null(store.Load());
+    }
+
+    [Fact]
+    public async Task 控えが元から無ければ取り消すものは無く真を返す()
+    {
+        using var http = new HttpClient(new StubHttpHandler(_ => (HttpStatusCode.OK, "{}")));
+        var store = new InMemoryTokenStore();
+        using var provider = new GoogleTokenProvider(
+            new LoopbackOAuthFlow(Options(), http, _ => { }, new FixedTime(Now)), store, new FixedTime(Now));
+
+        Assert.True(await provider.DisconnectAsync());
+    }
+
     [Fact]
     public async Task 更新トークンが返らない認可は受け付けない()
     {

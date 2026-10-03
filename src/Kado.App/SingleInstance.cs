@@ -26,7 +26,36 @@ public sealed class SingleInstance : IDisposable
     /// </summary>
     private const string MutexName = @"Local\Kado.SingleInstance";
 
-    private const string PipeName = "Kado.Activate";
+    /// <summary>
+    /// 合図のパイプの名前。セッションとユーザーごとに分ける（<see cref="ActivationPipe.NameFor"/>）。
+    /// ミューテックスと同じ範囲に揃える。
+    /// </summary>
+    private static string PipeName { get; } = ActivationPipe.NameFor(CurrentSessionId(), CurrentUserSid());
+
+    private static int CurrentSessionId()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            return process.SessionId;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return -1;
+        }
+    }
+
+    private static string? CurrentUserSid()
+    {
+        try
+        {
+            return System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private readonly Mutex _mutex;
     private readonly CancellationTokenSource _listening = new();
@@ -105,6 +134,8 @@ public sealed class SingleInstance : IDisposable
 
         _ = Task.Run(async () =>
         {
+            var failures = 0;
+
             while (!_listening.IsCancellationRequested)
             {
                 try
@@ -119,14 +150,29 @@ public sealed class SingleInstance : IDisposable
                     {
                         onActivate();
                     }
+
+                    failures = 0;
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (_listening.IsCancellationRequested)
                 {
                     return;
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // 相手が途中で切れた。待ち受けは続ける
+                    // 相手が途中で切れた（IOException）、パイプを作れない（同じ名前を別のプロセスが
+                    // 使っているなどの UnauthorizedAccessException）、合図を受けた先の失敗。
+                    // どれでも待ち受けは続ける。ただし間を置かずに回すと CPU を使い切るので、
+                    // 連続して失敗するほど間を延ばす
+                    failures++;
+
+                    try
+                    {
+                        await Task.Delay(ActivationPipe.RetryDelay(failures), _listening.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
                 }
             }
         }, _listening.Token);
