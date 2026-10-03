@@ -202,6 +202,104 @@ public class GoogleSyncServiceTests : IDisposable
         Assert.False(report.HasChanges);
     }
 
+    // ------------------------------------------------------------------
+    // 途中で止まった同期が、手元へ書き込んでいたか（画面を読み直すかの判断に使う）
+    // ------------------------------------------------------------------
+
+    private const string AuthError = """{"error":{"errors":[{"reason":"authError"}]}}""";
+
+    [Fact]
+    public async Task 一覧の取得で転んだ同期は何も書いていないと伝える()
+    {
+        // 回線が無いだけの失敗。書いていないので、画面を読み直す理由が無い
+        using var service = Create(new RoutingHandler(_ => (HttpStatusCode.Unauthorized, AuthError)));
+
+        await Assert.ThrowsAsync<GoogleApiException>(() => service.SyncAsync());
+
+        Assert.False(service.MayHaveWrittenBeforeInterruption);
+    }
+
+    [Fact]
+    public async Task 一覧を取り込んだあとで転んだ同期は書いたかもしれないと伝える()
+    {
+        // カレンダー一覧は取り込めた（手元のカレンダーの表が書き換わった）あと、予定の取得で 401
+        using var service = Create(new RoutingHandler(url =>
+            url.Contains("calendarList", StringComparison.Ordinal) || url.Contains("/colors", StringComparison.Ordinal)
+                ? Route(url)
+                : (HttpStatusCode.Unauthorized, AuthError)));
+
+        await Assert.ThrowsAsync<GoogleApiException>(() => service.SyncAsync());
+
+        Assert.True(service.MayHaveWrittenBeforeInterruption);
+        Assert.Equal(2, _test.Workspace.Sources.Calendars().Count(c => c.GoogleRaw is { Length: > 0 }));
+    }
+
+    [Fact]
+    public async Task 中止された同期も書いたかもしれないと伝える()
+    {
+        using var cts = new CancellationTokenSource();
+        var handler = new RoutingHandler(url =>
+        {
+            // 予定の取得に入ったところで止める
+            if (url.Contains("yomeru", StringComparison.Ordinal)) cts.Cancel();
+            return Route(url);
+        });
+
+        using var service = Create(handler);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SyncAsync(cts.Token));
+
+        Assert.True(service.MayHaveWrittenBeforeInterruption);
+    }
+
+    [Fact]
+    public async Task 次の同期が始まるたびに前回の印は消える()
+    {
+        var phase = 0;
+        using var service = Create(new RoutingHandler(url => phase switch
+        {
+            // 1回目: 一覧を取れて、予定の取得で 401（書いたかもしれない）
+            0 when url.Contains("calendarList", StringComparison.Ordinal) || url.Contains("/colors", StringComparison.Ordinal)
+                => Route(url),
+            0 => (HttpStatusCode.Unauthorized, AuthError),
+
+            // 2回目: 最初の通信で 401（何も書いていない）
+            _ => (HttpStatusCode.Unauthorized, AuthError),
+        }));
+
+        await Assert.ThrowsAsync<GoogleApiException>(() => service.SyncAsync());
+        Assert.True(service.MayHaveWrittenBeforeInterruption);
+
+        phase = 1;
+        await Assert.ThrowsAsync<GoogleApiException>(() => service.SyncAsync());
+
+        // 前回の「書いたかもしれない」を引きずらない
+        Assert.False(service.MayHaveWrittenBeforeInterruption);
+    }
+
+    [Fact]
+    public async Task カレンダー1つの同期が転んだ報告は書いたかもしれないと伝える()
+    {
+        using var service = Create(new RoutingHandler(Route));
+
+        var report = await service.SyncAsync();
+
+        // 「誕生日」が 404。件数には数えられないが、「仕事」は取り込めている
+        Assert.True(report!.MayHaveWritten);
+    }
+
+    [Fact]
+    public async Task 何も転ばなかった報告は書いたかもしれないと言わない()
+    {
+        using var service = Create(new RoutingHandler(url =>
+            url.Contains("yomenai", StringComparison.Ordinal) ? (HttpStatusCode.OK, """{"items":[],"nextSyncToken":"t"}""") : Route(url)));
+
+        await service.SyncAsync();
+        var report = await service.SyncAsync();
+
+        Assert.False(report!.MayHaveWritten);
+    }
+
     /// <summary>逆に、名前が変わっていれば「更新」と数える。</summary>
     [Fact]
     public async Task カレンダーの名前が変わると更新と数える()

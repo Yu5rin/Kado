@@ -247,6 +247,9 @@ public partial class App : Application
             ThemeManager.Apply(appliedTheme);
         };
 
+        // 配色が「自動」のときは、Windows の明暗の切り替えにも追随する
+        WatchSystemTheme();
+
         try
         {
             // 編集画面はウィンドウを親にして出す。その参照は作ったあとでないと渡せない
@@ -1223,6 +1226,32 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Windows の明暗の切り替えに、配色「自動」で追随する。
+    /// <para>
+    /// 起動時に1回読んで当てるだけだと、Windows 側で明暗を切り替えても、アプリを開き直すまで
+    /// 前のままになる。システムの設定変更の通知（General・Color）を受けて、自動のときだけ、
+    /// 明暗が変わっていれば当て直す（<see cref="ThemeManager.ReapplyIfSystemChanged"/>）。
+    /// </para>
+    /// <para>
+    /// この知らせは UI のスレッドには来ないので、渡し直してから触る。
+    /// <b>static イベントで、購読したままだとアプリより長く生きて漏れる。</b>終了時に必ず外す。
+    /// </para>
+    /// </summary>
+    private void WatchSystemTheme()
+    {
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        Exit += (_, _) => Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+
+        void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs args)
+        {
+            if (args.Category is not (Microsoft.Win32.UserPreferenceCategory.General
+                or Microsoft.Win32.UserPreferenceCategory.Color)) return;
+
+            Dispatcher.BeginInvoke(() => ThemeManager.ReapplyIfSystemChanged());
+        }
+    }
+
+    /// <summary>
     /// スリープから戻ったとき・時計を変えられたときに、すぐ追いつく（要件書 7.5）。
     /// <para>
     /// 眠っているあいだタイマーは止まっている。起きたあと次の1分を待つと、その間に
@@ -1267,7 +1296,20 @@ public partial class App : Application
 
             Dispatcher.BeginInvoke(() =>
             {
-                if (window.DataContext is MainViewModel main) main.UpdateNow(DateTime.Now);
+                if (window.DataContext is not MainViewModel main) return;
+
+                // タイムゾーンや書式のキャッシュは、最初に読んだ値のまま残る。時計を変えられたら
+                // 捨てる（先に捨てないと、次の UpdateNow も古いゾーンの「いま」で動く）。
+                // カルチャは呼んだスレッドのものに効くので、通知が来るスレッドではなく画面のスレッドで
+                if (ClockChangeRules.ShouldRefreshCaches(change))
+                {
+                    ClockCaches.Refresh();
+                    main.OnClockChanged(DateTime.Now);
+                }
+                else
+                {
+                    main.UpdateNow(DateTime.Now);
+                }
             });
 
             // 日をまたいで眠っていたら、24時間を待たずに新しい版を確かめる。ネットワークが戻るのを待ってから

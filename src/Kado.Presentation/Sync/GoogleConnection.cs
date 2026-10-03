@@ -160,6 +160,8 @@ public sealed class GoogleConnection(
             }
         });
 
+    public bool MayHaveWrittenBeforeInterruption => _service?.MayHaveWrittenBeforeInterruption ?? false;
+
     public bool HasDriveAttachmentScope =>
         IsConnected && Provider().HasScope(GoogleOAuthOptions.DriveFileScope);
 

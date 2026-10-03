@@ -93,8 +93,17 @@ public sealed class ScheduleQuery(EventRepository events, TaskRepository tasks, 
     private readonly EventRepository _events = events ?? throw new ArgumentNullException(nameof(events));
     private readonly TaskRepository _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
 
-    /// <summary>完了日時を「日付」にするときのタイムゾーン。端末のローカル。</summary>
-    private readonly TimeZoneInfo _timeZone = timeZone ?? TimeZoneInfo.Local;
+    /// <summary>
+    /// 完了日時を「日付」にするときのタイムゾーン。端末のローカル。
+    /// <para>
+    /// 作った時点の <see cref="TimeZoneInfo.Local"/> を握らない。何日も動き続けるあいだに端末の
+    /// タイムゾーンが変わる（出張・夏時間・設定の変更）と、握ったままでは古いゾーンで日付を出し続ける。
+    /// 毎回 <see cref="TimeZoneInfo.Local"/> を見る（変更の通知を受けたアプリが
+    /// <see cref="TimeZoneInfo.ClearCachedData"/> を呼べば、次から新しいゾーンになる）。
+    /// 引数で渡されたときだけ、そのゾーンに固定する（テスト用）。
+    /// </para>
+    /// </summary>
+    private TimeZoneInfo TimeZone => timeZone ?? TimeZoneInfo.Local;
 
     /// <summary>
     /// 期間に現れる予定を、日ごとに開いて返す。
@@ -253,7 +262,7 @@ public sealed class ScheduleQuery(EventRepository events, TaskRepository tasks, 
     /// </summary>
     public DateOnly? CompletedDate(TaskItem task) =>
         task is { IsDone: true, CompletedAt: { } at }
-            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, _timeZone).DateTime)
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, TimeZone).DateTime)
             : null;
 
     /// <summary>「期限 9/7・4実働日遅れ」。数え方は <see cref="DoneText"/> が持っている。</summary>

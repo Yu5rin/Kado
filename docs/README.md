@@ -311,6 +311,22 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
 - **`ConfigureAwait(false)` のあとで、画面用の SQLite 接続を触らない。** 接続は呼んだスレッドで
   使うもの。通信のあとに設定を読み書きするなら、`ConfigureAwait(true)` で戻ってから
 
+- **コンバーターが `TryFindResource` で引いたブラシは、配色を当て直しても前のまま残る。**
+  `DynamicResource` と違い、バインドの元の値が変わらない限り再評価されない。辞書から色を引く
+  コンバーターには `IThemeSensitiveConverter` を付ける。`ThemeManager.Apply` が窓の木をたどって、
+  その目印のバインドだけ `UpdateTarget` で結び直す（`tests/Kado.App.Tests` が付け忘れを見張る）。
+  Style の `Setter` の中のバインドは対象外なので、そこでは使わない
+- **ViewModel が作り直されても、画面（UserControl）の大きさが変わらなければ `SizeChanged` は来ない。**
+  画面が測って ViewModel へ渡す値（週・日の時間軸の高さ、月のマスの数、年の幅）は、
+  `DataContextChanged` でも測り直す。作りたての ViewModel は既定値のまま
+- **.NET は `TimeZoneInfo.Local` と現在のカルチャの書式を、最初に読んだ値のまま持つ。**
+  何日も動くので、タイムゾーンを変えられたら `ClockCaches.Refresh()`（画面のスレッドで）で捨てる。
+  作った時点のゾーンを欄に握らず、毎回 `TimeZoneInfo.Local` を見る（`ScheduleQuery`）。
+  `SystemEvents` の通知は画面のスレッドには来ない
+- **同期は別の接続で書くので、画面は書かれたことを自分では知らない。** 中止・失敗で途中から抜けても、
+  書いた可能性があれば読み直す（`IGoogleSync.MayHaveWrittenBeforeInterruption`、`SyncReport.MayHaveWritten`）。
+  分からないときは読み直す側に倒す
+
 起動が遅いときは `shell.log` の `startup-timing`（印ごとの累計と区間）と
 `startup-slow`（起動中に100msを超えた処理）を見る。仕掛けは
 `Kado.Presentation.Infrastructure.StartupTrace`。

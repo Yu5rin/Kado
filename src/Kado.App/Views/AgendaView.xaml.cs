@@ -28,14 +28,27 @@ public partial class AgendaView : UserControl
 
             _bound = args.NewValue as AgendaViewModel;
 
-            if (_bound is not null) _bound.ScrollRequested += OnScrollRequested;
+            if (_bound is null) return;
+
+            _bound.ScrollRequested += OnScrollRequested;
+
+            // 日付をまたいで一覧が作り直されたときなど、新しい実体を受け取る。依頼はこの
+            // 実体を作った直後に出ていて、まだ誰も聞いていなかった。控えてある位置合わせを
+            // いま行う（作り直した一覧は先頭、何年も前から始まる）。
+            // まだ表示される前なら、下の Loaded が行う
+            if (IsLoaded) ScrollToPendingOrToday();
         };
 
-        // 開いたときは今日のあたりを出す。先頭は何年も前かもしれない
-        Loaded += (_, _) =>
-        {
-            if (_bound is { } agenda) ScrollTo(agenda.TodayRow);
-        };
+        // 開いたときは、頼まれていた日（無ければ今日）のあたりを出す。先頭は何年も前かもしれない
+        Loaded += (_, _) => ScrollToPendingOrToday();
+    }
+
+    /// <summary>控えてある位置合わせを行う。頼まれていなければ今日のあたり。</summary>
+    private void ScrollToPendingOrToday()
+    {
+        if (_bound is not { } agenda) return;
+
+        ScrollTo(agenda.TakePendingScroll() is { } date ? agenda.RowOn(date) : agenda.TodayRow);
     }
 
     private void OnScrollRequested(object? sender, DateOnly date)

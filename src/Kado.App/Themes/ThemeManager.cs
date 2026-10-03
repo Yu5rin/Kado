@@ -19,8 +19,31 @@ public static class ThemeManager
     private static readonly Uri ThemeSource =
         new("pack://application:,,,/Themes/Theme.xaml", UriKind.Absolute);
 
-    /// <summary>現在の配色。</summary>
+    /// <summary>現在の配色（設定で選んだもの。自動のままのこともある）。</summary>
     public static ThemeChoice Current { get; private set; } = ThemeChoice.Auto;
+
+    /// <summary>
+    /// 実際に当てている配色。自動なら、そのとき Windows から読んだ明暗。
+    /// Windows の明暗が変わったかどうかを比べるのに使う。
+    /// </summary>
+    private static ThemeChoice _applied = ThemeChoice.Light;
+
+    /// <summary>
+    /// Windows の明暗が切り替わっていたら、自動のときだけ当て直す。
+    /// <para>
+    /// システムの設定変更の通知（<c>UserPreferenceChanged</c>）は、無関係な変更でも何度も来る。
+    /// 当て直しは辞書ごとの作り直しで重いので、明暗が実際に変わったときだけ払う。
+    /// 画面のスレッドで呼ぶこと。
+    /// </para>
+    /// </summary>
+    /// <returns>当て直したら true。</returns>
+    public static bool ReapplyIfSystemChanged()
+    {
+        if (!ThemeFollow.ShouldReapply(Current, _applied, DetectSystemTheme())) return false;
+
+        Apply(Current);
+        return true;
+    }
 
     /// <summary>配色を切り替える。</summary>
     public static void Apply(ThemeChoice theme)
@@ -28,6 +51,7 @@ public static class ThemeManager
         Current = theme;
 
         var resolved = theme == ThemeChoice.Auto ? DetectSystemTheme() : theme;
+        _applied = resolved;
         var source = new Uri(
             resolved switch
             {
@@ -54,6 +78,11 @@ public static class ThemeManager
 
         // タイトルバーは OS が描くので、辞書を入れ替えても追随しない。別に頼む
         TitleBarTheme.ApplyToAll();
+
+        // コンバーターが引いたブラシ（マイルストーンのラベル・期限の強調色・同期の丸印・
+        // 色を持たないカレンダーの既定色）は DynamicResource ではないので、前の配色のまま残る。
+        // 結び直す
+        ThemeBindingRefresh.RefreshAll();
     }
 
     /// <summary>

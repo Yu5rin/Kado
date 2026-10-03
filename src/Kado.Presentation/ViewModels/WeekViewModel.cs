@@ -284,7 +284,18 @@ public sealed class WeekViewModel : ObservableObject
 
     public void GoToNextWeek() => GoTo(_anchor.AddDays(7));
 
-    public void GoToToday() => GoTo(_today);
+    /// <summary>
+    /// 今日を含む週へ移し、選んでいる日の印も今日にする。
+    /// <para>
+    /// 月ビューの <c>GoToToday</c> と同じ。移すだけにすると、選んでいた日の列に印が
+    /// 前のまま残る。
+    /// </para>
+    /// </summary>
+    public void GoToToday()
+    {
+        GoTo(_today);
+        SelectedDate = _today;
+    }
 
     /// <summary>現在時刻の線を動かす。</summary>
     public void UpdateNowLine(TimeOnly now)
@@ -292,6 +303,19 @@ public sealed class WeekViewModel : ObservableObject
         // 1時間の高さが変わると線の位置も変わる。控えておいて引き直せるようにする
         _now = now;
 
+        ApplyNowLine(now);
+    }
+
+    /// <summary>
+    /// 控えてある「いま」で線を計算し直す。
+    /// <para>
+    /// 次の1分ごとの更新（<see cref="UpdateNowLine"/>）を待たない。今日を含む週へ移ったとき、
+    /// 今日が変わったとき、列を組み直したときに、線が最大1分出ない（または前の週に出たまま
+    /// 残る）のを防ぐ。
+    /// </para>
+    /// </summary>
+    private void ApplyNowLine(TimeOnly now)
+    {
         var inRange = _timeline.Covers(now);
 
         ShowNowLine = inRange && _today >= WeekStart && _today <= WeekEnd;
@@ -317,9 +341,9 @@ public sealed class WeekViewModel : ObservableObject
             if (Math.Abs(height - _timeline.HourHeight) < 0.5) return;
 
             _timeline = _timeline.WithHourHeight(height);
-            Refresh();
 
-            if (_now is { } now) UpdateNowLine(now);
+            // 組み直しの中で線も引き直す
+            Refresh();
         }
     }
 
@@ -333,5 +357,8 @@ public sealed class WeekViewModel : ObservableObject
 
         Raise(nameof(Title), nameof(WeekStart), nameof(WeekEnd),
               nameof(HourLabels), nameof(HourHeight), nameof(DayStartHour), nameof(TimelineHeight));
+
+        // 週や今日が変わると線の出る・出ないも変わる。次の更新を待たずに合わせる
+        if (_now is { } now) ApplyNowLine(now);
     }
 }

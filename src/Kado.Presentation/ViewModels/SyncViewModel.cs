@@ -130,6 +130,16 @@ public sealed class SyncViewModel : ObservableObject
     /// </summary>
     public event EventHandler? Cancelled;
 
+    /// <summary>
+    /// 中止・失敗で途中から抜けたが、そこまでに手元へ書き込んだかもしれないときに呼ばれる。
+    /// <para>
+    /// <see cref="Synced"/> は流さない（結果の報告が無く、<see cref="LastReport"/> は前回のまま）。
+    /// 画面はこれを受けて、書き込まれたぶんを読み直す。書き込んでいないと分かっているとき
+    /// （最初の通信の前に転んだだけ）は呼ばない。
+    /// </para>
+    /// </summary>
+    public event EventHandler? InterruptedAfterWrites;
+
     public SyncState State
     {
         get => _state;
@@ -476,11 +486,13 @@ public sealed class SyncViewModel : ObservableObject
         {
             State = SyncState.Idle;
             Cancelled?.Invoke(this, EventArgs.Empty);
+            RaiseInterruptedIfWritten();
         }
         catch (OAuthException ex)
         {
             // 更新トークンが死んでいたら繋ぎ直しが要る
             Fail(ex.IsRefreshTokenDead ? "繋ぎ直してください" : ex.Message);
+            RaiseInterruptedIfWritten();
         }
         catch (Exception ex)
         {
@@ -489,6 +501,7 @@ public sealed class SyncViewModel : ObservableObject
             // 想定していない転び方をしても、「同期中…」のまま固まらせない。型名は画面に出さない
             // （詳しい連鎖は GoogleConnection が shell.log に残している）
             Fail(GoogleFailure.Describe(ex, ex is HttpRequestException ? "ネットワークに繋がりません" : "同期できませんでした"));
+            RaiseInterruptedIfWritten();
         }
         finally
         {
@@ -500,6 +513,20 @@ public sealed class SyncViewModel : ObservableObject
             _syncCts = null;
             _cancelledByUser = false;
         }
+    }
+
+    /// <summary>
+    /// 途中で抜けた同期が、手元へ書き込んでいたかもしれなければ知らせる。
+    /// <para>
+    /// 件数の報告（<see cref="SyncReport"/>）は例外で失われるので、書いたかどうかは繋ぎの側
+    /// （<see cref="IGoogleSync.MayHaveWrittenBeforeInterruption"/>）に聞く。聞けないときは読み直す側に倒す。
+    /// </para>
+    /// </summary>
+    private void RaiseInterruptedIfWritten()
+    {
+        if (_google is { MayHaveWrittenBeforeInterruption: false }) return;
+
+        InterruptedAfterWrites?.Invoke(this, EventArgs.Empty);
     }
 
     private void RequestCancel()

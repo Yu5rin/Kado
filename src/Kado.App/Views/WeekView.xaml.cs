@@ -25,6 +25,20 @@ public partial class WeekView : UserControl
     {
         InitializeComponent();
         _settle = new Settle(ApplyViewportHeight);
+
+        // 設定の変更や年の出し方の切り替えで、週ビューの実体そのものが作り直される。作りたての
+        // 実体は既定の1時間の高さを持っていて、画面の大きさは変わらないので SizeChanged は
+        // 来ない。実体を受け取ったところで、いまの高さを測って渡す（月・年と同じ）
+        DataContextChanged += (_, _) => MeasureAgain();
+    }
+
+    /// <summary>いまの時間軸の高さを測り直して、すぐ ViewModel へ渡す。まだ大きさが無ければ何もしない。</summary>
+    private void MeasureAgain()
+    {
+        if (Timeline.ActualHeight <= 0) return;
+
+        _pendingViewportHeight = Timeline.ActualHeight;
+        _settle.Now();
     }
 
     /// <summary>終日レーンの予定を2回押すと開く。</summary>

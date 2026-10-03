@@ -43,4 +43,36 @@ public static class ClockChangeRules
     /// </para>
     /// </summary>
     public static bool ShouldSyncAfter(ClockChange change) => change is ClockChange.Resume;
+
+    /// <summary>
+    /// タイムゾーンと書式のキャッシュを捨てるか。時計を変えられたとき（タイムゾーンの変更を含む）と、
+    /// 復帰したとき（眠っているあいだに自動で変わっていることがある）。
+    /// </summary>
+    public static bool ShouldRefreshCaches(ClockChange change) =>
+        change is ClockChange.TimeChanged or ClockChange.Resume;
+}
+
+/// <summary>
+/// 時計・タイムゾーンまわりのキャッシュ。
+/// <para>
+/// .NET は <see cref="TimeZoneInfo.Local"/> と現在の <see cref="System.Globalization.CultureInfo"/> の
+/// 書式を最初に読んだ値のまま持ち続ける。トレイに常駐して何日も動くアプリは、
+/// タイムゾーンを変えられても（出張・夏時間・設定の変更）古いままの時刻で動いてしまう。
+/// 時計の変更を受けたら、これを呼んで捨てる。
+/// </para>
+/// </summary>
+public static class ClockCaches
+{
+    /// <summary>
+    /// タイムゾーンと、呼んだスレッドの現在のカルチャの書式のキャッシュを捨てる。
+    /// <para>
+    /// カルチャのほうは<b>呼んだスレッドのもの</b>に効く。画面のスレッドから呼ぶこと
+    /// （システムの通知が来るスレッドで呼んでも、画面のスレッドのカルチャには効かない）。
+    /// </para>
+    /// </summary>
+    public static void Refresh()
+    {
+        TimeZoneInfo.ClearCachedData();
+        System.Globalization.CultureInfo.CurrentCulture.ClearCachedData();
+    }
 }

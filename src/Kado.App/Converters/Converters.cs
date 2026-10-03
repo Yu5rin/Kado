@@ -8,6 +8,17 @@ using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Converters;
 
+/// <summary>
+/// 配色（<c>Application.Resources</c> の辞書）から色を引くコンバーターの目印。
+/// <para>
+/// 引いたブラシは、バインドの元の値が変わらない限り再評価されない。配色を当て直したあとは
+/// 前の配色のブラシが残るので、<c>ThemeBindingRefresh</c> がこの印の付いたコンバーターの
+/// バインドだけ結び直す。<b><c>TryFindResource</c> で色を引くコンバーターには必ず付ける</b>
+/// （<c>tests/Kado.App.Tests</c> が見張っている）。
+/// </para>
+/// </summary>
+public interface IThemeSensitiveConverter;
+
 /// <summary>true なら表示、false なら畳む。</summary>
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
@@ -59,7 +70,7 @@ public sealed class NullToVisibilityConverter : IValueConverter
 /// 見分けがつけば十分で、同じ名前なら常に同じ色になることのほうが大事。
 /// </para>
 /// </summary>
-public sealed class MilestoneBrushConverter : IValueConverter
+public sealed class MilestoneBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     /// <summary>面と文字、どちらを返すか。XAML から ConverterParameter で指定する。</summary>
     public const string FaceParameter = "Face";
@@ -126,7 +137,7 @@ public sealed class MilestoneBrushConverter : IValueConverter
 /// 予定は所属カレンダーの色。どちらなのかは印自身が持っている。
 /// </para>
 /// </summary>
-public sealed class DayMarkBrushConverter : IValueConverter
+public sealed class DayMarkBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     private static readonly MilestoneBrushConverter Milestones = new();
     private static readonly EventColorBrushConverter Events = new();
@@ -145,7 +156,7 @@ public sealed class DayMarkBrushConverter : IValueConverter
 }
 
 /// <summary>期限の強調度から文字色を引く。</summary>
-public sealed class DueEmphasisBrushConverter : IValueConverter
+public sealed class DueEmphasisBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         Application.Current?.TryFindResource(value switch
@@ -176,7 +187,7 @@ public sealed class EventTimeConverter : IValueConverter
 /// 既定のアクセント色に倒す。
 /// </para>
 /// </summary>
-public sealed class EventColorBrushConverter : IValueConverter
+public sealed class EventColorBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         ParseColor(value) is { } color
@@ -206,7 +217,7 @@ public sealed class EventColorBrushConverter : IValueConverter
 /// 予定の色から面のブラシを作る。
 /// <para>帯の色を薄く敷く。モックは rgba で 10〜12% の不透明度を使っている。</para>
 /// </summary>
-public sealed class EventColorFaceConverter : IValueConverter
+public sealed class EventColorFaceConverter : IValueConverter, IThemeSensitiveConverter
 {
     /// <summary>帯の色を敷くときの濃さ。モックの rgba(...,.1) 相当。</summary>
     private const byte FaceAlpha = 28;
@@ -347,7 +358,7 @@ public sealed class ShrinkWidthConverter : IValueConverter
 /// 隣の文字にも同じ内容を出してある。
 /// </para>
 /// </summary>
-public sealed class SyncStateBrushConverter : IValueConverter
+public sealed class SyncStateBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {

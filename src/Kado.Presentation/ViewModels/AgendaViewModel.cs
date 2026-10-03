@@ -141,12 +141,14 @@ public sealed class AgendaViewModel : ObservableObject
     private DateOnly _to;
     private DateOnly _selectedDate;
 
-    public AgendaViewModel(CalendarWorkspace workspace, DateOnly today, ICalendarSources sources)
+    // selected: 最初に印を付ける日。省けば今日。作り直すときに、選んでいた日を引き継ぐのに使う。
+    public AgendaViewModel(
+        CalendarWorkspace workspace, DateOnly today, ICalendarSources sources, DateOnly? selected = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _sources = sources ?? throw new ArgumentNullException(nameof(sources));
         _today = today;
-        _selectedDate = today;
+        _selectedDate = selected ?? today;
 
         Refresh();
     }
@@ -213,15 +215,57 @@ public sealed class AgendaViewModel : ObservableObject
     /// </summary>
     public event EventHandler<DateOnly>? ScrollRequested;
 
-    /// <summary>その日のあたりへ送る。</summary>
-    public void GoTo(DateOnly date) => ScrollRequested?.Invoke(this, date);
+    /// <summary>
+    /// 画面がまだ受け取っていないあいだに頼まれた、位置合わせの行き先。
+    /// <para>
+    /// 作った直後（日付をまたいで作り直したときなど）の依頼は、画面がこの実体を受け取る
+    /// 前に出てしまい、誰も聞いていない。捨てずに控えておき、画面が受け取ったときに
+    /// <see cref="TakePendingScroll"/> で引き取って動かす。
+    /// </para>
+    /// </summary>
+    private DateOnly? _pendingScroll;
 
-    /// <summary>今日のあたりへ送る。</summary>
-    public void GoToToday() => GoTo(_today);
+    /// <summary>その日のあたりへ送る。聞いている画面が無ければ、控えておく。</summary>
+    public void GoTo(DateOnly date)
+    {
+        if (ScrollRequested is null)
+        {
+            _pendingScroll = date;
+            return;
+        }
+
+        _pendingScroll = null;
+        ScrollRequested.Invoke(this, date);
+    }
+
+    /// <summary>
+    /// 画面が受け取る前に頼まれた位置合わせの行き先を返し、控えを消す。無ければ null。
+    /// </summary>
+    public DateOnly? TakePendingScroll()
+    {
+        var pending = _pendingScroll;
+        _pendingScroll = null;
+        return pending;
+    }
+
+    /// <summary>
+    /// 今日のあたりへ送り、選んでいる日の印も今日の行にする。
+    /// <para>送るだけだと、選んでいた日の行に印が前のまま残る。</para>
+    /// </summary>
+    public void GoToToday()
+    {
+        SelectedDate = _today;
+        GoTo(_today);
+    }
+
+    /// <summary>組み立てた回数（テスト用）。重い組み立てが余分に走っていないかを見る。</summary>
+    internal int RefreshCount { get; private set; }
 
     /// <summary>データを読み直して並べ直す。</summary>
     public void Refresh()
     {
+        RefreshCount++;
+
         var (from, to) = Span();
 
         _from = from;

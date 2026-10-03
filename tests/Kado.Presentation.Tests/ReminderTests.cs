@@ -85,6 +85,119 @@ public class ReminderTests
         Assert.Single(notifier.Sent);
     }
 
+    // ------------------------------------------------------------------
+    // 知らせた記録の片付け（朝のまとめとは切り離す）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 日が変わってから朝のまとめまでの間も予定は1回だけ知らせる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "早朝の打ち合わせ", Date = Today.AddDays(1),
+            StartTime = new TimeOnly(0, 40), EndTime = new TimeOnly(1, 0),
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        // 前の日の朝のまとめは済んでいる
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+        notifier.Sent.Clear();
+
+        // 日が変わった。まとめの時刻（8:00）までは、前の日の印のまま
+        service.Check(new DateTime(2026, 9, 25, 0, 31, 0));
+        service.Check(new DateTime(2026, 9, 25, 0, 32, 0));
+        service.Check(new DateTime(2026, 9, 25, 0, 33, 0));
+
+        Assert.Equal("早朝の打ち合わせ", notifier.Sent.Single().Title);
+    }
+
+    [Fact]
+    public void 日をまたぐ前に知らせた予定を0時過ぎに再び出さない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "夜更けの当番", Date = Today.AddDays(1),
+            StartTime = new TimeOnly(0, 5), EndTime = new TimeOnly(0, 30),
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 8, 0, 0));
+        notifier.Sent.Clear();
+
+        // 23:55 に知らせた（まだ前の日）
+        service.Check(new DateTime(2026, 9, 24, 23, 55, 0));
+        Assert.Single(notifier.Sent);
+
+        // 日が変わっても、同じ予定をもう一度は出さない
+        service.Check(new DateTime(2026, 9, 25, 0, 0, 0));
+        service.Check(new DateTime(2026, 9, 25, 0, 1, 0));
+
+        Assert.Single(notifier.Sent);
+    }
+
+    [Fact]
+    public void 朝のまとめを切っていても知らせた記録は溜まり続けない()
+    {
+        using var test = TestWorkspace.Create();
+        var (_, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+            s.SummaryEnabled = false;
+        });
+
+        // 10日分、毎日1件ずつ知らせる
+        for (var day = 0; day < 10; day++)
+        {
+            var date = Today.AddDays(day);
+            test.Workspace.AddEvent(new CalendarEvent
+            {
+                Id = $"e{day}", Title = "定例", Date = date,
+                StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(11, 0),
+            });
+
+            service.Check(date.ToDateTime(new TimeOnly(9, 51)));
+        }
+
+        // 昨日より前の記録は捨てる。残るのは昨日と今日のぶんだけ
+        Assert.True(service.NotifiedCount <= 2, $"記録が {service.NotifiedCount} 件残っている");
+    }
+
+    [Fact]
+    public void 予定ごとの通知の確認でカレンダー一覧を何度も読まない()
+    {
+        using var test = TestWorkspace.Create();
+        for (var i = 0; i < 5; i++) AddEvent(test, $"e{i}", new TimeOnly(10, 0), $"会議{i}");
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+        });
+
+        using var counter = SqlCounter.Attach(test.Connection);
+        service.Check(new DateTime(2026, 9, 24, 9, 51, 0));
+
+        Assert.Equal(5, notifier.Sent.Count);
+        Assert.Equal(1, counter.CalendarReads);
+    }
+
     [Fact]
     public void 始まってしまった予定は知らせない()
     {

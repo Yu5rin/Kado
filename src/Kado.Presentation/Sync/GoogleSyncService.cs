@@ -39,6 +39,21 @@ public sealed class GoogleSyncService(
     public bool IsRunning { get; private set; }
 
     /// <summary>
+    /// 直前の同期が途中で止まった（中止・失敗の例外で抜けた）とき、止まるまでに手元へ
+    /// 書き込んだかもしれないか。
+    /// <para>
+    /// 同期は別の接続で書くので、画面は自分では気づけない。最初の通信（カレンダー一覧）が
+    /// 返ってくる前に転んだなら false（何も書いていない。回線が無いだけの失敗でいちいち
+    /// 画面を読み直さない）。それより先は、書いたかもしれない側に倒して true にする。
+    /// 件数まで数える必要は無い。分からないときは読み直すほうが安全。
+    /// </para>
+    /// </summary>
+    public bool MayHaveWrittenBeforeInterruption { get; private set; }
+
+    /// <summary>ここから先は、手元へ書き込むかもしれない（<see cref="MayHaveWrittenBeforeInterruption"/>）。</summary>
+    private void MarkMayHaveWritten() => MayHaveWrittenBeforeInterruption = true;
+
+    /// <summary>
     /// 一度だけ同期する。
     /// <para>すでに走っていれば何もせず null を返す。二重に走らせない。</para>
     /// </summary>
@@ -47,9 +62,13 @@ public sealed class GoogleSyncService(
         if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return null;
 
         IsRunning = true;
+        MayHaveWrittenBeforeInterruption = false;
         try
         {
             var report = await ImportCalendarListAsync(cancellationToken).ConfigureAwait(false);
+
+            // 一覧が返ってきたあとは、どこで止まっても書き込み済みかもしれない
+            MarkMayHaveWritten();
 
             // 呼びすぎと言われた（待って出し直してもだめだった）。このまま各カレンダーを叩くと
             // かえって混むので、ここで止めて次回に回す
@@ -287,6 +306,8 @@ public sealed class GoogleSyncService(
 
             return new SyncReport
             {
+                // 転ぶまでのぶんは手元に入っているかもしれない（件数は戻ってこない）
+                MayHaveWritten = true,
                 Deferred = true,
                 Throttled = ex.IsRateLimited,
                 Warnings = [SyncReport.BusyWarning],
@@ -298,6 +319,7 @@ public sealed class GoogleSyncService(
 
             return new SyncReport
             {
+                MayHaveWritten = true,
                 Warnings = [$"「{name}」を同期できません（{GoogleFailure.Describe(ex, ex.Reason)}）"],
             };
         }
@@ -307,6 +329,7 @@ public sealed class GoogleSyncService(
 
             return new SyncReport
             {
+                MayHaveWritten = true,
                 Warnings = [$"「{name}」に繋がりません（{GoogleFailure.Describe(ex, "通信できませんでした")}）"],
             };
         }
@@ -324,6 +347,7 @@ public sealed class GoogleSyncService(
 
             return new SyncReport
             {
+                MayHaveWritten = true,
                 Warnings = [$"「{name}」で想定外の失敗が起きました（詳細は shell.log に残しました）"],
             };
         }
@@ -366,6 +390,9 @@ public sealed class GoogleSyncService(
             do
             {
                 var page = await calendars.ListCalendarsAsync(pageToken, cancellationToken).ConfigureAwait(false);
+
+                // 最初のページが返ってきた。以後は書き込みが始まる
+                MarkMayHaveWritten();
 
                 foreach (var item in page.Items)
                 {
@@ -778,6 +805,8 @@ public sealed class GoogleSyncService(
             do
             {
                 var page = await tasks.ListTaskListsAsync(pageToken, cancellationToken).ConfigureAwait(false);
+
+                MarkMayHaveWritten();
 
                 foreach (var item in page.Items)
                 {
