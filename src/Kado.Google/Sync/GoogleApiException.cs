@@ -67,6 +67,15 @@ public sealed class GoogleApiException(HttpStatusCode status, string reason, str
     /// <summary>相手にもう無い。消えたものとして扱う。</summary>
     public bool IsMissing => Status == HttpStatusCode.NotFound;
 
+    /// <summary>
+    /// 権限が無くて断られた（読み取り専用になった、主催者でない、など）。出し直しても通らない。
+    /// <para>呼びすぎ・容量の上限による 403（<see cref="IsRateLimited"/>）は含めない。</para>
+    /// </summary>
+    public bool IsPermissionDenied =>
+        Status == HttpStatusCode.Forbidden &&
+        !IsRateLimited &&
+        !Reason.Contains("uota", StringComparison.Ordinal);
+
     /// <summary>出し直せば直る見込みがあるか。</summary>
     public bool IsTransient =>
         IsRateLimited ||

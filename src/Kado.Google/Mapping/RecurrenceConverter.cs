@@ -162,6 +162,23 @@ public static class RecurrenceConverter
     }
 
     /// <summary>
+    /// <paramref name="source"/> が持つ除外日（<c>EXDATE=</c>）を、<paramref name="rule"/> に付ける。
+    /// <para>
+    /// 編集画面が繰り返しを選び直す（曜日の追従など）とき、手元で足した除外日を失わないために使う。
+    /// 除外日が無ければ <paramref name="rule"/> のまま。
+    /// </para>
+    /// </summary>
+    public static string? CopyExceptionDates(string? rule, string? source)
+    {
+        if (string.IsNullOrWhiteSpace(rule) || string.IsNullOrWhiteSpace(source)) return rule;
+
+        var part = source.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(p => p.StartsWith("EXDATE=", StringComparison.OrdinalIgnoreCase));
+
+        return part is null ? rule : $"{rule};{part}";
+    }
+
+    /// <summary>
     /// 書き戻す recurrence の行を組み立てる。
     /// <para>
     /// 使う人が RRULE そのものを変えていなければ、Google 側にある元の行
@@ -183,7 +200,13 @@ public static class RecurrenceConverter
     /// Google 側の元の recurrence 行。新規作成でまだ無い、またはこの予定がまだ
     /// 繰り返しでなかったときは null。
     /// </param>
-    public static IReadOnlyList<string> BuildOutgoing(string? localSpec, IReadOnlyList<string>? originalLines)
+    /// <param name="startChange">
+    /// 系列の開始時刻を変えて送るときの、前後の開始時刻。<b>変えていなければ null</b> で、
+    /// そのときは元の行を一字一句そのまま使う。変えているときは、時刻つきの EXDATE の
+    /// 時刻部分を新しい開始時刻に合わせて書き直す（<see cref="RetimeExceptionLines"/>）。
+    /// </param>
+    public static IReadOnlyList<string> BuildOutgoing(
+        string? localSpec, IReadOnlyList<string>? originalLines, SeriesStartChange? startChange = null)
     {
         var ruleOnly = WithoutExceptionDates(localSpec);
         if (ruleOnly is null) return [];
@@ -194,20 +217,169 @@ public static class RecurrenceConverter
             var originalRuleText = originalRuleLine is not null ? After(originalRuleLine, ':') : null;
 
             // 変えていない。元の並び・書式をそのまま使う（本物の EXDATE も含め）。
-            // こうすると書き戻す内容が控えた姿と一字一句一致し、送る必要も無くなる
+            // こうすると書き戻す内容が控えた姿と一字一句一致し、送る必要も無くなる。
+            // ただし開始時刻を変えたときは、時刻つきの EXDATE が新しい回と合わなくなるので直す
             if (originalRuleText is not null && string.Equals(originalRuleText, ruleOnly, StringComparison.Ordinal))
             {
-                return originalLines;
+                return startChange is { } change ? RetimeExceptionLines(originalLines, change) : originalLines;
             }
 
             // RRULE を変えた。新しい RRULE と、元にあった EXDATE 行だけを組み合わせる
             var merged = new List<string> { $"RRULE:{ruleOnly}" };
             merged.AddRange(originalLines.Where(line => LineName(line) == "EXDATE"));
-            return merged;
+
+            return startChange is { } moved ? RetimeExceptionLines(merged, moved) : merged;
         }
 
         // Google 側にまだ recurrence が無い（新規作成、またはいま繰り返しにした）
         return [$"RRULE:{ruleOnly}"];
+    }
+
+    /// <summary>系列の開始時刻の、変える前と後。</summary>
+    /// <param name="Before">最後に Google から受け取った開始（時差つき）。</param>
+    /// <param name="After">これから送る開始（時差つき）。</param>
+    public readonly record struct SeriesStartChange(DateTimeOffset Before, DateTimeOffset After);
+
+    /// <summary>
+    /// 時刻つきの EXDATE の時刻部分を、新しい開始時刻に合わせて書き直す。
+    /// <para>
+    /// 系列の開始時刻を変えると、元の <c>EXDATE;TZID=…:20261005T090000</c> がそのままでは
+    /// 新しい回（10:00 の回）と合わず、除外が外れて中止した回が復活する。<b>日付はそのまま</b>、
+    /// 時刻だけを新しい開始時刻（その EXDATE の時差で見た時刻）にする。TZID と書式（区切り・
+    /// 末尾の <c>Z</c>）は保つ。終日の EXDATE（<c>VALUE=DATE</c>・日付だけ）は触らない。
+    /// その時差で見た開始時刻が前後で同じなら、行は一字一句そのまま。
+    /// </para>
+    /// </summary>
+    private static List<string> RetimeExceptionLines(IReadOnlyList<string> lines, SeriesStartChange change) =>
+        lines.Select(line => LineName(line) == "EXDATE" ? RetimeExceptionLine(line, change) : line).ToList();
+
+    private static string RetimeExceptionLine(string line, SeriesStartChange change)
+    {
+        var colon = line.IndexOf(':');
+        if (colon < 0 || colon + 1 >= line.Length) return line;
+
+        var head = line[..colon];
+        var values = line[(colon + 1)..];
+
+        // 終日の指定は触らない
+        if (head.Contains("VALUE=DATE", StringComparison.OrdinalIgnoreCase) &&
+            !head.Contains("VALUE=DATE-TIME", StringComparison.OrdinalIgnoreCase))
+        {
+            return line;
+        }
+
+        TimeZoneInfo? zone = null;
+        var tzid = head.Split(';')
+            .Select(part => part.Trim())
+            .FirstOrDefault(part => part.StartsWith("TZID=", StringComparison.OrdinalIgnoreCase));
+        if (tzid is not null) zone = FindZone(tzid["TZID=".Length..].Trim('"'));
+
+        var changed = false;
+
+        var rewritten = values.Split(',').Select(raw =>
+        {
+            var value = raw.Trim();
+
+            // 日付だけの値は触らない
+            if (value.Length < 15 || value[8] != 'T') return raw;
+
+            var isUtc = value.EndsWith('Z');
+            // その値が置かれている時差で見た、開始時刻の前後
+            TimeSpan old, now;
+            if (isUtc)
+            {
+                (old, now) = (change.Before.UtcDateTime.TimeOfDay, change.After.UtcDateTime.TimeOfDay);
+            }
+            else if (zone is not null)
+            {
+                (old, now) = (TimeZoneInfo.ConvertTime(change.Before, zone).TimeOfDay,
+                              TimeZoneInfo.ConvertTime(change.After, zone).TimeOfDay);
+            }
+            else
+            {
+                // 時差の指定が無い（または読めない）値は、開始が持つ時差のままの時刻と見る
+                (old, now) = (change.Before.TimeOfDay, change.After.TimeOfDay);
+            }
+
+            // 開始時刻（時・分・秒）が変わっていなければ、そのまま
+            if (old == now) return raw;
+
+            changed = true;
+
+            return value[..9] + $"{now.Hours:D2}{now.Minutes:D2}{now.Seconds:D2}" + (isUtc ? "Z" : string.Empty);
+        }).ToArray();
+
+        return changed ? $"{head}:{string.Join(',', rewritten)}" : line;
+    }
+
+    private static TimeZoneInfo? FindZone(string id)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException
+                                       or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 受け取った指定に、手元だけで足した除外日を引き継ぐ。
+    /// <para>
+    /// 例外回（動かした回・中止した回）のために、取り込みは親の指定へ <c>EXDATE=</c> を足す。
+    /// Google の親は EXDATE を持たないので、親を送った応答や取り込み直した姿にはそれが無く、
+    /// そのまま置き換えると除外が消える。<b>引き継ぐのは、前に Google から受け取った行に
+    /// 無かった除外日</b>（<paramref name="previousGoogleLines"/> と比べて決める）だけ。
+    /// Google 側が外した除外日までは残さない。
+    /// </para>
+    /// </summary>
+    /// <param name="incoming">いま届いた姿から読んだ指定。null（外れている・表せない）なら何もしない。</param>
+    /// <param name="previousLocal">手元にあった指定（手元で足した除外日を含みうる）。</param>
+    /// <param name="previousGoogleLines">前に Google から受け取った recurrence 行。</param>
+    public static string? KeepLocalExceptionDates(
+        string? incoming, string? previousLocal, IReadOnlyList<string>? previousGoogleLines)
+    {
+        if (string.IsNullOrWhiteSpace(incoming) || string.IsNullOrWhiteSpace(previousLocal)) return incoming;
+
+        var known = ExceptionDatesOf(previousGoogleLines is { Count: > 0 } ? FromGoogle(previousGoogleLines) : null);
+        var current = ExceptionDatesOf(incoming);
+
+        var result = incoming;
+
+        foreach (var date in ExceptionDatesOf(previousLocal))
+        {
+            if (known.Contains(date) || current.Contains(date)) continue;
+
+            result = WithExceptionDate(result, date);
+        }
+
+        return result;
+    }
+
+    /// <summary>指定に含まれる除外日（<c>EXDATE=</c>）の一覧。</summary>
+    private static HashSet<DateOnly> ExceptionDatesOf(string? spec)
+    {
+        var result = new HashSet<DateOnly>();
+        if (string.IsNullOrWhiteSpace(spec)) return result;
+
+        foreach (var part in spec.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!part.StartsWith("EXDATE=", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var value in part["EXDATE=".Length..]
+                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (DatePart(value) is { } text && DateOnly.TryParseExact(
+                        text, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                {
+                    result.Add(date);
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>行の名前（<c>RRULE</c>・<c>EXDATE</c> など）。</summary>

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kado.Data.Models;
@@ -35,11 +36,22 @@ public interface IEventGateway
     Task<JsonElement> MoveAsync(
         string sourceCalendarId, string eventId, string destinationCalendarId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 全件を取るときの期間の始まり（<c>timeMin</c>）。無ければ全期間。
+    /// <para>
+    /// 全件を取り直したときに「一覧に無いから消えた」と判断してよいのは、この期間の予定だけ。
+    /// 取っていない期間の予定まで消さないために、同期の側が見る。
+    /// </para>
+    /// </summary>
+    DateTimeOffset? ListFrom => null;
 }
 
 /// <summary><see cref="GoogleCalendarApi"/> を上の口に合わせる。</summary>
 public sealed class CalendarApiGateway(GoogleCalendarApi api, DateTimeOffset? from = null) : IEventGateway
 {
+    public DateTimeOffset? ListFrom => from;
+
     public Task<GooglePage> ListAsync(
         string calendarId, string? syncToken, string? pageToken, CancellationToken cancellationToken) =>
         api.ListEventsAsync(calendarId, syncToken, pageToken, from, cancellationToken);
@@ -147,7 +159,7 @@ public sealed class EventSyncEngine(
                 tombstones.Clear(tombstone.Id, TombstoneRepository.EventKind);
                 deleted++;
             }
-            catch (GoogleApiException ex) when (ex.IsMissing)
+            catch (GoogleApiException ex) when (ex.IsMissing || ex.Status == HttpStatusCode.Gone)
             {
                 // このカレンダーには無い。持ち主が分かっているなら、すでに消えている
                 // ということなので記録を片付ける。
@@ -160,10 +172,22 @@ public sealed class EventSyncEngine(
                     tombstones.Clear(tombstone.Id, TombstoneRepository.EventKind);
                 }
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsPermissionDenied)
             {
-                // 次の同期で出し直す。記録は残す
-                warnings.Add($"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason}");
+                // 権限が無い（読み取り専用になった、主催者でない、など）。出し直しても通らないので、
+                // 記録を残すと同期のたびに同じ失敗を繰り返す。捨てて、使う人には知らせる
+                tombstones.Clear(tombstone.Id, TombstoneRepository.EventKind);
+                warnings.Add(
+                    $"権限が無いため、Google 側の予定を削除できません（{tombstone.Id}）: {ex.Reason}。" +
+                    "手元からは消えていますが、Google には残っています");
+            }
+            catch (GoogleApiException ex)
+            {
+                // 呼びすぎ・サーバー側の不調と、その他の 4xx。1件の削除が断られただけで、
+                // このカレンダーの取り込みも送信も止めない。記録は残し、次の同期でやり直す
+                warnings.Add(ex.Description is { Length: > 0 } detail
+                    ? $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason} — {detail}"
+                    : $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason}");
             }
         }
 
@@ -180,20 +204,28 @@ public sealed class EventSyncEngine(
         var token = settings.GetSyncState(TokenKey(calendarId));
         var fullResync = false;
 
+        // 印が無い（初回・繋ぎ直し・印を捨てた）ときも、全件を取る。差分と違い、消えた予定は
+        // cancelled では降ってこない（showDeleted=false）ので、一覧に無いことで見つける
+        var fullListing = token is not { Length: > 0 };
+
         List<JsonElement> items;
         string? nextToken;
+        bool complete;
 
         try
         {
-            (items, nextToken) = await ReadAllPagesAsync(calendarId, token, cancellationToken).ConfigureAwait(false);
+            (items, nextToken, complete) =
+                await ReadAllPagesAsync(calendarId, token, cancellationToken).ConfigureAwait(false);
         }
         catch (GoogleApiException ex) when (ex.NeedsFullResync)
         {
             // 差分では追いつけない。印を捨てて全部取り直す（要件書 6.3）
             fullResync = true;
+            fullListing = true;
             settings.SetSyncState(TokenKey(calendarId), string.Empty);
 
-            (items, nextToken) = await ReadAllPagesAsync(calendarId, null, cancellationToken).ConfigureAwait(false);
+            (items, nextToken, complete) =
+                await ReadAllPagesAsync(calendarId, null, cancellationToken).ConfigureAwait(false);
         }
 
         var created = 0;
@@ -304,6 +336,14 @@ public sealed class EventSyncEngine(
             }
         }
 
+        // 全件を取り直したのに、一覧に無い（Google で消えた）予定を片付ける。
+        // 一覧を最後まで読めたときだけ行う。途中で打ち切った一覧で見ると、読めなかっただけの
+        // 予定を消してしまう
+        if (fullListing && complete)
+        {
+            deleted += RemoveVanished(calendarId, localCalendarId, items, warnings);
+        }
+
         if (nextToken is { Length: > 0 }) settings.SetSyncState(TokenKey(calendarId), nextToken);
 
         return new SyncReport
@@ -409,12 +449,13 @@ public sealed class EventSyncEngine(
         return [message];
     }
 
-    private async Task<(List<JsonElement> Items, string? NextSyncToken)> ReadAllPagesAsync(
+    private async Task<(List<JsonElement> Items, string? NextSyncToken, bool Complete)> ReadAllPagesAsync(
         string calendarId, string? syncToken, CancellationToken cancellationToken)
     {
         var items = new List<JsonElement>();
         string? pageToken = null;
         string? nextSyncToken = null;
+        var complete = false;
 
         for (var page = 0; page < MaxPages; page++)
         {
@@ -430,10 +471,129 @@ public sealed class EventSyncEngine(
             if (result.NextSyncToken is { Length: > 0 }) nextSyncToken = result.NextSyncToken;
 
             pageToken = result.NextPageToken;
-            if (pageToken is not { Length: > 0 }) break;
+
+            if (pageToken is not { Length: > 0 })
+            {
+                complete = true;
+                break;
+            }
         }
 
-        return (items, nextSyncToken);
+        return (items, nextSyncToken, complete);
+    }
+
+    /// <summary>
+    /// 全件を取り直した一覧に無い、Google と結び付いた予定を片付ける。
+    /// <para>
+    /// syncToken の期限切れ（410）や繋ぎ直しで全件を取り直すと、その間に Google で消えた予定は
+    /// <c>cancelled</c> で降ってこない。手元に残ったままになる。
+    /// </para>
+    /// <para>
+    /// <b>消してよいのは、一覧が取った範囲の予定だけ。</b>期間を切って取っているとき
+    /// （<see cref="IEventGateway.ListFrom"/>）、それより前の予定は一覧に載らないだけで消えていない。
+    /// 繰り返しは、その期間に届くとはっきり言えるものだけ見る。
+    /// </para>
+    /// <para>
+    /// 未送信の変更があるものは消さない。Google で見つからない印（<see cref="CalendarEvent.GoogleMissing"/>）を
+    /// 付けて残し、警告に出す（以後は黙って作り直さない）。
+    /// </para>
+    /// </summary>
+    /// <returns>手元から消した件数。</returns>
+    private int RemoveVanished(
+        string calendarId, string localCalendarId, List<JsonElement> listed, List<string> warnings)
+    {
+        var listedIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in listed)
+        {
+            if (GoogleJson.Text(item, "id") is { } id) listedIds.Add(id);
+        }
+
+        var from = gateway.ListFrom;
+        var removed = 0;
+        var kept = new List<string>();
+
+        foreach (var value in events.All())
+        {
+            if (value.GoogleEventId is not { Length: > 0 } googleId) continue;
+            if (listedIds.Contains(googleId) || value.GoogleMissing) continue;
+            if (!LivesIn(value, calendarId, localCalendarId)) continue;
+            if (!IsWithinListedRange(value, from)) continue;
+
+            // 未送信の変更（内容・添付・別のカレンダーへ移す指示）があるなら、捨てない
+            if (HasUnsentChanges(value) || NeedsMove(value, calendarId))
+            {
+                events.Upsert(value with { GoogleMissing = true });
+                kept.Add(value.Title is { Length: > 0 } title ? title : "(無題)");
+                continue;
+            }
+
+            if (events.Delete(value.Id)) removed++;
+        }
+
+        if (kept.Count > 0)
+        {
+            const int maxNamed = 3;
+            var named = string.Concat(kept.Take(maxNamed).Select(title => $"「{title}」"));
+
+            warnings.Add(
+                (kept.Count > maxNamed ? $"{named}ほか{kept.Count - maxNamed}件" : named) +
+                "は Google で見つかりません。まだ送っていない変更があるため残し、以後は送りません" +
+                "（編集画面から「Google に新しく作り直す」を選べます）");
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    /// Google 側でいま実際にこのカレンダーにある予定か。
+    /// 場所をまだ確かめていない旧いデータは、入れ先の希望で見る。
+    /// </summary>
+    private static bool LivesIn(CalendarEvent value, string calendarId, string localCalendarId) =>
+        value.GoogleCalendarId is { Length: > 0 } actual
+            ? string.Equals(actual, calendarId, StringComparison.Ordinal)
+            : string.Equals(value.CalendarId, localCalendarId, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 一覧が取った範囲に、この予定が入っているはずか。
+    /// <para>
+    /// 期間を切っていなければ、すべて入っている。切っているときは、終わりがその期間より後の
+    /// 予定（Google の <c>timeMin</c> は「終了時刻がこれより後」）。日付の境目の揺れを見て、
+    /// 前後1日ぶんは余裕を持たせて「入っていない」側に倒す。
+    /// </para>
+    /// </summary>
+    private static bool IsWithinListedRange(CalendarEvent value, DateTimeOffset? from)
+    {
+        if (from is not { } start) return true;
+
+        var limit = DateOnly.FromDateTime(start.UtcDateTime).AddDays(2);
+
+        // 繰り返しは、期間に届くとはっきり言えるものだけ。Kado で表せない繰り返しは判断できない
+        if (value.IsRecurring) return RecurrenceReaches(value.Recurrence!, limit);
+        if (EventMapper.HoldsUnrepresentableRecurrence(value)) return false;
+
+        return value.LastDate >= limit;
+    }
+
+    /// <summary>繰り返しが、その日以降にも続くか。回数で終わるものは数えられないので false。</summary>
+    private static bool RecurrenceReaches(string spec, DateOnly limit)
+    {
+        foreach (var part in spec.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.StartsWith("COUNT=", StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (part.StartsWith("UNTIL=", StringComparison.OrdinalIgnoreCase))
+            {
+                var text = part["UNTIL=".Length..];
+
+                return text.Length >= 8 && DateOnly.TryParseExact(
+                           text[..8], "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture,
+                           System.Globalization.DateTimeStyles.None, out var until)
+                       && until >= limit;
+            }
+        }
+
+        // 終わりが無い
+        return true;
     }
 
     /// <summary>
@@ -538,44 +698,71 @@ public sealed class EventSyncEngine(
                 {
                     var current = value;
 
+                    // 内容の変更を送る先。ふつうはこのカレンダー。移せなかったときは、いま実際に
+                    // いる元のカレンダーに送る
+                    var patchCalendar = calendarId;
+                    var patchLocalCalendar = localCalendarId;
+
                     if (NeedsMove(current, calendarId))
                     {
                         var origin = current.GoogleCalendarId!;
 
-                        if (EventMapper.IsRecurringInstance(current))
+                        // 移せない予定（繰り返しの1回だけの回・他人が主催する予定・default 以外の種類）は、
+                        // 送っても断られるだけ。同期のたびに失敗しないよう、希望を実際の場所へ戻す。
+                        // 一緒に直した内容は、そのまま元のカレンダーへ PATCH で送る
+                        var blocked = EventMapper.MoveBlockReason(current);
+                        string? refused = null;
+                        JsonElement? movedElement = null;
+
+                        if (blocked is null)
                         {
-                            // 繰り返しのうち1回だけの回は、Google でもカレンダーを移せない。
-                            // 編集画面で止めているはずだが、ここまで来た分は壊さない側に倒し、
-                            // こちらの希望（入れ先）を実際の場所へ戻す
-                            events.Upsert(current with { CalendarId = origin, UpdatedAt = now });
-                            warnings.Add(
-                                $"繰り返しの1回だけの予定はカレンダーを移せません（{current.Title}）。" +
-                                "元のカレンダーのままにしました");
-                            continue;
+                            try
+                            {
+                                // 消して作り直すと、ゲスト・会議 URL・添付・色が落ちる。move で運ぶ
+                                movedElement = await gateway
+                                    .MoveAsync(origin, googleId, calendarId, cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            catch (GoogleApiException ex) when (!ex.IsMissing && !ex.IsTransient)
+                            {
+                                // 断られた（主催者でない、など）。出し直しても通らない。
+                                // 警告にして希望を戻し、内容の送信は止めない
+                                refused = ex.Reason;
+                            }
                         }
 
-                        // 消して作り直すと、ゲスト・会議 URL・添付・色が落ちる。move で運ぶ
-                        var movedElement = await gateway
-                            .MoveAsync(origin, googleId, calendarId, cancellationToken)
-                            .ConfigureAwait(false);
-
-                        // move の応答は「移った」ことだけを表し、本文（タイトルなど）は
-                        // 移す前のまま。ここでまるごと FromGoogle に通すと、まだ送れていない
-                        // 内容の変更（このあと patch で送るはずのもの）を上書きしてしまうので、
-                        // 場所に関する項目だけを取り込む
-                        var atDestination = EventMapper.FromGoogle(movedElement, localCalendarId, current, now, calendarId);
-                        current = current with
+                        if (movedElement is { } moved1)
                         {
-                            GoogleEventId = atDestination.GoogleEventId,
-                            GoogleCalendarId = atDestination.GoogleCalendarId,
-                            GoogleRaw = atDestination.GoogleRaw,
-                            GoogleUpdated = atDestination.GoogleUpdated,
-                            UpdatedAt = now,
-                        };
-                        events.Upsert(current);
-                        moved++;
+                            // move の応答は「移った」ことだけを表し、本文（タイトルなど）は
+                            // 移す前のまま。ここでまるごと FromGoogle に通すと、まだ送れていない
+                            // 内容の変更（このあと patch で送るはずのもの）を上書きしてしまうので、
+                            // 場所に関する項目だけを取り込む
+                            var atDestination = EventMapper.FromGoogle(moved1, localCalendarId, current, now, calendarId);
+                            current = current with
+                            {
+                                GoogleEventId = atDestination.GoogleEventId,
+                                GoogleCalendarId = atDestination.GoogleCalendarId,
+                                GoogleRaw = atDestination.GoogleRaw,
+                                GoogleUpdated = atDestination.GoogleUpdated,
+                                UpdatedAt = now,
+                            };
+                            events.Upsert(current);
+                            moved++;
 
-                        // ほかに変えた項目があれば、このあと続けて patch で送る
+                            // ほかに変えた項目があれば、このあと続けて patch で送る
+                        }
+                        else
+                        {
+                            current = current with { CalendarId = origin, UpdatedAt = now };
+                            events.Upsert(current);
+                            patchCalendar = origin;
+                            patchLocalCalendar = origin;
+
+                            warnings.Add(blocked is not null
+                                ? $"{blocked}（{current.Title}）。元のカレンダーのままにしました"
+                                : $"Google に断られたため、カレンダーを移せませんでした（{current.Title}）: {refused}。" +
+                                  "元のカレンダーのままにしました");
+                        }
                     }
 
                     if (EventMapper.NeedsPush(current))
@@ -583,11 +770,11 @@ public sealed class EventSyncEngine(
                         var body = EventMapper.ToGoogle(current);
 
                         var patched = await gateway
-                            .PatchAsync(calendarId, googleId, body, cancellationToken)
+                            .PatchAsync(patchCalendar, googleId, body, cancellationToken)
                             .ConfigureAwait(false);
 
                         // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため
-                        events.Upsert(EventMapper.FromGoogle(patched, localCalendarId, current, now, calendarId));
+                        events.Upsert(EventMapper.FromGoogle(patched, patchLocalCalendar, current, now, patchCalendar));
                         updated++;
                     }
                 }

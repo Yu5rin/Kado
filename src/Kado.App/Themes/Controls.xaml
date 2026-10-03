@@ -727,6 +727,18 @@
                                   ToolTip="新しい予定はここに入ります"
                                   Visibility="Collapsed" />
 
+                            <!--
+                                「Google から外れた」カレンダー／タスクリストの印。一覧から消えたが、まだ
+                                送っていない中身を残してある。説明はツールチップに出す
+                            -->
+                            <TextBlock x:Name="StatusMark" DockPanel.Dock="Right"
+                                       Text="{Binding StatusMarkText}" Margin="4,0,0,0"
+                                       VerticalAlignment="Center" FontSize="10.5"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       ToolTip="{Binding StatusNote}"
+                                       Visibility="{Binding HasStatusNote,
+                                                    Converter={StaticResource BoolToVisibility}}" />
+
                             <TextBlock x:Name="Label" Text="{Binding Name}"
                                        VerticalAlignment="Center"
                                        Foreground="{TemplateBinding Foreground}"

@@ -477,12 +477,17 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <see cref="CalendarLockReason"/> に出す。
     /// </para>
     /// </summary>
-    public bool CanChangeCalendar => _original is null || !EventMapper.IsRecurringInstance(_original);
+    public bool CanChangeCalendar => CalendarLockReason is null;
 
-    /// <summary>カレンダー欄を変えられない理由。変えられるなら null。</summary>
-    public string? CalendarLockReason => CanChangeCalendar
-        ? null
-        : "繰り返しの1回だけを差し替えた予定は、カレンダーを移せません（Google 側の制約）";
+    /// <summary>
+    /// カレンダー欄を変えられない理由。変えられるなら null。
+    /// <para>
+    /// 繰り返しの1回だけの回、他人が主催する予定、種類が default 以外（集中時間・不在・勤務場所・
+    /// メールから作られた予定）は、Google の move が受け付けない。変えさせても同期のたびに
+    /// 断られるだけなので、ここで止めて理由を出す（<see cref="EventMapper.MoveBlockReason"/>）。
+    /// </para>
+    /// </summary>
+    public string? CalendarLockReason => _original is null ? null : EventMapper.MoveBlockReason(_original);
 
     // ------------------------------------------------------------------
     // 添付。Google 連携のカレンダーの予定だけが対象（Google Tasks には無い機能）
@@ -571,14 +576,32 @@ public sealed class EventEditorViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(attachment);
 
         if (!CanUseAttachments) return;
-        if (!_attachments.Any(a => string.Equals(a.FileId, attachment.FileId, StringComparison.Ordinal))) return;
+        if (!_attachments.Any(a => SameAttachment(a, attachment))) return;
 
         _attachments = _attachments
-            .Where(a => !string.Equals(a.FileId, attachment.FileId, StringComparison.Ordinal))
+            .Where(a => !SameAttachment(a, attachment))
             .ToList();
         _attachmentsDirty = true;
 
         Raise(nameof(Attachments), nameof(CanAddAttachment));
+    }
+
+    /// <summary>
+    /// 同じ添付か。<b>fileUrl で見分ける</b>（無ければ fileId と題の組）。
+    /// <para>
+    /// fileId だけで見ると、ドライブ以外の添付など fileId を持たないもの（空文字どうし）が
+    /// すべて「同じ」になり、1件外しただけでほかの添付まで一緒に外れる。
+    /// </para>
+    /// </summary>
+    private static bool SameAttachment(EventAttachment left, EventAttachment right)
+    {
+        if (left.FileUrl is { Length: > 0 } && right.FileUrl is { Length: > 0 })
+        {
+            return string.Equals(left.FileUrl, right.FileUrl, StringComparison.Ordinal);
+        }
+
+        return string.Equals(left.FileId, right.FileId, StringComparison.Ordinal) &&
+               string.Equals(left.Title, right.Title, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -691,6 +714,10 @@ public sealed class EventEditorViewModel : ObservableObject
             Location = Blank(_location),
             Note = Blank(_note),
             Url = Blank(_url),
+
+            // 受け取った source.title は編集画面で触らない。引き継がないと、保存のたびに
+            // 予定の題が source.title として送られる（EventMapper.ToGoogle を見よ）
+            SourceTitle = _original?.SourceTitle,
             CalendarId = _calendarId,
             Notify = _notify,
 
@@ -698,10 +725,13 @@ public sealed class EventEditorViewModel : ObservableObject
             // 取り込んだ予定が持っている色は、上書きせずそのまま残す
             Color = _original?.Color,
 
-            // 選択肢で表せない指定は、元の文字列をそのまま持ち続ける
+            // 選択肢で表せない指定は、元の文字列をそのまま持ち続ける。
+            // 選択肢にある指定は日付から作り直すが、例外回のために手元で足した除外日
+            // （EXDATE=）は引き継ぐ。落とすと、動かした回が元の日にも出る
             Recurrence = _recurrence == RecurrenceKind.Custom
                 ? _original?.Recurrence
-                : RecurrenceChoice.ToSpec(_recurrence, _date),
+                : RecurrenceConverter.CopyExceptionDates(
+                    RecurrenceChoice.ToSpec(_recurrence, _date), _original?.Recurrence),
 
             // Google 側の情報は編集画面で触らない。消さずに引き継ぐ。
             //

@@ -5,6 +5,7 @@ using Kado.Core.WorkingDays;
 using Kado.Data.Import;
 using Kado.Data.Models;
 using Kado.Data.Repositories;
+using Kado.Google.Mapping;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
 
@@ -1001,6 +1002,53 @@ public sealed class CalendarWorkspace
     }
 
     /// <summary>
+    /// 予定を手元だけで削除する。<b>Google には何も送らない</b>（削除の記録を残さない）。
+    /// <para>
+    /// 送れないカレンダー（読み取り専用・Google から外れた）に入ってしまった予定を消すのに使う。
+    /// 元に戻すと、そのまま手元に戻る。
+    /// </para>
+    /// </summary>
+    /// <returns>対象が見つかって削除したら true。</returns>
+    public bool DeleteEventLocally(string id)
+    {
+        if (Events.Find(id) is not { } value) return false;
+
+        Run(new DeleteEventEdit(Events, value, tombstones: null));
+        return true;
+    }
+
+    /// <summary>
+    /// 「Google から外れた」カレンダーを、中の予定ごと手元から消す。Google には何も送らない。
+    /// <para>
+    /// 一覧から消えたカレンダーに、送っていない削除の記録が残っていても、もう届け先が無いので
+    /// 一緒に片付ける。元に戻せない操作（呼び出し側が確かめる）。
+    /// </para>
+    /// </summary>
+    /// <returns>消した予定の件数。対象が無ければ null。</returns>
+    public int? DiscardDetachedCalendar(string id)
+    {
+        if (Sources.FindCalendar(id) is not { IsDetached: true }) return null;
+
+        var removed = Sources.DropRemovedCalendar(id);
+        Tombstones.ForgetSource(id);
+        NotifyChanged();
+
+        return removed;
+    }
+
+    /// <summary>タスクリスト版。<see cref="DiscardDetachedCalendar"/> と同じ。</summary>
+    public int? DiscardDetachedTaskList(string id)
+    {
+        if (Sources.FindTaskList(id) is not { IsDetached: true }) return null;
+
+        var removed = Sources.DropRemovedTaskList(id);
+        Tombstones.ForgetSource(id);
+        NotifyChanged();
+
+        return removed;
+    }
+
+    /// <summary>
     /// 「Google 上で見つからない」予定を、Google に新しく作り直す。
     /// <para>
     /// 結び付き（ID・入れ先・控えた生データ）を外して新規として送る。<b>使う人が選んだときだけ</b>
@@ -1075,6 +1123,8 @@ public sealed class CalendarWorkspace
     /// <para>
     /// 同じカレンダーの、同じ日・同じ時刻・同じ題を「同じ内容」と見なす。
     /// 残すのは中身の濃いほう（場所やメモ、相手側との結び付きを持っているもの）。
+    /// ただし<b>ゲスト・会議 URL・添付を持つもの、他人が主催するものは、必ず残す</b>
+    /// （Google 側にしか無い情報で、消すと取り戻せない）。
     /// </para>
     /// <para>実働日データから起こした印は対象にしない。別の仕組みで入れ替えている。</para>
     /// </summary>
@@ -1084,9 +1134,13 @@ public sealed class CalendarWorkspace
             .GroupBy(e => (e.CalendarId, e.Date, e.EndDate, e.StartTime, e.EndTime, e.Title))
             .Where(g => g.Count() > 1)
             .SelectMany(g => g
-                .OrderByDescending(Weight)
+                // ゲスト・会議 URL・添付・他人が主催、を持つものを先頭に。残すほうは必ずそちらになる
+                .OrderByDescending(EventMapper.HoldsGoogleOnlyData)
+                .ThenByDescending(Weight)
                 .ThenBy(e => e.Id, StringComparer.Ordinal)
-                .Skip(1))
+                .Skip(1)
+                // 持つものは、2件以上あっても消さない。Google 側にしか無い情報は取り戻せない
+                .Where(e => !EventMapper.HoldsGoogleOnlyData(e)))
             .ToArray();
 
     /// <summary>どれを残すかの目安。中身が多いほど重い。</summary>

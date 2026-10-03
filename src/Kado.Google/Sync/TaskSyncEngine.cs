@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kado.Data.Models;
@@ -78,8 +79,11 @@ public sealed class TaskSyncEngine(
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
-    /// <summary>前回いつ取りに行ったかを覚えておくキー。</summary>
-    private static string SinceKey(string taskListId) => $"tasks:{taskListId}:updatedMin";
+    /// <summary>
+    /// 前回いつ取りに行ったかを覚えておくキー。
+    /// <para>印を捨てて全件を取り直させたいとき（一覧から外れて戻った、など）に、呼び出し側も使う。</para>
+    /// </summary>
+    public static string SinceKey(string taskListId) => $"tasks:{taskListId}:updatedMin";
 
     /// <summary>同期する。</summary>
     /// <param name="taskListId">Google 側のタスクリスト ID。</param>
@@ -115,7 +119,7 @@ public sealed class TaskSyncEngine(
                 tombstones.Clear(tombstone.Id, TombstoneRepository.TaskKind);
                 deleted++;
             }
-            catch (GoogleApiException ex) when (ex.IsMissing)
+            catch (GoogleApiException ex) when (ex.IsMissing || ex.Status == HttpStatusCode.Gone)
             {
                 // 持ち主が分からない古い記録は、次のリストが拾えるよう残す
                 if (tombstone.SourceId is { Length: > 0 })
@@ -123,9 +127,21 @@ public sealed class TaskSyncEngine(
                     tombstones.Clear(tombstone.Id, TombstoneRepository.TaskKind);
                 }
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsPermissionDenied)
             {
-                warnings.Add($"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason}");
+                // 権限が無い。出し直しても通らないので、記録を捨てて知らせる（EventSyncEngine と同じ）
+                tombstones.Clear(tombstone.Id, TombstoneRepository.TaskKind);
+                warnings.Add(
+                    $"権限が無いため、Google 側のタスクを削除できません（{tombstone.Id}）: {ex.Reason}。" +
+                    "手元からは消えていますが、Google には残っています");
+            }
+            catch (GoogleApiException ex)
+            {
+                // 呼びすぎ・サーバー側の不調と、その他の 4xx。1件の削除が断られただけで、
+                // このリストの取り込みも送信も止めない。記録は残し、次の同期でやり直す
+                warnings.Add(ex.Description is { Length: > 0 } detail
+                    ? $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason} — {detail}"
+                    : $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason}");
             }
         }
 
@@ -140,7 +156,7 @@ public sealed class TaskSyncEngine(
         // 取りに行く前の時刻を控える。読んでいる最中の変更を次回に拾えるようにする
         var startedAt = _clock.GetUtcNow();
 
-        var items = await ReadAllPagesAsync(taskListId, since, cancellationToken).ConfigureAwait(false);
+        var (items, complete) = await ReadAllPagesAsync(taskListId, since, cancellationToken).ConfigureAwait(false);
 
         var created = 0;
         var updated = 0;
@@ -220,6 +236,14 @@ public sealed class TaskSyncEngine(
                 tasks.Upsert(mapped);
                 updated++;
             }
+        }
+
+        // 前回の時刻が無い（初回・繋ぎ直し）ときは全件を取っている。消えたタスクは、
+        // 時間が経つと deleted: true でも降ってこない。一覧に無いことで見つけて片付ける。
+        // 一覧を最後まで読めたときだけ行う
+        if (since is null && complete)
+        {
+            deleted += RemoveVanished(taskListId, localListId, items, warnings);
         }
 
         settings.SetSyncState(SinceKey(taskListId), startedAt.ToString("O"));
@@ -305,11 +329,12 @@ public sealed class TaskSyncEngine(
             ? value
             : null;
 
-    private async Task<List<JsonElement>> ReadAllPagesAsync(
+    private async Task<(List<JsonElement> Items, bool Complete)> ReadAllPagesAsync(
         string taskListId, DateTimeOffset? since, CancellationToken cancellationToken)
     {
         var items = new List<JsonElement>();
         string? pageToken = null;
+        var complete = false;
 
         for (var page = 0; page < MaxPages; page++)
         {
@@ -322,10 +347,66 @@ public sealed class TaskSyncEngine(
             items.AddRange(result.Items);
 
             pageToken = result.NextPageToken;
-            if (pageToken is not { Length: > 0 }) break;
+
+            if (pageToken is not { Length: > 0 })
+            {
+                complete = true;
+                break;
+            }
         }
 
-        return items;
+        return (items, complete);
+    }
+
+    /// <summary>
+    /// 全件を取った一覧に無い、Google と結び付いたタスクを片付ける。
+    /// <para>考え方は <c>EventSyncEngine.RemoveVanished</c> と同じ（理由もそちらを見よ）。</para>
+    /// </summary>
+    /// <returns>手元から消した件数。</returns>
+    private int RemoveVanished(
+        string taskListId, string localListId, List<JsonElement> listed, List<string> warnings)
+    {
+        var listedIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in listed)
+        {
+            if (GoogleJson.Text(item, "id") is { } id) listedIds.Add(id);
+        }
+
+        var removed = 0;
+        var kept = new List<string>();
+
+        foreach (var value in tasks.All())
+        {
+            if (value.GoogleTaskId is not { Length: > 0 } googleId) continue;
+            if (listedIds.Contains(googleId) || value.GoogleMissing) continue;
+
+            var lives = value.GoogleTaskListId is { Length: > 0 } actual
+                ? string.Equals(actual, taskListId, StringComparison.Ordinal)
+                : string.Equals(value.TaskListId, localListId, StringComparison.Ordinal);
+            if (!lives) continue;
+
+            if (TaskMapper.NeedsPush(value) || NeedsMove(value, taskListId))
+            {
+                tasks.Upsert(value with { GoogleMissing = true });
+                kept.Add(value.Title is { Length: > 0 } title ? title : "(無題)");
+                continue;
+            }
+
+            if (tasks.Delete(value.Id)) removed++;
+        }
+
+        if (kept.Count > 0)
+        {
+            const int maxNamed = 3;
+            var named = string.Concat(kept.Take(maxNamed).Select(title => $"「{title}」"));
+
+            warnings.Add(
+                (kept.Count > maxNamed ? $"{named}ほか{kept.Count - maxNamed}件" : named) +
+                "は Google で見つかりません。まだ送っていない変更があるため残し、以後は送りません" +
+                "（編集画面から「Google に新しく作り直す」を選べます）");
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -380,27 +461,65 @@ public sealed class TaskSyncEngine(
                 {
                     var current = value;
 
+                    // 内容の変更を送る先。移せなかったときは、いま実際にいる元のリストに送る
+                    var patchList = taskListId;
+                    var patchLocalList = localListId;
+
                     if (NeedsMove(current, taskListId))
                     {
-                        // 消して作り直すより、tasks.move のほうが並び順や親子関係を保てる
-                        var movedElement = await gateway
-                            .MoveAsync(current.GoogleTaskListId!, googleId, taskListId, cancellationToken)
-                            .ConfigureAwait(false);
+                        var origin = current.GoogleTaskListId!;
 
-                        // move の応答は本文（タイトルなど）が移す前のまま。まるごと
-                        // FromGoogle に通すと、まだ送れていない内容の変更を上書きしてしまう
-                        // ので、場所に関する項目だけを取り込む（EventSyncEngine と同じ理由）
-                        var atDestination = TaskMapper.FromGoogle(movedElement, taskListId, localListId, current, now);
-                        current = current with
+                        // 親子は Google が持つ。子と、子を持つ親は別のリストへ移せない。
+                        // 送っても断られる・親子が壊れるので、希望を実際の場所へ戻し、
+                        // 一緒に直した内容は元のリストへ PATCH で送る
+                        var blocked = TaskMapper.MoveBlockReason(current, TaskMapper.HasChildren(current, tasks.All()));
+                        string? refused = null;
+                        JsonElement? movedElement = null;
+
+                        if (blocked is null)
                         {
-                            GoogleTaskId = atDestination.GoogleTaskId,
-                            GoogleTaskListId = atDestination.GoogleTaskListId,
-                            GoogleRaw = atDestination.GoogleRaw,
-                            GoogleUpdated = atDestination.GoogleUpdated,
-                            UpdatedAt = now,
-                        };
-                        tasks.Upsert(current);
-                        moved++;
+                            try
+                            {
+                                // 消して作り直すより、tasks.move のほうが並び順や親子関係を保てる
+                                movedElement = await gateway
+                                    .MoveAsync(origin, googleId, taskListId, cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            catch (GoogleApiException ex) when (!ex.IsMissing && !ex.IsTransient)
+                            {
+                                refused = ex.Reason;
+                            }
+                        }
+
+                        if (movedElement is { } moved1)
+                        {
+                            // move の応答は本文（タイトルなど）が移す前のまま。まるごと
+                            // FromGoogle に通すと、まだ送れていない内容の変更を上書きしてしまう
+                            // ので、場所に関する項目だけを取り込む（EventSyncEngine と同じ理由）
+                            var atDestination = TaskMapper.FromGoogle(moved1, taskListId, localListId, current, now);
+                            current = current with
+                            {
+                                GoogleTaskId = atDestination.GoogleTaskId,
+                                GoogleTaskListId = atDestination.GoogleTaskListId,
+                                GoogleRaw = atDestination.GoogleRaw,
+                                GoogleUpdated = atDestination.GoogleUpdated,
+                                UpdatedAt = now,
+                            };
+                            tasks.Upsert(current);
+                            moved++;
+                        }
+                        else
+                        {
+                            current = current with { TaskListId = origin, UpdatedAt = now };
+                            tasks.Upsert(current);
+                            patchList = origin;
+                            patchLocalList = origin;
+
+                            warnings.Add(blocked is not null
+                                ? $"{blocked}（{current.Title}）。元のリストのままにしました"
+                                : $"Google に断られたため、リストを移せませんでした（{current.Title}）: {refused}。" +
+                                  "元のリストのままにしました");
+                        }
                     }
 
                     if (TaskMapper.NeedsPush(current))
@@ -408,10 +527,10 @@ public sealed class TaskSyncEngine(
                         var body = TaskMapper.ToGoogle(current);
 
                         var patched = await gateway
-                            .PatchAsync(taskListId, googleId, body, cancellationToken)
+                            .PatchAsync(patchList, googleId, body, cancellationToken)
                             .ConfigureAwait(false);
 
-                        tasks.Upsert(TaskMapper.FromGoogle(patched, taskListId, localListId, current, now));
+                        tasks.Upsert(TaskMapper.FromGoogle(patched, patchList, patchLocalList, current, now));
                         updated++;
                     }
                 }

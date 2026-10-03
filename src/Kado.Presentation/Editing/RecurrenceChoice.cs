@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Core.Recurrence;
+using Kado.Google.Mapping;
 
 namespace Kado.Presentation.Editing;
 
@@ -130,8 +131,13 @@ public static class RecurrenceChoice
     {
         if (string.IsNullOrWhiteSpace(spec)) return RecurrenceKind.None;
 
+        // 例外回のために手元で足した除外日（EXDATE=）は、繰り返しの種類とは関係が無い。
+        // 含めたまま比べると、毎週のままなのに独自指定に見え、曜日の追従が効かなくなる
+        var rule = RecurrenceConverter.WithoutExceptionDates(spec);
+        if (string.IsNullOrWhiteSpace(rule)) return RecurrenceKind.Custom;
+
         // 書式が壊れているものを「繰り返さない」に倒すと、保存し直したときに消える
-        if (!TryNormalize(spec, out var normalized)) return RecurrenceKind.Custom;
+        if (!TryNormalize(rule, out var normalized)) return RecurrenceKind.Custom;
 
         foreach (var kind in (RecurrenceKind[])[RecurrenceKind.Daily, RecurrenceKind.Weekly,
                                                 RecurrenceKind.Monthly, RecurrenceKind.Yearly])

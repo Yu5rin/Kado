@@ -43,9 +43,15 @@ public sealed class SyncViewModel : ObservableObject
 {
     private readonly IGoogleSync? _google;
 
+    /// <summary>未読の警告を、いくつまで持つか。溜め続けて画面を埋めないための上限。</summary>
+    private const int MaxUnreadWarnings = 100;
+
     private SyncState _state;
     private string? _detail;
     private DateTimeOffset? _lastSyncedAt;
+
+    /// <summary>まだ使う人が見ていない警告。古いものから。同じ文は重ねない。</summary>
+    private readonly List<string> _unreadWarnings = [];
 
     /// <summary>走っている同期を止めるための印。走っていない間は null。</summary>
     private CancellationTokenSource? _syncCts;
@@ -70,7 +76,12 @@ public sealed class SyncViewModel : ObservableObject
 
         // 走っている間だけ押せる。ボタン側は同じ場所に「中止」として出す
         CancelSyncCommand = new RelayCommand(RequestCancel, () => IsBusy);
+
+        AcknowledgeWarningsCommand = new RelayCommand(AcknowledgeWarnings, () => HasUnreadWarnings);
     }
+
+    /// <summary>警告を読んだことにして、消す。使う人が見るまで、前回までの警告は残る。</summary>
+    public RelayCommand AcknowledgeWarningsCommand { get; }
 
     /// <summary>繋ぐ。ブラウザが開く。</summary>
     public AsyncRelayCommand ConnectCommand { get; }
@@ -101,7 +112,7 @@ public sealed class SyncViewModel : ObservableObject
             if (Set(ref _state, value))
             {
                 Raise(nameof(StatusText), nameof(IsConnected), nameof(IsBusy),
-                    nameof(ActionLabel), nameof(ActionToolTip));
+                    nameof(ActionLabel), nameof(ActionToolTip), nameof(DetailText));
             }
             RaiseCanExecute();
         }
@@ -150,9 +161,85 @@ public sealed class SyncViewModel : ObservableObject
         SyncState.Disconnected => "Google 未接続",
         SyncState.Running => "同期中…",
         SyncState.Failed => $"同期できません（{_detail}）",
-        SyncState.Warned => $"一部を伝えられません（{_detail}）",
+        SyncState.Warned => $"一部を伝えられません（{WarningSummary}）",
         _ => _lastSyncedAt is { } at ? $"同期済み {at.ToLocalTime():HH:mm}" : "同期済み",
     };
+
+    // ------------------------------------------------------------------
+    // 警告。最初の1件だけでなく、件数と全部を読めるようにする
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// まだ見ていない警告。
+    /// <para>
+    /// 次の同期で警告が無くても、<see cref="AcknowledgeWarningsCommand"/> で読んだことにするまで
+    /// 消さない。裏で15分ごとに回るので、気づく前に次の同期で消えてしまうと、何が伝わらなかったのか
+    /// 知るすべが無い。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Warnings => _unreadWarnings.ToArray();
+
+    /// <summary>未読の警告の件数。</summary>
+    public int WarningCount => _unreadWarnings.Count;
+
+    /// <summary>未読の警告があるか。</summary>
+    public bool HasUnreadWarnings => _unreadWarnings.Count > 0;
+
+    /// <summary>警告の見出し。「警告 3件」。</summary>
+    public string WarningHeader => $"警告 {_unreadWarnings.Count}件";
+
+    /// <summary>警告を1行ずつ並べた全文。ツールチップや一覧に出す。無ければ空。</summary>
+    public string WarningsText => string.Join(
+        Environment.NewLine, _unreadWarnings.Select((warning, index) => $"{index + 1}. {warning}"));
+
+    /// <summary>状態の文に、警告の全文を添えたもの。ツールチップに出す。</summary>
+    public string DetailText => HasUnreadWarnings
+        ? $"{StatusText}{Environment.NewLine}{Environment.NewLine}{WarningHeader}{Environment.NewLine}{WarningsText}"
+        : StatusText;
+
+    /// <summary>状態の文に添える、警告の要約。最初の1件と、残りの件数。</summary>
+    private string WarningSummary => _unreadWarnings.Count switch
+    {
+        0 => string.Empty,
+        1 => _unreadWarnings[0],
+        var count => $"{_unreadWarnings[0]} ほか{count - 1}件",
+    };
+
+    /// <summary>今回の警告を未読に足す。同じ文は重ねない。</summary>
+    private void AddWarnings(IReadOnlyList<string> warnings)
+    {
+        foreach (var warning in warnings)
+        {
+            if (string.IsNullOrWhiteSpace(warning) || _unreadWarnings.Contains(warning)) continue;
+
+            _unreadWarnings.Add(warning);
+        }
+
+        // 上限を超えたら、古いほうから落とす
+        if (_unreadWarnings.Count > MaxUnreadWarnings)
+        {
+            _unreadWarnings.RemoveRange(0, _unreadWarnings.Count - MaxUnreadWarnings);
+        }
+
+        RaiseWarnings();
+    }
+
+    /// <summary>警告を読んだことにする。警告の表示だった状態は、落ち着いた状態に戻す。</summary>
+    private void AcknowledgeWarnings()
+    {
+        _unreadWarnings.Clear();
+        RaiseWarnings();
+
+        if (_state == SyncState.Warned) State = SyncState.Idle;
+    }
+
+    private void RaiseWarnings()
+    {
+        Raise(nameof(Warnings), nameof(WarningCount), nameof(HasUnreadWarnings), nameof(WarningHeader),
+            nameof(WarningsText), nameof(DetailText), nameof(StatusText), nameof(ActionLabel));
+
+        AcknowledgeWarningsCommand.RaiseCanExecuteChanged();
+    }
 
     /// <summary>
     /// ボタンに出す文言。走っている間は「中止」にする。
@@ -245,6 +332,11 @@ public sealed class SyncViewModel : ObservableObject
 
         LastReport = null;
         LastSyncedAt = null;
+
+        // 切った相手の警告は、もう読む意味が無い
+        _unreadWarnings.Clear();
+        RaiseWarnings();
+
         State = SyncState.Disconnected;
 
         Synced?.Invoke(this, EventArgs.Empty);
@@ -277,15 +369,10 @@ public sealed class SyncViewModel : ObservableObject
             LastReport = report;
             LastSyncedAt = DateTimeOffset.Now;
 
-            if (report.Warnings.Count > 0)
-            {
-                _detail = report.Warnings[0];
-                State = SyncState.Warned;
-            }
-            else
-            {
-                State = SyncState.Idle;
-            }
+            // 警告は溜める。今回が無事でも、前回までの警告を使う人が見るまで消さない
+            AddWarnings(report.Warnings);
+
+            State = HasUnreadWarnings ? SyncState.Warned : SyncState.Idle;
 
             Synced?.Invoke(this, EventArgs.Empty);
         }

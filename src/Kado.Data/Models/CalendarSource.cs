@@ -116,5 +116,14 @@ public sealed record TaskListSource
 
     public string? GoogleRaw { get; init; }
 
+    /// <summary>
+    /// Google の一覧から外れたタスクリストか。
+    /// <para>
+    /// まだ送っていないタスク・編集・削除の記録があったので、捨てずに残してある
+    /// （<see cref="CalendarSource.IsDetached"/> と同じ扱い）。同期は止まる。
+    /// </para>
+    /// </summary>
+    public bool IsDetached { get; init; }
+
     public DateTimeOffset UpdatedAt { get; init; }
 }

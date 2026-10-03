@@ -133,6 +133,45 @@ public static class TaskMapper
         return keepsPendingMove ? existing!.TaskListId : localListId;
     }
 
+    /// <summary>サブタスクを別のリストへ移せない理由。</summary>
+    public const string ChildMoveReason = "サブタスクは、別のリストへ移せません（Google 側の制約）";
+
+    /// <summary>サブタスクを持つタスクを別のリストへ移せない理由。</summary>
+    public const string ParentMoveReason = "サブタスクを持つタスクは、別のリストへ移せません（Google 側の制約）";
+
+    /// <summary>
+    /// タスクを別のリストへ移せない理由。移せるなら null。
+    /// <para>
+    /// 親子関係は Google が持つ。子（<see cref="TaskItem.ParentId"/> を持つもの）や、子を持つ親を
+    /// 別のリストへ移そうとすると、親子が壊れる・断られるので、送る前に止める。
+    /// </para>
+    /// </summary>
+    /// <param name="value">移そうとしているタスク。</param>
+    /// <param name="hasChildren">手元で <see cref="TaskItem.ParentId"/> から参照されているか。</param>
+    public static string? MoveBlockReason(TaskItem value, bool hasChildren)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.ParentId is { Length: > 0 }) return ChildMoveReason;
+
+        return hasChildren ? ParentMoveReason : null;
+    }
+
+    /// <summary>
+    /// 子を持つ親か。<paramref name="all"/> のどれかが、このタスクを <see cref="TaskItem.ParentId"/> で
+    /// 指していれば true。<c>ParentId</c> は Google の ID を指すので、手元の識別子でも見る。
+    /// </summary>
+    public static bool HasChildren(TaskItem value, IEnumerable<TaskItem> all)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(all);
+
+        return all.Any(t =>
+            t.ParentId is { Length: > 0 } parent &&
+            (string.Equals(parent, value.GoogleTaskId, StringComparison.Ordinal) ||
+             string.Equals(parent, value.Id, StringComparison.Ordinal)));
+    }
+
     /// <summary>
     /// 書き戻す本文を作る。
     /// <para>親子関係と並び順は入れない。本文では動かせず、送っても無視されるため。</para>
@@ -141,7 +180,7 @@ public static class TaskMapper
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        return new JsonObject
+        var body = new JsonObject
         {
             ["title"] = value.Title,
             ["notes"] = value.Note,
@@ -150,7 +189,71 @@ public static class TaskMapper
             ["due"] = value.Due is { } due ? FormatDue(due) : null,
             ["status"] = value.IsDone ? CompletedStatus : NeedsActionStatus,
         };
+
+        // 完了に関わるキーは、使う人が完了・未完了を変えたときだけ送る。
+        // status だけ送ると Google が「いま」を完了日時に入れ、手元の完了日時も同期した
+        // 時刻に置き換わる（「N実働日 遅れて完了」の表示が狂う）
+        var received = ReceivedCompletion(value);
+
+        if (value.IsDone)
+        {
+            // 完了にした（または日時を付け直した）。手元の完了日時をそのまま送る
+            if (value.CompletedAt is { } at && !SameMoment(at, received.CompletedAt, received.WasDone))
+            {
+                body["completed"] = FormatMoment(at);
+            }
+        }
+        else if (received.WasDone)
+        {
+            // 未完了へ戻した。使う人の意思なので、完了日時を消し、隠れた印も外す
+            // （外さないと、未完了に戻したタスクが一覧から隠れたままになる）
+            body["completed"] = null;
+            body["hidden"] = false;
+        }
+
+        return body;
     }
+
+    /// <summary>最後に受け取った姿での、完了の状態。</summary>
+    private static (bool WasDone, DateTimeOffset? CompletedAt) ReceivedCompletion(TaskItem value)
+    {
+        if (value.GoogleRaw is not { Length: > 0 } raw) return (false, null);
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonObject original) return (false, null);
+
+            var done = original["status"] is JsonValue status
+                && status.TryGetValue<string>(out var text)
+                && string.Equals(text, CompletedStatus, StringComparison.OrdinalIgnoreCase);
+
+            var completed = original["completed"] is JsonValue moment && moment.TryGetValue<string>(out var at)
+                ? ParseMoment(at)
+                : null;
+
+            return (done, completed);
+        }
+        catch (JsonException)
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>
+    /// 完了日時が同じか。受け取った姿がすでに完了していて、同じ時刻（1秒の誤差まで）なら
+    /// 同じと見る。受け取った姿に完了日時が無いときは、送り直す理由が無いので同じと見る
+    /// （比べる相手の無いまま送り続けないため）。
+    /// </summary>
+    private static bool SameMoment(DateTimeOffset local, DateTimeOffset? received, bool receivedWasDone)
+    {
+        if (!receivedWasDone) return false;
+        if (received is not { } other) return true;
+
+        return (local - other).Duration() < TimeSpan.FromSeconds(1);
+    }
+
+    private static string FormatMoment(DateTimeOffset value) =>
+        value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
 
     /// <summary>書き戻す必要があるか。控えた生データと見比べる。</summary>
     public static bool NeedsPush(TaskItem value)
@@ -172,6 +275,10 @@ public static class TaskMapper
                     if (ReadDue(original["due"]?.GetValue<string>()) != value.Due) return true;
                     continue;
                 }
+
+                // 完了日時の付け直し（completed）と隠れた印の解除（hidden）は、送るべきときだけ
+                // ToGoogle が入れる。入っていること自体が「送る」の合図
+                if (pair.Key is "completed" or "hidden") return true;
 
                 if (!GoogleJson.SameContent(
                         pair.Value?.ToJsonString(), original[pair.Key]?.ToJsonString()))

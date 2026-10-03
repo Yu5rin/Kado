@@ -98,7 +98,8 @@ public sealed class SourceListItemViewModel : ObservableObject
 
     internal SourceListItemViewModel(string id, string name, string swatchColor,
         bool isVisible, bool isGoogle, Action<SourceListItemViewModel> onToggled,
-        bool notifies = true, Action<SourceListItemViewModel>? onNotifyToggled = null)
+        bool notifies = true, Action<SourceListItemViewModel>? onNotifyToggled = null,
+        bool isReadOnly = false, bool isDetached = false, bool isTaskList = false)
     {
         Id = id;
         Name = name;
@@ -106,6 +107,9 @@ public sealed class SourceListItemViewModel : ObservableObject
         _isVisible = isVisible;
         _notifies = notifies;
         IsGoogle = isGoogle;
+        IsReadOnly = isReadOnly;
+        IsDetached = isDetached;
+        _isTaskList = isTaskList;
         _onToggled = onToggled;
         _onNotifyToggled = onNotifyToggled;
     }
@@ -148,6 +152,53 @@ public sealed class SourceListItemViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool IsGoogle { get; }
+
+    private readonly bool _isTaskList;
+
+    /// <summary>
+    /// 読み取り専用か（他人から共有された、祝日など）。予定を入れられず、送れない。
+    /// タスクリストに読み取り専用は無い。
+    /// </summary>
+    public bool IsReadOnly { get; }
+
+    /// <summary>
+    /// Google の一覧から外れたか（購読解除・削除など）。
+    /// <para>
+    /// まだ送っていない中身を残してあるだけで、同期は止まっている。見ることと、手元から削除する
+    /// ことしかできない。新しい予定・タスクの入れ先にも、移し先にもしない。
+    /// </para>
+    /// </summary>
+    public bool IsDetached { get; }
+
+    /// <summary>
+    /// 新しい予定・タスクを入れてよいか。読み取り専用と「Google から外れた」ものは、入れても
+    /// 送れず、手元にだけ溜まる。
+    /// </summary>
+    public bool CanReceive => !IsReadOnly && !IsDetached;
+
+    /// <summary>
+    /// 削除を出してよいか。このアプリのものと、「Google から外れた」もの。
+    /// <para>
+    /// 外れていない Google のものは、手元から消しても次の同期で戻ってくるので出さない。
+    /// 外れたものは戻ってこないので、確かめたあとで手元から消せる（Google には何も送らない）。
+    /// </para>
+    /// </summary>
+    public bool CanDelete => !IsGoogle || IsDetached;
+
+    /// <summary>一覧の行の右に出す短い印。無ければ空。</summary>
+    public string StatusMarkText => IsDetached ? "外れた" : string.Empty;
+
+    /// <summary>印の説明。無ければ null。</summary>
+    public string? StatusNote => IsDetached
+        ? $"Google の一覧から外れています（購読解除や削除など）。まだ送っていない{(_isTaskList ? "タスク" : "予定")}や変更を" +
+          "手元に残してあり、同期は止まっています。中身は見られ、手元からだけ削除できます（Google には何も送りません）"
+        : null;
+
+    /// <summary>印を出すか。</summary>
+    public bool HasStatusNote => StatusNote is not null;
+
+    /// <summary>行のツールチップ。名前に、印の説明を続ける。</summary>
+    public string RowToolTip => StatusNote is { } note ? $"{Name}{Environment.NewLine}{note}" : Name;
 
     /// <summary>カレンダー ID またはタスクリスト ID。</summary>
     public string Id { get; }
@@ -284,13 +335,21 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
 
     /// <summary>
     /// 新しい予定の入れ先。
-    /// <para>決まっていなければ一覧の先頭。「Kado」は実働日データの入れ先なので避ける。</para>
+    /// <para>
+    /// 決まっていなければ一覧の先頭。「Kado」は実働日データの入れ先なので避ける。
+    /// 読み取り専用のカレンダーと「Google から外れた」カレンダーは入れ先にしない
+    /// （<see cref="SourceListItemViewModel.CanReceive"/>）。入れられるものが1つも無ければ null。
+    /// </para>
     /// </summary>
     public SourceListItemViewModel? DefaultCalendar
     {
         get
         {
-            if (_calendars.FirstOrDefault(c =>
+            // 読み取り専用と「Google から外れた」ものには入れない。入れても送れず、手元に溜まるだけで、
+            // しかも消せなくなる（設定がそこを指していても、先頭がそれでも、ここで外す）
+            var receivers = _calendars.Where(c => c.CanReceive).ToArray();
+
+            if (receivers.FirstOrDefault(c =>
                     string.Equals(c.Id, DefaultCalendarId, StringComparison.Ordinal)) is { } chosen)
             {
                 return chosen;
@@ -300,9 +359,9 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
             // 改名されると、実働日カレンダーが新しい予定の既定の入れ先になっていた
             var workday = _workspace.WorkingDayCalendarId;
 
-            return _calendars.FirstOrDefault(c =>
+            return receivers.FirstOrDefault(c =>
                        !string.Equals(c.Id, workday, StringComparison.Ordinal))
-                ?? _calendars.FirstOrDefault();
+                ?? receivers.FirstOrDefault();
         }
     }
 
@@ -315,7 +374,8 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>入れ先を選び直す。</summary>
     public void SetDefaultCalendar(SourceListItemViewModel? item)
     {
-        if (item is null) return;
+        // 送れないところは入れ先にしない
+        if (item is null || !item.CanReceive) return;
 
         DefaultCalendarId = item.Id;
         MarkDefault();
@@ -340,9 +400,9 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// </para>
     /// </summary>
     public SourceListItemViewModel? DefaultTaskList =>
-        _taskLists.FirstOrDefault(t => string.Equals(t.Id, DefaultTaskListId, StringComparison.Ordinal))
-        ?? _googleTaskLists.FirstOrDefault()
-        ?? _taskLists.FirstOrDefault();
+        _taskLists.FirstOrDefault(t => t.CanReceive && string.Equals(t.Id, DefaultTaskListId, StringComparison.Ordinal))
+        ?? _googleTaskLists.FirstOrDefault(t => t.CanReceive)
+        ?? _taskLists.FirstOrDefault(t => t.CanReceive);
 
     /// <summary>設定で選ばれている入れ先。設定を持たない組み立て方では null。</summary>
     public string? DefaultTaskListId { get; set; }
@@ -353,7 +413,7 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
     /// <summary>タスクの入れ先を選び直す。</summary>
     public void SetDefaultTaskList(SourceListItemViewModel? item)
     {
-        if (item is null) return;
+        if (item is null || !item.CanReceive) return;
 
         DefaultTaskListId = item.Id;
         MarkDefaultTaskList();
@@ -380,13 +440,15 @@ public sealed class SourceListsViewModel : ObservableObject, ICalendarSources
             .Select(c => new SourceListItemViewModel(
                 c.Id, c.DisplayName, c.BackgroundColor ?? CalendarPalette.ColorFor(c.Id),
                 c.IsVisible, IsFromGoogle(c.GoogleRaw), OnCalendarToggled,
-                c.NotifyDefault, OnCalendarNotifyToggled))
+                c.NotifyDefault, OnCalendarNotifyToggled,
+                isReadOnly: c.IsReadOnly, isDetached: c.IsDetached))
             .ToArray();
 
         TaskLists = _workspace.Sources.TaskLists()
             .Select(t => new SourceListItemViewModel(
                 t.Id, t.DisplayName, CalendarPalette.ColorFor(t.Id), t.IsVisible,
-                IsFromGoogle(t.GoogleRaw), OnTaskListToggled))
+                IsFromGoogle(t.GoogleRaw), OnTaskListToggled,
+                isDetached: t.IsDetached, isTaskList: true))
             .ToArray();
 
         LocalCalendars = _calendars.Where(c => !c.IsGoogle).ToArray();

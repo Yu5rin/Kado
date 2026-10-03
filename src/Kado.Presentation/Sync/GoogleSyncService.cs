@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kado.Data.Models;
+using Kado.Data.Repositories;
 using Kado.Google.Mapping;
 using Kado.Google.Sync;
 
@@ -66,8 +67,9 @@ public sealed class GoogleSyncService(
                     cancellationToken).ConfigureAwait(false);
             }
 
+            // 一覧から外れたもの（送っていない中身を残してあるだけ）は同期しない
             foreach (var list in workspace.Sources.TaskLists()
-                         .Where(t => IsOnGoogle(t.GoogleRaw)).Select(t => t.Id).ToArray())
+                         .Where(t => IsOnGoogle(t.GoogleRaw) && !t.IsDetached).Select(t => t.Id).ToArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -494,7 +496,7 @@ public sealed class GoogleSyncService(
                          EventMapper.NeedsPush(e) ||
                          e.PendingAttachments is not null));
 
-        var deletions = workspace.Tombstones.Pending(Kado.Data.Repositories.TombstoneRepository.EventKind, calendar.Id)
+        var deletions = workspace.Tombstones.Pending(TombstoneRepository.EventKind, calendar.Id)
             .Count(t => string.Equals(t.SourceId, calendar.Id, StringComparison.Ordinal));
 
         return events + deletions;
@@ -523,19 +525,32 @@ public sealed class GoogleSyncService(
     {
         var body = new JsonObject();
 
-        // 相手から受け取った姿と違っていれば、こちらで変えたということ
-        if (!string.Equals(local.SummaryOverride, remote.Text("summaryOverride"), StringComparison.Ordinal))
+        // 「こちらで変えた」かどうかは、最後に Google から受け取った姿（GoogleRaw）と手元を
+        // 見比べて決める。いま届いた姿（remote）と比べてはいけない。Web で色や呼び名を変えると
+        // 手元は旧いままなので、いま届いた姿と食い違い、「こちらで変えた」と取り違えて旧い値を
+        // 送り返してしまう。変わっていなければ送らず、Google の姿に従う
+        var received = ReadReceived(local.GoogleRaw, remote);
+
+        if (!string.Equals(local.SummaryOverride, received.Text("summaryOverride"), StringComparison.Ordinal) &&
+            !string.Equals(local.SummaryOverride, remote.Text("summaryOverride"), StringComparison.Ordinal))
         {
+            // 空にしたのは使う人が外したということ。消す意思として null を送る
             body["summaryOverride"] = local.SummaryOverride;
         }
 
-        var colors = await PaletteAsync(cancellationToken).ConfigureAwait(false);
-        var wanted = colors.ClosestCalendarId(local.BackgroundColor);
+        var changedColor = !string.Equals(
+            local.BackgroundColor, received.Text("backgroundColor"), StringComparison.OrdinalIgnoreCase);
 
-        // 寄せ先が今の色番号と違うときだけ送る。同じ番号なら見た目は変わらない
-        if (wanted is not null && !string.Equals(wanted, remote.Text("colorId"), StringComparison.Ordinal))
+        if (changedColor)
         {
-            body["colorId"] = wanted;
+            var colors = await PaletteAsync(cancellationToken).ConfigureAwait(false);
+            var wanted = colors.ClosestCalendarId(local.BackgroundColor);
+
+            // 寄せ先が今の色番号と違うときだけ送る。同じ番号なら見た目は変わらない
+            if (wanted is not null && !string.Equals(wanted, remote.Text("colorId"), StringComparison.Ordinal))
+            {
+                body["colorId"] = wanted;
+            }
         }
 
         if (body.Count == 0) return PushOutcome.Nothing;
@@ -564,6 +579,24 @@ public sealed class GoogleSyncService(
             // 送れなくても、こちらの見た目は変えたままにしておく。次の同期で出し直す。
             // 呼び出し側はこれを受けて、相手の姿での上書きを見送る
             return PushOutcome.Refused;
+        }
+    }
+
+    /// <summary>
+    /// 最後に Google から受け取った姿。控えが無い（読めない）ときは、いま届いた姿を
+    /// 比べる相手にする（そのときは「変えていない」と見なして何も送らない）。
+    /// </summary>
+    private static JsonElement ReadReceived(string? googleRaw, JsonElement fallback)
+    {
+        if (googleRaw is not { Length: > 0 }) return fallback;
+
+        try
+        {
+            return JsonDocument.Parse(googleRaw).RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return fallback;
         }
     }
 
@@ -630,12 +663,21 @@ public sealed class GoogleSyncService(
     private async Task<GoogleColors> PaletteAsync(CancellationToken cancellationToken) =>
         _palette ??= await calendars.GetColorsAsync(cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Google のタスクリスト一覧を取り込む。</summary>
+    /// <summary>
+    /// Google のタスクリスト一覧を取り込む。
+    /// <para>
+    /// 一覧から消えたリストは、カレンダーと同じに扱う（<see cref="ImportCalendarListAsync"/>）。
+    /// 送っていないものが無ければ一覧から外し、あれば捨てずに残して「Google から外れた」印を付け、
+    /// 同期を止めて警告する。何もしないと、消えたリストを毎回読みに行って、同期のたびに警告が出る。
+    /// </para>
+    /// </summary>
     private async Task<SyncReport> ImportTaskListsAsync(CancellationToken cancellationToken)
     {
         var created = 0;
         var updated = 0;
         var warnings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var listed = false;
 
         try
         {
@@ -650,7 +692,18 @@ public sealed class GoogleSyncService(
                 {
                     if (item.Text("id") is not { } id) continue;
 
+                    seen.Add(id);
+
                     var existing = workspace.Sources.FindTaskList(id);
+
+                    // 一覧から外れていたものが戻った。見ていない間の変更は、前回の時刻では取れない。
+                    // 前回の時刻を捨てて全件を取り直す
+                    if (existing is { IsDetached: true })
+                    {
+                        workspace.Settings.SetSyncState(TaskSyncEngine.SinceKey(id), string.Empty);
+                        workspace.Sources.SetTaskListDetached(id, false);
+                        updated++;
+                    }
 
                     var wanted = new TaskListSource
                     {
@@ -674,13 +727,85 @@ public sealed class GoogleSyncService(
                 pageToken = page.NextPageToken;
             }
             while (pageToken is { Length: > 0 });
+
+            listed = true;
         }
         catch (GoogleApiException ex)
         {
             warnings.Add($"タスクリスト一覧を取れませんでした: {ex.Reason}");
         }
 
-        return new SyncReport { CreatedLocal = created, UpdatedLocal = updated, Warnings = warnings };
+        // Google から無くなったリストを片付ける。カレンダーと同じ理由で、
+        // 一覧を最後まで取れたときだけ見る。1件も返ってこなかったときも触らない
+        var removedCount = 0;
+
+        if (listed && seen.Count > 0)
+        {
+            var gone = workspace.Sources.TaskLists()
+                .Where(t => IsOnGoogle(t.GoogleRaw) && !seen.Contains(t.Id))
+                .ToArray();
+
+            var dropped = new List<TaskListSource>();
+
+            foreach (var list in gone)
+            {
+                // まだ送っていないタスク・編集・削除の記録があるなら、捨てない
+                var unsent = CountUnsent(list);
+
+                if (unsent > 0)
+                {
+                    if (!list.IsDetached)
+                    {
+                        workspace.Sources.SetTaskListDetached(list.Id, true);
+                        removedCount++;
+
+                        warnings.Add(
+                            $"「{list.DisplayName}」が Google の一覧から外れました（削除など）。" +
+                            $"まだ送っていないタスク・変更が {unsent} 件あるため、中身を残して同期を止めました。" +
+                            "確かめてから、タスクリストごと消してください");
+                    }
+
+                    continue;
+                }
+
+                workspace.Sources.DropRemovedTaskList(list.Id);
+                workspace.Tombstones.ForgetSource(list.Id);
+                dropped.Add(list);
+            }
+
+            removedCount += dropped.Count;
+
+            if (dropped.Count > 0)
+            {
+                warnings.Add(dropped.Count == 1
+                    ? $"Google から消えた「{dropped[0].DisplayName}」を一覧から外しました"
+                    : $"Google から消えたタスクリスト {dropped.Count} 件を一覧から外しました");
+            }
+        }
+
+        return new SyncReport
+        {
+            CreatedLocal = created,
+            UpdatedLocal = updated,
+            SourcesChanged = removedCount > 0,
+            Warnings = warnings,
+        };
+    }
+
+    /// <summary>
+    /// まだ Google に送っていないタスクの件数。結び付いていないもの、編集したもの、
+    /// まだ伝えていない削除の記録（持ち主がこのリストと分かっているもの）。
+    /// </summary>
+    private int CountUnsent(TaskListSource list)
+    {
+        var tasksInList = workspace.Tasks.All()
+            .Count(t => string.Equals(t.TaskListId, list.Id, StringComparison.Ordinal) &&
+                        (t.GoogleTaskId is null || TaskMapper.NeedsPush(t)));
+
+        var deletions = workspace.Tombstones.Pending(TombstoneRepository.TaskKind, list.Id)
+            .Count(t => string.Equals(t.SourceId, list.Id, StringComparison.Ordinal));
+
+        return tasksInList + deletions;
     }
 
     public void Dispose() => _gate.Dispose();

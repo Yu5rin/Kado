@@ -407,6 +407,21 @@
                             </StackPanel>
                         </StackPanel>
 
+                        <!--
+                            同期の警告。右上の表示には最初の1件と件数しか出ないので、全部をここで読める。
+                            読んだことにするまでは、次の同期で警告が無くても消えない
+                        -->
+                        <StackPanel Style="{StaticResource FieldGroupStyle}"
+                                    Visibility="{Binding Sync.HasUnreadWarnings, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sync.WarningHeader}" Style="{StaticResource FieldLabelStyle}" />
+                            <TextBox Text="{Binding Sync.WarningsText, Mode=OneWay}" IsReadOnly="True"
+                                     TextWrapping="Wrap" MaxHeight="150" Padding="6,4" FontSize="12"
+                                     VerticalScrollBarVisibility="Auto" />
+                            <Button Content="確認した（警告を消す）" Style="{StaticResource GhostButtonStyle}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0"
+                                    Command="{Binding Sync.AcknowledgeWarningsCommand}" />
+                        </StackPanel>
+
                         <StackPanel Style="{StaticResource FieldGroupStyle}">
                             <StackPanel Orientation="Horizontal">
                                 <Button Content="Google に接続…" Style="{StaticResource GhostButtonStyle}"

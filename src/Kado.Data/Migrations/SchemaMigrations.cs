@@ -357,6 +357,18 @@ public static class SchemaMigrations
         ALTER TABLE calendars ADD COLUMN google_detached INTEGER NOT NULL DEFAULT 0;
         """;
 
+    /// <summary>
+    /// V11：「Google から外れた」タスクリストの印。
+    /// <para>
+    /// <b><c>task_lists.google_detached</c></b>：Google の一覧から消えたが、まだ送っていない
+    /// タスク・編集・削除の記録を持っているタスクリストに立てる（V10 のカレンダーと同じ扱い）。
+    /// 中身を捨てず、同期だけ止める。
+    /// </para>
+    /// </summary>
+    private const string V11 = """
+        ALTER TABLE task_lists ADD COLUMN google_detached INTEGER NOT NULL DEFAULT 0;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -370,6 +382,7 @@ public static class SchemaMigrations
         new(8, "期間検索・所属・tombstone の突き合わせに効く索引を足す", V8),
         new(9, "完了日で引くタスクの検索に効く索引を足す", V9),
         new(10, "Google 上で見つからない印と、Google から外れたカレンダーの印を持つ", V10),
+        new(11, "Google から外れたタスクリストの印を持つ", V11),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>
