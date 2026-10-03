@@ -687,9 +687,11 @@ public sealed class AppSettings
     /// <summary>
     /// 起動のたびに新しい版が無いか確かめるか。
     /// <para>
-    /// 既定はオン（今までどおり）。立っていると起動のたびに <c>api.github.com</c> へ
-    /// アクセスする。止めたい人のための設定で、⚙メニューからの手動の確認
-    /// （「更新を確認…」）はこの設定に関わらず動く。
+    /// 既定はオン（今までどおり）。立っていると起動のたびと、動かしているあいだ1日1回
+    /// （<c>UpdateCheckSchedule</c>）、GitHub（<c>github.com</c> の Atom、新しい版があるときだけ
+    /// <c>api.github.com</c>）へアクセスする。止めたい人のための設定で、⚙メニューからの手動の確認
+    /// （「更新を確認…」）はこの設定に関わらず動く。常駐中の確認は更新の窓を勝手に開かない
+    /// （トレイの通知と状態行で知らせる）。
     /// </para>
     /// </summary>
     public bool CheckForUpdateOnStartup

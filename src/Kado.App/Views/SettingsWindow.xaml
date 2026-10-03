@@ -183,10 +183,10 @@
                     </StackPanel>
 
                     <StackPanel Style="{StaticResource FieldGroupStyle}">
-                        <CheckBox Content="起動したときに新しい版が無いか確かめる"
+                        <CheckBox Content="起動したときと、動かしているあいだ1日1回、新しい版が無いか確かめる"
                                   IsChecked="{Binding CheckForUpdateOnStartup}" Cursor="Hand" />
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
-                                   Text="切っても、更新の確認はいつでも「Kado について」タブの「更新を確認…」から行えます。" />
+                                   Text="動かしているあいだに見つかったときは、画面を勝手に開かず、トレイの通知でお知らせします（押すと更新の窓が開きます）。&#10;切っても、更新の確認はいつでも「Kado について」タブの「更新を確認…」から行えます。" />
                     </StackPanel>
                 </StackPanel>
 

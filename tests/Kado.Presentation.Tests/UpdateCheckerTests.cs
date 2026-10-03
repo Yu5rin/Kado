@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using Kado.Presentation.Net;
 using Kado.Presentation.Update;
 
 namespace Kado.Presentation.Tests;
@@ -219,7 +220,7 @@ public class UpdateCheckerTests
         Assert.Equal(UpdateCheckStatus.Failed, result.Status);
 
         var failure = result.Failure!;
-        Assert.Equal(UpdateFailureKind.RateLimited, failure.Kind);
+        Assert.Equal(NetworkFailureKind.RateLimited, failure.Kind);
         Assert.Contains("回数の上限に達していました", failure.Message, StringComparison.Ordinal);
 
         // 失敗したときも、リリースのページへ行ける
@@ -238,7 +239,7 @@ public class UpdateCheckerTests
 
         var result = await h.Checker(log: log).CheckAsync();
 
-        Assert.Equal(UpdateFailureKind.ProxyAuthRequired, result.Failure!.Kind);
+        Assert.Equal(NetworkFailureKind.ProxyAuthRequired, result.Failure!.Kind);
         Assert.Contains("プロキシ", result.Failure.Message, StringComparison.Ordinal);
         Assert.Contains(log, l => l.Contains("応答 407 ProxyAuthenticationRequired", StringComparison.Ordinal));
         Assert.Contains(log, l => l.Contains("Content-Type=text/html", StringComparison.Ordinal));
@@ -255,7 +256,7 @@ public class UpdateCheckerTests
         var result = await h.Checker(log: log).CheckAsync();
 
         Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-        Assert.Equal(UpdateFailureKind.CannotConnect, result.Failure!.Kind);
+        Assert.Equal(NetworkFailureKind.CannotConnect, result.Failure!.Kind);
 
         // 外側だけでなく、内側の例外まで残っている
         Assert.Contains(log, l =>
@@ -274,7 +275,7 @@ public class UpdateCheckerTests
 
         var result = await h.Checker().CheckAsync();
 
-        Assert.Equal(UpdateFailureKind.Timeout, result.Failure!.Kind);
+        Assert.Equal(NetworkFailureKind.Timeout, result.Failure!.Kind);
     }
 
     [Fact]
@@ -397,6 +398,11 @@ public class UpdateCheckerTests
 
         Assert.Single(log, l => l.StartsWith("更新の通信: ", StringComparison.Ordinal));
         Assert.Contains(log, l => l.Contains("proxy.corp.example:8080", StringComparison.Ordinal));
+
+        // 認証付きプロキシへは、ログオン中のユーザーの資格情報を渡して通信している（KadoHttp）。
+        // 「資格情報=なし」と記録すると、実際の設定と食い違う
+        Assert.Contains(log, l => l.Contains("資格情報=ログオン中のユーザー", StringComparison.Ordinal));
+        Assert.DoesNotContain(log, l => l.Contains("資格情報=なし", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -84,7 +84,7 @@ public class GoogleDriveAttachmentUploaderTests : IDisposable
         {
             if (ThrowOnCreateApi is { } error) throw error;
 
-            return new GoogleDriveApi(new HttpClient(handler), new FixedToken());
+            return new GoogleDriveApi(new HttpClient(handler), new FixedToken(), GoogleRetryPolicy.None);
         }
     }
 

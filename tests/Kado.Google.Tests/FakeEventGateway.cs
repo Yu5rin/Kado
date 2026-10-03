@@ -41,6 +41,20 @@ internal sealed class FakeEventGateway : IEventGateway
     /// <summary>次の書き込みでこの例外を投げる。</summary>
     public GoogleApiException? ThrowOnWrite { get; set; }
 
+    /// <summary>書き込みのたびにこの例外を投げ続ける。呼びすぎ・Google の不調が続く場面を作る。</summary>
+    public GoogleApiException? ThrowOnEveryWrite { get; set; }
+
+    /// <summary>書き込み（作成・書き換え・削除・移動）を試みた回数。失敗したものも数える。</summary>
+    public int WriteAttempts { get; private set; }
+
+    private void ThrowIfWriteFails()
+    {
+        WriteAttempts++;
+
+        if (ThrowOnEveryWrite is { } always) throw always;
+        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+    }
+
     public Task<GooglePage> ListAsync(
         string calendarId, string? syncToken, string? pageToken, CancellationToken cancellationToken)
     {
@@ -97,7 +111,7 @@ internal sealed class FakeEventGateway : IEventGateway
 
     public Task<JsonElement> InsertAsync(string calendarId, JsonObject body, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         var id = $"g{_nextId++}";
         var stored = body.DeepClone().AsObject();
@@ -112,7 +126,7 @@ internal sealed class FakeEventGateway : IEventGateway
     public Task<JsonElement> PatchAsync(
         string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         if (!Items.TryGetValue(eventId, out var stored))
         {
@@ -129,7 +143,7 @@ internal sealed class FakeEventGateway : IEventGateway
 
     public Task DeleteAsync(string calendarId, string eventId, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         Deleted.Add(eventId);
         Items.Remove(eventId);
@@ -145,7 +159,7 @@ internal sealed class FakeEventGateway : IEventGateway
         string sourceCalendarId, string eventId, string destinationCalendarId,
         CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         if (!Items.TryGetValue(eventId, out var stored))
         {

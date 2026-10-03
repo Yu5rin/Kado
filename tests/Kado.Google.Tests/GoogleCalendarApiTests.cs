@@ -26,7 +26,7 @@ public class GoogleCalendarApiTests
             return respond(request);
         });
 
-        return (new GoogleCalendarApi(new HttpClient(handler), new FixedToken()), seen);
+        return (new GoogleCalendarApi(new HttpClient(handler), new FixedToken(), GoogleRetryPolicy.None), seen);
     }
 
     [Fact]

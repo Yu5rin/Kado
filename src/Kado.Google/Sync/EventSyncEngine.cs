@@ -125,6 +125,10 @@ public sealed class EventSyncEngine(
             ? new SyncReport()
             : await PushDeletionsAsync(calendarId, cancellationToken).ConfigureAwait(false);
 
+        // Google が混み合っていて、削除を伝えるところで止まった。続けても同じ結果になりやすいので、
+        // このカレンダーの残り（取り込み・送信）は次回に回す。手元には何も足していない
+        if (report.Deferred) return report;
+
         report += await PullAsync(calendarId, localCalendarId, cancellationToken).ConfigureAwait(false);
 
         if (!readOnly)
@@ -143,6 +147,8 @@ public sealed class EventSyncEngine(
     private async Task<SyncReport> PushDeletionsAsync(string calendarId, CancellationToken cancellationToken)
     {
         var deleted = 0;
+        var deferred = false;
+        var throttled = false;
         var warnings = new List<string>();
 
         // このカレンダーのものだけ。絞らないと、他のカレンダーの予定まで
@@ -181,9 +187,18 @@ public sealed class EventSyncEngine(
                     $"権限が無いため、Google 側の予定を削除できません（{tombstone.Id}）: {ex.Reason}。" +
                     "手元からは消えていますが、Google には残っています");
             }
+            catch (GoogleApiException ex) when (ex.IsTransient)
+            {
+                // 呼びすぎ・Google の不調。通信の層で待って出し直したあとなので、続けても同じ結果に
+                // なりやすい。残りの削除の記録は残したまま止め、次回に回す
+                deferred = true;
+                throttled = ex.IsRateLimited;
+                warnings.Add(SyncReport.BusyWarning);
+                break;
+            }
             catch (GoogleApiException ex)
             {
-                // 呼びすぎ・サーバー側の不調と、その他の 4xx。1件の削除が断られただけで、
+                // その他の 4xx。1件の削除が断られただけで、
                 // このカレンダーの取り込みも送信も止めない。記録は残し、次の同期でやり直す
                 warnings.Add(ex.Description is { Length: > 0 } detail
                     ? $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason} — {detail}"
@@ -191,7 +206,7 @@ public sealed class EventSyncEngine(
             }
         }
 
-        return new SyncReport { DeletedRemote = deleted, Warnings = warnings };
+        return new SyncReport { DeletedRemote = deleted, Warnings = warnings, Deferred = deferred, Throttled = throttled };
     }
 
     // ------------------------------------------------------------------
@@ -672,6 +687,8 @@ public sealed class EventSyncEngine(
         var created = 0;
         var updated = 0;
         var moved = 0;
+        var deferred = false;
+        var throttled = false;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
 
@@ -807,7 +824,13 @@ public sealed class EventSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {
-                warnings.Add($"送れませんでした（{value.Title}）: {ex.Reason}");
+                // 呼びすぎ・Google の不調。通信の層で待って出し直したあとなので、続けても同じ結果に
+                // なりやすい（1件ずつ叩き続けると、かえって混む）。残りは次回に回す。
+                // 送れていないものは、結び付いていないまま／変更したままなので、次の同期でまた送る
+                deferred = true;
+                throttled = ex.IsRateLimited;
+                warnings.Add(SyncReport.BusyWarning);
+                break;
             }
             catch (GoogleApiException ex)
             {
@@ -825,6 +848,8 @@ public sealed class EventSyncEngine(
             CreatedRemote = created,
             UpdatedRemote = updated,
             Moved = moved,
+            Deferred = deferred,
+            Throttled = throttled,
             Warnings = warnings,
         };
     }

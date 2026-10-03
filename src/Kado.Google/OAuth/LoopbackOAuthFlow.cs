@@ -3,11 +3,13 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Web;
+using Kado.Core.Net;
 
 namespace Kado.Google.OAuth;
 
 /// <summary>認可に失敗した。利用者が断った場合も含む。</summary>
-public sealed class OAuthException(string message, string? error = null) : Exception(message)
+public sealed class OAuthException(string message, string? error = null, Exception? innerException = null)
+    : Exception(message, innerException)
 {
     /// <summary>Google が返したエラー識別子。断られたときは <c>access_denied</c>。</summary>
     public string? Error { get; } = error;
@@ -34,7 +36,7 @@ public sealed class OAuthException(string message, string? error = null) : Excep
 /// </summary>
 public sealed class LoopbackOAuthFlow(
     GoogleOAuthOptions options, HttpClient http, Action<string> openBrowser,
-    TimeProvider? time = null, TimeSpan? authorizationTimeout = null)
+    TimeProvider? time = null, TimeSpan? authorizationTimeout = null, Action<string>? log = null)
 {
     private readonly GoogleOAuthOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly HttpClient _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -42,6 +44,12 @@ public sealed class LoopbackOAuthFlow(
 
     /// <summary>失効時刻の起点。トークンを配る側と同じ時計でないと食い違う。</summary>
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+
+    /// <summary>
+    /// 失敗した通信の記録（shell.log）。応答の要点（状態・Content-Type・経由）と例外の連鎖を、1行で渡す。
+    /// <b>トークン・認可コード・本文は書かない。</b>
+    /// </summary>
+    private readonly Action<string>? _log = log;
 
     /// <summary>
     /// ブラウザでの許可待ちの上限。
@@ -74,7 +82,7 @@ public sealed class LoopbackOAuthFlow(
         var state = PkceCodes.Base64Url(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
         using var listener = new HttpListener();
-        var redirectUri = StartListener(listener);
+        var redirectUri = StartListener(listener, _log);
 
         _openBrowser(BuildAuthorizationUrl(redirectUri, pkce.Challenge, state, scopes, includeGrantedScopes));
 
@@ -114,11 +122,23 @@ public sealed class LoopbackOAuthFlow(
     {
         using var content = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = token });
 
-        using var response = await _http
-            .PostAsync(_options.RevocationEndpoint, content, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var response = await _http
+                .PostAsync(_options.RevocationEndpoint, content, cancellationToken).ConfigureAwait(false);
 
-        // すでに無効なトークンでも 400 が返る。切りたいだけなので受け流す
-        _ = response;
+            // すでに無効なトークンでも 400 が返る。切りたいだけなので受け流す。
+            // ただし 407 や 5xx など、取り消しが届いていない応答は記録に残す
+            if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.BadRequest)
+            {
+                Write(_log, $"取り消し: {NetworkDiagnostics.DescribeResponse(response)}");
+            }
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            Write(_log, $"取り消し: 通信に失敗。{NetworkDiagnostics.Summarize(ex)}");
+            throw;
+        }
     }
 
     /// <summary>認可画面の URL を組み立てる。</summary>
@@ -155,16 +175,68 @@ public sealed class LoopbackOAuthFlow(
         return $"{_options.AuthorizationEndpoint}?{query}";
     }
 
-    /// <summary>空きポートで待ち受け、戻り先の URL を返す。</summary>
-    private static string StartListener(HttpListener listener)
+    /// <summary>
+    /// 空きポートで待ち受け、戻り先の URL を返す。
+    /// <para>
+    /// 開始できないことがある（URL の予約が無く権限が足りない＝Access denied、ポートを別のアプリに
+    /// 取られた、セキュリティ ソフトに止められた、など）。裸の <see cref="HttpListenerException"/> のまま
+    /// 漏らすと、画面は「接続できませんでした」としか言えない。理由つきの <see cref="OAuthException"/> に
+    /// して、原因（Win32 のエラー番号）を記録に残す。
+    /// </para>
+    /// </summary>
+    private static string StartListener(HttpListener listener, Action<string>? log)
     {
         var port = FreePort();
         var redirectUri = $"http://127.0.0.1:{port}/";
 
-        listener.Prefixes.Add(redirectUri);
-        listener.Start();
+        try
+        {
+            listener.Prefixes.Add(redirectUri);
+            listener.Start();
+        }
+        catch (HttpListenerException ex)
+        {
+            throw ToOAuthException(ex, log);
+        }
 
         return redirectUri;
+    }
+
+    /// <summary>
+    /// 受け口を開始できなかったことを、理由つきの <see cref="OAuthException"/> にする。原因は記録に残す。
+    /// </summary>
+    internal static OAuthException ToOAuthException(HttpListenerException ex, Action<string>? log)
+    {
+        Write(log, $"認可の受け口を開始できなかった（{DescribeListenerFailure(ex)}）。" +
+                   $"{NetworkDiagnostics.Summarize(ex)}");
+
+        return new OAuthException(
+            "ブラウザからの戻りを受け取る準備ができませんでした" +
+            $"（{DescribeListenerFailure(ex)}）。セキュリティ ソフトなどが 127.0.0.1 の待ち受けを止めていないか、" +
+            "確かめてください。", innerException: ex);
+    }
+
+    /// <summary>
+    /// 受け口を開始できなかった理由を、Win32 のエラー番号から言葉にする。
+    /// 5 は権限（Access denied）、32・183 は別のアプリが使用中。
+    /// </summary>
+    internal static string DescribeListenerFailure(HttpListenerException ex) => ex.ErrorCode switch
+    {
+        5 => "権限が足りません（エラー 5）",
+        32 or 183 => $"別のアプリが使っています（エラー {ex.ErrorCode}）",
+        var code => $"エラー {code}",
+    };
+
+    private static void Write(Action<string>? log, string message)
+    {
+        try
+        {
+            log?.Invoke(message);
+        }
+        catch (Exception)
+        {
+            // 記録できなくても、認可そのものは続ける
+        }
     }
 
     /// <summary>空いているポートを OS に選ばせる。</summary>
@@ -293,18 +365,50 @@ public sealed class LoopbackOAuthFlow(
         fields["client_id"] = _options.ClientId;
         fields["client_secret"] = _options.ClientSecret;
 
+        var label = fields.TryGetValue("grant_type", out var grant) && grant == "refresh_token"
+            ? "トークンの取り直し"
+            : "トークンの交換";
+
         using var content = new FormUrlEncodedContent(fields);
-        using var response = await _http
-            .PostAsync(_options.TokenEndpoint, content, cancellationToken).ConfigureAwait(false);
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
-            throw new OAuthException($"トークンを取得できませんでした。{Describe(body)}", ErrorOf(body));
+            response = await _http
+                .PostAsync(_options.TokenEndpoint, content, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 通信そのものが転んだ（プロキシ・証明書・接続・時間切れ）。原因は例外の連鎖にある
+            Write(_log, $"{label}: 通信に失敗。{NetworkDiagnostics.Summarize(ex)}");
+            throw;
         }
 
-        return Parse(body, _time.GetUtcNow());
+        using (response)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = ErrorOf(body);
+
+                Write(_log, $"{label}: 失敗。{NetworkDiagnostics.DescribeResponse(response)}" +
+                            (error is null ? string.Empty : $", error={error}"));
+
+                // Google の言葉（error）が付いていれば、それを伝える。付いていなければ、Google ではなく
+                // 途中の中継（プロキシの 407・エラーページ）や障害が返したもの。状態コードごと投げて、
+                // 画面が「プロキシの認証」「時間切れ」などを言い分けられるようにする
+                if (error is null)
+                {
+                    throw new HttpRequestException(
+                        "成功以外の状態コードが返りました", null, response.StatusCode);
+                }
+
+                throw new OAuthException($"トークンを取得できませんでした。{Describe(body)}", error);
+            }
+
+            return Parse(body, _time.GetUtcNow());
+        }
     }
 
     /// <summary>応答を読む。</summary>

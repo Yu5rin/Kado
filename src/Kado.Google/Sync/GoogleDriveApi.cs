@@ -14,7 +14,8 @@ namespace Kado.Google.Sync;
 /// 「Kado」フォルダも自分で作る（<see cref="CreateFolderAsync"/>）。
 /// </para>
 /// </summary>
-public sealed class GoogleDriveApi(HttpClient http, IAccessTokenSource tokens)
+public sealed class GoogleDriveApi(
+    HttpClient http, IAccessTokenSource tokens, GoogleRetryPolicy? retry = null)
 {
     private const string Root = "https://www.googleapis.com/drive/v3";
     private const string UploadRoot = "https://www.googleapis.com/upload/drive/v3/files";
@@ -24,6 +25,52 @@ public sealed class GoogleDriveApi(HttpClient http, IAccessTokenSource tokens)
 
     private readonly HttpClient _http = http ?? throw new ArgumentNullException(nameof(http));
     private readonly IAccessTokenSource _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
+
+    /// <summary>429・5xx のときに待って出し直す方針。省略すると本物の待ち方。</summary>
+    private readonly GoogleRetryPolicy _retry = retry ?? GoogleRetryPolicy.Default;
+
+    /// <summary>フォルダを作るような小さい呼び出しの待ち時間。ほかの API と同じ30秒。</summary>
+    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>アップロードの全体の上限の、最低ライン。</summary>
+    public static readonly TimeSpan UploadMinimumTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>アップロードの全体の上限に、1MB ごとに足す長さ。およそ 34KB/s を下限の速さとみる。</summary>
+    public static readonly TimeSpan UploadTimeoutPerMegabyte = TimeSpan.FromSeconds(30);
+
+    /// <summary>アップロードの全体の上限の、いちばん長いところ。</summary>
+    public static readonly TimeSpan UploadMaximumTimeout = TimeSpan.FromMinutes(30);
+
+    /// <summary>送るのが止まったとみなす長さ。1バイトでも進めば、ここから数え直す。</summary>
+    public static readonly TimeSpan DefaultUploadStallTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// 送り終えてから、Google の応答を待つ長さ。送るのが止まったとみなす長さとは別に持つ
+    /// （送り終えたあとは読み取りが進まないので、止まったことにしてはいけない）。
+    /// </summary>
+    public static readonly TimeSpan UploadResponseTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// 送るのが止まったとみなす長さ。既定は <see cref="DefaultUploadStallTimeout"/>。
+    /// 試験では短くして、止まったときの動きを確かめる。
+    /// </summary>
+    public TimeSpan UploadStallTimeout { get; init; } = DefaultUploadStallTimeout;
+
+    /// <summary>
+    /// ファイルの大きさに応じたアップロード全体の上限。
+    /// <para>
+    /// 最低2分、1MB ごとに30秒を足し、30分で頭打ち。全体の上限だけだと、遅い回線で大きなものを
+    /// 送るときに、進んでいるのに切れる。止まったかどうかは、別に進み具合で見る
+    /// （<see cref="UploadStallTimeout"/>）。
+    /// </para>
+    /// </summary>
+    public static TimeSpan UploadTimeoutFor(long sizeBytes)
+    {
+        var megabytes = Math.Max(0, sizeBytes) / (1024.0 * 1024.0);
+        var span = UploadMinimumTimeout + TimeSpan.FromSeconds(Math.Ceiling(megabytes) * UploadTimeoutPerMegabyte.TotalSeconds);
+
+        return span > UploadMaximumTimeout ? UploadMaximumTimeout : span;
+    }
 
     /// <summary>
     /// フォルダを作る。
@@ -36,15 +83,19 @@ public sealed class GoogleDriveApi(HttpClient http, IAccessTokenSource tokens)
 
         var body = new JsonObject { ["name"] = name, ["mimeType"] = FolderMimeType };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{Root}/files?fields=id,name")
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
+        var json = body.ToJsonString();
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
-        await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
+        using var response = await GoogleHttp.SendAsync(
+            _http, _tokens,
+            () => new HttpRequestMessage(HttpMethod.Post, $"{Root}/files?fields=id,name")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            },
+            _retry, RequestTimeout, cancellationToken).ConfigureAwait(false);
 
-        return await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+        await GoogleHttp.EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
+
+        return await GoogleHttp.ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -69,80 +120,60 @@ public sealed class GoogleDriveApi(HttpClient http, IAccessTokenSource tokens)
             ["parents"] = new JsonArray(folderId),
         };
 
-        using var content = new MultipartContent("related");
-        content.Add(new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json"));
+        // 開けないファイル（権限が無い・消えた・フォルダだった）は、通信を始める前にここで例外にする
+        long size;
+        await using (var probe = File.OpenRead(localFilePath)) size = probe.Length;
 
-        await using var stream = File.OpenRead(localFilePath);
-        using var fileContent = new StreamContent(stream);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue(
-            mimeType is { Length: > 0 } ? mimeType : "application/octet-stream");
-        content.Add(fileContent);
+        var limit = UploadTimeoutFor(size);
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{UploadRoot}?uploadType=multipart&fields=id,name,mimeType,webViewLink,iconLink")
+        // 全体の上限と、進み具合が止まったときの打ち切りと、呼び出し側の中止を、1本の待ちにする
+        using var total = new CancellationTokenSource(limit);
+        using var stall = new CancellationTokenSource(UploadStallTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, total.Token, stall.Token);
+
+        HttpRequestMessage CreateRequest()
         {
-            Content = content,
-        };
+            // 出し直しのたびに、ファイルを開き直して新しい本文を作る
+            stall.CancelAfter(UploadStallTimeout);
 
-        using var response = await SendRawAsync(request, cancellationToken).ConfigureAwait(false);
-        await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
+            var content = new MultipartContent("related");
+            content.Add(new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json"));
 
-        return await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
-    }
+            var progress = new ProgressStream(
+                File.OpenRead(localFilePath),
+                onProgress: () => stall.CancelAfter(UploadStallTimeout),
+                // 送り終えた。応答を待つあいだは読み取りが進まないので、別の長さで待つ
+                onEnd: () => stall.CancelAfter(UploadResponseTimeout));
 
-    // ------------------------------------------------------------------
+            var fileContent = new StreamContent(progress);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+                mimeType is { Length: > 0 } ? mimeType : "application/octet-stream");
+            content.Add(fileContent);
 
-    private async Task<HttpResponseMessage> SendRawAsync(
-        HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", await _tokens.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+            return new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{UploadRoot}?uploadType=multipart&fields=id,name,mimeType,webViewLink,iconLink")
+            {
+                Content = content,
+            };
+        }
 
-        return await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task<JsonElement> ReadBodyAsync(
-        HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(text)) return default;
-
-        // 読み終えた文書は返す（Clone した要素は文書と切り離されている）。
-        // JSON でない本文（プロキシの HTML など）は JsonException になる。呼び出し側が文言にする
-        using var document = JsonDocument.Parse(text);
-        return document.RootElement.Clone();
-    }
-
-    private static async Task EnsureOkAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode) return;
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        throw new GoogleApiException(response.StatusCode, ReadReason(body), body);
-    }
-
-    private static string ReadReason(string body)
-    {
         try
         {
-            var error = JsonDocument.Parse(body).RootElement.GetProperty("error");
+            using var response = await GoogleHttp.SendAsync(
+                _http, _tokens, CreateRequest, _retry, timeout: null, linked.Token).ConfigureAwait(false);
 
-            if (error.TryGetProperty("errors", out var list) &&
-                list.ValueKind == JsonValueKind.Array &&
-                list.EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Object } first &&
-                Mapping.GoogleJson.Text(first, "reason") is { } reason)
-            {
-                return reason;
-            }
+            await GoogleHttp.EnsureOkAsync(response, linked.Token).ConfigureAwait(false);
 
-            return Mapping.GoogleJson.Text(error, "message") ?? "理由なし";
+            return await GoogleHttp.ReadBodyAsync(response, linked.Token).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return "理由なし";
+            // 呼び出し側が止めたのではない。進みが止まったか、全体の上限を超えた
+            throw new TimeoutException(stall.IsCancellationRequested
+                ? $"アップロードが{(int)UploadStallTimeout.TotalSeconds}秒間進まなかったので中止しました。"
+                : $"アップロードが{(int)limit.TotalMinutes}分以内に終わらなかったので中止しました。");
         }
     }
 }

@@ -94,6 +94,11 @@ public sealed class TaskSyncEngine(
         ArgumentException.ThrowIfNullOrWhiteSpace(taskListId);
 
         var report = await PushDeletionsAsync(taskListId, cancellationToken).ConfigureAwait(false);
+
+        // Google が混み合っていて、削除を伝えるところで止まった。このリストの残りは次回に回す
+        // （EventSyncEngine と同じ）
+        if (report.Deferred) return report;
+
         report += await PullAsync(taskListId, localListId, cancellationToken).ConfigureAwait(false);
         report += await PushChangesAsync(taskListId, localListId, cancellationToken).ConfigureAwait(false);
 
@@ -105,6 +110,8 @@ public sealed class TaskSyncEngine(
     private async Task<SyncReport> PushDeletionsAsync(string taskListId, CancellationToken cancellationToken)
     {
         var deleted = 0;
+        var deferred = false;
+        var throttled = false;
         var warnings = new List<string>();
 
         // このタスクリストのものだけ。予定のときと同じ理由（EventSyncEngine を見よ）
@@ -135,9 +142,17 @@ public sealed class TaskSyncEngine(
                     $"権限が無いため、Google 側のタスクを削除できません（{tombstone.Id}）: {ex.Reason}。" +
                     "手元からは消えていますが、Google には残っています");
             }
+            catch (GoogleApiException ex) when (ex.IsTransient)
+            {
+                // 呼びすぎ・Google の不調。待って出し直したあとなので、残りは次回に回す
+                deferred = true;
+                throttled = ex.IsRateLimited;
+                warnings.Add(SyncReport.BusyWarning);
+                break;
+            }
             catch (GoogleApiException ex)
             {
-                // 呼びすぎ・サーバー側の不調と、その他の 4xx。1件の削除が断られただけで、
+                // その他の 4xx。1件の削除が断られただけで、
                 // このリストの取り込みも送信も止めない。記録は残し、次の同期でやり直す
                 warnings.Add(ex.Description is { Length: > 0 } detail
                     ? $"削除を伝えられませんでした（{tombstone.Id}）: {ex.Reason} — {detail}"
@@ -145,7 +160,7 @@ public sealed class TaskSyncEngine(
             }
         }
 
-        return new SyncReport { DeletedRemote = deleted, Warnings = warnings };
+        return new SyncReport { DeletedRemote = deleted, Warnings = warnings, Deferred = deferred, Throttled = throttled };
     }
 
     private async Task<SyncReport> PullAsync(
@@ -439,6 +454,8 @@ public sealed class TaskSyncEngine(
         var created = 0;
         var updated = 0;
         var moved = 0;
+        var deferred = false;
+        var throttled = false;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
 
@@ -559,7 +576,12 @@ public sealed class TaskSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {
-                warnings.Add($"送れませんでした（{value.Title}）: {ex.Reason}");
+                // 呼びすぎ・Google の不調。待って出し直したあとなので、残りは次回に回す
+                // （EventSyncEngine と同じ。送れていないものは、次の同期でまた送る）
+                deferred = true;
+                throttled = ex.IsRateLimited;
+                warnings.Add(SyncReport.BusyWarning);
+                break;
             }
             catch (GoogleApiException ex)
             {
@@ -578,6 +600,8 @@ public sealed class TaskSyncEngine(
             CreatedRemote = created,
             UpdatedRemote = updated,
             Moved = moved,
+            Deferred = deferred,
+            Throttled = throttled,
             Warnings = warnings,
         };
     }

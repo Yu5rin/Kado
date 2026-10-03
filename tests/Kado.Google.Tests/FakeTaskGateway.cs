@@ -25,6 +25,20 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
 
     public GoogleApiException? ThrowOnWrite { get; set; }
 
+    /// <summary>書き込みのたびにこの例外を投げ続ける。呼びすぎ・Google の不調が続く場面を作る。</summary>
+    public GoogleApiException? ThrowOnEveryWrite { get; set; }
+
+    /// <summary>書き込み（作成・書き換え・削除・移動）を試みた回数。失敗したものも数える。</summary>
+    public int WriteAttempts { get; private set; }
+
+    private void ThrowIfWriteFails()
+    {
+        WriteAttempts++;
+
+        if (ThrowOnEveryWrite is { } always) throw always;
+        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+    }
+
     public Task<GooglePage> ListAsync(
         string taskListId, DateTimeOffset? updatedSince, string? pageToken, CancellationToken cancellationToken)
     {
@@ -61,7 +75,7 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
 
     public Task<JsonElement> InsertAsync(string taskListId, JsonObject body, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         var id = $"t{_nextId++}";
         var stored = body.DeepClone().AsObject();
@@ -76,7 +90,7 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
     public Task<JsonElement> PatchAsync(
         string taskListId, string taskId, JsonObject body, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         if (!Items.TryGetValue(taskId, out var stored))
         {
@@ -92,7 +106,7 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
 
     public Task DeleteAsync(string taskListId, string taskId, CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         Deleted.Add(taskId);
         Items.Remove(taskId);
@@ -108,7 +122,7 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
         string sourceTaskListId, string taskId, string destinationTaskListId,
         CancellationToken cancellationToken)
     {
-        if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
+        ThrowIfWriteFails();
 
         if (!Items.TryGetValue(taskId, out var stored))
         {

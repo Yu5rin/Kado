@@ -118,7 +118,7 @@ public class GoogleSyncServiceTests : IDisposable
         var token = new FixedToken();
 
         return new GoogleSyncService(
-            _test.Workspace, new GoogleCalendarApi(http, token), new GoogleTasksApi(http, token));
+            _test.Workspace, new GoogleCalendarApi(http, token, GoogleRetryPolicy.None), new GoogleTasksApi(http, token, GoogleRetryPolicy.None));
     }
 
     private static (HttpStatusCode, string) Route(string url) => url switch

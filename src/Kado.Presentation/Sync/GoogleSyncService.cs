@@ -4,6 +4,7 @@ using Kado.Data.Models;
 using Kado.Data.Repositories;
 using Kado.Google.Mapping;
 using Kado.Google.Sync;
+using Kado.Presentation.Net;
 
 namespace Kado.Presentation.Sync;
 
@@ -22,9 +23,15 @@ public sealed class GoogleSyncService(
     CalendarWorkspace workspace,
     GoogleCalendarApi calendars,
     GoogleTasksApi tasks,
-    DateTimeOffset? from = null) : IDisposable
+    DateTimeOffset? from = null,
+    NetworkLog? log = null) : IDisposable
 {
+    /// <summary>shell.log の見出し。</summary>
+    private const string LogArea = "Google 同期";
+
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    private readonly NetworkLog _log = log ?? NetworkLog.None;
 
     private GoogleColors? _palette;
 
@@ -43,7 +50,14 @@ public sealed class GoogleSyncService(
         try
         {
             var report = await ImportCalendarListAsync(cancellationToken).ConfigureAwait(false);
+
+            // 呼びすぎと言われた（待って出し直してもだめだった）。このまま各カレンダーを叩くと
+            // かえって混むので、ここで止めて次回に回す
+            if (report.Throttled) return report;
+
             report += await ImportTaskListsAsync(cancellationToken).ConfigureAwait(false);
+            if (report.Throttled) return report;
+
             report += await MoveWorkingDayCalendarToGoogleAsync(cancellationToken).ConfigureAwait(false);
 
             // 入れ先が決まったあとで見る。ここまでで見つからなければ案内を出す
@@ -65,6 +79,9 @@ public sealed class GoogleSyncService(
                     () => engine.SyncAsync(calendar.Id, calendar.Id, cancellationToken, calendar.IsReadOnly),
                     calendar.DisplayName,
                     cancellationToken).ConfigureAwait(false);
+
+                // 呼びすぎと言われた。残りのカレンダーも次回に回す（続けると、かえって混む）
+                if (report.Throttled) return report;
             }
 
             // 一覧から外れたもの（送っていない中身を残してあるだけ）は同期しない
@@ -80,6 +97,8 @@ public sealed class GoogleSyncService(
                 report += await RunAsync(
                     () => engine.SyncAsync(list, list, cancellationToken), list, cancellationToken)
                     .ConfigureAwait(false);
+
+                if (report.Throttled) return report;
             }
 
             PruneTombstones();
@@ -202,12 +221,14 @@ public sealed class GoogleSyncService(
                 Warnings = [$"実働日の入れ先を Google の「{CalendarWorkspace.WorkingDayCalendarName}」に移しました（{moved} 件）"],
             };
         }
-        catch (GoogleApiException ex)
+        catch (GoogleApiException ex) when (!IsFatalForRun(ex))
         {
+            LogApiFailure("実働日の入れ先を作る", ex);
+
             // 作れなくても、こちらの中には入れ先がある。次の同期でまた試す
             return new SyncReport
             {
-                Warnings = [$"Google に「{CalendarWorkspace.WorkingDayCalendarName}」を作れませんでした（{ex.Reason}）"],
+                Warnings = [$"Google に「{CalendarWorkspace.WorkingDayCalendarName}」を作れませんでした（{GoogleFailure.Describe(ex, ex.Reason)}）"],
             };
         }
     }
@@ -238,21 +259,56 @@ public sealed class GoogleSyncService(
     /// カレンダーは1つずつ独立している。1つが読めないからといって、他のカレンダーの
     /// 予定まで入らないのは困る。何が起きたかは残したうえで次へ進む。
     /// </para>
+    /// <para>
+    /// 失敗は<b>1行ずつ shell.log に残す</b>（例外の連鎖・状態コード・Content-Type・種類）。
+    /// 画面の警告には、型名や英語のメッセージを出さない。
+    /// </para>
+    /// <para>
+    /// ただし、プロキシの認証（407）と、トークンが通らない（401）は、どのカレンダーでも同じ
+    /// 結果になる。1つずつ警告にして叩き続けず、同期そのものを失敗として上へ返す。
+    /// </para>
     /// </summary>
-    private static async Task<SyncReport> RunAsync(
+    private async Task<SyncReport> RunAsync(
         Func<Task<SyncReport>> work, string name, CancellationToken cancellationToken)
     {
         try
         {
             return await work().ConfigureAwait(false);
         }
+        catch (GoogleApiException ex) when (IsFatalForRun(ex))
+        {
+            // 呼び出し側（SyncViewModel）が、文言にして失敗として出す
+            throw;
+        }
+        catch (GoogleApiException ex) when (ex.IsTransient)
+        {
+            // 待って出し直してもだめだった（呼びすぎ・Google の不調）。残りは次回に回す
+            LogApiFailure($"「{name}」の同期", ex);
+
+            return new SyncReport
+            {
+                Deferred = true,
+                Throttled = ex.IsRateLimited,
+                Warnings = [SyncReport.BusyWarning],
+            };
+        }
         catch (GoogleApiException ex)
         {
-            return new SyncReport { Warnings = [$"「{name}」を同期できません（{ex.Reason}）"] };
+            LogApiFailure($"「{name}」の同期", ex);
+
+            return new SyncReport
+            {
+                Warnings = [$"「{name}」を同期できません（{GoogleFailure.Describe(ex, ex.Reason)}）"],
+            };
         }
         catch (HttpRequestException ex)
         {
-            return new SyncReport { Warnings = [$"「{name}」に繋がりません（{ex.Message}）"] };
+            _log.Failure(LogArea, ex, GoogleFailure.Classify(ex), $"「{name}」の同期");
+
+            return new SyncReport
+            {
+                Warnings = [$"「{name}」に繋がりません（{GoogleFailure.Describe(ex, "通信できませんでした")}）"],
+            };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -262,10 +318,26 @@ public sealed class GoogleSyncService(
         catch (Exception ex)
         {
             // 想定していない転び方をしても、他のカレンダーは続ける。
-            // 1つのつまずきで一件も入らないより、入るものを入れて何が起きたかを残す
-            return new SyncReport { Warnings = [$"「{name}」で想定外の失敗（{ex.GetType().Name}: {ex.Message}）"] };
+            // 1つのつまずきで一件も入らないより、入るものを入れて何が起きたかを残す。
+            // 型名は画面に出さない（詳細は shell.log）
+            _log.Failure(LogArea, ex, GoogleFailure.Classify(ex), $"「{name}」の同期");
+
+            return new SyncReport
+            {
+                Warnings = [$"「{name}」で想定外の失敗が起きました（詳細は shell.log に残しました）"],
+            };
         }
     }
+
+    /// <summary>
+    /// 1つずつの警告にせず、同期ごと止めるべき断られ方か。
+    /// <para>プロキシが認証を求めている（407）、またはトークンが通らない（401。取り直しても同じ）。</para>
+    /// </summary>
+    private static bool IsFatalForRun(GoogleApiException ex) => ex.IsProxyAuthRequired || ex.IsUnauthorized;
+
+    /// <summary>Google の API が断ってきたことを、1行で記録に残す。</summary>
+    private void LogApiFailure(string what, GoogleApiException ex) =>
+        _log.Failure(LogArea, ex, GoogleFailure.ClassifyApi(ex), what);
 
     /// <summary>
     /// Google のカレンダー一覧を取り込む。
@@ -280,6 +352,8 @@ public sealed class GoogleSyncService(
         var created = 0;
         var updated = 0;
         var pushed = 0;
+        var deferred = false;
+        var throttled = false;
         var warnings = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var listed = false;
@@ -375,10 +449,23 @@ public sealed class GoogleSyncService(
 
             listed = true;
         }
+        catch (GoogleApiException ex) when (IsFatalForRun(ex))
+        {
+            throw;
+        }
+        catch (GoogleApiException ex) when (ex.IsTransient)
+        {
+            // 待って出し直してもだめだった。一覧を取れなくても手元は壊れない
+            LogApiFailure("カレンダー一覧の取得", ex);
+            deferred = true;
+            throttled = ex.IsRateLimited;
+            warnings.Add(SyncReport.BusyWarning);
+        }
         catch (GoogleApiException ex)
         {
             // 一覧を取れなくても、すでに知っているカレンダーの同期は続けられる
-            warnings.Add($"カレンダー一覧を取れませんでした: {ex.Reason}");
+            LogApiFailure("カレンダー一覧の取得", ex);
+            warnings.Add($"カレンダー一覧を取れませんでした: {GoogleFailure.Describe(ex, ex.Reason)}");
         }
 
         // Google から無くなったものを片付ける。
@@ -443,6 +530,8 @@ public sealed class GoogleSyncService(
             CreatedLocal = created,
             UpdatedLocal = updated,
             UpdatedRemote = pushed,
+            Deferred = deferred,
+            Throttled = throttled,
             // 消えたカレンダーは created/updated に数えない（作った・直したわけではない）。
             // それでも一覧は変わっているので、専用の印を立てる（SyncReport.SourcesChanged を見よ）
             SourcesChanged = removedCount > 0,
@@ -673,6 +762,8 @@ public sealed class GoogleSyncService(
     /// </summary>
     private async Task<SyncReport> ImportTaskListsAsync(CancellationToken cancellationToken)
     {
+        var deferred = false;
+        var throttled = false;
         var created = 0;
         var updated = 0;
         var warnings = new List<string>();
@@ -730,9 +821,21 @@ public sealed class GoogleSyncService(
 
             listed = true;
         }
+        catch (GoogleApiException ex) when (IsFatalForRun(ex))
+        {
+            throw;
+        }
+        catch (GoogleApiException ex) when (ex.IsTransient)
+        {
+            LogApiFailure("タスクリスト一覧の取得", ex);
+            deferred = true;
+            throttled = ex.IsRateLimited;
+            warnings.Add(SyncReport.BusyWarning);
+        }
         catch (GoogleApiException ex)
         {
-            warnings.Add($"タスクリスト一覧を取れませんでした: {ex.Reason}");
+            LogApiFailure("タスクリスト一覧の取得", ex);
+            warnings.Add($"タスクリスト一覧を取れませんでした: {GoogleFailure.Describe(ex, ex.Reason)}");
         }
 
         // Google から無くなったリストを片付ける。カレンダーと同じ理由で、
@@ -787,6 +890,8 @@ public sealed class GoogleSyncService(
         {
             CreatedLocal = created,
             UpdatedLocal = updated,
+            Deferred = deferred,
+            Throttled = throttled,
             SourcesChanged = removedCount > 0,
             Warnings = warnings,
         };

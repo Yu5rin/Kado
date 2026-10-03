@@ -57,6 +57,30 @@ public sealed record SyncReport
     /// </summary>
     public bool SourcesChanged { get; init; }
 
+    /// <summary>
+    /// Google が混み合っていて（呼びすぎ・5xx）、待って出し直してもだめだったので、一部を次回に回したか。
+    /// <para>
+    /// <b>手元は壊れていない</b>ので失敗ではない。残りは次の同期でまた送る。
+    /// </para>
+    /// </summary>
+    public bool Deferred { get; init; }
+
+    /// <summary>
+    /// <see cref="Deferred"/> のうち、<b>呼びすぎ</b>（429・呼びすぎの 403）と言われたもの。
+    /// <para>
+    /// すぐ次を叩いても同じ結果になる。裏の定期同期は、これが立ったら間隔を延ばす
+    /// （<c>SyncViewModel.SyncQuietlyAsync</c>）。1つのカレンダーの5xxでは立てない
+    /// （その不調で、ほかのカレンダーの同期まで遅くしない）。
+    /// </para>
+    /// </summary>
+    public bool Throttled { get; init; }
+
+    /// <summary>
+    /// <see cref="Deferred"/> のときに出す警告。<b>同じ文で出す</b>（画面は同じ文を重ねない。
+    /// カレンダーごとに出しても1行にまとまる）。
+    /// </summary>
+    public const string BusyWarning = "Google が混み合っていたので、一部を次回に回しました";
+
     /// <summary>伝えきれなかったことがら。止めるほどではないが、黙らせない。</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
@@ -90,6 +114,8 @@ public sealed record SyncReport
         Moved = left.Moved + right.Moved,
         FullResync = left.FullResync || right.FullResync,
         SourcesChanged = left.SourcesChanged || right.SourcesChanged,
+        Deferred = left.Deferred || right.Deferred,
+        Throttled = left.Throttled || right.Throttled,
         Warnings = [.. left.Warnings, .. right.Warnings],
     };
 }

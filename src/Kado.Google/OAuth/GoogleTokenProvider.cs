@@ -128,37 +128,71 @@ public sealed class GoogleTokenProvider(
             // 待っている間に別の呼び出しが取り直していることがある
             if (_store.Load() is { } latest && latest.IsUsableAt(_time.GetUtcNow())) return latest.AccessToken;
 
-            var current = _store.Load() ?? throw new OAuthException("Google に接続していません。");
-            if (current.RefreshToken is not { } refreshToken)
-            {
-                throw new OAuthException("更新トークンがありません。接続し直してください。");
-            }
-
-            OAuthTokens refreshed;
-            try
-            {
-                refreshed = current.WithRefreshed(
-                    await _flow.RefreshAsync(refreshToken, cancellationToken).ConfigureAwait(false));
-            }
-            catch (OAuthException e) when (e.IsRefreshTokenDead)
-            {
-                // 更新トークンが死ぬ場面は現実にある。同意画面が「テスト」のままなら
-                // 7日で失効するし、利用者が Google 側で許可を取り消すこともある。
-                // 控えを残すと、繋がって見えるのに何をしても失敗し続ける
-                _store.Clear();
-
-                throw new OAuthException(
-                    "Google との連携が切れました。接続し直してください。"
-                    + "（同意画面が「テスト」のままだと7日で切れます）", e.Error);
-            }
-
-            _store.Save(refreshed);
-            return refreshed.AccessToken;
+            return await RefreshLockedAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Google が 401 で断ってきたときに、期限に関わらずトークンを取り直す。
+    /// <para>
+    /// 時計のずれや Google 側での失効で、期限は残っているのに通らないことがある。
+    /// 断られたトークンと違うものを、すでに別の呼び出しが取り直していれば、それを返す
+    /// （同時に何本も取り直さない）。
+    /// </para>
+    /// </summary>
+    public async Task<string> RefreshAccessTokenAsync(string rejectedToken, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_store.Load() is not { } current) throw new OAuthException("Google に接続していません。");
+
+            if (!string.Equals(current.AccessToken, rejectedToken, StringComparison.Ordinal))
+            {
+                return current.AccessToken;
+            }
+
+            return await RefreshLockedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>更新トークンでアクセストークンを取り直して控える。<see cref="_gate"/> を持った状態で呼ぶ。</summary>
+    private async Task<string> RefreshLockedAsync(CancellationToken cancellationToken)
+    {
+        var current = _store.Load() ?? throw new OAuthException("Google に接続していません。");
+        if (current.RefreshToken is not { } refreshToken)
+        {
+            throw new OAuthException("更新トークンがありません。接続し直してください。");
+        }
+
+        OAuthTokens refreshed;
+        try
+        {
+            refreshed = current.WithRefreshed(
+                await _flow.RefreshAsync(refreshToken, cancellationToken).ConfigureAwait(false));
+        }
+        catch (OAuthException e) when (e.IsRefreshTokenDead)
+        {
+            // 更新トークンが死ぬ場面は現実にある。同意画面が「テスト」のままなら
+            // 7日で失効するし、利用者が Google 側で許可を取り消すこともある。
+            // 控えを残すと、繋がって見えるのに何をしても失敗し続ける
+            _store.Clear();
+
+            throw new OAuthException(
+                "Google との連携が切れました。接続し直してください。"
+                + "（同意画面が「テスト」のままだと7日で切れます）", e.Error);
+        }
+
+        _store.Save(refreshed);
+        return refreshed.AccessToken;
     }
 
     public void Dispose() => _gate.Dispose();

@@ -16,6 +16,7 @@ using Kado.Presentation.Settings;
 using Kado.Data;
 using Kado.Data.Backup;
 using Kado.Presentation;
+using Kado.Presentation.Net;
 using Kado.Presentation.Sync;
 using Kado.Presentation.Update;
 using Kado.Presentation.ViewModels;
@@ -35,8 +36,9 @@ public partial class App : Application
     /// <summary>
     /// Google 同期専用の接続。
     /// <para>
-    /// <see cref="GoogleSyncService"/> は <c>ConfigureAwait(false)</c> で書かれているので、
-    /// 最初の通信のあとはスレッドプール上のスレッドでリポジトリを叩く。<see cref="_connection"/>
+    /// <see cref="GoogleSyncService"/> は <see cref="GoogleConnection"/> が <c>Task.Run</c> の中で動かし、
+    /// <c>ConfigureAwait(false)</c> で書かれているので、同期の最初から最後まで、スレッドプール上のスレッドで
+    /// リポジトリを叩く。<see cref="_connection"/>
     /// を UI スレッドと同時に使うと、どちらかが張っているトランザクションともう片方の
     /// トランザクション無しのコマンドがかち合い、<see cref="InvalidOperationException"/> で
     /// 落ちることがある。SQLite は WAL なので接続を分ければ読み書きを並行できる
@@ -50,6 +52,18 @@ public partial class App : Application
     private SingleInstance? _instance;
     private BackgroundSync? _background;
     private UpdateService? _updater;
+
+    /// <summary>常駐しているあいだの、新しい版の確認の段取り（起動から24時間ごと）。</summary>
+    private readonly UpdateCheckSchedule _updateSchedule = new();
+
+    /// <summary>確認の時期が来ているかを、30分ごとに見る。確認そのものは <see cref="_updateSchedule"/> が決める。</summary>
+    private DispatcherTimer? _updatePoll;
+
+    /// <summary>トレイの通知・状態行で知らせた、まだ更新していない版。通知を押したら、この版の更新の窓を開く。</summary>
+    private UpdateInfo? _announcedUpdate;
+
+    /// <summary>更新の窓を開いている最中か。重ねて開かない。</summary>
+    private bool _updateWindowOpen;
 
     /// <summary>
     /// 新しい版を見に行く先。
@@ -278,11 +292,16 @@ public partial class App : Application
             // 復号できた控えは DpapiTokenStore が覚えているので、2回目以降は呼ばない
             StartupTrace.Measure("DPAPI(トークン読み込み)", () => tokenStore.Load());
 
+            // Google の通信の失敗は、1行ずつ shell.log に残す（更新の確認と同じ流儀）。
+            // 経路（プロキシ）の記録を二重にしないよう、同期・接続・添付で同じ記録係を使う
+            var googleLog = new NetworkLog(Shell.ShellDiagnosticsLog.Write);
+
             _google = new GoogleConnection(
                 syncWorkspace,
                 googleClient,
                 tokenStore,
-                OpenInBrowser);
+                OpenInBrowser,
+                log: googleLog);
 
             // 前回、ワークエリアを削ったまま落ちていたら元に戻す（要件書 2.3）。
             // ウィンドウを作る前に済ませる。削られたままの画面を基準に位置を決めない
@@ -314,7 +333,9 @@ public partial class App : Application
                 // フォルダ ID の控えは UI 側の workspace.Settings に持つ（同じ
                 // ファイルを同期用の接続とも共有している）
                 attachmentUploader: new Kado.Presentation.Sync.GoogleDriveAttachmentUploader(
-                    _google, workspace.Settings)));
+                    _google, workspace.Settings, googleLog),
+                // 実働日の配信の取得。失敗は shell.log に残し、通信は認証付きプロキシ（407）にも対応する
+                feed: new WorkdayFeedClient(log: new NetworkLog(Shell.ShellDiagnosticsLog.Write))));
             StartupTrace.Mark("MainViewModel構築後");
 
             // ここでバインディングが評価される。年・一覧のビューは表示するまで
@@ -433,6 +454,9 @@ public partial class App : Application
                         () => main.Sync.SyncQuietlyAsync(token)).Task.Unwrap());
 
                 _background.Start();
+
+                // 手で押した同期や、繋いだ直後の同期がうまくいったら、失敗で延びた間隔を戻す
+                main.Sync.Succeeded += (_, _) => _background?.ReportSuccess();
             }
 
             StartupTrace.Mark("同期の準備後");
@@ -445,7 +469,13 @@ public partial class App : Application
                 // 通信そのものは別スレッドで走る（UpdateService.CheckAsync）。
                 // ここで測るのは、呼び出しが画面のスレッドを止めた時間
                 StartupTrace.Measure("更新の確認(開始)", () => { _ = CheckForUpdateAsync(showWhenLatest: false); });
+
+                // 起動時の確認を起点に、24時間ごとの確認を数え始める
+                _updateSchedule.MarkChecked(DateTime.Now);
             }
+
+            // 常駐しているあいだも、1日1回、静かに確かめる（設定で切っていれば何もしない）
+            StartUpdatePolling();
 
             StartupTrace.Measure("WatchForResume", () => WatchForResume(window));
             StartupTrace.Mark("OnStartup終了");
@@ -561,9 +591,144 @@ public partial class App : Application
                 return;
 
             case UpdateCheckStatus.UpdateAvailable:
-                new UpdateWindow(_updater, result.Info!, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+                // 窓で知らせた版は、常駐中の確認でもう一度通知しない（同じ版で何度も出さない）
+                _announcedUpdate = result.Info;
+                ShowUpdateWindow(result.Info!);
                 return;
         }
+    }
+
+    /// <summary>
+    /// 更新の窓を出す。重ねては開かない（起動時の確認・押しての確認・通知を押したときが、近い時刻に重なりうる）。
+    /// </summary>
+    private void ShowUpdateWindow(UpdateInfo info)
+    {
+        if (_updater is null || _updateWindowOpen) return;
+
+        _updateWindowOpen = true;
+        try
+        {
+            new UpdateWindow(_updater, info, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+        }
+        finally
+        {
+            _updateWindowOpen = false;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 常駐中の、新しい版の確認
+    // ------------------------------------------------------------------
+
+    /// <summary>確認の時期が来ているかを見る間隔。確認そのものは <see cref="UpdateCheckSchedule"/> が決める。</summary>
+    private static readonly TimeSpan UpdatePollInterval = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// 常駐しているあいだの確認を始める。
+    /// <para>
+    /// 以前は起動したときと押したときにしか確かめなかった。トレイに入ったまま何日も動かす使い方
+    /// （既定）では、新しい版に一度も気づかなかった。ここでは<b>起動から24時間ごと</b>に静かに確かめる。
+    /// スリープから戻って日付が変わっていたときも確かめる（<see cref="WatchForResume"/>）。
+    /// </para>
+    /// </summary>
+    private void StartUpdatePolling()
+    {
+        _updatePoll = new DispatcherTimer(DispatcherPriority.Background) { Interval = UpdatePollInterval };
+        _updatePoll.Tick += (_, _) => CheckForUpdateInBackgroundIfDue(afterResume: false);
+        _updatePoll.Start();
+
+        Exit += (_, _) => _updatePoll?.Stop();
+    }
+
+    /// <summary>
+    /// 時期が来ていれば、静かに確かめる。設定で更新の確認を切っていれば、何もしない。
+    /// </summary>
+    private void CheckForUpdateInBackgroundIfDue(bool afterResume)
+    {
+        if (_updater is null || _leaving) return;
+
+        // 設定は動いている間に変わる。確認を切っているなら、通信しない
+        if (_settings is not { CheckForUpdateOnStartup: true }) return;
+
+        // 更新の窓を開いている間は、重ねて確かめない
+        if (_updateWindowOpen) return;
+
+        if (!_updateSchedule.IsDue(DateTime.Now, afterResume)) return;
+
+        _ = CheckForUpdateQuietlyAsync();
+    }
+
+    /// <summary>
+    /// 静かな確認。<b>更新の窓を勝手に開かない。</b>新しい版があれば、トレイの通知と状態行で知らせ、
+    /// 押されたときに更新の窓を開く。最新のとき・確かめられなかったときは何も出さない
+    /// （確かめられなかった理由は shell.log に残っている）。
+    /// </summary>
+    private async Task CheckForUpdateQuietlyAsync()
+    {
+        if (_updater is null) return;
+
+        UpdateCheckResult result;
+        try
+        {
+            result = await _updater.CheckAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // CheckAsync は例外を投げない作り。想定外でも、常駐中に落とさない
+            Shell.ShellDiagnosticsLog.Write($"更新の確認(常駐): 想定外の失敗。{Kado.Core.Net.NetworkDiagnostics.Summarize(ex)}");
+            _updateSchedule.MarkFailed(DateTime.Now);
+            return;
+        }
+
+        switch (result.Status)
+        {
+            case UpdateCheckStatus.AlreadyChecking:
+                // 押しての確認と重なった。そちらが結果を出す。時期はそのまま（次の見回りでまた見る）
+                return;
+
+            case UpdateCheckStatus.Failed:
+                _updateSchedule.MarkFailed(DateTime.Now);
+                return;
+
+            case UpdateCheckStatus.UpToDate:
+                _updateSchedule.MarkChecked(DateTime.Now);
+                return;
+
+            case UpdateCheckStatus.UpdateAvailable:
+                _updateSchedule.MarkChecked(DateTime.Now);
+                AnnounceUpdate(result.Info!);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// 新しい版があることを、割り込まずに知らせる。同じ版は、一度だけ。
+    /// <para>
+    /// 状態行（ウィンドウの下）と、トレイのバルーン。バルーンは押すと更新の窓を開く。
+    /// 通知を出せない設定（集中モードなど）でも、状態行と「更新を確認…」から更新できる。
+    /// </para>
+    /// </summary>
+    private void AnnounceUpdate(UpdateInfo info)
+    {
+        if (_announcedUpdate is { } announced && announced.Version >= info.Version) return;
+
+        _announcedUpdate = info;
+
+        if (MainWindow?.DataContext is MainViewModel main)
+        {
+            main.AnnounceStatus($"新しい版 {info.TagName} があります。⚙メニューの「更新を確認…」から更新できます");
+        }
+
+        _tray?.ShowBalloon("Kado", $"新しい版 {info.TagName} があります。ここを押すと更新の窓を開きます。");
+    }
+
+    /// <summary>通知を押された。知らせた版の更新の窓を、前に出して開く。</summary>
+    private void OnUpdateBalloonClicked()
+    {
+        if (_announcedUpdate is not { } info) return;
+
+        BringToFront();
+        ShowUpdateWindow(info);
     }
 
     /// <summary>
@@ -1039,6 +1204,7 @@ public partial class App : Application
 
         _tray = new Shell.TrayIcon("Kado", BuildTrayMenu(main));
         _tray.Activated += (_, _) => Dispatcher.Invoke(BringToFront);
+        _tray.BalloonClicked += (_, _) => Dispatcher.Invoke(OnUpdateBalloonClicked);
 
         // 他のアプリを使っているあいだでも効かせる。取られていれば黙って諦める
         _hotKeys = Shell.GlobalHotKeys.Attach(window);
@@ -1092,12 +1258,25 @@ public partial class App : Application
 
         void Recheck(ClockChange change)
         {
+            // 復帰したら、少し待ってから裏の同期を1回起こす。戻った直後はネットワークがまだ無いので、
+            // すぐ叩かない（BackgroundSync.ResumeDelay）。この知らせは UI のスレッドには来ないが、
+            // SyncSoon はどのスレッドから呼んでもよい
+            if (ClockChangeRules.ShouldSyncAfter(change)) _background?.SyncSoon();
+
             if (!ClockChangeRules.ShouldRecheck(change)) return;
 
             Dispatcher.BeginInvoke(() =>
             {
                 if (window.DataContext is MainViewModel main) main.UpdateNow(DateTime.Now);
             });
+
+            // 日をまたいで眠っていたら、24時間を待たずに新しい版を確かめる。ネットワークが戻るのを待ってから
+            if (ClockChangeRules.ShouldSyncAfter(change))
+            {
+                _ = Task.Delay(BackgroundSync.ResumeDelay).ContinueWith(
+                    _ => Dispatcher.BeginInvoke(() => CheckForUpdateInBackgroundIfDue(afterResume: true)),
+                    TaskScheduler.Default);
+            }
         }
     }
 

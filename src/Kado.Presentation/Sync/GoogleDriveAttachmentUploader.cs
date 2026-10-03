@@ -2,6 +2,7 @@ using Kado.Data.Models;
 using Kado.Data.Repositories;
 using Kado.Google.Sync;
 using Kado.Presentation.Editing;
+using Kado.Presentation.Net;
 
 namespace Kado.Presentation.Sync;
 
@@ -14,9 +15,12 @@ namespace Kado.Presentation.Sync;
 /// （利用者がドライブ側で消したなど）、控えを捨てて作り直す。
 /// </para>
 /// </summary>
-public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRepository settings)
+public sealed class GoogleDriveAttachmentUploader(
+    IGoogleSync google, SettingsRepository settings, NetworkLog? log = null)
     : IAttachmentUploader
 {
+    private readonly NetworkLog _log = log ?? NetworkLog.None;
+
     /// <summary>控えておくフォルダ ID の設定キー。</summary>
     public const string FolderIdKey = "google:drive_attachment_folder_id";
 
@@ -37,6 +41,14 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
     /// スレッドで使うものなので、<c>ConfigureAwait(false)</c> で別のスレッドへ流れたまま
     /// 触らない。
     /// </para>
+    /// <para>
+    /// <b>通信の始まりは <c>Task.Run</c> の中。</b>最初の HTTP 要求は、経路（プロキシ）の自動検出で
+    /// 呼んだスレッドのまま数秒止まることがある。画面のスレッドで始めない。通信を包むのは
+    /// 通信の呼び出しだけで、設定（画面側の DB）の読み書きは包まない（画面のスレッドで行う）。
+    /// </para>
+    /// <para>
+    /// 失敗は shell.log に1行で残す（種類・例外の連鎖）。
+    /// </para>
     /// </summary>
     public async Task<AttachmentUploadResult> UploadAsync(
         string localFilePath, CancellationToken cancellationToken = default)
@@ -50,6 +62,8 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
         catch (Exception ex) when (!AttachmentFailure.IsCancellation(ex, cancellationToken)
                                    && ex is not OutOfMemoryException)
         {
+            _log.Failure("Google 添付", ex, GoogleFailure.Classify(ex), "アップロード");
+
             return AttachmentUploadResult.Failure(AttachmentFailure.Describe(ex));
         }
     }
@@ -102,8 +116,13 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
     {
         var mimeType = AttachmentMimeTypes.GuessFrom(localFilePath);
 
-        var uploaded = await api
-            .UploadFileAsync(folderId, localFilePath, mimeType, cancellationToken)
+        // 通信の始まりは別のスレッドで（上の UploadAsync の説明）。戻ってから画面側の接続に触る
+        var uploaded = await Task
+            .Run(() =>
+            {
+                LogRouteOnce();
+                return api.UploadFileAsync(folderId, localFilePath, mimeType, cancellationToken);
+            })
             .ConfigureAwait(true);
 
         var fileId = ReadId(uploaded);
@@ -121,11 +140,20 @@ public sealed class GoogleDriveAttachmentUploader(IGoogleSync google, SettingsRe
         return new EventAttachment(fileId, fileUrl, title, mimeType, iconLink);
     }
 
+    /// <summary>経路（プロキシ）を記録する。調べる処理が数秒止まることがあるので、通信と同じく別のスレッドで呼ぶ。</summary>
+    private void LogRouteOnce() => _log.LogProxyOnce("Google 通信", "https://www.googleapis.com/");
+
     private async Task<string> EnsureFolderAsync(GoogleDriveApi api, CancellationToken cancellationToken)
     {
         if (settings.Get(FolderIdKey) is { Length: > 0 } cached) return cached;
 
-        var created = await api.CreateFolderAsync(FolderName, cancellationToken).ConfigureAwait(true);
+        var created = await Task
+            .Run(() =>
+            {
+                LogRouteOnce();
+                return api.CreateFolderAsync(FolderName, cancellationToken);
+            })
+            .ConfigureAwait(true);
         var id = ReadId(created);
 
         settings.Set(FolderIdKey, id);

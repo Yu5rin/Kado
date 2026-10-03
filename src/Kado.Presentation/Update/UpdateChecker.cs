@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using Kado.Core.Net;
+using Kado.Presentation.Net;
 
 namespace Kado.Presentation.Update;
 
@@ -130,7 +132,9 @@ public sealed class UpdateChecker
 
         try
         {
-            _log("更新の通信: " + UpdateDiagnostics.DescribeProxy(_proxy ?? HttpClient.DefaultProxy, new Uri(url)));
+            // 認証付きプロキシへは、ログオン中のユーザーの資格情報を渡す設定で通信している（KadoHttp）
+            _log("更新の通信: " + UpdateDiagnostics.DescribeProxy(
+                _proxy ?? HttpClient.DefaultProxy, new Uri(url), KadoHttp.UsesDefaultProxyCredentials));
         }
         catch (Exception ex) when (ex is UriFormatException or ArgumentException or NotSupportedException
                                        or InvalidOperationException)
@@ -373,7 +377,7 @@ public sealed class UpdateChecker
                 {
                     _log("更新の通信確認: Atom は届いたが、版のタグを読めなかった");
                     atomStep = new("更新の一覧（Atom）", false,
-                        UpdateFailure.ShortReason(UpdateFailureKind.UnreadableResponse));
+                        UpdateFailure.ShortReason(NetworkFailureKind.UnreadableResponse));
                 }
             }
 
@@ -446,7 +450,7 @@ public sealed class UpdateChecker
 
             if (!response.IsSuccessStatusCode)
             {
-                var kind = UpdateFailure.ClassifyStatus(response.StatusCode) ?? UpdateFailureKind.Other;
+                var kind = UpdateFailure.ClassifyStatus(response.StatusCode) ?? NetworkFailureKind.Other;
 
                 return (new(name, false, $"HTTP {(int)response.StatusCode} {response.StatusCode}、" +
                                          UpdateFailure.ShortReason(kind)), null);
@@ -454,7 +458,7 @@ public sealed class UpdateChecker
 
             if (UpdateDiagnostics.IsHtml(response.Content.Headers.ContentType?.ToString()))
             {
-                return (new(name, false, UpdateFailure.ShortReason(UpdateFailureKind.WebPageInsteadOfFile)), null);
+                return (new(name, false, UpdateFailure.ShortReason(NetworkFailureKind.WebPageInsteadOfFile)), null);
             }
 
             // 先頭だけ受け取って切る。ここまで来れば、繋がって中身が流れてくることは分かる

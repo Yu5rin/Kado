@@ -11,7 +11,7 @@ CI は Linux なので、画面と Windows の仕組みと Google との実際�
 | `mock-sidebar.html` | サイドバーモードの UI モック（参考） |
 | `google-field-gap.md` | Google 側の入力項目と、この実装との差分。Phase 4 の計画に使う |
 | `google-setup.md` | Google 連携の下ごしらえ。クライアント ID の発行手順 |
-| `調査記録/修正-会社のネットワークで更新できない.md` | 更新が会社の回線で通らなかった件。原因（API の回数上限）、直し方、`shell.log` の読み方 |
+| `調査記録/修正-会社のネットワークで更新できない.md` | 更新が会社の回線で通らなかった件。原因（API の回数上限）、直し方、`shell.log` の読み方。のちに、認証付きプロキシ（407）への対処と、Google・実働日の配信まで通信すべてを共通にした「その後」の節もある |
 
 ## 食い違いの調査結果
 
@@ -283,8 +283,16 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
   `YearForView`／`AgendaForView`（表示するまで null）に結ぶ
 - **最初の HTTP 要求は、経路（プロキシ）の自動検出で呼んだスレッドのまま数秒止まる
   ことがある（会社の回線）。** 画面のスレッドから始めず、`Task.Run` の中で呼ぶ
-  （更新の確認・実働日の配信の取得）。DPAPI（`DpapiTokenStore`）も同じく、ドメイン参加の
-  PC では最初の呼び出しが遅いことがある
+  （更新の確認・実働日の配信の取得・Google の同期／接続／切断／追加認可・添付）。
+  Google は `GoogleConnection` の入口が包んでいる。添付（`GoogleDriveAttachmentUploader`）は通信の
+  呼び出しだけを包み、設定（画面側の DB）の読み書きは `ConfigureAwait(true)` で戻った画面のスレッドで行う。
+  同期は専用の DB 接続（`App.xaml.cs` の `_syncConnection`）を使う。DPAPI（`DpapiTokenStore`）も同じく、
+  ドメイン参加の PC では最初の呼び出しが遅いことがある
+- **`HttpClient` は `Kado.Core.Net.KadoHttp` から作る。`new HttpClient()` と `HttpClientHandler` を
+  他の場所に書かない。** 認証付きプロキシ（407）への対処（`DefaultProxyCredentials`）がハンドラの設定で、
+  別の作り方をした場所だけ 407 で通らなくなる（`tests/Kado.App.Tests/NetworkWiringTests` が見張る）。
+  通信の失敗は `NetworkLog` で `shell.log` に1行ずつ残し、画面の文言に例外の型名を出さない
+  （`GoogleFailure`・`UpdateFailure`・`FeedFetchPolicy.Describe`）
 
 - **WPF は、終了の問い合わせ（`WM_QUERYENDSESSION`）を取り消さないと、自分で
   `Application.Shutdown()` を呼ぶ。** 他のアプリがシャットダウンを取り消しても、Kado だけ終わっている。

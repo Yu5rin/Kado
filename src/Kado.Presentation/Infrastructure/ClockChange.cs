@@ -34,4 +34,13 @@ public static class ClockChangeRules
     /// <summary>確かめ直すか。時刻が飛びうる出来事（復帰・時計の変更）だけ。</summary>
     public static bool ShouldRecheck(ClockChange change) =>
         change is ClockChange.Resume or ClockChange.TimeChanged;
+
+    /// <summary>
+    /// 少し待ってから、裏の同期を1回起こすか。スリープや休止から復帰したときだけ。
+    /// <para>
+    /// 眠っているあいだタイマーは止まっているので、戻っても次の間隔が来るまで同期が走らない
+    /// （失敗で最長2時間まで延びていることもある）。時計を変えただけでは、ネットワークは変わらない。
+    /// </para>
+    /// </summary>
+    public static bool ShouldSyncAfter(ClockChange change) => change is ClockChange.Resume;
 }

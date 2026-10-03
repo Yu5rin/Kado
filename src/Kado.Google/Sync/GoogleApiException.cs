@@ -1,4 +1,5 @@
 using System.Net;
+using Kado.Core.Net;
 
 namespace Kado.Google.Sync;
 
@@ -9,9 +10,23 @@ namespace Kado.Google.Sync;
 /// <b>403/429</b>（呼びすぎ＝待って出し直す）、<b>404</b>（相手にもう無い＝消えたとみなす）。
 /// </para>
 /// </summary>
-public sealed class GoogleApiException(HttpStatusCode status, string reason, string? body = null)
-    : Exception($"Google の API が {(int)status} を返しました（{reason}）。")
+public sealed class GoogleApiException(
+    HttpStatusCode status, string reason, string? body = null,
+    string? responseInfo = null, TimeSpan? retryAfter = null)
+    : Exception($"Google の API が {(int)status} を返しました（{reason}）。"), IResponseDescribed
 {
+    /// <summary>
+    /// 応答の要点（状態・Content-Type・Via・Retry-After・プロキシの認証方式）。記録に残す用。
+    /// <para>
+    /// 407 や、プロキシが返した HTML は、本文を見ても Google の言葉ではない。何が返ったのかを
+    /// 1行で残しておくと、会社の回線で起きていることが追える。本文そのものは記録しない。
+    /// </para>
+    /// </summary>
+    public string? ResponseInfo { get; } = responseInfo;
+
+    /// <summary>Google が「この時間は待って」と伝えてきた長さ（<c>Retry-After</c>）。無ければ null。</summary>
+    public TimeSpan? RetryAfter { get; } = retryAfter;
+
     /// <summary>応答の状態。</summary>
     public HttpStatusCode Status { get; } = status;
 
@@ -63,6 +78,14 @@ public sealed class GoogleApiException(HttpStatusCode status, string reason, str
         Status == HttpStatusCode.TooManyRequests ||
         (Status == HttpStatusCode.Forbidden &&
          Reason.Contains("imit", StringComparison.Ordinal));
+
+    /// <summary>
+    /// プロキシが認証を求めている（407）。Google の言葉ではなく、途中の中継が返したもの。
+    /// </summary>
+    public bool IsProxyAuthRequired => Status == HttpStatusCode.ProxyAuthenticationRequired;
+
+    /// <summary>アクセストークンが通らなかった（401）。取り直せば直ることがある。</summary>
+    public bool IsUnauthorized => Status == HttpStatusCode.Unauthorized;
 
     /// <summary>相手にもう無い。消えたものとして扱う。</summary>
     public bool IsMissing => Status == HttpStatusCode.NotFound;

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Kado.Data;
 using Kado.Google.OAuth;
 using Kado.Google.Sync;
+using Kado.Presentation.Net;
 using Microsoft.Data.Sqlite;
 
 namespace Kado.Presentation.Sync;
@@ -27,14 +28,25 @@ public static class AttachmentFailure
     {
         ArgumentNullException.ThrowIfNull(exception);
 
+        // 通信そのものの失敗は、原因（プロキシの認証・証明書・接続・時間切れ・Google の拒否・呼びすぎ）ごとに
+        // 言い分ける。次に打つ手が違うので、「オフラインの可能性があります」でひとまとめにしない
+        var kind = GoogleFailure.Classify(exception);
+        var longReason = GoogleFailure.LongReason(kind);
+
         return exception switch
         {
             // こちらで書いた文言（接続情報が無い・更新トークンが切れた、など）
             OAuthException oauth => $"Google との接続を確かめられませんでした: {oauth.Message}",
 
+            // 送るのが止まった／全体の上限を超えた（GoogleDriveApi が書いた、日本語の理由つき）
+            TimeoutException timeout when HasKana(timeout.Message) =>
+                $"通信がタイムアウトしました。{timeout.Message}",
+
+            _ when longReason.Length > 0 => $"アップロードできませんでした: {longReason}",
+
             GoogleApiException api => $"アップロードできませんでした: {api.Reason}",
 
-            HttpRequestException => "通信できませんでした。オフラインの可能性があります。",
+            HttpRequestException => "通信できませんでした。ネットワークの状態を確かめて、もう一度お試しください。",
 
             // 呼び出し側の取り消しは IsCancellation が先に除いている。ここへ来るのは通信の時間切れ
             OperationCanceledException => "通信がタイムアウトしました。",
@@ -69,4 +81,7 @@ public static class AttachmentFailure
             _ => "添付を上げられませんでした。時間をおいてもう一度お試しください。",
         };
     }
+
+    /// <summary>Kado が日本語で書いた文か（ひらがな・カタカナを含むか）。.NET の英語のメッセージは出さない。</summary>
+    private static bool HasKana(string text) => text.Any(c => c is >= '\u3040' and <= '\u30FF');
 }
