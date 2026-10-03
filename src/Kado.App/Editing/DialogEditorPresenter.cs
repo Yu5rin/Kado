@@ -71,6 +71,13 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
             title, MessageBoxButton.OKCancel, MessageBoxImage.Warning,
             MessageBoxResult.Cancel) == MessageBoxResult.OK;
 
+    public bool ConfirmOverwrite(string title, string message) =>
+        MessageBox.Show(
+            ownerProvider() ?? Application.Current.MainWindow,
+            message,
+            title, MessageBoxButton.YesNo, MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
+
     private bool Show(Window window)
     {
         // 親を渡さないと画面の真ん中ではなく前回の位置に出る

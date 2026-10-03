@@ -36,6 +36,22 @@ public class EventRepositoryTests
     }
 
     [Fact]
+    public void Google上で見つからない印は書いて読める()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new EventRepository(db.Connection);
+
+        repo.Upsert(Sample("e1", D(2026, 9, 24)));
+        Assert.False(repo.Find("e1")!.GoogleMissing);
+
+        repo.Upsert(repo.Find("e1")! with { GoogleEventId = "g1", GoogleMissing = true });
+        Assert.True(repo.Find("e1")!.GoogleMissing);
+
+        repo.Upsert(repo.Find("e1")! with { GoogleMissing = false });
+        Assert.False(repo.Find("e1")!.GoogleMissing);
+    }
+
+    [Fact]
     public void 終日予定は時刻を持たない()
     {
         using var db = TestDatabase.Create();
@@ -168,6 +184,19 @@ public class TaskRepositoryTests
         Assert.Null(found.Due);
         Assert.False(found.HasDue);
         Assert.Single(repo.WithoutDue());
+    }
+
+    [Fact]
+    public void Google上で見つからない印は書いて読める()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+
+        repo.Upsert(new TaskItem { Id = "t1", Title = "集計", GoogleTaskId = "g1", GoogleMissing = true });
+        Assert.True(repo.Find("t1")!.GoogleMissing);
+
+        repo.Upsert(repo.Find("t1")! with { GoogleMissing = false });
+        Assert.False(repo.Find("t1")!.GoogleMissing);
     }
 
     [Fact]

@@ -291,8 +291,10 @@ public class TaskSyncEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task 相手から消えていたら結びを外して作り直す()
+    public async Task 相手から消えていたら作り直さず印を付ける()
     {
+        // 以前は 404 で結びを外し、次の同期で作り直していた。別のリストへ移っていた
+        // だけのことがあり、二重になる（TaskSyncEngineLossTests に続きがある）
         _remote.Add("g1", "集計", due: "2026-09-24");
         await Engine.SyncAsync("@default", "local:mytasks");
 
@@ -302,8 +304,11 @@ public class TaskSyncEngineTests : IDisposable
 
         var report = await Engine.SyncAsync("@default", "local:mytasks");
 
-        Assert.Equal(1, report.Relinked);
-        Assert.Null(Tasks.All().Single().GoogleTaskId);
+        Assert.Equal(0, report.Relinked);
+        var after = Tasks.All().Single();
+        Assert.Equal("g1", after.GoogleTaskId);
+        Assert.True(after.GoogleMissing);
+        Assert.NotEmpty(report.Warnings);
     }
 
     [Fact]

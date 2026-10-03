@@ -79,11 +79,17 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
         return ReadPage(await GetAsync(query.ToString(), cancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>カレンダーの一覧を取る。名前と色を取り込むために使う。</summary>
+    /// <summary>
+    /// カレンダーの一覧を取る。名前と色を取り込むために使う。
+    /// <para>
+    /// <b><c>showHidden=true</c> を付ける。</b>付けないと、Google の一覧から隠しただけの
+    /// カレンダーが返ってこない。それを「消えた」と取り違えると、中の予定ごと手元から捨ててしまう。
+    /// </para>
+    /// </summary>
     public async Task<GooglePage> ListCalendarsAsync(
         string? pageToken = null, CancellationToken cancellationToken = default)
     {
-        var url = $"{Root}/users/me/calendarList?maxResults=250";
+        var url = $"{Root}/users/me/calendarList?maxResults=250&showHidden=true";
         if (pageToken is { Length: > 0 }) url += "&pageToken=" + Uri.EscapeDataString(pageToken);
 
         return ReadPage(await GetAsync(url, cancellationToken).ConfigureAwait(false));
@@ -165,6 +171,19 @@ public sealed class GoogleCalendarApi(HttpClient http, IAccessTokenSource tokens
             $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events?supportsAttachments=true",
             body, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// イベントを1件取る。
+    /// <para>
+    /// 消されたイベントは 404 ではなく <c>status=cancelled</c> で返ってくることがある。
+    /// 「そこにあるか」を見るときは、呼び出し側で状態も見ること。
+    /// </para>
+    /// </summary>
+    public async Task<JsonElement> GetEventAsync(
+        string calendarId, string eventId, CancellationToken cancellationToken = default) =>
+        await GetAsync(
+            $"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events/{Uri.EscapeDataString(eventId)}",
+            cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// イベントを書き換える。

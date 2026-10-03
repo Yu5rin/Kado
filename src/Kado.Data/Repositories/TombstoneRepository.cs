@@ -87,6 +87,21 @@ public sealed class TombstoneRepository(SqliteConnection connection)
                 r.Id, r.Kind, r.GoogleId, DateTimeOffset.FromUnixTimeSeconds(r.DeletedAt), r.SourceId))
             .ToArray();
 
+    /// <summary>
+    /// 記録を1件引く。無ければ null。
+    /// <para>
+    /// 削除を元に戻すときに、まだ伝えていないか（記録が残っている）、もう伝え終わったか
+    /// （記録が無い）を見分けるのに使う。
+    /// </para>
+    /// </summary>
+    public Tombstone? Find(string id, string kind) =>
+        _connection.Query<(string Id, string Kind, string? GoogleId, long DeletedAt, string? SourceId)>(
+                "SELECT id, kind, google_id, deleted_at, source_id FROM tombstones WHERE id = @id AND kind = @kind;",
+                new { id, kind })
+            .Select(r => new Tombstone(
+                r.Id, r.Kind, r.GoogleId, DateTimeOffset.FromUnixTimeSeconds(r.DeletedAt), r.SourceId))
+            .FirstOrDefault();
+
     /// <summary>この識別子は消されたか。相手から降ってきたものを復活させないために見る。</summary>
     public bool Contains(string id, string kind) =>
         _connection.ExecuteScalar<long>(

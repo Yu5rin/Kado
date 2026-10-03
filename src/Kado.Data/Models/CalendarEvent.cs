@@ -89,6 +89,16 @@ public sealed record CalendarEvent
     /// <summary>Google 側の更新時刻。差分判定に使う。</summary>
     public string? GoogleUpdated { get; init; }
 
+    /// <summary>
+    /// 送ろうとしたら Google に「無い」と言われた（404）印。
+    /// <para>
+    /// 結び付きは外さない。外して作り直すと、別の場所へ移っただけのものが二重になり、
+    /// ゲスト・会議 URL・添付も落ちる。立っている間は送らず、取り込みで見つかれば外れる。
+    /// 使う人が「Google に新しく作り直す」を選んだときだけ、結び付きごと外して新規として送る。
+    /// </para>
+    /// </summary>
+    public bool GoogleMissing { get; init; }
+
     /// <summary>取り込み元。</summary>
     public string? Source { get; init; }
 

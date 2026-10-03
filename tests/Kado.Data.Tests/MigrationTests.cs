@@ -178,4 +178,32 @@ public class MigrationTests
         Assert.Null(
             db.Connection.ExecuteScalar<string?>("SELECT google_calendar_id FROM events WHERE id = 'e3';"));
     }
+
+    /// <summary>
+    /// V10（「Google 上で見つからない」印と「Google から外れた」印）が、V9 までの
+    /// 既存のデータに影響しないこと。既存の予定・タスク・カレンダーは、どちらの印も立っていない。
+    /// </summary>
+    [Fact]
+    public void V10は既存の行に印を立てずに列を足す()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 10).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO events (id, title, date, google_event_id, updated_at) VALUES ('e1', '定例', '2026-09-24', 'g1', 1);");
+        db.Connection.Execute("INSERT INTO tasks (id, title, updated_at) VALUES ('t1', '集計', 1);");
+        db.Connection.Execute("INSERT INTO calendars (id, summary, updated_at) VALUES ('cal-a', '仕事', 1);");
+
+        var applied = DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Contains(applied, m => m.Version == 10);
+        Assert.Equal(0L, db.Connection.ExecuteScalar<long>("SELECT google_missing FROM events WHERE id = 'e1';"));
+        Assert.Equal(0L, db.Connection.ExecuteScalar<long>("SELECT google_missing FROM tasks WHERE id = 't1';"));
+        Assert.Equal(0L, db.Connection.ExecuteScalar<long>("SELECT google_detached FROM calendars WHERE id = 'cal-a';"));
+    }
 }

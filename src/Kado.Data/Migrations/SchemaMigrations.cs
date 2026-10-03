@@ -336,6 +336,27 @@ public static class SchemaMigrations
             WHERE completed_at IS NOT NULL;
         """;
 
+    /// <summary>
+    /// V10：「Google 上で見つからない」印と、「Google から外れた」カレンダーの印。
+    /// <para>
+    /// <b><c>events.google_missing</c> / <c>tasks.google_missing</c></b>：送ろうとしたら 404 が
+    /// 返ってきた予定・タスクに立てる。以前は 404 で結び付きを外し、次の同期で作り直していたが、
+    /// 向こうには別の場所へ移っただけ（別カレンダー、ほかの人が移した）のものが残っていて、
+    /// ゲスト・会議 URL・添付の無い写しが二重にできていた。印が立っている間は送らない。
+    /// 取り込みでまた見つかれば印を外して結び直し、使う人が「作り直す」を選んだときだけ
+    /// 結び付きを外して新規として送る。
+    /// </para>
+    /// <para>
+    /// <b><c>calendars.google_detached</c></b>：Google の一覧から消えたが、まだ送っていない
+    /// 予定・編集・削除の記録を持っているカレンダーに立てる。中身を捨てず、同期だけ止める。
+    /// </para>
+    /// </summary>
+    private const string V10 = """
+        ALTER TABLE events ADD COLUMN google_missing INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE tasks ADD COLUMN google_missing INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE calendars ADD COLUMN google_detached INTEGER NOT NULL DEFAULT 0;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -348,6 +369,7 @@ public static class SchemaMigrations
         new(7, "予定に Google 側の実カレンダーと、添付の未送信の指定を持つ", V7),
         new(8, "期間検索・所属・tombstone の突き合わせに効く索引を足す", V8),
         new(9, "完了日で引くタスクの検索に効く索引を足す", V9),
+        new(10, "Google 上で見つからない印と、Google から外れたカレンダーの印を持つ", V10),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

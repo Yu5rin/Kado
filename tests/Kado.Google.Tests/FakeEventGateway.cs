@@ -65,6 +65,33 @@ internal sealed class FakeEventGateway : IEventGateway
         return Task.FromResult(new GooglePage(items, null, NextSyncToken));
     }
 
+    /// <summary>
+    /// カレンダーごとに「そこに確かにある」イベント。<see cref="GetAsync"/> が先に見る。
+    /// <para>
+    /// 一覧（<see cref="Items"/>）はカレンダーを区別しない。移す指示の途中で切れた場面
+    /// （元のカレンダーからは cancelled が来るが、移し先には生きている）を作るのに使う。
+    /// </para>
+    /// </summary>
+    public Dictionary<(string CalendarId, string EventId), JsonObject> Located { get; } = [];
+
+    /// <summary>GetAsync で引かれた先。</summary>
+    public List<(string CalendarId, string EventId)> Got { get; } = [];
+
+    public Task<JsonElement> GetAsync(string calendarId, string eventId, CancellationToken cancellationToken)
+    {
+        Got.Add((calendarId, eventId));
+
+        if (Located.TryGetValue((calendarId, eventId), out var located)) return Task.FromResult(Parse(located));
+
+        if (Items.TryGetValue(eventId, out var stored) &&
+            !string.Equals(stored["status"]?.GetValue<string>(), "cancelled", StringComparison.Ordinal))
+        {
+            return Task.FromResult(Parse(stored));
+        }
+
+        throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
+    }
+
     public Task<JsonElement> InsertAsync(string calendarId, JsonObject body, CancellationToken cancellationToken)
     {
         if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }

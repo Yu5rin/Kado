@@ -24,6 +24,12 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
     /// <summary>文言つきの確認にどう答えるか。</summary>
     public bool Confirms { get; set; } = true;
 
+    /// <summary>上書きしてよいかの確認にどう答えるか。</summary>
+    public bool ConfirmsOverwrite { get; set; } = true;
+
+    /// <summary>上書きの確認を出した回数。</summary>
+    public int OverwriteAsked { get; private set; }
+
     /// <summary>直近に開かれた予定の入力欄。開かれたかどうかの確認に使う。</summary>
     public EventEditorViewModel? LastEventEditor { get; private set; }
 
@@ -67,6 +73,14 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
         LastConfirmedTitle = title;
         LastConfirmMessage = message;
         return Confirms;
+    }
+
+    public bool ConfirmOverwrite(string title, string message)
+    {
+        OverwriteAsked++;
+        LastConfirmedTitle = title;
+        LastConfirmMessage = message;
+        return ConfirmsOverwrite;
     }
 
     /// <summary>出された設定画面。開いたかどうかを見るために控える。</summary>

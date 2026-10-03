@@ -272,8 +272,11 @@ public class EventSyncEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task 相手から消えていたら結びを外して作り直す()
+    public async Task 相手から消えていたら作り直さず印を付ける()
     {
+        // 以前は 404 で結びを外し、次の同期で作り直していた。向こうでは別の場所へ移っていた
+        // だけのことがあり、ゲスト・会議 URL・添付の無い写しが二重にできた。
+        // 作り直しは使う人が選んだときだけにする（EventSyncEngineLossTests に続きがある）
         _remote.Add("g1", "棚卸し", "2026-09-24");
         await Engine.SyncAsync("primary", "local:shigoto");
 
@@ -284,8 +287,11 @@ public class EventSyncEngineTests : IDisposable
 
         var report = await Engine.SyncAsync("primary", "local:shigoto");
 
-        Assert.Equal(1, report.Relinked);
-        Assert.Null(Events.All().Single().GoogleEventId);
+        Assert.Equal(0, report.Relinked);
+        var after = Events.All().Single();
+        Assert.Equal("g1", after.GoogleEventId);
+        Assert.True(after.GoogleMissing);
+        Assert.NotEmpty(report.Warnings);
     }
 
     [Fact]

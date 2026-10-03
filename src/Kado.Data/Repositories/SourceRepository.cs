@@ -20,7 +20,7 @@ public sealed class SourceRepository(SqliteConnection connection)
         id AS Id, summary AS Summary, summary_override AS SummaryOverride,
         background_color AS BackgroundColor, foreground_color AS ForegroundColor,
         is_primary AS IsPrimary, is_visible AS IsVisible, sort_order AS SortOrder,
-        notify_default AS NotifyDefault,
+        notify_default AS NotifyDefault, google_detached AS IsDetached,
         google_raw AS GoogleRaw, updated_at AS UpdatedAt
         """;
 
@@ -225,6 +225,15 @@ public sealed class SourceRepository(SqliteConnection connection)
         _connection.Execute(
             "UPDATE calendars SET notify_default = @notify WHERE id = @id;",
             new { id, notify }) > 0;
+
+    /// <summary>
+    /// 「Google から外れた」印を付ける・外す。
+    /// <para>取り込みの Upsert では上書きしない（表示のチェックと同じ）。</para>
+    /// </summary>
+    public bool SetCalendarDetached(string id, bool isDetached) =>
+        _connection.Execute(
+            "UPDATE calendars SET google_detached = @isDetached WHERE id = @id;",
+            new { id, isDetached }) > 0;
 
     public bool SetTaskListVisible(string id, bool isVisible) =>
         _connection.Execute(

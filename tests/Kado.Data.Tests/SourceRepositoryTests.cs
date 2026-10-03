@@ -27,6 +27,26 @@ public class SourceRepositoryTests
     }
 
     [Fact]
+    public void Googleから外れた印は取り込み直しでは戻らない()
+    {
+        using var db = TestDatabase.Create();
+        var repository = new SourceRepository(db.Connection);
+
+        repository.Upsert(Calendar("a", "仕事"));
+        Assert.False(repository.FindCalendar("a")!.IsDetached);
+
+        repository.SetCalendarDetached("a", true);
+
+        // 一覧の取り込み（Upsert）が印を消すと、止めたはずの同期がまた動き出す
+        repository.Upsert(Calendar("a", "仕事（名前が変わった）"));
+        Assert.True(repository.FindCalendar("a")!.IsDetached);
+        Assert.True(repository.Calendars().Single().IsDetached);
+
+        repository.SetCalendarDetached("a", false);
+        Assert.False(repository.FindCalendar("a")!.IsDetached);
+    }
+
+    [Fact]
     public void 取り込み直してもチェックは戻らない()
     {
         using var db = TestDatabase.Create();

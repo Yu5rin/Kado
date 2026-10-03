@@ -12,6 +12,9 @@ public interface ITaskGateway
     Task<GooglePage> ListAsync(
         string taskListId, DateTimeOffset? updatedSince, string? pageToken, CancellationToken cancellationToken);
 
+    /// <summary>タスクを1件取る。無ければ 404。移す指示を出していたタスクが移し先にあるかを確かめる。</summary>
+    Task<JsonElement> GetAsync(string taskListId, string taskId, CancellationToken cancellationToken);
+
     Task<JsonElement> InsertAsync(string taskListId, JsonObject body, CancellationToken cancellationToken);
 
     Task<JsonElement> PatchAsync(
@@ -31,6 +34,10 @@ public sealed class TasksApiGateway(GoogleTasksApi api) : ITaskGateway
     public Task<GooglePage> ListAsync(
         string taskListId, DateTimeOffset? updatedSince, string? pageToken, CancellationToken cancellationToken) =>
         api.ListTasksAsync(taskListId, updatedSince, pageToken, cancellationToken);
+
+    public Task<JsonElement> GetAsync(
+        string taskListId, string taskId, CancellationToken cancellationToken) =>
+        api.GetTaskAsync(taskListId, taskId, cancellationToken);
 
     public Task<JsonElement> InsertAsync(
         string taskListId, JsonObject body, CancellationToken cancellationToken) =>
@@ -138,7 +145,10 @@ public sealed class TaskSyncEngine(
         var created = 0;
         var updated = 0;
         var deleted = 0;
+        var relinked = 0;
+        var now = _clock.GetUtcNow();
         var overwritten = new List<string>();
+        var warnings = new List<string>();
 
         foreach (var item in items)
         {
@@ -155,7 +165,12 @@ public sealed class TaskSyncEngine(
                 // ただし、このリストからの deleted は「利用者が削除した」だけとは限らない。
                 // こちらで入れ先を別のリストへ変え、すでに tasks.move で移したあとにも、
                 // 元のリスト（このリスト）側では同じ知らせが返る（ShouldDeleteOnCancel を見よ）
-                if (ShouldDeleteOnCancel(existing, taskListId) && tasks.Delete(existing!.Id)) deleted++;
+                if (ShouldDeleteOnCancel(existing, taskListId) &&
+                    await DeleteLocalAsync(existing!, now, warnings, cancellationToken).ConfigureAwait(false))
+                {
+                    deleted++;
+                }
+
                 continue;
             }
 
@@ -165,6 +180,14 @@ public sealed class TaskSyncEngine(
             if (existing is not null &&
                 GoogleJson.SameContent(existing.GoogleRaw, GoogleJson.Normalize(item)))
             {
+                // 「Google 上で見つからない」印が付いていたものが、また見つかった（別のリストに
+                // いた、など）。内容は触らず、印だけを外して結び直す
+                if (existing.GoogleMissing)
+                {
+                    tasks.Upsert(existing with { GoogleMissing = false, GoogleTaskListId = taskListId });
+                    relinked++;
+                }
+
                 continue;
             }
 
@@ -179,7 +202,7 @@ public sealed class TaskSyncEngine(
 
             if (existing is null)
             {
-                if (FindUnlinkedMatch(mapped) is { } orphan)
+                if (FindUnlinkedMatch(mapped, localListId) is { } orphan)
                 {
                     // orphan を existing として渡し直す。作成日時・並び順はローカルにしか
                     // 無い項目なので、結び付けただけで消してしまわないようにする
@@ -206,8 +229,54 @@ public sealed class TaskSyncEngine(
             CreatedLocal = created,
             UpdatedLocal = updated,
             DeletedLocal = deleted,
-            Warnings = SummarizeOverwritten(overwritten),
+            Relinked = relinked,
+            Warnings = [.. warnings, .. SummarizeOverwritten(overwritten)],
         };
+    }
+
+    /// <summary>
+    /// 相手の削除（deleted）を受けて、こちらの行を消す。確かめることは
+    /// <see cref="EventSyncEngine"/> の同名の処理と同じ（理由もそちらを見よ）。
+    /// </summary>
+    /// <returns>消したら true。</returns>
+    private async Task<bool> DeleteLocalAsync(
+        TaskItem existing, DateTimeOffset now, List<string> warnings, CancellationToken cancellationToken)
+    {
+        if (await IsAlreadyMovedAsync(existing, cancellationToken).ConfigureAwait(false))
+        {
+            tasks.Upsert(existing with { GoogleTaskListId = existing.TaskListId, UpdatedAt = now });
+            return false;
+        }
+
+        if (TaskMapper.NeedsPush(existing))
+        {
+            warnings.Add(
+                "Google 側で削除されたため、こちらの未送信の変更を捨てました：" +
+                (existing.Title is { Length: > 0 } title ? title : "(無題)"));
+        }
+
+        return tasks.Delete(existing.Id);
+    }
+
+    /// <summary>移す指示を出していたタスクが、移し先に本当にあるか。</summary>
+    private async Task<bool> IsAlreadyMovedAsync(TaskItem existing, CancellationToken cancellationToken)
+    {
+        if (existing.GoogleTaskId is not { Length: > 0 } googleId) return false;
+        if (existing.GoogleTaskListId is not { Length: > 0 } origin) return false;
+        if (existing.TaskListId is not { Length: > 0 } destination) return false;
+        if (string.Equals(origin, destination, StringComparison.Ordinal)) return false;
+
+        try
+        {
+            var found = await gateway.GetAsync(destination, googleId, cancellationToken).ConfigureAwait(false);
+
+            // 消されたタスクは 404 ではなく deleted: true で返ることがある。それは「ある」ではない
+            return !TaskMapper.IsDeleted(found);
+        }
+        catch (GoogleApiException ex) when (!ex.IsTransient)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -268,11 +337,18 @@ public sealed class TaskSyncEngine(
         (existing.GoogleTaskListId is not { Length: > 0 } known ||
          string.Equals(known, taskListId, StringComparison.Ordinal));
 
-    /// <summary>まだ結び付いていない、同じ内容のタスクを探す。</summary>
-    private TaskItem? FindUnlinkedMatch(TaskItem incoming) =>
+    /// <summary>
+    /// まだ結び付いていない、同じ内容のタスクを探す。
+    /// <para>
+    /// 探す範囲は、取り込み先のリスト（<paramref name="localListId"/>）の中だけ。範囲を絞らないと、
+    /// このアプリの中だけのリストや別のリストのタスクが、同じ題・期限というだけで吸い込まれる。
+    /// </para>
+    /// </summary>
+    private TaskItem? FindUnlinkedMatch(TaskItem incoming, string localListId) =>
         tasks.All()
             .FirstOrDefault(t =>
                 t.GoogleTaskId is null &&
+                string.Equals(t.TaskListId, localListId, StringComparison.Ordinal) &&
                 string.Equals(t.Title, incoming.Title, StringComparison.Ordinal) &&
                 t.Due == incoming.Due);
 
@@ -281,14 +357,16 @@ public sealed class TaskSyncEngine(
     {
         var created = 0;
         var updated = 0;
-        var relinked = 0;
         var moved = 0;
         var warnings = new List<string>();
         var now = _clock.GetUtcNow();
 
         // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む
+        //
+        // 「Google 上で見つからない」印が付いたものは送らない（下の catch を見よ）
         var mine = tasks.All()
             .Where(t => string.Equals(t.TaskListId, localListId, StringComparison.Ordinal))
+            .Where(t => !t.GoogleMissing)
             .Where(t => TaskMapper.NeedsPush(t) || NeedsMove(t, taskListId))
             .ToArray();
 
@@ -351,11 +429,14 @@ public sealed class TaskSyncEngine(
             }
             catch (GoogleApiException ex) when (ex.IsMissing && value.GoogleTaskId is not null)
             {
-                tasks.Upsert(value with
-                {
-                    GoogleTaskId = null, GoogleTaskListId = null, GoogleRaw = null, UpdatedAt = now,
-                });
-                relinked++;
+                // 相手が「無い」と言った。黙って作り直さない（EventSyncEngine と同じ理由）。
+                // 印だけを付けて、以後は送らない。取り込みで見つかれば外れ、使う人が
+                // 「Google に新しく作り直す」を選んだときだけ新規として送る
+                tasks.Upsert((tasks.Find(value.Id) ?? value) with { GoogleMissing = true });
+
+                warnings.Add(
+                    $"Google 上で見つからないため送りません（{value.Title}）。" +
+                    "編集画面から「Google に新しく作り直す」を選べます");
             }
             catch (GoogleApiException ex) when (ex.IsTransient)
             {
@@ -377,7 +458,6 @@ public sealed class TaskSyncEngine(
         {
             CreatedRemote = created,
             UpdatedRemote = updated,
-            Relinked = relinked,
             Moved = moved,
             Warnings = warnings,
         };

@@ -393,6 +393,35 @@ public class WorkingDayCalendarImportTests
     }
 
     [Fact]
+    public void 書き出し直しで消した休業日の記録は_Googleでいるカレンダーを持ち主にする()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.WriteWorkingDayEvents();
+
+        var calendar = test.Workspace.Sources.Calendars()
+            .Single(c => c.DisplayName == CalendarWorkspace.WorkingDayCalendarName);
+
+        // 稼働日になったので消えるはずの休業日の印。同期済みで、Google でいるカレンダーと
+        // 入れ先の希望（こちらの CalendarId）が違う（移す指示だけ出して、まだ送っていない）
+        test.Workspace.Events.Upsert(new CalendarEvent
+        {
+            Id = "closedday:20260924", Title = CalendarWorkspace.ClosedDayTitle,
+            Date = new DateOnly(2026, 9, 24), CalendarId = calendar.Id,
+            GoogleEventId = "g-x", GoogleCalendarId = "google-actual", Source = "google",
+            UpdatedAt = DateTimeOffset.Now,
+        });
+
+        test.Workspace.WriteWorkingDayEvents();
+
+        Assert.Null(test.Workspace.Events.Find("closedday:20260924"));
+
+        // 希望のほうを持ち主にすると、削除は本当にいるカレンダーへ届かない
+        var pending = Assert.Single(
+            test.Workspace.Tombstones.Pending(Kado.Data.Repositories.TombstoneRepository.EventKind));
+        Assert.Equal("google-actual", pending.SourceId);
+    }
+
+    [Fact]
     public void 土日は休業日に入れない()
     {
         using var test = TestWorkspace.Create();

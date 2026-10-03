@@ -47,6 +47,15 @@ public sealed record CalendarSource
     /// <summary>最後に Google から受け取った姿。</summary>
     public string? GoogleRaw { get; init; }
 
+    /// <summary>
+    /// Google の一覧から外れたカレンダーか（購読解除・削除など）。
+    /// <para>
+    /// まだ送っていない予定・編集・削除の記録があったので、捨てずに残してある。
+    /// 同期は止まる。使う人が中身を確かめてから消す。再び一覧に現れたら外れる。
+    /// </para>
+    /// </summary>
+    public bool IsDetached { get; init; }
+
     /// <summary>ローカルでの更新時刻。</summary>
     public DateTimeOffset UpdatedAt { get; init; }
 

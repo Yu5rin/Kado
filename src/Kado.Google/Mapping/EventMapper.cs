@@ -353,8 +353,13 @@ public static class EventMapper
     /// 読み取れるなら（＝本当に外した）false、読み取れない（RDATE・EXRULE・RRULE
     /// 2本以上など）なら true。
     /// </para>
+    /// <para>
+    /// 書き戻しの判断だけでなく、画面も見る。<see cref="CalendarEvent.Recurrence"/> が空でも
+    /// 向こうでは繰り返しの予定なので、ドラッグで開始日を動かすと系列の開始がずれる。
+    /// 繰り返しの予定と同じに扱って動かせなくする。
+    /// </para>
     /// </summary>
-    private static bool HoldsUnrepresentableRecurrence(CalendarEvent value)
+    public static bool HoldsUnrepresentableRecurrence(CalendarEvent value)
     {
         if (value.Recurrence is not null) return false;
         if (value.GoogleRaw is not { Length: > 0 } raw) return false;

@@ -51,6 +51,9 @@ public sealed record TaskItem
     /// <summary>Google 側の更新時刻。</summary>
     public string? GoogleUpdated { get; init; }
 
+    /// <summary>送ろうとしたら Google に「無い」と言われた（404）印。理由は <see cref="CalendarEvent.GoogleMissing"/> と同じ。</summary>
+    public bool GoogleMissing { get; init; }
+
     /// <summary>取り込み元。</summary>
     public string? Source { get; init; }
 

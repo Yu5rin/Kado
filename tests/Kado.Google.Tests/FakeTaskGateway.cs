@@ -38,6 +38,27 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
         return Task.FromResult(new GooglePage(items, null, null));
     }
 
+    /// <summary>リストごとに「そこに確かにある」タスク。一覧（<see cref="Items"/>）はリストを区別しない。</summary>
+    public Dictionary<(string ListId, string TaskId), JsonObject> Located { get; } = [];
+
+    /// <summary>GetAsync で引かれた先。</summary>
+    public List<(string ListId, string TaskId)> Got { get; } = [];
+
+    public Task<JsonElement> GetAsync(string taskListId, string taskId, CancellationToken cancellationToken)
+    {
+        Got.Add((taskListId, taskId));
+
+        if (Located.TryGetValue((taskListId, taskId), out var located)) return Task.FromResult(Parse(located));
+
+        if (Items.TryGetValue(taskId, out var stored) &&
+            stored["deleted"]?.GetValue<bool>() != true)
+        {
+            return Task.FromResult(Parse(stored));
+        }
+
+        throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
+    }
+
     public Task<JsonElement> InsertAsync(string taskListId, JsonObject body, CancellationToken cancellationToken)
     {
         if (ThrowOnWrite is { } error) { ThrowOnWrite = null; throw error; }
