@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Kado.Google.Sync;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Kado.Google.Tests;
 
@@ -98,10 +99,12 @@ public class GoogleDriveUploadLimitsTests : IDisposable
         }
     }
 
-    private static GoogleDriveApi Api(HttpMessageHandler handler, TimeSpan stall, GoogleRetryPolicy? retry = null) =>
+    private static GoogleDriveApi Api(
+        HttpMessageHandler handler, TimeSpan stall, GoogleRetryPolicy? retry = null, TimeProvider? time = null) =>
         new(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, new FixedToken(), retry ?? GoogleRetryPolicy.None)
         {
             UploadStallTimeout = stall,
+            TimeProvider = time ?? TimeProvider.System,
         };
 
     // ------------------------------------------------------------------
@@ -136,19 +139,27 @@ public class GoogleDriveUploadLimitsTests : IDisposable
     // 進み具合が止まったら打ち切る
     // ------------------------------------------------------------------
 
+    // 時間は FakeTimeProvider で進める。書き込みの「かかった時間」は、書き込みの中で時計を進めて表す。
+    // 実時間の待ちに頼らないので、テストを同時に流して混んでも結果が変わらない。
+
     [Fact]
     public async Task 送るのが止まったら打ち切って時間切れにする()
     {
         WriteFile();
+        var time = new FakeTimeProvider();
+        var stall = TimeSpan.FromSeconds(60);
 
-        // 1回目だけ流れて、あとは詰まる
+        // 1回目だけ流れて、2回目で詰まる（止まったとみなす長さのあいだ、進まない）
         var handler = new SinkHandler(request =>
             new SlowSink(async (index, ct) =>
             {
-                if (index >= 1) await Task.Delay(Timeout.Infinite, ct);
+                if (index < 1) return;
+
+                time.Advance(stall);
+                await Task.Delay(Timeout.Infinite, ct);
             }, CancellationToken.None));
 
-        var api = Api(handler, stall: TimeSpan.FromMilliseconds(300));
+        var api = Api(handler, stall, time: time);
 
         var error = await Assert.ThrowsAsync<TimeoutException>(() => api.UploadFileAsync("folder-1", _path, "application/octet-stream"));
 
@@ -159,18 +170,49 @@ public class GoogleDriveUploadLimitsTests : IDisposable
     public async Task ゆっくりでも進んでいれば打ち切らない()
     {
         WriteFile(500 * 1024);
+        var time = new FakeTimeProvider();
+        var stall = TimeSpan.FromSeconds(40);
+        var perWrite = TimeSpan.FromSeconds(15);
 
-        // 書き込みごとに 100ms かかる。合計は止まったとみなす長さ（300ms）を超えるが、止まってはいない
-        var started = DateTime.UtcNow;
+        // 書き込みごとに 15秒かかる。合計は止まったとみなす長さ（40秒）を超えるが、止まってはいない
+        var started = time.GetUtcNow();
         var handler = new SinkHandler(request =>
-            new SlowSink((_, ct) => Task.Delay(100, ct), CancellationToken.None));
+            new SlowSink((_, _) =>
+            {
+                time.Advance(perWrite);
+                return Task.CompletedTask;
+            }, CancellationToken.None));
 
-        var api = Api(handler, stall: TimeSpan.FromMilliseconds(400));
+        var api = Api(handler, stall, time: time);
 
         var file = await api.UploadFileAsync("folder-1", _path, "application/octet-stream");
 
         Assert.Equal("file-1", file.GetProperty("id").GetString());
-        Assert.True(DateTime.UtcNow - started >= TimeSpan.FromMilliseconds(300), "送るのに時間がかかっている前提");
+        Assert.True(time.GetUtcNow() - started > stall, "送るのに、止まったとみなす長さより長くかかっている前提");
+    }
+
+    [Fact]
+    public async Task 全体の上限を超えたら打ち切って時間切れにする()
+    {
+        WriteFile();
+        var time = new FakeTimeProvider();
+        var limit = GoogleDriveApi.UploadTimeoutFor(300 * 1024);
+
+        // 止まってはいない（止まったとみなす長さは上限より長い）が、全体では上限を超える
+        var handler = new SinkHandler(request =>
+            new SlowSink(async (index, ct) =>
+            {
+                if (index < 1) return;
+
+                time.Advance(limit);
+                await Task.Delay(Timeout.Infinite, ct);
+            }, CancellationToken.None));
+
+        var api = Api(handler, stall: limit + TimeSpan.FromHours(1), time: time);
+
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => api.UploadFileAsync("folder-1", _path, "application/octet-stream"));
+
+        Assert.Contains("分以内に終わらなかった", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -178,17 +220,24 @@ public class GoogleDriveUploadLimitsTests : IDisposable
     {
         WriteFile();
         using var cts = new CancellationTokenSource();
+        var time = new FakeTimeProvider();
+        var blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var handler = new SinkHandler(request =>
             new SlowSink(async (index, ct) =>
             {
-                if (index >= 1) await Task.Delay(Timeout.Infinite, ct);
+                if (index < 1) return;
+
+                blocked.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ct);
             }, CancellationToken.None));
 
-        var api = Api(handler, stall: TimeSpan.FromSeconds(30));
+        var api = Api(handler, stall: TimeSpan.FromSeconds(30), time: time);
 
         var uploading = api.UploadFileAsync("folder-1", _path, "application/octet-stream", cts.Token);
-        await Task.Delay(100);
+
+        // 詰まったところで、時計は進めずに利用者が止める
+        await blocked.Task;
         cts.Cancel();
 
         // 利用者が止めたのは、失敗ではなく取り消し（TimeoutException ではない）

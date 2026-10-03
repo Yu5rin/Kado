@@ -57,6 +57,12 @@ public sealed class GoogleDriveApi(
     public TimeSpan UploadStallTimeout { get; init; } = DefaultUploadStallTimeout;
 
     /// <summary>
+    /// アップロードの全体の上限と、進みが止まったときの打ち切りが時間を取る元。既定は実時間
+    /// （<see cref="TimeProvider.System"/>）。テストで時間を進めるために差し替えられる。
+    /// </summary>
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+
+    /// <summary>
     /// ファイルの大きさに応じたアップロード全体の上限。
     /// <para>
     /// 最低2分、1MB ごとに30秒を足し、30分で頭打ち。全体の上限だけだと、遅い回線で大きなものを
@@ -127,8 +133,8 @@ public sealed class GoogleDriveApi(
         var limit = UploadTimeoutFor(size);
 
         // 全体の上限と、進み具合が止まったときの打ち切りと、呼び出し側の中止を、1本の待ちにする
-        using var total = new CancellationTokenSource(limit);
-        using var stall = new CancellationTokenSource(UploadStallTimeout);
+        using var total = new CancellationTokenSource(limit, TimeProvider);
+        using var stall = new CancellationTokenSource(UploadStallTimeout, TimeProvider);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, total.Token, stall.Token);
 
