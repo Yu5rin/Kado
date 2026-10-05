@@ -1,6 +1,7 @@
 using System.Globalization;
 using Kado.Presentation;
 using Kado.Presentation.Links;
+using Kado.Presentation.Menus;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -417,6 +418,62 @@ public sealed class AttachmentMenuItemsConverter : IMultiValueConverter
         values is [Kado.Presentation.ViewModels.MainViewModel main, OpenTargets targets]
             ? main.AttachmentMenuItems(targets)
             : Array.Empty<OpenMenuItem>();
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 予定の右クリックメニューの出し分け（<see cref="EventMenuInfo"/>）を作る。
+/// 値は、本体の <c>MainViewModel</c>（右クリックされた要素の <c>Tag</c>）と、右クリックされた行
+/// （<c>PlacementTarget.DataContext</c>）。
+/// <para>
+/// 行の型は画面ごとに違うが、振り分けは <c>MainViewModel.EventMenuFor</c> が持つので、
+/// メニュー側はどの画面でも同じ書き方で済む（<see cref="OpenTargetsConverter"/> と同じ作り）。
+/// 項目の押せる・押せない、押せない理由、「編集」か「詳細を見る」か、移し先の一覧を決める。
+/// </para>
+/// </summary>
+public sealed class EventMenuInfoConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+        values is [MainViewModel main, var entry, ..] ? main.EventMenuFor(entry) : EventMenuInfo.Unavailable;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// タスクの右クリックメニューの出し分け（<see cref="TaskMenuInfo"/>）を作る。
+/// 値は <see cref="EventMenuInfoConverter"/> と同じ。
+/// </summary>
+public sealed class TaskMenuInfoConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+        values is [MainViewModel main, var entry, ..] ? main.TaskMenuFor(entry) : TaskMenuInfo.Unavailable;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 日付・空き時間の右クリックメニューの出し分け（<see cref="DayMenuInfo"/>）を作る。
+/// <para>
+/// 値は、本体の <c>MainViewModel</c>、右クリックされた場所の中身（<c>PlacementTarget.DataContext</c>）、
+/// 時間帯の上で右クリックしたときの時刻（<see cref="Views.DayMenu.TimeProperty"/>。無ければ null）、
+/// いま出しているビュー。<b>最後のビューは読まない</b>。変わったときに作り直させる（「今いるビューと同じものは
+/// 出さない」ので、右ペインのように、ビューが変わっても残る場所では出し分けが変わる）ための目印。
+/// </para>
+/// </summary>
+public sealed class DayMenuInfoConverter : IMultiValueConverter
+{
+    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values is not [MainViewModel main, var entry, ..]) return null;
+
+        var time = values.Length > 2 && values[2] is TimeOnly at ? at : (TimeOnly?)null;
+
+        return main.DayMenuFor(entry, time);
+    }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

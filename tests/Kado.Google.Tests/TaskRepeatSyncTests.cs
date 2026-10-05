@@ -82,8 +82,9 @@ public class TaskRepeatSyncTests : IDisposable
         Assert.Equal(WeeklyMonday, next.Repeat);
         Assert.Equal("local:mytasks", next.TaskListId);
 
-        // 作ったことを残す
-        Assert.Contains(report.Warnings, w => w == "繰り返しの次の回を作りました：週報 9/28(月)");
+        // 作ったことは「知らせ」に残す。警告には入れない（入れると同期の表示が毎週「警告」になる）
+        Assert.Contains(report.Notes, w => w == "繰り返しの次の回を作りました：週報 9/28(月)");
+        Assert.Empty(report.Warnings);
     }
 
     [Fact]
@@ -129,7 +130,7 @@ public class TaskRepeatSyncTests : IDisposable
         var second = await EngineWith().SyncAsync("@default", "local:mytasks");
 
         Assert.Equal(2, Tasks.All().Count);
-        Assert.DoesNotContain(second.Warnings, w => w.Contains("繰り返しの次の回を作りました"));
+        Assert.DoesNotContain(second.Notes, w => w.Contains("繰り返しの次の回を作りました"));
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class TaskRepeatSyncTests : IDisposable
         var report = await EngineWith().SyncAsync("@default", "local:mytasks");
 
         Assert.Single(Tasks.All());
-        Assert.DoesNotContain(report.Warnings, w => w.Contains("繰り返しの次の回を作りました"));
+        Assert.DoesNotContain(report.Notes, w => w.Contains("繰り返しの次の回を作りました"));
     }
 
     [Fact]
@@ -173,7 +174,7 @@ public class TaskRepeatSyncTests : IDisposable
         var only = Assert.Single(Tasks.All());
         Assert.True(only.IsDone);
         Assert.Equal("こわれた文字列", only.Repeat);
-        Assert.DoesNotContain(report.Warnings, w => w.Contains("繰り返しの次の回を作りました"));
+        Assert.DoesNotContain(report.Notes, w => w.Contains("繰り返しの次の回を作りました"));
     }
 
     [Fact]

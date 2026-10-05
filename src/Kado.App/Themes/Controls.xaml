@@ -28,37 +28,6 @@
     <conv:HexBrushConverter x:Key="HexBrush" />
 
     <!--
-        日付の行のラベル（マイルストーン）の右クリックメニュー（項目13）。
-        以前は MainWindow・MonthView・SidebarLayout・WeekView・DayView の5か所に
-        一字一句同じものが重複定義されていた。ここに1つ置いて共有する。
-
-        ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
-        使う側は Tag に MainViewModel（Window の DataContext）を入れ、この定義は
-        PlacementTarget 経由でそれを引く。DataContext を自分の定義スコープから
-        継承する作りではないので、どの Window の Resources から呼ばれても、
-        呼び出し側が同じ Tag／CommandParameter の付け方をしている限り同じように動く
-    -->
-    <ContextMenu x:Key="MilestoneMenu">
-        <MenuItem Header="編集"
-                  Command="{Binding PlacementTarget.Tag.EditMilestoneCommand,
-                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                  CommandParameter="{Binding PlacementTarget.DataContext,
-                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        <!--
-            リンクと添付の項目のスタイルは、このファイルのずっと下（MenuItem の暗黙スタイルの後）で
-            定義している。StaticResource は前方参照できないので、ここだけ DynamicResource で引く
-        -->
-        <MenuItem Style="{DynamicResource EventLinkMenuItemStyle}" />
-        <MenuItem Style="{DynamicResource OpenAttachmentMenuItemStyle}" />
-        <Separator />
-        <MenuItem Header="削除"
-                  Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
-                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                  CommandParameter="{Binding PlacementTarget.DataContext,
-                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-    </ContextMenu>
-
-    <!--
         キーボードで辿ったときの焦点の輪（項目8）。
         Tab で回っても居場所が分からなかった。IconButtonStyle / GhostButtonStyle /
         SegmentButtonStyle / MiniDayStyle の FocusVisualStyle に共通で当てる。
@@ -1440,7 +1409,7 @@
     </Style>
 
     <!--
-        予定・タスクの右クリックメニューに足す「リンクを開く」「添付を開く」（と、その前の区切り線）。
+        予定・タスクの右クリックメニューに足す「リンクを開く」「添付を開く」。
 
         開ける先があるときだけ出す。出し分けのために、項目自身の DataContext に「開ける先」
         （OpenTargets）を置く。右クリックされた行の DataContext から OpenTargetsConverter が読む。
@@ -1519,16 +1488,402 @@
         </Setter>
     </Style>
 
-    <!-- 開ける先がどちらも無いときは、その前の区切り線も出さない（右ペインのタスクの行） -->
-    <Style x:Key="OpenSeparatorStyle" TargetType="Separator"
-           BasedOn="{StaticResource {x:Type Separator}}">
-        <Setter Property="DataContext"
-                Value="{Binding PlacementTarget.DataContext,
-                        RelativeSource={RelativeSource AncestorType=ContextMenu},
-                        Converter={StaticResource OpenTargetsConverter}}" />
-        <Setter Property="Visibility"
-                Value="{Binding HasAny, Converter={StaticResource BoolToVisibility}}" />
+    <!--
+        右クリックメニュー（予定・タスク・日付と空き時間）。画面ごとに別々に持たず、ここの4つを全部の画面で
+        共有する（EventContextMenu・TaskContextMenu・TaskRowContextMenu・DayContextMenu）。以前は画面ごとに
+        同じ並びのメニューを書いていて、1つ足すたびに足し忘れる画面が出た
+        （tests/Kado.App.Tests/ContextMenuOpenItemsTests が、並びと使われ方を見張っている）。
+
+        ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。使う側は、
+        メニューを付ける要素の Tag に MainViewModel（Window の DataContext）を入れ、項目は
+        PlacementTarget 経由でそれを引く。コマンドの引数は右クリックされた行（PlacementTarget.DataContext）
+        そのもの。行の型は画面ごとに違う（月のチップ・時間軸のブロック・右ペインの行・一覧の行など）が、
+        どの行かの読み取りは MainViewModel（EntryRefs）が持つので、メニュー側は全部同じ書き方で済む。
+
+        項目の出し分け（編集か詳細か・押せるか・押せない理由・子メニューの中身）は、項目自身の DataContext に
+        MainViewModel が組み立てた情報（EventMenuInfo・TaskMenuInfo・DayMenuInfo）を置いて読む。
+        リンク・添付の項目（OpenTargets）と同じ作り。押せない項目は隠さず灰色にして、理由をツールチップに出す
+        （灰色の項目にツールチップを出すには ToolTipService.ShowOnDisabled が要る）。
+
+        子メニュー（別のカレンダーへ移す・期限を変える・別のリストへ移す）の項目は別のポップアップに出て
+        ContextMenu をたどれないので、押したときのコマンドと渡すものは項目自身（MenuChoice）が持つ。
+
+        ここは MenuItem / Separator の暗黙スタイルより後ろに置く。StaticResource は前方参照できず、
+        暗黙スタイルを BasedOn で引き継ぐ（Style を明示すると暗黙のスタイルは当たらなくなり、枠や色が
+        Windows 既定に戻る）ため。
+    -->
+    <conv:EventMenuInfoConverter x:Key="EventMenuInfoConverter" />
+    <conv:TaskMenuInfoConverter x:Key="TaskMenuInfoConverter" />
+    <conv:DayMenuInfoConverter x:Key="DayMenuInfoConverter" />
+
+    <!-- 子メニューの1件。名前の前に色見本（カレンダー・リストの色）を出す。色が無ければ名前だけ -->
+    <DataTemplate x:Key="MenuChoiceTemplate">
+        <StackPanel Orientation="Horizontal">
+            <Border Width="11" Height="11" CornerRadius="3" Margin="0,0,8,0" VerticalAlignment="Center"
+                    Background="{Binding Color, Converter={StaticResource HexBrush}}"
+                    Visibility="{Binding HasColor, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
+
+    <Style x:Key="MenuChoiceItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="HeaderTemplate" Value="{StaticResource MenuChoiceTemplate}" />
+        <Setter Property="Command" Value="{Binding Command}" />
+        <Setter Property="CommandParameter" Value="{Binding Parameter}" />
+        <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+        <Setter Property="ToolTip" Value="{Binding ToolTip}" />
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
     </Style>
+
+    <!-- 予定のメニューの項目の土台。DataContext に EventMenuInfo を置く -->
+    <Style x:Key="EventMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="DataContext">
+            <Setter.Value>
+                <MultiBinding Converter="{StaticResource EventMenuInfoConverter}">
+                    <Binding Path="PlacementTarget.Tag"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding Path="PlacementTarget.DataContext"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                </MultiBinding>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+    </Style>
+
+    <!-- 「編集」。編集できない予定（読み取り専用のカレンダー・Google 側で変えられないもの）では「詳細を見る」 -->
+    <Style x:Key="EventEditMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource EventMenuItemStyle}">
+        <Setter Property="Header" Value="{Binding EditLabel}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.EditEventEntryCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="EventDuplicateMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource EventMenuItemStyle}">
+        <Setter Property="Header" Value="複製" />
+        <Setter Property="IsEnabled" Value="{Binding CanDuplicate}" />
+        <Setter Property="ToolTip" Value="{Binding DuplicateDisabledReason}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.DuplicateEventCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!-- 子メニューに、書き込めるカレンダーを左パネルと同じ並びで出す。移せない予定は親ごと灰色（理由はツールチップ） -->
+    <Style x:Key="EventMoveMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource EventMenuItemStyle}">
+        <Setter Property="Header" Value="別のカレンダーへ移す" />
+        <Setter Property="IsEnabled" Value="{Binding CanMove}" />
+        <Setter Property="ToolTip" Value="{Binding MoveDisabledReason}" />
+        <Setter Property="ItemsSource" Value="{Binding MoveChoices}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource MenuChoiceItemStyle}" />
+    </Style>
+
+    <Style x:Key="EventCopyMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource EventMenuItemStyle}">
+        <Setter Property="Header" Value="題名と日時をコピー" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.CopyEventTextCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="EventDeleteMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource EventMenuItemStyle}">
+        <Setter Property="Header" Value="削除" />
+        <Setter Property="IsEnabled" Value="{Binding CanDelete}" />
+        <Setter Property="ToolTip" Value="{Binding DeleteDisabledReason}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.DeleteEventEntryCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!-- タスクのメニューの項目の土台。DataContext に TaskMenuInfo を置く -->
+    <Style x:Key="TaskMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="DataContext">
+            <Setter.Value>
+                <MultiBinding Converter="{StaticResource TaskMenuInfoConverter}">
+                    <Binding Path="PlacementTarget.Tag"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding Path="PlacementTarget.DataContext"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                </MultiBinding>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+    </Style>
+
+    <Style x:Key="TaskEditMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="編集" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.EditTaskEntryCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!-- 文言は完了・未完了で切り替える（TaskMenuInfo.DoneLabel） -->
+    <Style x:Key="TaskDoneMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="{Binding DoneLabel}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.ToggleTaskEntryDoneCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!-- 今日・明日・次の稼働日・来週の週始め・期限なし。いまの期限と同じ項目は灰色 -->
+    <Style x:Key="TaskDueMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="期限を変える" />
+        <Setter Property="ItemsSource" Value="{Binding DueChoices}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource MenuChoiceItemStyle}" />
+    </Style>
+
+    <!-- サブタスク・サブタスクを持つタスクは、Google がリストをまたいで移させない。項目ごとに灰色にして理由を出す -->
+    <Style x:Key="TaskListMoveMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="別のリストへ移す" />
+        <Setter Property="IsEnabled" Value="{Binding CanMoveToList}" />
+        <Setter Property="ToolTip" Value="{Binding ListMoveDisabledReason}" />
+        <Setter Property="ItemsSource" Value="{Binding ListChoices}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource MenuChoiceItemStyle}" />
+    </Style>
+
+    <Style x:Key="TaskDuplicateMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="複製" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.DuplicateTaskCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="TaskCopyMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="題名をコピー" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.CopyTaskTitleCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="TaskDeleteMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource TaskMenuItemStyle}">
+        <Setter Property="Header" Value="削除" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.DeleteTaskEntryCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!--
+        右ペインの行だけが持つ「上へ移動」「下へ移動」。同じ期限日の中で入れ替える。
+        グループの端では無効になる（MainViewModel.CanMoveTaskInGroup。コマンドの CanExecute）。
+        引数は TaskListItemViewModel（右ペインの行の DataContext）
+    -->
+    <Style x:Key="TaskMoveUpMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Header" Value="上へ移動" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.MoveTaskUpCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="TaskMoveDownMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Header" Value="下へ移動" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.MoveTaskDownCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!--
+        日付・空き時間のメニューの項目の土台。DataContext に DayMenuInfo を置く。
+        値は、本体・右クリックされた場所の中身・時間軸の上の時刻（DayMenu.Time。時間軸の列だけが付ける）・
+        いま出しているビュー。最後のビューは出し分けを作り直させる目印で、右ペインのように、ビューが
+        変わっても残る場所で「今いるビューと同じものは出さない」を保つのに要る
+    -->
+    <Style x:Key="DayMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="DataContext">
+            <Setter.Value>
+                <MultiBinding Converter="{StaticResource DayMenuInfoConverter}">
+                    <Binding Path="PlacementTarget.Tag"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding Path="PlacementTarget.DataContext"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding Path="PlacementTarget.(views:DayMenu.Time)"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding Path="PlacementTarget.Tag.CurrentView"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                </MultiBinding>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 時間帯の上なら、その時刻（15分に丸めた）から1時間の予定。それ以外はふつうの「予定を追加」 -->
+    <Style x:Key="DayAddEventMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource DayMenuItemStyle}">
+        <Setter Property="Header" Value="この日に予定を追加" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.AddEventAtCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter" Value="{Binding Target}" />
+    </Style>
+
+    <Style x:Key="DayAddTaskMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource DayMenuItemStyle}">
+        <Setter Property="Header" Value="この日にタスクを追加" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.AddTaskOnCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter" Value="{Binding Date}" />
+    </Style>
+
+    <!-- 今いるビューと同じものは出さない（DayMenuInfo.ShowsDay・ShowsWeek・ShowsMonth） -->
+    <Style x:Key="DayShowDayMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource DayMenuItemStyle}">
+        <Setter Property="Header" Value="この日を1日で見る" />
+        <Setter Property="Visibility"
+                Value="{Binding ShowsDay, Converter={StaticResource BoolToVisibility}}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.ShowDayOfCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter" Value="{Binding Date}" />
+    </Style>
+
+    <Style x:Key="DayShowWeekMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource DayMenuItemStyle}">
+        <Setter Property="Header" Value="この週を見る" />
+        <Setter Property="Visibility"
+                Value="{Binding ShowsWeek, Converter={StaticResource BoolToVisibility}}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.ShowWeekOfCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter" Value="{Binding Date}" />
+    </Style>
+
+    <Style x:Key="DayShowMonthMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource DayMenuItemStyle}">
+        <Setter Property="Header" Value="この月を見る" />
+        <Setter Property="Visibility"
+                Value="{Binding ShowsMonth, Converter={StaticResource BoolToVisibility}}" />
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.ShowMonthOfCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <Setter Property="CommandParameter" Value="{Binding Date}" />
+    </Style>
+
+    <!--
+        予定の右クリックメニュー。月のチップ・週と日の終日レーン・時間軸のブロック・一覧・右ペイン・
+        日付の行のラベル（マイルストーン）の全部で使う。並びを変えるときは、ここだけを直す。
+
+        編集 / リンク・添付（あるときだけ）/ ― / 複製 / 別のカレンダーへ移す ▸ / 題名と日時をコピー / ― / 削除
+    -->
+    <ContextMenu x:Key="EventContextMenu">
+        <MenuItem Style="{StaticResource EventEditMenuItemStyle}" />
+        <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
+        <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource EventDuplicateMenuItemStyle}" />
+        <MenuItem Style="{StaticResource EventMoveMenuItemStyle}" />
+        <MenuItem Style="{StaticResource EventCopyMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource EventDeleteMenuItemStyle}" />
+    </ContextMenu>
+
+    <!--
+        タスクの右クリックメニュー。月のチップ・週と日の終日レーン・一覧で使う（右ペインの行は、
+        すぐ下の TaskRowContextMenu）。並びを変えるときは、この2つを一緒に直す
+        （tests/Kado.App.Tests/ContextMenuOpenItemsTests が、右ペインのものが「これに上へ・下へを足しただけ」
+        であることを見張っている）。
+
+        編集 / 完了にする・完了を取り消す / 期限を変える ▸ / 別のリストへ移す ▸ / リンク・添付（あるときだけ）/
+        ― / 複製 / 題名をコピー / ― / 削除
+    -->
+    <ContextMenu x:Key="TaskContextMenu">
+        <MenuItem Style="{StaticResource TaskEditMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskDoneMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskDueMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskListMoveMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
+        <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource TaskDuplicateMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskCopyMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource TaskDeleteMenuItemStyle}" />
+    </ContextMenu>
+
+    <!--
+        右ペインのタスクの行のメニュー。TaskContextMenu と同じ並びで、削除の上に、並べ替えの
+        「上へ移動」「下へ移動」を区切り線で分けて足す（ドラッグが実機でうまく動かなかったときの逃げ道）。
+    -->
+    <ContextMenu x:Key="TaskRowContextMenu">
+        <MenuItem Style="{StaticResource TaskEditMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskDoneMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskDueMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskListMoveMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
+        <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource TaskDuplicateMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskCopyMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource TaskMoveUpMenuItemStyle}" />
+        <MenuItem Style="{StaticResource TaskMoveDownMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource TaskDeleteMenuItemStyle}" />
+    </ContextMenu>
+
+    <!--
+        日付・空き時間の右クリックメニュー。月のマスの空いた所・週の日見出し・週と日の時間帯の空いた所・
+        年の日付・一覧の日付見出し・右ペインの空いた所で使う。予定やタスクの上で右クリックしたときは、
+        その予定・タスクのメニューだけが出る（WPF は、ContextMenu を持ついちばん内側の要素のメニューを
+        開いて、そこで止める。外側のこのメニューは出ない）。
+
+        この日に予定を追加 / この日にタスクを追加 / ― / この日を1日で見る / この週を見る / この月を見る
+        （今いるビューと同じものは出さない）
+    -->
+    <ContextMenu x:Key="DayContextMenu">
+        <MenuItem Style="{StaticResource DayAddEventMenuItemStyle}" />
+        <MenuItem Style="{StaticResource DayAddTaskMenuItemStyle}" />
+        <Separator />
+        <MenuItem Style="{StaticResource DayShowDayMenuItemStyle}" />
+        <MenuItem Style="{StaticResource DayShowWeekMenuItemStyle}" />
+        <MenuItem Style="{StaticResource DayShowMonthMenuItemStyle}" />
+    </ContextMenu>
 
     <!--
         ツールチップ。

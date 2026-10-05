@@ -341,7 +341,9 @@ public partial class App : Application
                 feed: new WorkdayFeedClient(log: new NetworkLog(Shell.ShellDiagnosticsLog.Write)),
                 // 右クリックメニューと編集画面の「リンクを開く」「添付を開く」。何を開いてよいかの
                 // 判断は Kado.Presentation.Links が済ませ、ここは言われたものを起動するだけ
-                linkOpener: new Kado.Presentation.Links.ShellLinkOpener()));
+                linkOpener: new Kado.Presentation.Links.ShellLinkOpener(),
+                // 右クリックメニューの「題名と日時をコピー」「題名をコピー」
+                clipboard: new Kado.App.Editing.WpfClipboard()));
             StartupTrace.Mark("MainViewModel構築後");
 
             // ここでバインディングが評価される。年・一覧のビューは表示するまで

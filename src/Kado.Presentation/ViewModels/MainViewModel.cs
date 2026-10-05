@@ -11,6 +11,7 @@ using Kado.Google.OAuth;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
 using Kado.Presentation.Links;
+using Kado.Presentation.Menus;
 using Kado.Presentation.Net;
 using Kado.Presentation.Notifications;
 using Kado.Presentation.Settings;
@@ -40,7 +41,7 @@ public enum CalendarView
 /// ツールバー側に置く。
 /// </para>
 /// </summary>
-public sealed class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject
 {
     private readonly CalendarWorkspace _workspace;
     private readonly IEditorPresenter _editors;
@@ -124,7 +125,8 @@ public sealed class MainViewModel : ObservableObject
         DockPlacement? shell = null,
         WorkdayFeedClient? feed = null,
         Editing.IAttachmentUploader? attachmentUploader = null,
-        ILinkOpener? linkOpener = null)
+        ILinkOpener? linkOpener = null,
+        IClipboard? clipboard = null)
     {
         _clock = clock ?? TimeProvider.System;
         _feed = feed ?? new WorkdayFeedClient();
@@ -134,6 +136,7 @@ public sealed class MainViewModel : ObservableObject
         _files = files ?? NullFileDialogs.Instance;
         _attachmentUploader = attachmentUploader ?? Editing.NullAttachmentUploader.Instance;
         _links = new LinkLauncher(linkOpener ?? NullLinkOpener.Instance);
+        _clipboard = clipboard ?? NullClipboard.Instance;
         _today = today;
 
         _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
@@ -352,6 +355,9 @@ public sealed class MainViewModel : ObservableObject
         MoveTaskDownCommand = new RelayCommand<TaskListItemViewModel?>(
             t => MoveTaskInGroup(t, up: false), t => CanMoveTaskInGroup(t, up: false));
 
+        // 右クリックメニューの項目（複製・移す・コピー・期限・日付のメニュー）
+        InitializeMenuCommands();
+
         // 実働日計算の画面はこのあとのフェーズで作る。それまでは押せないことで示す
         OpenWorkingDayCalculatorCommand = new RelayCommand(ShowWorkdayCalculator);
 
@@ -421,6 +427,9 @@ public sealed class MainViewModel : ObservableObject
         // これまでどおり必ず走らせる。判断に自信が持てない経路は省かない側に倒す
         Sync.Synced += (_, _) =>
         {
+            // 同期で起きたことの知らせ（繰り返しの次の回を作った、など）は、警告にせず、ステータスで一度だけ伝える
+            AnnounceSyncNotes(Sync.LastReport);
+
             if (Sync.LastReport is { HasChanges: false, MayHaveWritten: false }) return;
 
             ReloadAfterSync();
@@ -2907,7 +2916,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (!copy)
         {
-            if (!_workspace.UpdateTask(moved)) return false;
+            if (!_workspace.SetTaskDue(found.Id, date)) return false;
 
             StatusMessage = "タスクの期限を移しました";
             return true;
@@ -3058,15 +3067,14 @@ public sealed class MainViewModel : ObservableObject
         // 表示用の複製ではなく保存されている内容を直す。繰り返しの展開を書き戻さないため
         if (_workspace.Events.Find(id) is not { } stored) return;
 
-        if (UnsendableMessage(stored) is { } unsendable)
+        // 編集できない予定（読み取り専用のカレンダー・Google 側で変えられないもの）は、保存しても
+        // 向こうへ伝わらず、こちらだけ食い違う。編集画面は開かず、読み取り専用の画面で中身だけ見せる
+        // （右クリックの「詳細を見る」。理由は画面の上に出る）。保存も削除もできない
+        if (EditBlockReason(stored) is { } readOnlyReason)
         {
-            StatusMessage = unsendable;
-            return;
-        }
-
-        if (IsLocked(stored))
-        {
-            StatusMessage = LockedMessage;
+            _editors.ShowEventEditor(new EventEditorViewModel(
+                stored, CalendarChoicesFor(stored), _attachmentUploader, _files, _links,
+                readOnlyReason: readOnlyReason));
             return;
         }
 
@@ -3595,6 +3603,23 @@ public sealed class MainViewModel : ObservableObject
         // そのあいだ会社の実働日カレンダーが更新されても古いままで、設定の
         // 「1日に1回、自動で取りに行く」が嘘になっていた
         FetchFeedIfDue(now);
+    }
+
+    /// <summary>
+    /// 同期の知らせ（<see cref="Kado.Google.Sync.SyncReport.Notes"/>）を、ステータス行に出す。
+    /// <para>
+    /// 困りごとではないので、同期の表示は警告にしない（<see cref="SyncViewModel.AcknowledgeWarningsCommand"/> で
+    /// 読んだことにする警告とは別の流れ）。他のステータスと同じく、数秒後に消える。
+    /// 知らせが複数あるときは、最初の1件と残りの件数にまとめる。
+    /// </para>
+    /// </summary>
+    private void AnnounceSyncNotes(Kado.Google.Sync.SyncReport? report)
+    {
+        if (report is not { Notes.Count: > 0 }) return;
+
+        StatusMessage = report.Notes.Count == 1
+            ? $"同期しました。{report.Notes[0]}"
+            : $"同期しました。{report.Notes[0]} ほか{report.Notes.Count - 1}件";
     }
 
     /// <summary>

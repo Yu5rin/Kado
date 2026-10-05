@@ -49,61 +49,7 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!--
-            マスに並ぶ予定・タスクの右クリックメニュー。
-            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
-            行の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
-        -->
-        <ContextMenu x:Key="EventChipMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
 
-        <ContextMenu x:Key="TaskChipMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
-            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskChipDoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Style>
-                    <Style TargetType="MenuItem">
-                        <Setter Property="Header" Value="完了にする" />
-                        <Style.Triggers>
-                            <DataTrigger Value="True"
-                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
-                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <Setter Property="Header" Value="完了を取り消す" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </MenuItem.Style>
-            </MenuItem>
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
 
         <!-- 予定のチップ。「09:00 計画レビュー」のように時刻を頭に付けて1行で出す -->
         <!--
@@ -126,7 +72,7 @@
                     BorderThickness="3,0,0,0"
                     BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource EventChipMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}" LineHeight="16"
@@ -151,7 +97,7 @@
                     BorderThickness="3,0,0,0"
                     BorderBrush="{Binding Color, Converter={StaticResource EventColorBrush}}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource EventChipMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Text}" LineHeight="16"
@@ -213,7 +159,7 @@
             <!-- 押せる面を作るため Background を敷く。透明でも当たり判定は残る -->
             <Border x:Name="Chip" Background="Transparent" Margin="2,2,0,0"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource TaskChipMenu}"
+                    ContextMenu="{StaticResource TaskContextMenu}"
                     MouseLeftButtonDown="OnTaskChipClicked"
                     MouseMove="OnChipDragging">
                 <StackPanel Orientation="Horizontal">
@@ -254,7 +200,7 @@
 
         <!--
             マイルストーン。日付の右に残る領域で中央寄せ（要件書 4.2）。
-            ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う（項目13）。
+            ContextMenu は Themes/Controls.xaml の共有 EventContextMenu を使う。
 
             操作説明のツールチップは外した（項目12）。バッジの文字がそのまま
             マイルストーン名なので、切れて読めなくなる題も無い
@@ -263,7 +209,7 @@
             <Border CornerRadius="3" Padding="5,0" HorizontalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource MilestoneMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
                     MouseMove="OnChipDragging"
                     Cursor="Hand">
@@ -292,6 +238,8 @@
             <Border x:Name="Cell" Margin="0,0,1,1" Padding="5,3,5,4"
                     Background="{DynamicResource PanelBrush}"
                     ClipToBounds="True" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource DayContextMenu}"
                     MouseLeftButtonDown="OnCellClicked"
                     AllowDrop="True"
                     DragOver="OnCellDragOver" DragLeave="OnCellDragLeft"
@@ -449,6 +397,8 @@
             <Border x:Name="Cell" Margin="0,0,1,1" Padding="2"
                     Background="{DynamicResource PanelBrush}"
                     ClipToBounds="True" Cursor="Hand"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource DayContextMenu}"
                     MouseLeftButtonDown="OnCellClicked"
                     AllowDrop="True"
                     DragOver="OnCellDragOver" DragLeave="OnCellDragLeft"

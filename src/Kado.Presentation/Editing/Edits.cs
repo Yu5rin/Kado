@@ -17,13 +17,15 @@ namespace Kado.Presentation.Editing;
 /// </para>
 /// </summary>
 public sealed class AddEventEdit(
-    EventRepository repository, CalendarEvent value, TombstoneRepository? tombstones = null)
+    EventRepository repository, CalendarEvent value, TombstoneRepository? tombstones = null,
+    string description = "予定の追加")
     : IUndoableEdit
 {
     /// <summary>一度元に戻したか。戻したあとの「やり直し」だけ、新規として入れる。</summary>
     private bool _reverted;
 
-    public string Description => "予定の追加";
+    /// <summary>元に戻すメニューに出す説明。複製のときは「予定の複製」と言い分ける。</summary>
+    public string Description => description;
 
     public void Apply() => repository.Upsert(_reverted ? SyncLinks.AsNew(value) : value);
 
@@ -59,10 +61,12 @@ public sealed class AddEventEdit(
 /// 次の編集が 404 → 作り直し（二重）になったりする。
 /// </para>
 /// </summary>
-public sealed class UpdateEventEdit(EventRepository repository, CalendarEvent before, CalendarEvent after)
+public sealed class UpdateEventEdit(
+    EventRepository repository, CalendarEvent before, CalendarEvent after, string description = "予定の変更")
     : IUndoableEdit
 {
-    public string Description => "予定の変更";
+    /// <summary>元に戻すメニューに出す説明。別のカレンダーへ移したときは、それが分かる言い方にする。</summary>
+    public string Description => description;
 
     public void Apply() => Write(after, before);
 
@@ -149,12 +153,14 @@ public sealed class DeleteEventEdit(
 /// <para>元に戻す・やり直すときの扱いは <see cref="AddEventEdit"/> と同じ。</para>
 /// </summary>
 public sealed class AddTaskEdit(
-    TaskRepository repository, TaskItem value, TombstoneRepository? tombstones = null)
+    TaskRepository repository, TaskItem value, TombstoneRepository? tombstones = null,
+    string description = "タスクの追加")
     : IUndoableEdit
 {
     private bool _reverted;
 
-    public string Description => "タスクの追加";
+    /// <summary>元に戻すメニューに出す説明。複製のときは「タスクの複製」と言い分ける。</summary>
+    public string Description => description;
 
     public void Apply() => repository.Upsert(_reverted ? SyncLinks.AsNew(value) : value);
 
@@ -179,7 +185,8 @@ public sealed class AddTaskEdit(
 /// タスクを書き換える。
 /// <para>中身と結び付きの分け方は <see cref="UpdateEventEdit"/> と同じ。</para>
 /// </summary>
-public sealed class UpdateTaskEdit(TaskRepository repository, TaskItem before, TaskItem after) : IUndoableEdit
+public sealed class UpdateTaskEdit(
+    TaskRepository repository, TaskItem before, TaskItem after, string? description = null) : IUndoableEdit
 {
     /// <summary>
     /// 完了の切り替えだけなら、その旨を説明に出す。
@@ -190,9 +197,10 @@ public sealed class UpdateTaskEdit(TaskRepository repository, TaskItem before, T
     /// </para>
     /// </summary>
     public string Description =>
-        before with { IsDone = after.IsDone, CompletedAt = after.CompletedAt, UpdatedAt = after.UpdatedAt } == after
+        description ??
+        (before with { IsDone = after.IsDone, CompletedAt = after.CompletedAt, UpdatedAt = after.UpdatedAt } == after
             ? after.IsDone ? "タスクを完了にする" : "タスクの完了を取り消す"
-            : "タスクの変更";
+            : "タスクの変更");
 
     public void Apply() => Write(after);
 

@@ -22,77 +22,14 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:MilestoneBrushConverter x:Key="MilestoneBrush" />
 
-        <!-- 日付の行のラベルの右クリックメニューは Themes/Controls.xaml の
-             共有 MilestoneMenu を使う（項目13） -->
+        <!--
+            右クリックメニューは Themes/Controls.xaml の共有メニューを使う。予定は EventContextMenu、
+            タスクは TaskContextMenu、日付の見出しは DayContextMenu（日付の行のラベルは予定なので
+            EventContextMenu）。ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
+            メニューを付ける要素の Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+        -->
 
         <conv:TimelineOffsetToMarginConverter x:Key="TimelineOffsetToMargin" />
-
-        <!--
-            日付ヘッダの右クリックメニュー。ダブルクリックは予定の追加に譲ったので、
-            日ビューへの移動はこちらへ移した（要件書のねらいと違う動きをしていたのを直す）。
-        -->
-        <ContextMenu x:Key="DayHeaderMenu">
-            <MenuItem Header="日ビューへ移動"
-                      Command="{Binding PlacementTarget.Tag.ShowDayOfCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <!--
-            終日レーンの右クリックメニュー。ContextMenu は画面の木から外れて出るので、
-            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
-        -->
-        <ContextMenu x:Key="AllDayEventMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <ContextMenu x:Key="AllDayTaskMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditTaskChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
-            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskChipDoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Style>
-                    <Style TargetType="MenuItem">
-                        <Setter Property="Header" Value="完了にする" />
-                        <Style.Triggers>
-                            <DataTrigger Value="True"
-                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
-                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <Setter Property="Header" Value="完了を取り消す" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </MenuItem.Style>
-            </MenuItem>
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteTaskChipCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
 
         <!-- 終日レーンのタスク。点線の丸印で予定と区別する -->
         <DataTemplate x:Key="AllDayTaskTemplate">
@@ -101,7 +38,7 @@
                     BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"
                     ToolTip="ダブルクリックで編集 ・ 時間帯へドラッグすると作業時間を確保します"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource AllDayTaskMenu}"
+                    ContextMenu="{StaticResource TaskContextMenu}"
                     MouseLeftButtonDown="OnAllDayTaskClicked"
                     MouseMove="OnAllDayDragging">
                 <StackPanel Orientation="Horizontal">
@@ -138,7 +75,7 @@
         <DataTemplate x:Key="AllDayEventTemplate">
             <Border CornerRadius="3" Padding="5,1" Margin="0,0,0,2" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource AllDayEventMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnAllDayEventClicked"
                     MouseMove="OnAllDayDragging"
                     Background="{DynamicResource AccentSoftBrush}">
@@ -153,10 +90,10 @@
             <!-- 見出しを押すと、その日を選ぶ。右ペインがその日に入れ替わる -->
             <Border x:Name="Head" Padding="0,5,0,6" Cursor="Hand"
                     Background="Transparent"
-                    ToolTip="クリックで選択 ・ ダブルクリックで予定を追加 ・ 右クリックで日ビューへ"
+                    ToolTip="クリックで選択 ・ ダブルクリックで予定を追加 ・ 右クリックでメニュー"
                     MouseLeftButtonDown="OnDayHeaderClicked"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource DayHeaderMenu}"
+                    ContextMenu="{StaticResource DayContextMenu}"
                     BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}">
                 <StackPanel>
                     <!--
@@ -197,7 +134,7 @@
                                         Cursor="Hand" ToolTip="ダブルクリックで編集 ・ 右クリックでメニュー"
                                         Tag="{Binding DataContext,
                                               RelativeSource={RelativeSource AncestorType=Window}}"
-                                        ContextMenu="{StaticResource MilestoneMenu}"
+                                        ContextMenu="{StaticResource EventContextMenu}"
                                         MouseLeftButtonDown="OnMilestoneClicked"
                                         Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                     ConverterParameter=Face}">

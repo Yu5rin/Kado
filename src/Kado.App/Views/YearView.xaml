@@ -45,29 +45,11 @@
         </DataTemplate>
 
         <!--
-            マスの右クリックメニュー。
+            マスの右クリックメニューは、Themes/Controls.xaml の共有 DayContextMenu を使う
+            （この日に予定・タスクを追加／この日を1日で見る／この週を見る／この月を見る）。
             ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に
             届かない。Tag に MainViewModel を入れて PlacementTarget 経由で引く
         -->
-        <ContextMenu x:Key="YearDayMenu">
-            <MenuItem Header="この日に予定を追加"
-                      Command="{Binding PlacementTarget.Tag.AddEventOnCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <MenuItem Header="この日の月を見る"
-                      Command="{Binding PlacementTarget.Tag.ShowMonthOfCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Header="この日を1日で見る"
-                      Command="{Binding PlacementTarget.Tag.ShowDayOfCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext.Date,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
         <!--
             ストリップの1日。
 
@@ -86,7 +68,7 @@
                     Background="{DynamicResource PanelBrush}"
                     Cursor="Hand" ToolTip="{Binding Tooltip}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource YearDayMenu}"
+                    ContextMenu="{StaticResource DayContextMenu}"
                     MouseLeftButtonDown="OnDayClicked">
                 <StackPanel VerticalAlignment="Center">
                     <!-- 帯の最小幅（160〜220px）では常にマスが最小になるため、下限でも読める大きさにする -->
@@ -296,7 +278,7 @@
                                         Cursor="Hand" ToolTip="{Binding Tooltip}"
                                         Tag="{Binding DataContext,
                                               RelativeSource={RelativeSource AncestorType=Window}}"
-                                        ContextMenu="{StaticResource YearDayMenu}"
+                                        ContextMenu="{StaticResource DayContextMenu}"
                                         MouseLeftButtonDown="OnDayClicked">
                                     <!--
                                         スリムパネルの月カレンダー（MonthView.xaml の

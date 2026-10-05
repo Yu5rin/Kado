@@ -28,59 +28,22 @@
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
 
         <!--
-            予定行の右クリックメニュー（項目1）。もとはスリムパネルだけが持って
-            いた（右パネルには無かった）。「既存の配線を落とさない」に従い、
-            一本化のこの部品に残す。ContextMenu は画面の木から外れて出るので、
-            Tag に MainViewModel を入れて PlacementTarget 経由で引く
-            （SourceRowMenu・MilestoneMenu と同じ手口）。
+            右クリックメニューは Themes/Controls.xaml の共有メニューを使う。予定の行は EventContextMenu
+            （日付ヘッダのマイルストーンのラベルも同じ）、タスクの行は、並べ替えの「上へ・下へ移動」も持つ
+            TaskRowContextMenu、一覧の空いた所は DayContextMenu（選んでいる日）。
+            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。メニューを付ける
+            要素の Tag に MainViewModel を入れて PlacementTarget 経由で引く（SourceRowMenu と同じ手口）。
+            予定・タスクの行の上では、その行のメニューだけが開く。
         -->
-        <ContextMenu x:Key="EventRowMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditEventCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteEventCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <!--
-            タスクの行の右クリックメニュー。並べ替え（項目「タスクの並び替え」）の
-            逃げ道。ドラッグが実機でうまく動かなかったときのために、こちらは
-            確実に動く作りにしてある。グループ（同じ期限日）の端では無効になる
-            （MainViewModel.CanMoveTaskInGroup／RelayCommand の CanExecute）。
-        -->
-        <ContextMenu x:Key="TaskRowMenu">
-            <MenuItem Header="上へ移動"
-                      Command="{Binding PlacementTarget.Tag.MoveTaskUpCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Header="下へ移動"
-                      Command="{Binding PlacementTarget.Tag.MoveTaskDownCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator Style="{StaticResource OpenSeparatorStyle}" />
-            <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-        </ContextMenu>
-
         <!--
             マイルストーンのラベル（.ms）。日付ヘッダで使う。
-            ContextMenu は Themes/Controls.xaml の共有 MilestoneMenu を使う。
+            ContextMenu は Themes/Controls.xaml の共有 EventContextMenu を使う。
         -->
         <DataTemplate x:Key="MilestoneBadgeTemplate">
             <Border CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
                     Background="{Binding Name, Converter={StaticResource MilestoneBrush}, ConverterParameter=Face}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource MilestoneMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
                     Cursor="Hand">
                 <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
@@ -89,14 +52,14 @@
         </DataTemplate>
 
         <!--
-            予定の行（.ev）。右クリックで編集・削除（EventRowMenu）、ダブルクリックで
+            予定の行（.ev）。右クリックでメニュー（EventContextMenu）、ダブルクリックで
             編集、ホバーでゴミ箱、ホバー中は Delete キーでも消せる（DayPaneView.xaml.cs
             の _pointedRow）。
         -->
         <DataTemplate x:Key="EventRowTemplate">
             <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource EventRowMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventClicked"
                     MouseEnter="OnRowPointerEntered" MouseLeave="OnRowPointerExited">
                 <DockPanel>
@@ -153,7 +116,7 @@
             <Border x:Name="Row" Background="Transparent" Padding="14,6" Cursor="Hand"
                     ToolTip="{Binding DueTooltip}"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource TaskRowMenu}"
+                    ContextMenu="{StaticResource TaskRowContextMenu}"
                     AllowDrop="True"
                     PreviewMouseLeftButtonDown="OnTaskRowPreviewMouseDown"
                     MouseLeftButtonDown="OnTaskClicked"
@@ -367,7 +330,15 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+        <!--
+            予定・タスクの一覧。空いた所を右クリックすると、選んでいる日の DayContextMenu。
+            ScrollViewer 自身に付けるのは、内容より下の余白も右クリックの対象にするため
+            （内容の StackPanel は内容の高さしかない）。押せる面にするので Background を敷く。
+            Tag の MainViewModel は、DataContext を SelectedDay に差し替える前のこの部品の DataContext から取る
+        -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Background="Transparent"
+                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type views:DayPaneView}}}"
+                      ContextMenu="{StaticResource DayContextMenu}">
             <StackPanel>
                 <!-- 予定の見出し（.dsec） -->
                 <DockPanel Margin="14,9,14,4">

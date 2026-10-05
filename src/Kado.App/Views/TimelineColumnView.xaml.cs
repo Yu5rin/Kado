@@ -144,6 +144,17 @@ public partial class TimelineColumnView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 右ボタンを押した時点で、押した高さの時刻（15分に丸めた）を控える。
+    /// <para>
+    /// 空いた時間帯のメニュー（<c>DayContextMenu</c>）の「この日に予定を追加」が、その時刻から1時間の
+    /// 予定にするために読む（<see cref="DayMenu.TimeProperty"/>）。メニューは右ボタンを離したときに
+    /// 開くので、その前に付けておく。ブロックの上で押したときも付くが、ブロックのメニューは読まない。
+    /// </para>
+    /// </summary>
+    private void OnColumnRightPressed(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
+        DayMenu.SetTime(Column, TimeAt(e.GetPosition(Column).Y));
+
     /// <summary>押したまま動かしたらドラッグを始める。</summary>
     private void OnBlockDragging(object sender, System.Windows.Input.MouseEventArgs e) =>
         DragSession.Current.DragIfMoved(sender, e);

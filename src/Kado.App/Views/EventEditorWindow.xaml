@@ -38,22 +38,36 @@
             <TextBlock Text="{Binding HeaderText}" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" />
         </Border>
 
+        <!--
+            読み取り専用の画面（右クリックの「詳細を見る」）にだけ出す。読み取り専用のカレンダー・
+            Google 側で変えられない予定は、こちらで変えても向こうへ伝わらず食い違うだけなので、
+            欄は触れず、保存も削除もできない。理由を上に書く
+        -->
+        <Border DockPanel.Dock="Top" Margin="16,12,16,0" Padding="10,8" CornerRadius="5"
+                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}"
+                Background="{DynamicResource SunkenBrush}"
+                Visibility="{Binding ReadOnlyReason, Converter={StaticResource NullToVisibility}}">
+            <TextBlock Text="{Binding ReadOnlyReason}" Style="{StaticResource CaptionTextStyle}"
+                       TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+        </Border>
+
         <Border DockPanel.Dock="Bottom" Padding="16,11"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="キャンセル" Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0"
+                    <Button Content="{Binding CancelLabel}" Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0"
                             IsCancel="True" />
                     <Button Content="保存" Style="{StaticResource PrimaryButtonStyle}"
                             IsDefault="True" IsEnabled="{Binding CanSave}"
+                            Visibility="{Binding IsEditable, Converter={StaticResource BoolToVisibility}}"
                             Command="{Binding SaveCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                 </StackPanel>
 
-                <!-- 既存の予定を編集しているときだけ出す。新規作成では消すものが無い -->
+                <!-- 既存の予定を編集しているときだけ出す。新規作成では消すものが無く、読み取り専用では消させない -->
                 <Button Content="削除" DockPanel.Dock="Left" Style="{StaticResource GhostButtonStyle}"
                         Foreground="{DynamicResource SundayBrush}" Margin="0,0,10,0"
                         Command="{Binding DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                        Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}" />
+                        Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}" />
 
                 <TextBlock Text="{Binding ValidationMessage}" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0"
@@ -62,7 +76,7 @@
             </DockPanel>
         </Border>
 
-        <StackPanel Margin="16,14">
+        <StackPanel Margin="16,14" IsEnabled="{Binding IsEditable}">
             <!--
                 同期で「Google 上で見つからない」印が付いた予定にだけ出す。以後は Google へ送られない。
                 作り直すのは使う人が選んだときだけ（結び付きを外して新規として送る）

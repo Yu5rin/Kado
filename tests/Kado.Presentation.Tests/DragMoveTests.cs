@@ -191,7 +191,7 @@ public class DragMoveTests
     }
 
     [Fact]
-    public void 向こうで変えられない予定は編集画面を開かない()
+    public void 向こうで変えられない予定は読み取り専用の画面だけを開く()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(Locked("g-local", Today));
@@ -202,9 +202,10 @@ public class DragMoveTests
 
         main.EditChipCommand.Execute(chip);
 
-        // 開けてしまうと、直せたように見えて向こうには伝わらない
-        Assert.Null(editors.LastEventEditor);
-        Assert.NotNull(main.StatusMessage);
+        // 直せる編集画面を開いてしまうと、直せたように見えて向こうには伝わらない。
+        // 開くのは読み取り専用の画面（右クリックの「詳細を見る」）だけ。保存も削除もできない
+        Assert.True(editors.LastEventEditor!.IsReadOnly);
+        Assert.False(editors.LastEventEditor.CanSave);
     }
 
     [Fact]
@@ -462,7 +463,7 @@ public class DragMoveTests
     }
 
     [Fact]
-    public void 読み取り専用カレンダーの予定は編集画面を開かない()
+    public void 読み取り専用カレンダーの予定は読み取り専用の画面だけを開く()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.Sources.Upsert(ReadOnlyCalendar());
@@ -474,8 +475,9 @@ public class DragMoveTests
 
         main.EditChipCommand.Execute(chip);
 
-        Assert.Null(editors.LastEventEditor);
-        Assert.NotNull(main.StatusMessage);
+        // 開くのは読み取り専用の画面（詳細を見る）だけ。直せる画面は開かない
+        Assert.True(editors.LastEventEditor!.IsReadOnly);
+        Assert.False(editors.LastEventEditor.CanSave);
     }
 
     [Fact]

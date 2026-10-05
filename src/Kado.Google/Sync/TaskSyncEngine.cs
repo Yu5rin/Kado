@@ -205,6 +205,9 @@ public sealed class TaskSyncEngine(
         var overwritten = new List<string>();
         var warnings = new List<string>();
 
+        // 起きたことの知らせ。警告ではない（同期の表示を「警告」にしない）
+        var notes = new List<string>();
+
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -263,7 +266,7 @@ public sealed class TaskSyncEngine(
                     // 無い項目なので、結び付けただけで消してしまわないようにする
                     var adopted = TaskMapper.FromGoogle(item, taskListId, localListId, orphan, startedAt);
 
-                    tasks.Upsert(CompleteRepeating(orphan, adopted, now, warnings, ref created));
+                    tasks.Upsert(CompleteRepeating(orphan, adopted, now, notes, ref created));
                     updated++;
                     continue;
                 }
@@ -274,7 +277,7 @@ public sealed class TaskSyncEngine(
             }
             else
             {
-                tasks.Upsert(CompleteRepeating(existing, mapped, now, warnings, ref created));
+                tasks.Upsert(CompleteRepeating(existing, mapped, now, notes, ref created));
                 updated++;
             }
         }
@@ -296,6 +299,7 @@ public sealed class TaskSyncEngine(
             DeletedLocal = deleted,
             Relinked = relinked,
             Warnings = [.. warnings, .. SummarizeOverwritten(overwritten)],
+            Notes = notes,
         };
     }
 
@@ -309,8 +313,8 @@ public sealed class TaskSyncEngine(
     /// <para>
     /// 次の回は Google の ID を持たない新規のタスク。ここでは手元に入れるだけで、Google へは
     /// 受け取りのあとの送信（<see cref="PushChangesAsync"/>）が新規として送る。
-    /// 次の回を作ったことは、警告ではなく知らせとして <paramref name="notices"/> に1行残す
-    /// （件数にも数える）。
+    /// 次の回を作ったことは、警告ではなく知らせとして <paramref name="notices"/>（<see cref="SyncReport.Notes"/>）に
+    /// 1行残す（件数にも数える）。警告に入れると、毎週のように同期の表示が「警告」になって邪魔になる。
     /// </para>
     /// </summary>
     /// <param name="before">受け取る前の手元の姿。無ければ（初めて受け取るなら）何もしない。</param>

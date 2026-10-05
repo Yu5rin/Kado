@@ -19,29 +19,23 @@
         <conv:AllTrueToVisibilityConverter x:Key="AllTrueToVisibility" />
 
         <!--
-            時間軸に置かれた1件の右クリックメニュー。
-            ContextMenu は画面の木から外れて出るので、祖先をたどっても Window に届かない。
-            Tag に MainViewModel を入れておき、PlacementTarget 経由で引く。
+            右クリックメニューは Themes/Controls.xaml の共有メニューを使う。予定のブロックは
+            EventContextMenu、空いた時間帯は DayContextMenu。ContextMenu は画面の木から外れて出るので、
+            祖先をたどっても Window に届かない。メニューを付ける要素の Tag に MainViewModel を入れておき、
+            PlacementTarget 経由で引く。
+
+            空いた時間帯のメニューの「この日に予定を追加」は、右クリックした時刻（15分に丸めた）から
+            1時間の予定にする。メニューは離したときに開くので、押した時点で時刻を控える
+            （OnColumnRightPressed → DayMenu.Time）。ブロックの上で右クリックしたときは、
+            ブロックのメニューだけが開く。
         -->
-        <ContextMenu x:Key="BlockMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditBlockCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteBlockCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
     </UserControl.Resources>
 
     <Border x:Name="Column" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource LineBrush}"
             Background="Transparent"
+            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+            ContextMenu="{StaticResource DayContextMenu}"
+            PreviewMouseRightButtonDown="OnColumnRightPressed"
             AllowDrop="True" DragOver="OnColumnDragOver" Drop="OnColumnDropped"
             MouseLeftButtonDown="OnColumnPressed"
             MouseMove="OnColumnHovering" MouseLeave="OnColumnLeft">
@@ -96,7 +90,7 @@
                         <Border x:Name="Block" VerticalAlignment="Top" CornerRadius="3" Padding="5,2"
                                 Cursor="Hand" ToolTip="{Binding Tooltip}"
                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                                ContextMenu="{StaticResource BlockMenu}"
+                                ContextMenu="{StaticResource EventContextMenu}"
                                 MouseLeftButtonDown="OnBlockClicked"
                                 MouseMove="OnBlockDragging"
                                 Height="{Binding Height}"

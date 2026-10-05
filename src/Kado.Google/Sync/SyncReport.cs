@@ -95,6 +95,17 @@ public sealed record SyncReport
     /// <summary>伝えきれなかったことがら。止めるほどではないが、黙らせない。</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
+    /// <summary>
+    /// 同期で起きたことの<b>知らせ</b>。<see cref="Warnings"/> とは別に持つ。
+    /// <para>
+    /// 困りごとではなく、ただ伝えておきたいこと（Google 側で完了にされた繰り返しタスクの次の回を作った、など）。
+    /// <b>警告に入れると、同期の表示が「一部を伝えられません」になり、毎週のように出て邪魔になる。</b>
+    /// 警告の表示・「読んだことにする」の流れには載せず、画面は下のステータスの文言で一度だけ知らせる
+    /// （<c>MainViewModel</c>）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
     /// <summary>何か変わったか。変わっていなければ画面に出さない。</summary>
     public bool HasChanges =>
         CreatedLocal + UpdatedLocal + DeletedLocal +
@@ -129,5 +140,6 @@ public sealed record SyncReport
         Deferred = left.Deferred || right.Deferred,
         Throttled = left.Throttled || right.Throttled,
         Warnings = [.. left.Warnings, .. right.Warnings],
+        Notes = [.. left.Notes, .. right.Notes],
     };
 }

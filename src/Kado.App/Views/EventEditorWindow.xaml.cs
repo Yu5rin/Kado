@@ -23,7 +23,7 @@ public partial class EventEditorWindow : Window
         DataContext = _editor = editor;
 
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
-        DeleteCommand = new RelayCommand(Delete, () => !editor.IsNew);
+        DeleteCommand = new RelayCommand(Delete, () => editor.CanDelete);
         RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);
 
         // RelayCommand は CommandManager に乗っていないので、自分で知らせないと

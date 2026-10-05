@@ -1011,21 +1011,83 @@ public sealed class CalendarWorkspace
     // ------------------------------------------------------------------
 
     /// <summary>予定を追加する。</summary>
-    public void AddEvent(CalendarEvent value) => Run(new AddEventEdit(Events, value, Tombstones));
+    /// <param name="value">追加する予定。</param>
+    /// <param name="description">元に戻すメニューに出す説明。複製のときは言い分ける。</param>
+    public void AddEvent(CalendarEvent value, string description = "予定の追加") =>
+        Run(new AddEventEdit(Events, value, Tombstones, description));
 
     /// <summary>
     /// 予定を書き換える。
     /// <para>書き換え前の姿は保存されている内容から取る。呼び出し側が渡した古い値は信用しない。</para>
     /// </summary>
+    /// <param name="after">書き換えたあとの姿。</param>
+    /// <param name="description">元に戻すメニューに出す説明。別のカレンダーへ移すときは言い分ける。</param>
     /// <returns>対象が見つかって書き換えたら true。</returns>
-    public bool UpdateEvent(CalendarEvent after)
+    public bool UpdateEvent(CalendarEvent after, string description = "予定の変更")
     {
         ArgumentNullException.ThrowIfNull(after);
 
         if (Events.Find(after.Id) is not { } before) return false;
 
-        Run(new UpdateEventEdit(Events, before, after));
+        Run(new UpdateEventEdit(Events, before, after, description));
         return true;
+    }
+
+    /// <summary>
+    /// 予定を複製する。<b>1件の新しい予定</b>を、同じ日・同じ時刻に作る。
+    /// <para>
+    /// 写すのは、題名・場所・メモ・URL・色・通知。<b>繰り返しは写さない</b>ので、繰り返しの予定の1回分を
+    /// 複製すると、その日だけの単発の予定になる（<paramref name="occurrence"/> がその回の日付）。
+    /// 添付・ゲスト・会議 URL は写さない（Kado からは送らない項目で、同じものを2つの予定に付けると
+    /// Google 側で食い違うため）。Google の ID などの結び付きは持たない（新規として同期で送られる）。
+    /// </para>
+    /// <para>1手で元に戻せる（元に戻すと複製が消える。Google と結び付いたあとなら消したことも記録する）。</para>
+    /// </summary>
+    /// <param name="id">複製する予定の識別子。</param>
+    /// <param name="calendarId">複製の入れ先のカレンダー。</param>
+    /// <param name="occurrence">繰り返しの予定のとき、複製する回の日付。繰り返さない予定では使わない。</param>
+    /// <returns>作った予定。元の予定が見つからなければ null。</returns>
+    public CalendarEvent? DuplicateEvent(string id, string calendarId, DateOnly? occurrence = null)
+    {
+        if (Events.Find(id) is not { } found) return null;
+
+        var date = found.IsRecurring && occurrence is { } day ? day : found.Date;
+        var length = found.EndDate is { } end ? end.DayNumber - found.Date.DayNumber : 0;
+
+        var copy = new CalendarEvent
+        {
+            Id = Guid.NewGuid().ToString("N")[..15],
+            Title = found.Title,
+            Date = date,
+            EndDate = length > 0 ? date.AddDays(length) : null,
+            StartTime = found.StartTime,
+            EndTime = found.EndTime,
+            Location = found.Location,
+            Note = found.Note,
+            Url = found.Url,
+            SourceTitle = found.SourceTitle,
+            Color = found.Color,
+            Notify = found.Notify,
+            CalendarId = calendarId,
+            UpdatedAt = DateTimeOffset.Now,
+        };
+
+        AddEvent(copy, "予定の複製");
+        return copy;
+    }
+
+    /// <summary>
+    /// 予定を別のカレンダーへ移す。<b>編集画面でカレンダーを変えて保存したときと同じ経路</b>
+    /// （入れ先の希望だけを書き換える。Google 側の <c>events.move</c> は同期が行う）。
+    /// <para>移せるかの判断（読み取り専用・移せない種類の予定）は呼び出し側が済ませる。</para>
+    /// </summary>
+    /// <returns>対象が見つかって移したら true。</returns>
+    public bool MoveEventToCalendar(string id, string calendarId)
+    {
+        if (Events.Find(id) is not { } found) return false;
+        if (string.Equals(found.CalendarId, calendarId, StringComparison.Ordinal)) return false;
+
+        return UpdateEvent(found with { CalendarId = calendarId, UpdatedAt = DateTimeOffset.Now }, "予定を別のカレンダーへ移す");
     }
 
     /// <summary>予定を削除する。</summary>
@@ -1123,7 +1185,9 @@ public sealed class CalendarWorkspace
     /// 下に付くようにするため（要件どおり）。
     /// </para>
     /// </summary>
-    public void AddTask(TaskItem value)
+    /// <param name="value">追加するタスク。</param>
+    /// <param name="description">元に戻すメニューに出す説明。複製のときは言い分ける。</param>
+    public void AddTask(TaskItem value, string description = "タスクの追加")
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -1133,7 +1197,80 @@ public sealed class CalendarWorkspace
             SortOrder = Tasks.NextSortOrder(value.Due),
         };
 
-        Run(new AddTaskEdit(Tasks, prepared, Tombstones));
+        Run(new AddTaskEdit(Tasks, prepared, Tombstones, description));
+    }
+
+    /// <summary>
+    /// タスクを複製する。題名・メモ・期限・URL・添付・繰り返しを写した、<b>未完了の新しいタスク</b>を作る。
+    /// <para>
+    /// サブタスクを複製したときは、親なしの（ふつうの）タスクになる。Google の ID などの結び付きと
+    /// 並びの位置は持たない（新しいタスクとして同期で送られる）。並び順は、ふつうの新規追加と同じく
+    /// 同じ期限日の末尾（<see cref="AddTask"/>）。1手で元に戻せる。
+    /// </para>
+    /// </summary>
+    /// <param name="id">複製するタスクの識別子。</param>
+    /// <param name="taskListId">複製の入れ先のタスクリスト。</param>
+    /// <returns>作ったタスク。元のタスクが見つからなければ null。</returns>
+    public TaskItem? DuplicateTask(string id, string? taskListId)
+    {
+        if (Tasks.Find(id) is not { } found) return null;
+
+        var now = DateTimeOffset.Now;
+
+        // 期限が無いものに繰り返しは付けられない。元が読めない指定を持っていても、消さずに写す
+        var copy = TaskRepeating.Normalize(
+            new TaskItem
+            {
+                Id = Guid.NewGuid().ToString("N")[..15],
+                Title = found.Title,
+                Due = found.Due,
+                Note = found.Note,
+                Url = found.Url,
+                Attachments = found.Attachments,
+                Repeat = found.Repeat,
+                TaskListId = taskListId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            previous: null);
+
+        AddTask(copy, "タスクの複製");
+        return Tasks.Find(copy.Id);
+    }
+
+    /// <summary>
+    /// タスクの期限を変える。期限の変更（ドラッグで期限を動かしたとき）と同じ経路
+    /// （<see cref="UpdateTask(TaskItem, out DateOnly?, DateOnly?, DayOfWeek, string?)"/>）。
+    /// <para>
+    /// 期限を外す（<paramref name="due"/> が null）と、繰り返しも外れる。期限の無いタスクに繰り返しは
+    /// 付けられない（<see cref="TaskRepeating.Normalize"/>）。
+    /// </para>
+    /// </summary>
+    /// <returns>対象が見つかって書き換えたら true。</returns>
+    public bool SetTaskDue(string id, DateOnly? due)
+    {
+        if (Tasks.Find(id) is not { } found) return false;
+        if (found.Due == due) return false;
+
+        return UpdateTask(
+            found with { Due = due, UpdatedAt = DateTimeOffset.Now },
+            out _, description: due is null ? "タスクの期限を外す" : "タスクの期限の変更");
+    }
+
+    /// <summary>
+    /// タスクを別のタスクリストへ移す。<b>編集画面でリストを変えて保存したときと同じ経路</b>
+    /// （入れ先の希望だけを書き換える。Google 側の <c>tasks.move</c> は同期が行う）。
+    /// <para>サブタスクと、サブタスクを持つタスクは移せない（<c>TaskMapper.MoveBlockReason</c>）。判断は呼び出し側が済ませる。</para>
+    /// </summary>
+    /// <returns>対象が見つかって移したら true。</returns>
+    public bool MoveTaskToList(string id, string taskListId)
+    {
+        if (Tasks.Find(id) is not { } found) return false;
+        if (string.Equals(found.TaskListId, taskListId, StringComparison.Ordinal)) return false;
+
+        return UpdateTask(
+            found with { TaskListId = taskListId, UpdatedAt = DateTimeOffset.Now },
+            out _, description: "タスクを別のリストへ移す");
     }
 
     /// <summary>タスクを書き換える。</summary>
@@ -1153,9 +1290,11 @@ public sealed class CalendarWorkspace
     /// <param name="nextRepeatDue">次の回を作ったら、その期限。作らなければ null。</param>
     /// <param name="today">今日。次の回の期限の計算に使う。渡さなければ端末の今日。</param>
     /// <param name="weekStart">週の始まりの曜日（設定）。稼働日基準の週の区切りに使う。</param>
+    /// <param name="description">元に戻すメニューに出す説明。期限の変更・リストの移動のときは言い分ける。</param>
     /// <returns>対象が見つかって書き換えたら true。</returns>
     public bool UpdateTask(
-        TaskItem after, out DateOnly? nextRepeatDue, DateOnly? today = null, DayOfWeek weekStart = DayOfWeek.Sunday)
+        TaskItem after, out DateOnly? nextRepeatDue, DateOnly? today = null, DayOfWeek weekStart = DayOfWeek.Sunday,
+        string? description = null)
     {
         ArgumentNullException.ThrowIfNull(after);
 
@@ -1172,9 +1311,18 @@ public sealed class CalendarWorkspace
             return true;
         }
 
-        Run(new UpdateTaskEdit(Tasks, before, after));
+        Run(new UpdateTaskEdit(Tasks, before, after, description));
         return true;
     }
+
+    /// <summary>
+    /// 稼働日の決まり。設定で読み込んだ会社の稼働日を優先し、登録の無い日は土日祝を除いた日とみなす。
+    /// <para>
+    /// 読み込み直されたあとの稼働日を使えるよう、呼ぶたびに作る（<see cref="ReloadWorkingDays"/>）。
+    /// 繰り返しタスクの次の回と、右クリックメニューの「次の稼働日」「来週の週始め」が同じものを使う。
+    /// </para>
+    /// </summary>
+    public WorkdayRule Workdays => new(_workingDays, date => Holidays.NameOf(date) is { Length: > 0 });
 
     /// <summary>
     /// 完了にしたタスクの次の回。作れなければ null。
@@ -1182,10 +1330,8 @@ public sealed class CalendarWorkspace
     /// </summary>
     private TaskItem? NextOccurrence(TaskItem completed, DateOnly? today, DayOfWeek weekStart)
     {
-        var rule = new WorkdayRule(_workingDays, date => Holidays.NameOf(date) is { Length: > 0 });
-
         return TaskRepeating.NextOccurrence(
-            completed, today ?? DateOnly.FromDateTime(DateTime.Now), rule.IsWorkday, weekStart, DateTimeOffset.Now)
+            completed, today ?? DateOnly.FromDateTime(DateTime.Now), Workdays.IsWorkday, weekStart, DateTimeOffset.Now)
             is { } next
             // 並び順は、ふつうの新規追加と同じ。同じ期限日の末尾に置く
             ? next with { SortOrder = Tasks.NextSortOrder(next.Due) }
@@ -1270,7 +1416,7 @@ public sealed class CalendarWorkspace
 
     /// <summary>
     /// タスクの完了を切り替える。繰り返し付きのタスクを完了にしたときは、次の回も作る
-    /// （<see cref="UpdateTask(TaskItem, out DateOnly?, DateOnly?, DayOfWeek)"/> と同じ。1手で戻せる）。
+    /// （<see cref="UpdateTask(TaskItem, out DateOnly?, DateOnly?, DayOfWeek, string?)"/> と同じ。1手で戻せる）。
     /// <para>完了を取り消す（完了 → 未完了）ときは何もしない。作った次の回は残る。</para>
     /// </summary>
     /// <param name="id">タスクの ID。</param>

@@ -215,7 +215,8 @@ public class UnsendableCalendarTests
         // 変えられない（送れない）
         editors.OnEvent = _ => false;
         vm.EditChipCommand.Execute(chip);
-        Assert.Null(editors.LastEventEditor);
+        Assert.True(editors.LastEventEditor!.IsReadOnly);
+        Assert.False(editors.LastEventEditor.CanSave);
         Assert.False(vm.MoveEventTo("inside", Today.AddDays(1)));
         Assert.NotNull(vm.StatusMessage);
 

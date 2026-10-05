@@ -16,62 +16,18 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:EventColorBrushConverter x:Key="EventColorBrush" />
 
-        <ContextMenu x:Key="AgendaEventMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditEventCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteEventCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
-        <ContextMenu x:Key="AgendaTaskMenu">
-            <MenuItem Header="編集"
-                      Command="{Binding PlacementTarget.Tag.EditTaskCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
-            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
-            <Separator />
-            <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
-            <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskDoneCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Style>
-                    <Style TargetType="MenuItem">
-                        <Setter Property="Header" Value="完了にする" />
-                        <Style.Triggers>
-                            <DataTrigger Value="True"
-                                         Binding="{Binding PlacementTarget.DataContext.IsDone,
-                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <Setter Property="Header" Value="完了を取り消す" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </MenuItem.Style>
-            </MenuItem>
-            <Separator />
-            <MenuItem Header="削除"
-                      Command="{Binding PlacementTarget.Tag.DeleteTaskCommand,
-                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
-
+        <!--
+            右クリックメニューは Themes/Controls.xaml の共有メニューを使う。予定は EventContextMenu、
+            タスクは TaskContextMenu、日付の行（見出しと空き）は DayContextMenu。ContextMenu は画面の木から
+            外れて出るので、祖先をたどっても Window に届かない。メニューを付ける要素の Tag に
+            MainViewModel を入れておき、PlacementTarget 経由で引く。
+            予定やタスクの上では、その予定・タスクのメニューだけが開く（外側の行のメニューは出ない）。
+        -->
         <!-- 予定1件。時刻を左に寄せて、縦に揃えて読めるようにする -->
         <DataTemplate x:Key="AgendaEventTemplate">
             <Border Background="Transparent" Padding="0,3" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource AgendaEventMenu}"
+                    ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventClicked">
                 <DockPanel>
                     <Border DockPanel.Dock="Left" Width="3" CornerRadius="2" Margin="0,1,9,1"
@@ -98,7 +54,7 @@
         <DataTemplate x:Key="AgendaTaskTemplate">
             <Border x:Name="Row" Background="Transparent" Padding="0,3" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ContextMenu="{StaticResource AgendaTaskMenu}"
+                    ContextMenu="{StaticResource TaskContextMenu}"
                     MouseLeftButtonDown="OnTaskClicked">
                 <DockPanel>
                     <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,9,0"
@@ -143,8 +99,10 @@
         <!-- 1行。日付を左、中身を右に置く -->
         <DataTemplate x:Key="AgendaRowTemplate">
             <Border x:Name="Row" Padding="12,8" Margin="0,0,0,1" Cursor="Hand"
-                    ToolTip="クリックで選択 ・ ダブルクリックで予定を追加"
+                    ToolTip="クリックで選択 ・ ダブルクリックで予定を追加 ・ 右クリックでメニュー"
                     Background="{DynamicResource PanelBrush}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ContextMenu="{StaticResource DayContextMenu}"
                     MouseLeftButtonDown="OnRowClicked">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Left" Width="132" Margin="0,0,12,0">

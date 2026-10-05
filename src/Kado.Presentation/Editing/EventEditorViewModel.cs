@@ -125,11 +125,23 @@ public sealed class EventEditorViewModel : ObservableObject
     }
 
     /// <summary>すでにある予定を直す。</summary>
+    /// <param name="value">直す予定。</param>
+    /// <param name="calendars">選べるカレンダー。</param>
+    /// <param name="uploader">添付をドライブへ上げる口。</param>
+    /// <param name="dialogs">ファイルを選ばせる口。</param>
+    /// <param name="links">添付を開く口。渡さなければ何も起動しない。</param>
+    /// <param name="readOnlyReason">
+    /// 渡すと<b>読み取り専用</b>の画面になる（右クリックの「詳細を見る」）。値は、変えられない理由で、画面の上に出す。
+    /// 読み取り専用のカレンダー・Google 側で変えられない予定のように、保存しても向こうへ伝わらないものを、
+    /// こちらだけ食い違わせないために使う。保存も削除もできない。
+    /// </param>
     public EventEditorViewModel(CalendarEvent value, IReadOnlyList<SourceChoice> calendars,
-        IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null, LinkLauncher? links = null)
+        IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null, LinkLauncher? links = null,
+        string? readOnlyReason = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        _readOnlyReason = readOnlyReason;
         _original = value;
         Calendars = calendars;
         _uploader = uploader ?? NullAttachmentUploader.Instance;
@@ -220,7 +232,28 @@ public sealed class EventEditorViewModel : ObservableObject
         : "Kado では表せない繰り返しの予定のため、日時と繰り返しは Google で編集してください";
 
     /// <summary>画面の見出し。</summary>
-    public string HeaderText => IsNew ? "予定の追加" : "予定の編集";
+    public string HeaderText => IsReadOnly ? "予定の詳細" : IsNew ? "予定の追加" : "予定の編集";
+
+    // ------------------------------------------------------------------
+    // 読み取り専用（変えられない予定を、中身だけ見せる）
+    // ------------------------------------------------------------------
+
+    private readonly string? _readOnlyReason;
+
+    /// <summary>読み取り専用の画面か。保存も削除もできず、欄は触れない。</summary>
+    public bool IsReadOnly => _readOnlyReason is not null;
+
+    /// <summary>欄を触れるか。読み取り専用でなければ true。</summary>
+    public bool IsEditable => !IsReadOnly;
+
+    /// <summary>読み取り専用の理由。画面の上に出す。読み取り専用でなければ null。</summary>
+    public string? ReadOnlyReason => _readOnlyReason;
+
+    /// <summary>閉じるボタンの名前。読み取り専用では、取り消すものが無いので「閉じる」。</summary>
+    public string CancelLabel => IsReadOnly ? "閉じる" : "キャンセル";
+
+    /// <summary>削除のボタンを出すか。既存の予定を直しているときだけ。新規作成と読み取り専用では出さない。</summary>
+    public bool CanDelete => !IsNew && !IsReadOnly;
 
     /// <summary>
     /// 削除を求めて閉じたか。
@@ -237,7 +270,7 @@ public sealed class EventEditorViewModel : ObservableObject
     /// </summary>
     public void RequestDelete()
     {
-        if (IsNew) return;
+        if (IsNew || IsReadOnly) return;
 
         Deleted = true;
     }
@@ -670,8 +703,8 @@ public sealed class EventEditorViewModel : ObservableObject
         set => Set(ref _url, value);
     }
 
-    /// <summary>保存できるか。</summary>
-    public bool CanSave => ValidationMessage is null;
+    /// <summary>保存できるか。読み取り専用の画面では保存できない。</summary>
+    public bool CanSave => !IsReadOnly && ValidationMessage is null;
 
     /// <summary>
     /// 保存できない理由。問題が無ければ null。
@@ -719,6 +752,7 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <summary>入力から予定を組み立てる。<see cref="CanSave"/> が true のときだけ呼ぶ。</summary>
     public CalendarEvent ToModel()
     {
+        if (IsReadOnly) throw new InvalidOperationException(_readOnlyReason);
         if (ValidationMessage is { } message) throw new InvalidOperationException(message);
 
         return new CalendarEvent

@@ -131,4 +131,122 @@ public class SyncWarningsTests
         Assert.Empty(vm.Warnings);
         Assert.Equal(SyncState.Disconnected, vm.State);
     }
+
+    // ------------------------------------------------------------------
+    // 知らせ（Notes）。警告ではない
+    // ------------------------------------------------------------------
+
+    private const string NextOccurrenceNote = "繰り返しの次の回を作りました：週報 9/28(月)";
+
+    [Fact]
+    public async Task 知らせは警告に入れず_同期の表示を警告にしない()
+    {
+        var google = new FakeGoogle
+        {
+            Report = new SyncReport { CreatedLocal = 1, Notes = [NextOccurrenceNote] },
+        };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Idle, vm.State);
+        Assert.False(vm.HasUnreadWarnings);
+        Assert.Equal(0, vm.WarningCount);
+        Assert.Empty(vm.Warnings);
+        Assert.DoesNotContain("一部を伝えられません", vm.StatusText, StringComparison.Ordinal);
+        Assert.Equal(vm.StatusText, vm.DetailText);
+    }
+
+    [Fact]
+    public async Task 知らせがあっても警告の確認の流れは変わらない()
+    {
+        var google = new FakeGoogle
+        {
+            Report = new SyncReport { Warnings = ["本物の警告"], Notes = [NextOccurrenceNote] },
+        };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        // 警告は警告として溜まり、知らせは混ざらない
+        Assert.Equal(SyncState.Warned, vm.State);
+        Assert.Equal(["本物の警告"], vm.Warnings);
+        Assert.DoesNotContain(NextOccurrenceNote, vm.WarningsText, StringComparison.Ordinal);
+
+        // 読んだことにすると、落ち着いた状態に戻る
+        Assert.True(vm.AcknowledgeWarningsCommand.CanExecute(null));
+        vm.AcknowledgeWarningsCommand.Execute(null);
+
+        Assert.Equal(SyncState.Idle, vm.State);
+        Assert.False(vm.HasUnreadWarnings);
+    }
+
+    [Fact]
+    public async Task 知らせだけの同期のあとは警告の確認が要らない()
+    {
+        var google = new FakeGoogle
+        {
+            Report = new SyncReport { CreatedLocal = 1, Notes = [NextOccurrenceNote] },
+        };
+        var vm = new SyncViewModel(google);
+
+        await vm.SyncAsync();
+
+        Assert.False(vm.AcknowledgeWarningsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void 結果を足すと知らせも足される()
+    {
+        var sum = new SyncReport { Notes = ["a"] } + new SyncReport { Notes = ["b", "c"], Warnings = ["w"] };
+
+        Assert.Equal(["a", "b", "c"], sum.Notes);
+        Assert.Equal(["w"], sum.Warnings);
+    }
+
+    [Fact]
+    public async Task 知らせは同期のあとステータスで伝える()
+    {
+        using var test = TestWorkspace.Create();
+        var google = new FakeGoogle
+        {
+            Report = new SyncReport { CreatedLocal = 1, Notes = [NextOccurrenceNote] },
+        };
+        var vm = new MainViewModel(test.Workspace, new DateOnly(2026, 9, 24), google: google);
+
+        await vm.Sync.SyncAsync();
+
+        Assert.Equal($"同期しました。{NextOccurrenceNote}", vm.StatusMessage);
+
+        // 右上の同期の表示は警告にならない
+        Assert.Equal(SyncState.Idle, vm.Sync.State);
+        Assert.True(vm.IsSynced);
+    }
+
+    [Fact]
+    public async Task 知らせが複数なら最初の1件と残りの件数にまとめる()
+    {
+        using var test = TestWorkspace.Create();
+        var google = new FakeGoogle
+        {
+            Report = new SyncReport { CreatedLocal = 2, Notes = [NextOccurrenceNote, "別の知らせ", "もう1つ"] },
+        };
+        var vm = new MainViewModel(test.Workspace, new DateOnly(2026, 9, 24), google: google);
+
+        await vm.Sync.SyncAsync();
+
+        Assert.Equal($"同期しました。{NextOccurrenceNote} ほか2件", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task 知らせが無い同期はステータスを出さない()
+    {
+        using var test = TestWorkspace.Create();
+        var google = new FakeGoogle { Report = new SyncReport { CreatedLocal = 1 } };
+        var vm = new MainViewModel(test.Workspace, new DateOnly(2026, 9, 24), google: google);
+
+        await vm.Sync.SyncAsync();
+
+        Assert.Null(vm.StatusMessage);
+    }
 }

@@ -138,7 +138,8 @@ public sealed class TimelineBuilder
                 placed.Top, placed.Height,
                 _sources.ColorOf(scheduled.Source.CalendarId),
                 scheduled.Source.Location,
-                scheduled.Source));
+                scheduled.Source,
+                scheduled.Date));
         }
 
         return result.OrderBy(b => b.Start).ToArray();

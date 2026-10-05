@@ -16,9 +16,11 @@ namespace Kado.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, string? color, string? location, CalendarEvent? source = null)
+        double top, double height, string? color, string? location, CalendarEvent? source = null,
+        DateOnly? date = null)
     {
         Source = source;
+        Date = date;
         Id = id;
         Title = title;
         Start = start;
@@ -36,6 +38,12 @@ public sealed class TimeBlockViewModel
     /// （<see cref="Links.OpenTargets.From"/>）。
     /// </summary>
     public CalendarEvent? Source { get; }
+
+    /// <summary>
+    /// このブロックが出ている日。繰り返しの予定は1件の元の予定が何日にも現れるので、右クリックメニューの
+    /// 「複製」「題名と日時をコピー」が、どの回かを知るのに使う。
+    /// </summary>
+    public DateOnly? Date { get; }
 
     public string Title { get; }
 

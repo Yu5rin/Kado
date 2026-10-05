@@ -222,8 +222,59 @@ Google Tasks の API には URL も添付の欄も無い。タスクに持たせ
 - 右クリックの出し分けは `OpenTargets`（行の型ごとの振り分けは `OpenTargets.From`）。メニューの
   項目は `Themes/Controls.xaml` の `EventLinkMenuItemStyle`・`TaskLinkMenuItemStyle`・
   `OpenAttachmentMenuItemStyle`。**子メニューは別のポップアップで `ContextMenu` をたどれない**ので、
-  子の項目のコマンドは `MainViewModel.AttachmentMenuItems` が項目に持たせる。新しい右クリックメニューを
-  足したら、この項目も足す（`tests/Kado.App.Tests/ContextMenuOpenItemsTests` が見張る）
+  子の項目のコマンドは `MainViewModel.AttachmentMenuItems` が項目に持たせる。メニューは全画面で共有する
+  3種類にまとめてあるので、足し忘れる画面は出ない（次の「右クリックメニュー」。
+  `tests/Kado.App.Tests/ContextMenuOpenItemsTests` が並びと使われ方を見張る）
+
+### 右クリックメニュー（予定・タスク・日付と空き時間）
+
+メニューは画面ごとに書かず、**`Themes/Controls.xaml` の共有の4つ**を全画面が参照する（以前は画面ごとに同じ並びを
+書いていて、項目を1つ足すたびに足し忘れる画面が出た）。
+
+| メニュー | 使う所 | 並び |
+|---|---|---|
+| `EventContextMenu` | 月のチップ・週と日の終日レーン・時間軸のブロック・一覧・右ペインの行・日付の行のラベル | 編集（編集できなければ「詳細を見る」）／リンクを開く／添付を開く／―／複製／別のカレンダーへ移す ▸／題名と日時をコピー／―／削除 |
+| `TaskContextMenu` | 月のチップ・週と日の終日レーン・一覧 | 編集／完了にする・取り消す／期限を変える ▸／別のリストへ移す ▸／リンクを開く／添付を開く／―／複製／題名をコピー／―／削除 |
+| `TaskRowContextMenu` | 右ペインのタスクの行 | 上と同じで、削除の上に「上へ移動／下へ移動」（区切り線で分ける） |
+| `DayContextMenu` | 月のマスの空き・週の日見出し・週と日の時間帯の空き・年の日付・一覧の日付行・右ペインの空き | この日に予定を追加／この日にタスクを追加／―／この日を1日で見る／この週を見る／この月を見る（今いるビューと同じものは出さない） |
+
+- **コマンドの引数は、右クリックされた行（`PlacementTarget.DataContext`）そのもの。** 行の型は画面ごとに違う
+  （`EventChipViewModel`・`DayEventViewModel`・`TimeBlockViewModel`・`MilestoneViewModel`・`ScheduledTask`・
+  `TaskListItemViewModel`・月のマス・年の日など）。どの行かの読み取りは `EntryRefs`（予定・タスクの識別子）と
+  `DayTarget.From`（日付）が持ち、**識別子だけを取って、中身は保存されている行を読み直す**。コマンドと項目の
+  出し分けは `MainViewModel.Menus.cs`
+- **項目の出し分けは、項目自身の `DataContext` に置いた情報（`EventMenuInfo`・`TaskMenuInfo`・`DayMenuInfo`）で行う**
+  （`OpenTargets` と同じ作り。コンバーターが `Tag` の本体と行から作る）。押せない項目は**隠さず灰色にして、理由を
+  ツールチップに出す**（灰色にはツールチップが出ないので `ToolTipService.ShowOnDisabled`）。子メニューの項目は
+  別のポップアップで `ContextMenu` をたどれないので、コマンドも押せるかも理由も `MenuChoice` が持つ
+- **編集できない予定は「詳細を見る」**（読み取り専用の編集画面が開く。保存も削除もできない）。判定は
+  `MainViewModel.EditBlockReason` ＝ 既存の `UnsendableMessage`（読み取り専用・Google から外れたカレンダー）と
+  `EventMapper.IsLocked`（メールから作られた予約・誕生日・勤務場所・他人が主催する予定）。**Kado では表せない
+  繰り返し（RDATE など）は含めない**（題・場所・メモなどは直せて、日時と繰り返しだけを編集画面が止める）。
+  削除は既存の判断（`DeleteEventByCore`）のまま：Google 側で変えられない予定は削除できる、読み取り専用のカレンダーの
+  Google から受け取った予定は削除できない
+- **複製**は新しい予定を1件、同じ日・同じ時刻・同じカレンダーに作る（`CalendarWorkspace.DuplicateEvent`）。写すのは
+  題名・場所・メモ・URL・色・通知だけ。**繰り返しは写さない**（繰り返しの1回分は、その日だけの単発になる）。添付・
+  ゲスト・会議 URL・Google の結び付きは持たない（新規として送られる）。入れ先は、今のカレンダーに書き込めるなら同じ、
+  読み取り専用などなら既定のカレンダー（実働日の入れ先は取り込みで消えるので避ける）。タスクの複製は未完了・親なし
+- **移す**は、編集画面でカレンダー（リスト）を変えて保存したときと同じ経路（入れ先の希望だけを書き換え、
+  Google 側の `events.move`／`tasks.move` は同期が行う）。移せない理由（`EventMapper.MoveBlockReason`・
+  `TaskMapper.MoveBlockReason`）は子メニューの項目ごとに灰色にして出す。移し先の候補は編集画面の候補と同じ決まり
+  （`CalendarChoicesFor`／`TaskListChoicesFor`）から今のものを除く。並びと色は左パネルと同じ
+- **期限を変える**は、ドラッグで期限を動かしたときと同じ経路（`CalendarWorkspace.SetTaskDue` → `UpdateTask`）。
+  「次の稼働日」「来週の週始め」は `TaskDuePresets`（今日・週の始まり・稼働日の判定を外から受ける純粋な関数）が決め、
+  稼働日は `CalendarWorkspace.Workdays`（`WorkdayRule`）。期限なしにすると繰り返しも外れる（`TaskRepeating.Normalize`）
+- **コピー**は `IClipboard`（実物は `WpfClipboard`。クリップボードを他のアプリが握っていると失敗するので
+  `TrySetText` が false を返し、「コピーできませんでした」と出す）。文面は `EntryText`
+- **全部 Undo できる編集**（`Edits.cs`。複製は `AddEventEdit`／`AddTaskEdit`、移す・期限は `UpdateEventEdit`／
+  `UpdateTaskEdit`。説明文だけ言い分ける）
+- **時間帯の時刻**：メニューは右ボタンを離したときに開くので、押した時点で `TimelineColumnView` が、押した高さの時刻
+  （15分に丸める）を添付プロパティ `DayMenu.Time` に控え、メニューがそれを読む
+- **予定・タスクの上で右クリックしたときに日付のメニューが出ない**のは、WPF が `ContextMenu` を持つ**いちばん内側の
+  要素**のメニューを開いて、そこで止める（`Handled`）ため。外側（マス・列・行）の日付のメニューには届かない。
+  予定・タスクの要素には必ず自分の `ContextMenu` を付ける（メニューを付ける要素は `Tag` に `MainViewModel` を入れる）
+- **ショートカットの表示（`InputGestureText`）は付けていない。** メニューに出す操作のうち、キーに対応するのは
+  右ペインで行を指しているときの Delete だけで、全画面で共有するメニューには書けない（複製の Ctrl＋D などは無い）
 
 ### タスクの繰り返しも Kado だけの項目
 
@@ -257,8 +308,10 @@ Google Tasks の API には繰り返しの欄が無い（Google のアプリで�
 **Google 側で完了にされたとき**は、`TaskSyncEngine` が受け取りの前後を見比べる。手元では「未完了で繰り返しあり」
 だったものが「完了」になっていたら、同じ決まりで次の回を作る。次の回は受け取りのあとの**送信で、同じ同期のうちに**
 Google に新規として作られる。同じ完了をもう一度受け取っても、繰り返しはもう外れているので作らない。同期は画面とは別の
-接続で動くので、稼働日と週の始まりは次の回が要るときにだけ読む（`RepeatEnvironment`）。作ったことは `SyncReport.Warnings`
-に1行残す（知らせ用の口が無いため。件数は `CreatedLocal` に入る）。
+接続で動くので、稼働日と週の始まりは次の回が要るときにだけ読む（`RepeatEnvironment`）。作ったことは **`SyncReport.Notes`**
+（警告ではなく知らせ）に1行残す（件数は `CreatedLocal` に入る）。`Warnings` に入れると同期の表示が毎週のように
+「一部を伝えられません」になって邪魔なので、警告の表示・「確認した」の流れには載せず、同期のあと下のステータスに
+「同期しました。繰り返しの次の回を作りました：題名 10/13(月)」と一度だけ出す（`MainViewModel.AnnounceSyncNotes`）。
 
 **同期で消えないことが要。** `TaskMapper.FromGoogle` は `existing` から引き継ぎ、`ToGoogle` には入れない
 （`TaskLocalOnlyFieldsTests`）。
@@ -417,13 +470,20 @@ Google に新規として作られる。同じ完了をもう一度受け取っ�
   直後に `ThemeResources.Invalidate()` を呼び、そのあとでバインドを結び直す。この順を変えると前の配色が残る
 - **幅をつまんでいるあいだは、`DockWidthChanged`（動かすたびに来る）で保存しない。** 保存は
   `DockWidthCommitted`（つまんでいないときの変更はその場で、つまんでいたなら離したときに1回）で受ける
+- **`StaticResource` は、定義より前には書けない。** 辞書の中で、後ろで定義するスタイルを `BasedOn` や
+  `Style=` で引くと、ビルドは通るのに起動時（辞書の読み込み）で落ちる。後ろのものは `DynamicResource` で引くか、
+  定義より後ろに置く。暗黙の `MenuItem`／`Separator` スタイルを `BasedOn="{StaticResource {x:Type MenuItem}}"` で
+  引き継ぐスタイルも、暗黙スタイルより後ろに置く（`Themes/Controls.xaml` の右クリックメニューは末尾近くにある）。
+  `tests/Kado.App.Tests/ContextMenuOpenItemsTests` が、`Controls.xaml` の前方参照と `BasedOn` の抜けを検査する
+- **`MenuItem` に `Style` を明示すると、暗黙のスタイルは当たらなくなる。** 枠や色が Windows 既定に戻る。
+  明示するときは `BasedOn` を付ける（入れ子の `ItemContainerStyle` も同じ）
 
 起動が遅いときは `shell.log` の `startup-timing`（印ごとの累計と区間）と
 `startup-slow`（起動中に100msを超えた処理）を見る。仕掛けは
 `Kado.Presentation.Infrastructure.StartupTrace`。
 
-`tests/Kado.App.Tests` が1つ目を静的に検査する。2つ目と3つ目は
-検査できていないので、同じ書き方をしないよう上に残した。
+`tests/Kado.App.Tests` が、`StaticResource` の型変換、`StaticResource` の前方参照、`MenuItem` の `BasedOn` の抜けを
+静的に検査する。`InputBinding` と `RelayCommand` の2つは検査できていないので、同じ書き方をしないよう上に残した。
 
 ## シェル統合（Phase 5）
 
@@ -889,6 +949,9 @@ RDATE など、こちらの繰り返しの形（`Recurrence`）に収まらな�
 分からない）。読んだことにするのは、⚙の「確認した」か、右上の表示の右クリック。
 同じ文は重ねず、100件を超えたら古いものから落とす。
 
+警告とは別に、同期で起きた**知らせ**（`SyncReport.Notes`。繰り返しの次の回を作った、など）がある。困りごとではないので
+警告に入れず、同期の表示を「警告」にしない。下のステータスで一度だけ伝える。
+
 ### 送れないカレンダー（読み取り専用・Google から外れた）
 
 **読み取り専用**と「**Google から外れた**」（`google_detached`）カレンダーには、予定を入れても
@@ -899,6 +962,11 @@ RDATE など、こちらの繰り返しの形（`Recurrence`）に収まらな�
 記録を残さない）。対象は、「Google から外れた」カレンダーの中身すべてと、読み取り専用の
 カレンダーのうち**一度も Google に送っていない**予定。Google から受け取った予定は、手元だけ消しても
 Google には残るので、これまでどおり止める。
+
+**こうした予定を開くと、直せる編集画面ではなく読み取り専用の画面**（右クリックの「詳細を見る」。ダブルクリックも同じ）が
+開く。上に理由が出て、欄は触れず、保存も削除もできない（以前は理由を下のステータスに出して、何も開かなかった）。
+Google 側で変えられない予定（メールから作られた予約・誕生日・勤務場所・他人が主催する予定）も同じ扱い
+（`MainViewModel.EditBlockReason`）。
 
 「Google から外れた」カレンダーは、左パネルの行に「外れた」の印を出し、説明をツールチップに出す。
 中の予定は見られるが、変えられない（同期が止まっているので）。行の右クリックに「削除」を出し、
