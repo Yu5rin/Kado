@@ -109,9 +109,11 @@
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" Text="{Binding Title}" LineHeight="17"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" LineHeight="17"
                                    TextTrimming="CharacterEllipsis"
-                                   Foreground="{DynamicResource InkBrush}" />
+                                   Foreground="{DynamicResource InkBrush}">
+                            <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
+                        </TextBlock>
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}" LineHeight="15"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}" />

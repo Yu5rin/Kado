@@ -181,7 +181,7 @@ ID をそのまま並べられないので、`SourceChoice`（ID と名前の組
 |---|---|---|
 | タイトル | `summary` | `title` |
 | 日付 | `start` / `end`（終日は日付、時刻付きは日時） | `due`（**日付のみ**。時刻を持たない） |
-| 繰り返し | `recurrence`（RRULE） | なし |
+| 繰り返し | `recurrence`（RRULE） | なし（**Kado だけが持つ**。Google には送らない。下の「タスクの繰り返しも Kado だけの項目」） |
 | 場所 | `location` | なし |
 | URL | `source.url` | なし（**Kado だけが持つ**。Google には送らない。下の「タスクの URL と添付」） |
 | 説明・詳細 | `description` | `notes` |
@@ -224,6 +224,46 @@ Google Tasks の API には URL も添付の欄も無い。タスクに持たせ
   `OpenAttachmentMenuItemStyle`。**子メニューは別のポップアップで `ContextMenu` をたどれない**ので、
   子の項目のコマンドは `MainViewModel.AttachmentMenuItems` が項目に持たせる。新しい右クリックメニューを
   足したら、この項目も足す（`tests/Kado.App.Tests/ContextMenuOpenItemsTests` が見張る）
+
+### タスクの繰り返しも Kado だけの項目
+
+Google Tasks の API には繰り返しの欄が無い（Google のアプリで付けた繰り返しは、外からは読めも作れもしない）。
+そこで **Kado 独自の繰り返し** を、手元（`tasks.repeat`、V13）にだけ持つ。Google には送らない。
+**完了にすると、Kado が「次の回」を新しいタスクとして作り**、それがふつうのタスクとして Google に送られる。
+
+- **種類は8つ**。暦どおりの4つ（毎日・毎週◯曜日・毎月◯日・毎年◯月◯日）は RRULE の形
+  （`FREQ=WEEKLY;BYDAY=MO`）で、**期限日から曜日・日付を決めて明示して持つ**。稼働日基準の4つ
+  （毎週の週始め・週終わり、毎月の月初・月末）は RRULE で表せないので独自の書き方
+  （`X-KADO=WEEK-FIRST-WORKDAY` など）。読み書きと次の回の計算は `Kado.Core.Recurrence.TaskRepeat`
+  （純粋な関数。`NextDue`）、タスクを組み立てる決まりは `Kado.Data.Models.TaskRepeating`
+- **次の期限は「今の期限より後」かつ「今日以降」のいちばん早い該当日**。溜めてから完了しても過去の回は作らない
+- **毎月・毎年は、無い日を月末に寄せる**（31日 → 2月は28日。次の月は31日に戻る）。RFC 5545 の `BYMONTHDAY`
+  は日の無い月を飛ばすので、この2つは `RecurrenceRule` を使わず自前で数える。毎日・毎週は `RecurrenceRule`
+- **稼働日**は `WorkdayRule`：登録した稼働日データ（`WorkingDayCalendar`）がある期間はそれが決め、登録の無い期間は
+  土日と祝日（`JapaneseHolidays`）を除いた日。**週の区切りは設定の「週の始まり」**。稼働日が1日も無い週・月は飛ばす
+- **読めない指定は「繰り返さない」として扱い、次の回は作らない。文字列は消さない**（編集画面には
+  「読めない指定のまま」と出る）
+- **付けられないのは、期限の無いタスクとサブタスク**。編集画面では選べなくし（理由を出す）、保存でも外す
+  （`TaskRepeating.Normalize`）。期限日が変わったら暦どおりの指定は新しい期限日で指定し直す（ドラッグでの移動も）
+
+完了にしたときの流れ（`CalendarWorkspace.ToggleTask` / `UpdateTask`。チェック・チップ・編集画面の保存のどれでも同じ）：
+
+1. そのタスクを完了にし、**繰り返しを外す**（取り消して完了し直しても二重にならない）
+2. 次の回を作る（題名・メモ・リスト・URL・添付・繰り返しを引き継ぎ、期限は求めた日。Google の結び付きは持たない）
+
+この2つが**1つの元に戻せる操作**（`CompositeEdit`）。元に戻すと完了と繰り返しが戻り、次の回が消える（Google と
+結び付いたあとなら、既存の削除の流れで墓標を残して Google からも消える）。完了の取り消しでは何もしない。
+
+**Google 側で完了にされたとき**は、`TaskSyncEngine` が受け取りの前後を見比べる。手元では「未完了で繰り返しあり」
+だったものが「完了」になっていたら、同じ決まりで次の回を作る。次の回は受け取りのあとの**送信で、同じ同期のうちに**
+Google に新規として作られる。同じ完了をもう一度受け取っても、繰り返しはもう外れているので作らない。同期は画面とは別の
+接続で動くので、稼働日と週の始まりは次の回が要るときにだけ読む（`RepeatEnvironment`）。作ったことは `SyncReport.Warnings`
+に1行残す（知らせ用の口が無いため。件数は `CreatedLocal` に入る）。
+
+**同期で消えないことが要。** `TaskMapper.FromGoogle` は `existing` から引き継ぎ、`ToGoogle` には入れない
+（`TaskLocalOnlyFieldsTests`）。
+
+表示は、題名の後ろに薄く「↻」（`TaskItem.RepeatMark`）。右ペイン・月・週・日・一覧のタスクに出す。
 
 ### まだ合わせられていない項目
 

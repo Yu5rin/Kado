@@ -99,6 +99,12 @@ public static class TaskMapper
             // 向こうに送らないので（ToGoogle には入れない）、ここで守るのが唯一の砦
             Url = existing?.Url,
             Attachments = existing?.Attachments,
+
+            // 繰り返しも同じ。Google Tasks の API には繰り返しの欄が無い（読めも作れもしない）ので、
+            // 引き継がないと同期のたびに繰り返しが消える。
+            // ここは「引き継ぐ」だけ。Google 側で完了にされたときの次の回づくりは
+            // TaskSyncEngine が受け取りの前後を見比べて行う
+            Repeat = existing?.Repeat,
         };
     }
 
@@ -197,7 +203,7 @@ public static class TaskMapper
 
             // TaskItem.Url と TaskItem.Attachments はここに入れない。Google Tasks に
             // その欄は無く、Kado だけが持つ。NeedsPush もこの本文を見るので、入れると
-            // 「送るものがある」と誤判定し続ける
+            // 「送るものがある」と誤判定し続ける。TaskItem.Repeat（繰り返し）も同じ
         };
 
         // 完了に関わるキーは、使う人が完了・未完了を変えたときだけ送る。

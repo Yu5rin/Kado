@@ -43,6 +43,19 @@ public sealed record TaskItem
     /// </summary>
     public string? Attachments { get; init; }
 
+    /// <summary>
+    /// 繰り返しの指定（<c>FREQ=WEEKLY;BYDAY=MO</c> や <c>X-KADO=MONTH-LAST-WORKDAY</c>）。
+    /// 繰り返さないなら null。読み書きと次の回の計算は <c>Kado.Core.Recurrence.TaskRepeat</c>。
+    /// <para>
+    /// <b>Kado だけが持つ</b>項目で、Google には送らない。Google Tasks の API には繰り返しの欄が
+    /// 無く、Google のアプリで付けた繰り返しは外から読めも作れもしない。完了にしたとき、Kado が
+    /// 次の回を新しいタスクとして作る（それがふつうのタスクとして Google に送られる）。
+    /// 同期で Google から受け取るときも、こちらの値を引き継ぐ（<c>TaskMapper.FromGoogle</c>）。
+    /// </para>
+    /// <para>期限の無いタスクとサブタスクには付けない。読めない文字列は消さずに持ち続ける。</para>
+    /// </summary>
+    public string? Repeat { get; init; }
+
     /// <summary>所属タスクリスト。</summary>
     public string? TaskListId { get; init; }
 
@@ -98,6 +111,15 @@ public sealed record TaskItem
     /// </summary>
     public int SortOrder { get; init; }
 
+    /// <summary>題名の後ろに添える、繰り返しの印。予定には繰り返しの印が無いので、タスクの行・チップで揃える。</summary>
+    public const string RepeatMark = " ↻";
+
     /// <summary>期限が決まっているか。</summary>
     public bool HasDue => Due is not null;
+
+    /// <summary>
+    /// 次の回を作る繰り返しか。読めない指定（<see cref="Repeat"/> が壊れている）は繰り返さないので false。
+    /// 画面の「↻」の印に使う。
+    /// </summary>
+    public bool IsRepeating => Core.Recurrence.TaskRepeat.Parse(Repeat) is not null;
 }

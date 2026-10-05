@@ -155,11 +155,23 @@ public sealed class CalendarWorkspace
     [MemberNotNull(nameof(_workingDays), nameof(WorkingDayMath), nameof(DueFormatter))]
     private void LoadWorkingDays()
     {
-        _workingDays = WorkingDayMarks.Overlay(WorkingDayStore.Load(), RebuildFromMarks());
+        _workingDays = BuildWorkingDays();
 
         WorkingDayMath = new WorkingDayMath(_workingDays);
         DueFormatter = new DueDateFormatter(WorkingDayMath, _countInCalendarDays);
     }
+
+    /// <summary>
+    /// 保存されている実働日と印から、稼働日を組み立てて返す。保持している <see cref="WorkingDays"/> は
+    /// 差し替えない。
+    /// <para>
+    /// Google 同期専用の workspace は起動のたびには組み立てない（<c>loadWorkingDays: false</c>）。
+    /// 同期の中で稼働日が要るとき（Google 側で完了にされた繰り返しのタスクの、次の回の期限）だけ、
+    /// ここで必要なときに組み立てる。
+    /// </para>
+    /// </summary>
+    public WorkingDayCalendar BuildWorkingDays() =>
+        WorkingDayMarks.Overlay(WorkingDayStore.Load(), RebuildFromMarks());
 
     private bool _countInCalendarDays;
 
@@ -1126,15 +1138,75 @@ public sealed class CalendarWorkspace
 
     /// <summary>タスクを書き換える。</summary>
     /// <returns>対象が見つかって書き換えたら true。</returns>
-    public bool UpdateTask(TaskItem after)
+    public bool UpdateTask(TaskItem after) => UpdateTask(after, out _);
+
+    /// <summary>
+    /// タスクを書き換える。<b>繰り返し付きのタスクを「未完了 → 完了」にするときは、完了にすることと
+    /// 次の回を作ることを1つの元に戻せる操作として行う</b>（<see cref="CompleteRepeating"/>）。
+    /// <para>
+    /// 編集画面で完了にして保存したときも、チェックを入れたときも、ここを通る。
+    /// 保存の前に繰り返しを付けられる姿に整える（期限が無い・サブタスクなら外し、期限日が変わったら
+    /// 暦どおりの指定を指定し直す。<see cref="TaskRepeating.Normalize"/>）。
+    /// </para>
+    /// </summary>
+    /// <param name="after">書き換えたあとの姿。</param>
+    /// <param name="nextRepeatDue">次の回を作ったら、その期限。作らなければ null。</param>
+    /// <param name="today">今日。次の回の期限の計算に使う。渡さなければ端末の今日。</param>
+    /// <param name="weekStart">週の始まりの曜日（設定）。稼働日基準の週の区切りに使う。</param>
+    /// <returns>対象が見つかって書き換えたら true。</returns>
+    public bool UpdateTask(
+        TaskItem after, out DateOnly? nextRepeatDue, DateOnly? today = null, DayOfWeek weekStart = DayOfWeek.Sunday)
     {
         ArgumentNullException.ThrowIfNull(after);
 
+        nextRepeatDue = null;
+
         if (Tasks.Find(after.Id) is not { } before) return false;
+
+        after = TaskRepeating.Normalize(after, before);
+
+        if (!before.IsDone && after.IsDone && NextOccurrence(after, today, weekStart) is { } next)
+        {
+            Run(CompleteRepeating(before, after, next));
+            nextRepeatDue = next.Due;
+            return true;
+        }
 
         Run(new UpdateTaskEdit(Tasks, before, after));
         return true;
     }
+
+    /// <summary>
+    /// 完了にしたタスクの次の回。作れなければ null。
+    /// <para>稼働日は、設定で読み込んだ会社の稼働日を優先し、登録の無い日は土日祝を除いた日とみなす（<see cref="WorkdayRule"/>）。</para>
+    /// </summary>
+    private TaskItem? NextOccurrence(TaskItem completed, DateOnly? today, DayOfWeek weekStart)
+    {
+        var rule = new WorkdayRule(_workingDays, date => Holidays.NameOf(date) is { Length: > 0 });
+
+        return TaskRepeating.NextOccurrence(
+            completed, today ?? DateOnly.FromDateTime(DateTime.Now), rule.IsWorkday, weekStart, DateTimeOffset.Now)
+            is { } next
+            // 並び順は、ふつうの新規追加と同じ。同じ期限日の末尾に置く
+            ? next with { SortOrder = Tasks.NextSortOrder(next.Due) }
+            : null;
+    }
+
+    /// <summary>
+    /// 繰り返しのタスクを完了にして、次の回を作る。<b>1手で戻せる</b>。
+    /// <para>
+    /// 完了にしたほうからは繰り返しを外す。残すと、完了を取り消してもう一度完了にしたときに
+    /// 次の回が二重にできる。元に戻すと、完了が戻り、繰り返しが戻り、次の回が消える
+    /// （Google と結び付いたあとなら、消したことも記録して Google からも消す。<see cref="AddTaskEdit"/>）。
+    /// やり直しで、また作られる。
+    /// </para>
+    /// </summary>
+    private CompositeEdit CompleteRepeating(TaskItem before, TaskItem completed, TaskItem next) =>
+        new("タスクを完了にする（次の回を作成）",
+        [
+            new UpdateTaskEdit(Tasks, before, TaskRepeating.WithoutRepeat(completed)),
+            new AddTaskEdit(Tasks, next, Tombstones),
+        ]);
 
     // ------------------------------------------------------------------
     // 重複の整理
@@ -1194,9 +1266,20 @@ public sealed class CalendarWorkspace
 
     /// <summary>タスクの完了を切り替える。</summary>
     /// <returns>対象が見つかって切り替えたら true。</returns>
-    public bool ToggleTaskDone(string id)
+    public bool ToggleTaskDone(string id) => ToggleTask(id) is not null;
+
+    /// <summary>
+    /// タスクの完了を切り替える。繰り返し付きのタスクを完了にしたときは、次の回も作る
+    /// （<see cref="UpdateTask(TaskItem, out DateOnly?, DateOnly?, DayOfWeek)"/> と同じ。1手で戻せる）。
+    /// <para>完了を取り消す（完了 → 未完了）ときは何もしない。作った次の回は残る。</para>
+    /// </summary>
+    /// <param name="id">タスクの ID。</param>
+    /// <param name="today">今日。次の回の期限の計算に使う。渡さなければ端末の今日。</param>
+    /// <param name="weekStart">週の始まりの曜日（設定）。</param>
+    /// <returns>切り替えた結果。対象が見つからなければ null。</returns>
+    public TaskToggleResult? ToggleTask(string id, DateOnly? today = null, DayOfWeek weekStart = DayOfWeek.Sunday)
     {
-        if (Tasks.Find(id) is not { } before) return false;
+        if (Tasks.Find(id) is not { } before) return null;
 
         var isDone = !before.IsDone;
         var now = DateTimeOffset.Now;
@@ -1210,8 +1293,15 @@ public sealed class CalendarWorkspace
             CompletedAt = isDone ? before.CompletedAt ?? now : null,
             UpdatedAt = now,
         };
+
+        if (isDone && NextOccurrence(after, today, weekStart) is { } next)
+        {
+            Run(CompleteRepeating(before, after, next));
+            return new TaskToggleResult(true, next.Due);
+        }
+
         Run(new UpdateTaskEdit(Tasks, before, after));
-        return true;
+        return new TaskToggleResult(isDone, null);
     }
 
     /// <summary>タスクを削除する。</summary>

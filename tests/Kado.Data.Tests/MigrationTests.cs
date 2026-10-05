@@ -237,4 +237,34 @@ public class MigrationTests
         Assert.Equal("メモ", db.Connection.ExecuteScalar<string>("SELECT note FROM tasks WHERE id = 't1';"));
         Assert.Equal("g1", db.Connection.ExecuteScalar<string>("SELECT google_task_id FROM tasks WHERE id = 't1';"));
     }
+    /// <summary>
+    /// V13（タスクの繰り返し）が、V12 までの既存のタスクを壊さずに列を足すこと。
+    /// 既存のタスクは空（NULL）＝繰り返さない。
+    /// </summary>
+    [Fact]
+    public void V13は既存のタスクを変えずに繰り返しの列を足す()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 13).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO tasks (id, title, note, url, google_task_id, updated_at) VALUES ('t1', '集計', 'メモ', 'https://example.com', 'g1', 1);");
+
+        var applied = DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Contains(applied, m => m.Version == 13);
+        Assert.Equal(SchemaMigrations.LatestVersion, DatabaseMigrator.GetVersion(db.Connection));
+
+        Assert.Null(db.Connection.ExecuteScalar<string?>("SELECT repeat FROM tasks WHERE id = 't1';"));
+
+        // 既存の中身はそのまま
+        Assert.Equal("メモ", db.Connection.ExecuteScalar<string>("SELECT note FROM tasks WHERE id = 't1';"));
+        Assert.Equal("https://example.com", db.Connection.ExecuteScalar<string>("SELECT url FROM tasks WHERE id = 't1';"));
+        Assert.Equal("g1", db.Connection.ExecuteScalar<string>("SELECT google_task_id FROM tasks WHERE id = 't1';"));
+    }
 }

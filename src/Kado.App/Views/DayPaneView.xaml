@@ -182,8 +182,10 @@
                     </Button>
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource InkBrush}" />
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource InkBrush}">
+                            <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
+                        </TextBlock>
                         <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
                                     Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}">
                             <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"

@@ -7,6 +7,7 @@
 
     URL と添付（ファイルの場所）は Google Tasks に無い、Kado だけの項目。手元にだけ持ち、
     Google には送らない。添付は場所（フルパス）の記録で、ファイルの中身は持たない・上げない。
+    繰り返しも同じく Kado だけの項目（完了にすると Kado が次の回を作る）。
 -->
 <Window x:Class="Kado.App.Views.TaskEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -108,6 +109,29 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
+            </StackPanel>
+
+            <!--
+                繰り返し。Kado だけの項目で、Google には送らない（Google Tasks の API に繰り返しの欄は無い）。
+                完了にすると、Kado が次の回を新しいタスクとして作る。期限の無いタスクとサブタスクには付けられない。
+                期限日を変えると、暦どおりの4つは新しい期限日の曜日・日付で文言も指定も変わる
+            -->
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="繰り返し" Style="{StaticResource FieldLabelStyle}" />
+                <ComboBox Width="248" HorizontalAlignment="Left"
+                          Style="{StaticResource FieldComboBoxStyle}"
+                          ItemsSource="{Binding RepeatOptions}"
+                          DisplayMemberPath="Label" SelectedValuePath="Key"
+                          SelectedValue="{Binding RepeatKey}"
+                          IsEnabled="{Binding CanRepeat}"
+                          ToolTip="{Binding RepeatLockReason}" />
+
+                <TextBlock Text="{Binding RepeatLockReason}" Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap" Margin="0,3,0,0"
+                           Visibility="{Binding RepeatLockReason, Converter={StaticResource NullToVisibility}}" />
+
+                <TextBlock Text="{Binding RepeatNote}" Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap" Margin="0,3,0,0" />
             </StackPanel>
 
             <StackPanel Margin="0,0,0,12"

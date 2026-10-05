@@ -111,7 +111,8 @@ public sealed class GoogleSyncService(
 
                 var engine = new TaskSyncEngine(
                     workspace.Tasks, workspace.Tombstones, workspace.Settings,
-                    new TasksApiGateway(tasks));
+                    new TasksApiGateway(tasks),
+                    repeatEnvironment: RepeatEnvironmentNow);
 
                 report += await RunAsync(
                     () => engine.SyncAsync(list, list, cancellationToken), list, cancellationToken)
@@ -129,6 +130,22 @@ public sealed class GoogleSyncService(
             IsRunning = false;
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// 繰り返しのタスクを Google 側で完了にされたとき、次の回の期限を求めるのに使う稼働日と週の始まり。
+    /// <para>
+    /// 同期用の workspace は稼働日を起動時には組み立てていないので（<c>loadWorkingDays: false</c>）、
+    /// 要る場面（Google で完了にされた繰り返しのタスクがあったとき）にだけ組み立てる。
+    /// 画面側の設定は同じデータベースに入っているので、週の始まりもそこから読む。
+    /// </para>
+    /// </summary>
+    private RepeatEnvironment RepeatEnvironmentNow()
+    {
+        var rule = new Kado.Core.WorkingDays.WorkdayRule(
+            workspace.BuildWorkingDays(), date => workspace.Holidays.NameOf(date) is { Length: > 0 });
+
+        return new RepeatEnvironment(rule.IsWorkday, Settings.AppSettings.ReadWeekStart(workspace.Settings));
     }
 
     /// <summary>伝えられないまま残った削除の記録を、どれだけ持っておくか。</summary>

@@ -192,9 +192,11 @@
                                                      VerticalAlignment="Center"
                                                      Stroke="{DynamicResource AccentBrush}"
                                                      StrokeThickness="1.5" />
-                                            <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
+                                            <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}"
                                                        Foreground="{DynamicResource InkBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
+                                                       TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
+                                            </TextBlock>
                                             <!-- 添え書き（「期限 9/7・4実働日遅れ」「9/11 完了」） -->
                                             <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Note}"
                                                        Margin="6,0,0,0" VerticalAlignment="Center"

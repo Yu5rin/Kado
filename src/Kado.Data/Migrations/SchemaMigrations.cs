@@ -382,6 +382,19 @@ public static class SchemaMigrations
         ALTER TABLE tasks ADD COLUMN attachments TEXT;
         """;
 
+    /// <summary>
+    /// V13：タスクに繰り返しの指定を持たせる。
+    /// <para>
+    /// <b><c>tasks.repeat</c></b>：Google Tasks の API には繰り返しの欄が無い（Google のアプリで
+    /// 付けた繰り返しは、外からは読めも作れもしない）。だから Kado 独自の繰り返しで、<b>Kado だけが
+    /// 持ち、Google には送らない</b>。完了にすると Kado が次の回を新しいタスクとして作り、それが
+    /// ふつうのタスクとして Google に送られる。既存のタスクは空（NULL）＝繰り返さない。
+    /// </para>
+    /// </summary>
+    private const string V13 = """
+        ALTER TABLE tasks ADD COLUMN repeat TEXT;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -397,6 +410,7 @@ public static class SchemaMigrations
         new(10, "Google 上で見つからない印と、Google から外れたカレンダーの印を持つ", V10),
         new(11, "Google から外れたタスクリストの印を持つ", V11),
         new(12, "タスクに URL と添付（ファイルの場所）を持つ。Kado だけが持ち、Google には送らない", V12),
+        new(13, "タスクに繰り返しの指定を持つ。Kado だけが持ち、Google には送らない", V13),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

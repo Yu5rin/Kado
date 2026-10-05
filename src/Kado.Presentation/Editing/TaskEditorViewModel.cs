@@ -25,6 +25,10 @@ public sealed record DuePreset(string Label, DateOnly Date);
 /// <b>URL と添付（ファイルの場所）は Kado だけの項目</b>で、Google Tasks には無い。手元にだけ持ち、
 /// Google には送らない（<see cref="LocalOnlyNote"/> で、画面にもそう書く）。
 /// </para>
+/// <para>
+/// <b>繰り返しも Kado だけの項目</b>。完了にすると Kado が次の回を新しいタスクとして作る。期限の無いタスクと
+/// サブタスクには付けられない（<see cref="CanRepeat"/>）。
+/// </para>
 /// </summary>
 public sealed class TaskEditorViewModel : ObservableObject
 {
@@ -61,6 +65,7 @@ public sealed class TaskEditorViewModel : ObservableObject
     private IReadOnlyList<TaskAttachment> _attachments = [];
     private bool _attachmentsDirty;
     private string? _attachmentMessage;
+    private string _repeatKey = TaskRepeatChoice.None;
 
     /// <summary>
     /// 新しく作る。
@@ -118,6 +123,7 @@ public sealed class TaskEditorViewModel : ObservableObject
         _taskListId = value.TaskListId;
         _url = value.Url;
         _attachments = TaskAttachments.Read(value.Attachments);
+        _repeatKey = TaskRepeatChoice.KeyOf(value.Repeat);
     }
 
     /// <summary>期限の早入れ。日付欄を開かずに決められる。</summary>
@@ -189,14 +195,65 @@ public sealed class TaskEditorViewModel : ObservableObject
     public bool HasDue
     {
         get => _hasDue;
-        set => Set(ref _hasDue, value);
+        set
+        {
+            // 期限が無いと繰り返しは選べない（保存でも外れる）
+            if (Set(ref _hasDue, value)) Raise(nameof(CanRepeat), nameof(RepeatLockReason));
+        }
     }
 
     public DateOnly Due
     {
         get => _due;
-        set => Set(ref _due, value);
+        set
+        {
+            // 暦どおりの繰り返しは期限日の曜日・日付で決まる。選択肢の文言も指定も、新しい期限日に合わせて変わる
+            if (Set(ref _due, value)) Raise(nameof(RepeatOptions));
+        }
     }
+
+    // ------------------------------------------------------------------
+    // 繰り返し（Kado 独自。Google には送らない）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 繰り返しの選択肢。文言は期限日に合わせて具体的に出す（「毎週 月曜日」「毎月 31日」）。
+    /// 読めない指定を持っているときだけ「読めない指定のまま」が加わる。
+    /// </summary>
+    public IReadOnlyList<TaskRepeatOption> RepeatOptions =>
+        TaskRepeatChoice.OptionsFor(_due, includeCustom: _repeatKey == TaskRepeatChoice.Custom);
+
+    /// <summary>選んでいる繰り返し（<see cref="TaskRepeatOption.Key"/>）。</summary>
+    public string RepeatKey
+    {
+        get => _repeatKey;
+        set
+        {
+            // ItemsSource を差し替えた拍子に null が来ることがある。選びなおされたのではないので無視する
+            if (value is not { Length: > 0 }) return;
+
+            Set(ref _repeatKey, value);
+        }
+    }
+
+    /// <summary>
+    /// 繰り返しを選べるか。<b>期限の無いタスクと、サブタスクには付けられない</b>。
+    /// 期限が無いと次の回の日が決まらず、サブタスクは次の回を作ると親子が崩れる。
+    /// </summary>
+    public bool CanRepeat => _hasDue && !IsSubtask;
+
+    /// <summary>繰り返しを選べない理由。選べるなら null。</summary>
+    public string? RepeatLockReason =>
+        IsSubtask ? TaskRepeatChoice.SubtaskReason : _hasDue ? null : TaskRepeatChoice.NeedsDueReason;
+
+    /// <summary>サブタスクか。親子は Google が持つので、保存されている行の値を見る。</summary>
+    private bool IsSubtask => _original?.ParentId is { Length: > 0 };
+
+    /// <summary>
+    /// 繰り返しの欄の近くに出す、小さな一行。Google のアプリで付けた繰り返しとは別物で、
+    /// 両方付けると二重になることを使う人に伝える。
+    /// </summary>
+    public string RepeatNote => TaskRepeatChoice.KadoOnlyNote;
 
     /// <summary>期限を入れる。早入れのボタンから呼ぶ。期限なしだったら付ける。</summary>
     public void SetDue(DateOnly date)
@@ -387,6 +444,10 @@ public sealed class TaskEditorViewModel : ObservableObject
             // 開いて保存し直しただけで空に書き換えてしまわないため
             Url = string.IsNullOrWhiteSpace(_url) ? null : _url.Trim(),
             Attachments = _attachmentsDirty ? TaskAttachments.ToJson(_attachments) : _original?.Attachments,
+
+            // 繰り返しも Kado だけの項目。付けられない（期限なし・サブタスク）ときは外す。
+            // 暦どおりの指定は、いまの期限日の曜日・日付で明示する。読めない指定は消さずに返す
+            Repeat = CanRepeat ? TaskRepeatChoice.ToSpec(_repeatKey, _due, _original?.Repeat) : null,
 
             // Google 側の情報は編集画面で触らない。消さずに引き継ぐ。
             //

@@ -72,6 +72,9 @@ public sealed record ScheduledTask(
     /// <summary>薄い見た目か。</summary>
     public bool IsFaint => Look == ScheduledTaskLook.Faint;
 
+    /// <summary>題名の後ろに添える、繰り返しの印（「 ↻」）。繰り返さないなら空。</summary>
+    public string RepeatMark => Source.IsRepeating ? TaskItem.RepeatMark : string.Empty;
+
     /// <summary>薄い跡に添える短い添え書き（「9/11 完了」）。通常の見た目では null。</summary>
     public string? FaintNote => IsFaint ? Note : null;
 

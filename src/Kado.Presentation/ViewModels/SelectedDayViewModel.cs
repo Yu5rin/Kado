@@ -34,6 +34,10 @@ public sealed class TaskListItemViewModel(
 
     public string Id => Task.Id;
     public string Title => Task.Title;
+
+    /// <summary>題名の後ろに添える、繰り返しの印（「 ↻」）。繰り返さないなら空。</summary>
+    public string RepeatMark => Task.IsRepeating ? TaskItem.RepeatMark : string.Empty;
+
     public bool IsDone => Task.IsDone;
     public string? Note => Task.Note;
 

@@ -3188,11 +3188,16 @@ public sealed class MainViewModel : ObservableObject
                     continue;
             }
 
-            var saved = _workspace.UpdateTask(editor.ToModel());
+            var saved = _workspace.UpdateTask(editor.ToModel(), out var nextRepeatDue, _today, _weekStart);
 
             if (saved && editor.RecreateRequested) _workspace.RecreateTaskOnGoogle(id);
 
-            StatusMessage = saved ? "タスクを変更しました" : "タスクが見つかりませんでした";
+            // 編集画面で完了にして保存したときも、繰り返しの次の回が作られる（CalendarWorkspace.UpdateTask）
+            StatusMessage = !saved
+                ? "タスクが見つかりませんでした"
+                : nextRepeatDue is { } next
+                    ? $"タスクを完了にしました。{NextRepeatText(next)}"
+                    : "タスクを変更しました";
             return;
         }
     }
@@ -3353,10 +3358,23 @@ public sealed class MainViewModel : ObservableObject
 
     private void ToggleTaskDoneCore(TaskListItemViewModel? target)
     {
-        if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
+        if (target is null || _workspace.ToggleTask(target.Id, _today, _weekStart) is not { } result) return;
 
-        StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
+        StatusMessage = ToggledMessage(result);
     }
+
+    /// <summary>
+    /// 完了を切り替えた結果の知らせ。繰り返しのタスクを完了にして次の回を作ったときは、その期限も伝える。
+    /// </summary>
+    private static string ToggledMessage(TaskToggleResult result) => result switch
+    {
+        { IsDone: false } => "タスクの完了を取り消しました",
+        { NextDue: { } next } => $"タスクを完了にしました。{NextRepeatText(next)}",
+        _ => "タスクを完了にしました",
+    };
+
+    /// <summary>「次は 10/13(月)」。繰り返しの次の回の期限を知らせる。</summary>
+    private static string NextRepeatText(DateOnly next) => $"次は {next.Month}/{next.Day}({Weekday(next)})";
 
     /// <summary>
     /// 月・週・日ビューのタスクチップの右クリックメニューから、完了を切り替える。
@@ -3366,9 +3384,9 @@ public sealed class MainViewModel : ObservableObject
 
     private void ToggleTaskChipDoneCore(ScheduledTask? target)
     {
-        if (target is null || !_workspace.ToggleTaskDone(target.Id)) return;
+        if (target is null || _workspace.ToggleTask(target.Id, _today, _weekStart) is not { } result) return;
 
-        StatusMessage = target.IsDone ? "タスクの完了を取り消しました" : "タスクを完了にしました";
+        StatusMessage = ToggledMessage(result);
     }
 
     // ------------------------------------------------------------------

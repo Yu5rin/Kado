@@ -9,7 +9,7 @@ using Kado.Google.Sync;
 namespace Kado.Google.Tests;
 
 /// <summary>
-/// タスクの URL と添付（ファイルの場所）は Kado だけの項目。Google Tasks に欄が無いので、
+/// タスクの URL・添付（ファイルの場所）・繰り返しは Kado だけの項目。Google Tasks に欄が無いので、
 /// <b>Google には一切送らず</b>、同期で Google から受け取っても消えない。
 /// <para>
 /// 消えると、使う人が付けた資料の場所が、Google 側で題を直されただけで黙って無くなる
@@ -20,6 +20,7 @@ public class TaskLocalOnlyFieldsTests : IDisposable
 {
     private const string Url = "https://example.com/spec";
     private const string Attachments = """[{"path":"C:\\資料\\図面.pdf"},{"path":"\\\\server\\share\\議事録"}]""";
+    private const string Repeat = "FREQ=WEEKLY;BYDAY=MO";
 
     private readonly SqliteConnection _connection = CalendarDatabase.OpenInMemory().ConnectAndMigrate();
     private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));
@@ -40,7 +41,7 @@ public class TaskLocalOnlyFieldsTests : IDisposable
     /// <summary>Google に送る本文・Google から来る本文に、Kado だけの項目が紛れ込んでいないか。</summary>
     private static void AssertNoLocalOnlyKeys(System.Text.Json.Nodes.JsonObject remote)
     {
-        foreach (var key in new[] { "url", "Url", "attachments", "Attachments", "links" })
+        foreach (var key in new[] { "url", "Url", "attachments", "Attachments", "links", "repeat", "Repeat", "recurrence" })
         {
             Assert.False(remote.ContainsKey(key), $"Google に「{key}」が送られている");
         }
@@ -65,6 +66,37 @@ public class TaskLocalOnlyFieldsTests : IDisposable
     }
 
     [Fact]
+    public void Googleから受け取っても既存の繰り返しを引き継ぐ()
+    {
+        var existing = new TaskItem { Id = "t1", Title = "週報", Repeat = Repeat };
+
+        var value = TaskMapper.FromGoogle(
+            Json("""{"id":"g1","title":"週報（Googleで変更）","due":"2026-09-21T00:00:00.000Z"}"""),
+            "@default", existing: existing);
+
+        Assert.Equal("週報（Googleで変更）", value.Title);
+        Assert.Equal(Repeat, value.Repeat);
+    }
+
+    [Fact]
+    public void 読めない繰り返しの文字列も受け取って消えない()
+    {
+        var existing = new TaskItem { Id = "t1", Title = "週報", Repeat = "こわれた文字列" };
+
+        var value = TaskMapper.FromGoogle(Json("""{"id":"g1","title":"週報"}"""), "@default", existing: existing);
+
+        Assert.Equal("こわれた文字列", value.Repeat);
+    }
+
+    [Fact]
+    public void 初めて受け取るタスクには繰り返しも無い()
+    {
+        var value = TaskMapper.FromGoogle(Json("""{"id":"g1","title":"集計"}"""), "@default");
+
+        Assert.Null(value.Repeat);
+    }
+
+    [Fact]
     public void 初めて受け取るタスクにはURLも添付も無い()
     {
         var value = TaskMapper.FromGoogle(Json("""{"id":"g1","title":"集計"}"""), "@default");
@@ -78,7 +110,7 @@ public class TaskLocalOnlyFieldsTests : IDisposable
     {
         var body = TaskMapper.ToGoogle(new TaskItem
         {
-            Id = "t1", Title = "集計", Due = D(2026, 9, 24), Url = Url, Attachments = Attachments,
+            Id = "t1", Title = "集計", Due = D(2026, 9, 24), Url = Url, Attachments = Attachments, Repeat = Repeat,
         });
 
         AssertNoLocalOnlyKeys(body);
@@ -95,7 +127,7 @@ public class TaskLocalOnlyFieldsTests : IDisposable
             "@default");
 
         Assert.False(TaskMapper.NeedsPush(received));
-        Assert.False(TaskMapper.NeedsPush(received with { Url = Url, Attachments = Attachments }));
+        Assert.False(TaskMapper.NeedsPush(received with { Url = Url, Attachments = Attachments, Repeat = Repeat }));
     }
 
     // ------------------------------------------------------------------
@@ -232,6 +264,105 @@ public class TaskLocalOnlyFieldsTests : IDisposable
         var report = await Engine.SyncAsync("@default", "local:mytasks");
 
         // 送るものが無いのに Google の更新時刻だけ進めない（他の人の画面にも影響する）
+        Assert.Equal(0, report.UpdatedRemote);
+        Assert.Equal(writesBefore, _remote.WriteAttempts);
+        AssertNoLocalOnlyKeys(_remote.Items["g1"]);
+    }
+    // ------------------------------------------------------------------
+    // 繰り返し（同期のどの経路でも消えない。Google には送らない）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Google側の更新を取り込んでも繰り返しが残る()
+    {
+        _remote.Add("g1", "週報", due: "2026-09-21");
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        Tasks.Upsert(Tasks.All().Single() with { Repeat = Repeat });
+
+        _remote.Edit("g1", "週報（Googleで変更）");
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        var stored = Assert.Single(Tasks.All());
+        Assert.Equal("週報（Googleで変更）", stored.Title);
+        Assert.Equal(Repeat, stored.Repeat);
+    }
+
+    [Fact]
+    public async Task 書き戻した応答を取り込んでも繰り返しが残り送られない()
+    {
+        _remote.Add("g1", "週報", due: "2026-09-21");
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        Tasks.Upsert(Tasks.All().Single() with { Title = "週報（こちらで変更）", Repeat = Repeat });
+
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        Assert.Equal(1, report.UpdatedRemote);
+        AssertNoLocalOnlyKeys(_remote.Items["g1"]);
+        Assert.Equal(Repeat, Assert.Single(Tasks.All()).Repeat);
+    }
+
+    [Fact]
+    public async Task 新規に送った応答を取り込んでも繰り返しが残り送られない()
+    {
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "週報", Due = D(2026, 9, 21), TaskListId = "local:mytasks", Repeat = Repeat,
+        });
+
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        Assert.Equal(1, report.CreatedRemote);
+        AssertNoLocalOnlyKeys(Assert.Single(_remote.Items).Value);
+
+        var stored = Assert.Single(Tasks.All());
+        Assert.NotNull(stored.GoogleTaskId);
+        Assert.Equal(Repeat, stored.Repeat);
+    }
+
+    [Fact]
+    public async Task 結び付いていない同じタスクを引き受けても繰り返しが残る()
+    {
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "t1", Title = "週報", Due = D(2026, 9, 21), TaskListId = "local:mytasks", Repeat = Repeat,
+        });
+        _remote.Add("g1", "週報", due: "2026-09-21");
+
+        await Engine.SyncAsync("@default", "local:mytasks");
+
+        var stored = Assert.Single(Tasks.All());
+        Assert.Equal("g1", stored.GoogleTaskId);
+        Assert.Equal(Repeat, stored.Repeat);
+    }
+
+    [Fact]
+    public async Task リストを移しても内容を一緒に送っても繰り返しが残る()
+    {
+        _remote.Add("g1", "週報", due: "2026-09-21");
+        await Engine.SyncAsync("list-a", "list-a");
+
+        Tasks.Upsert(Tasks.All().Single() with { TaskListId = "list-b", Title = "週報（変更）", Repeat = Repeat });
+
+        var report = await Engine.SyncAsync("list-b", "list-b");
+
+        Assert.Equal(1, report.Moved);
+        AssertNoLocalOnlyKeys(_remote.Items["g1"]);
+        Assert.Equal(Repeat, Assert.Single(Tasks.All()).Repeat);
+    }
+
+    [Fact]
+    public async Task 繰り返しを変えただけでは何も送らない()
+    {
+        _remote.Add("g1", "週報", due: "2026-09-21");
+        await Engine.SyncAsync("@default", "local:mytasks");
+        var writesBefore = _remote.WriteAttempts;
+
+        Tasks.Upsert(Tasks.All().Single() with { Repeat = Repeat });
+
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
         Assert.Equal(0, report.UpdatedRemote);
         Assert.Equal(writesBefore, _remote.WriteAttempts);
         AssertNoLocalOnlyKeys(_remote.Items["g1"]);

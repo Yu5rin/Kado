@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Kado.Core.WorkingDays;
 using Kado.Data.Models;
 using Kado.Data.Repositories;
 using Kado.Google.Mapping;
@@ -58,6 +59,21 @@ public sealed class TasksApiGateway(GoogleTasksApi api) : ITaskGateway
 }
 
 /// <summary>
+/// 繰り返しの次の回の期限を求めるのに要る、Kado の設定と稼働日。
+/// <para>
+/// 同期は画面とは別の接続・別のスレッドで動くので、画面の設定を直接は見られない。
+/// 次の回を作る必要が出たときだけ読み出せるよう、<see cref="TaskSyncEngine"/> には関数で渡す。
+/// </para>
+/// </summary>
+/// <param name="IsWorkday">稼働日か。</param>
+/// <param name="WeekStart">週の始まりの曜日（設定）。</param>
+public sealed record RepeatEnvironment(Func<DateOnly, bool> IsWorkday, DayOfWeek WeekStart)
+{
+    /// <summary>稼働日データも設定も無いときの既定。土日祝を除いた日が稼働日で、週は日曜から。</summary>
+    public static RepeatEnvironment Default { get; } = new(WorkdayRule.Default.IsWorkday, DayOfWeek.Sunday);
+}
+
+/// <summary>
 /// タスクの同期。
 /// <para>
 /// 予定と同じ順序で回すが、差分の取り方が違う。Tasks には <c>syncToken</c> が無いので、
@@ -67,13 +83,21 @@ public sealed class TasksApiGateway(GoogleTasksApi api) : ITaskGateway
 /// 消えたタスクは <c>deleted: true</c> で降ってくる。予定の <c>cancelled</c> と違い、
 /// <c>hidden</c>（完了して一覧から隠れただけ）とは別物なので混ぜない。
 /// </para>
+/// <para>
+/// <b>繰り返し（Kado 独自。Google には欄が無い）</b>：手元で「未完了で繰り返しあり」だったタスクが、
+/// Google 側で完了にされたと分かったら、Kado の中で完了にしたときと同じに、次の回を手元に作り、
+/// 完了したほうから繰り返しを外す。次の回は新規タスクなので、<b>同じ同期の送信で Google に作られる</b>
+/// （受け取りのあとに送信が走り、まだ Google の ID を持たないタスクを新規として送るため）。
+/// 同じ完了をもう一度受け取っても、繰り返しはもう外れているので二重には作らない。
+/// </para>
 /// </summary>
 public sealed class TaskSyncEngine(
     TaskRepository tasks,
     TombstoneRepository tombstones,
     SettingsRepository settings,
     ITaskGateway gateway,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    Func<RepeatEnvironment>? repeatEnvironment = null)
 {
     private const int MaxPages = 50;
 
@@ -237,7 +261,9 @@ public sealed class TaskSyncEngine(
                 {
                     // orphan を existing として渡し直す。作成日時・並び順はローカルにしか
                     // 無い項目なので、結び付けただけで消してしまわないようにする
-                    tasks.Upsert(TaskMapper.FromGoogle(item, taskListId, localListId, orphan, startedAt));
+                    var adopted = TaskMapper.FromGoogle(item, taskListId, localListId, orphan, startedAt);
+
+                    tasks.Upsert(CompleteRepeating(orphan, adopted, now, warnings, ref created));
                     updated++;
                     continue;
                 }
@@ -248,7 +274,7 @@ public sealed class TaskSyncEngine(
             }
             else
             {
-                tasks.Upsert(mapped);
+                tasks.Upsert(CompleteRepeating(existing, mapped, now, warnings, ref created));
                 updated++;
             }
         }
@@ -271,6 +297,47 @@ public sealed class TaskSyncEngine(
             Relinked = relinked,
             Warnings = [.. warnings, .. SummarizeOverwritten(overwritten)],
         };
+    }
+
+    /// <summary>
+    /// Google 側で完了にされた繰り返しのタスクなら、次の回を手元に作り、完了したほうから繰り返しを外す。
+    /// <para>
+    /// 見るのは「手元では未完了で繰り返しあり」だったものが、受け取って「完了」になった場合だけ。
+    /// 外すのは、同じ完了をもう一度受け取ったり、完了を取り消して完了し直したりしても次の回を
+    /// 二重に作らないため（Kado の中で完了にしたときと同じ）。
+    /// </para>
+    /// <para>
+    /// 次の回は Google の ID を持たない新規のタスク。ここでは手元に入れるだけで、Google へは
+    /// 受け取りのあとの送信（<see cref="PushChangesAsync"/>）が新規として送る。
+    /// 次の回を作ったことは、警告ではなく知らせとして <paramref name="notices"/> に1行残す
+    /// （件数にも数える）。
+    /// </para>
+    /// </summary>
+    /// <param name="before">受け取る前の手元の姿。無ければ（初めて受け取るなら）何もしない。</param>
+    /// <param name="received">Google から受け取って組み立てた姿。</param>
+    /// <returns>手元に書き込む姿。次の回を作ったときは繰り返しを外してある。</returns>
+    private TaskItem CompleteRepeating(
+        TaskItem? before, TaskItem received, DateTimeOffset now, List<string> notices, ref int created)
+    {
+        if (before is not { IsDone: false, Repeat: not null } || !received.IsDone) return received;
+
+        var environment = (repeatEnvironment ?? (() => RepeatEnvironment.Default))();
+        var today = DateOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+
+        if (TaskRepeating.NextOccurrence(received, today, environment.IsWorkday, environment.WeekStart, now) is not { } next)
+        {
+            return received;
+        }
+
+        tasks.Upsert(next with { SortOrder = tasks.NextSortOrder(next.Due) });
+        created++;
+
+        var due = next.Due!.Value;
+        notices.Add(
+            $"繰り返しの次の回を作りました：{(next.Title is { Length: > 0 } title ? title : "(無題)")} " +
+            $"{due.Month}/{due.Day}({"日月火水木金土"[(int)due.DayOfWeek]})");
+
+        return TaskRepeating.WithoutRepeat(received);
     }
 
     /// <summary>

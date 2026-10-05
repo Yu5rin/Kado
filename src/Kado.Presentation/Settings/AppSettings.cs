@@ -207,6 +207,19 @@ public sealed class AppSettings
         set => Write(ref _theme, value, ThemeKey);
     }
 
+    /// <summary>
+    /// 保存されている週の始まりの曜日だけを読む。画面とは別の接続で動く Google 同期が、
+    /// 繰り返しのタスクの「週の最初・最後の稼働日」を決めるのに使う（設定の全項目は要らない）。
+    /// </summary>
+    public static DayOfWeek ReadWeekStart(SettingsRepository store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+
+        return Enum.TryParse<DayOfWeek>(store.Get(WeekStartKey), ignoreCase: true, out var saved) && Enum.IsDefined(saved)
+            ? saved
+            : DayOfWeek.Sunday;
+    }
+
     /// <summary>週の始まりの曜日。月ビューの列の並びとミニ月暦に効く。</summary>
     public DayOfWeek WeekStart
     {

@@ -107,9 +107,11 @@
                 <StackPanel Orientation="Horizontal">
                     <Ellipse x:Name="Dot" Width="5" Height="5" Margin="0,0,4,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
-                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" Text="{Binding Title}"
+                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}"
                                Foreground="{DynamicResource InkBrush}"
-                               TextTrimming="CharacterEllipsis" />
+                               TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
+                    </TextBlock>
                     <!-- 添え書き（「期限 9/7・4実働日遅れ」「9/11 完了」）。入りきらないぶんは切れる -->
                     <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Note}"
                                Margin="6,0,0,0" VerticalAlignment="Center"
