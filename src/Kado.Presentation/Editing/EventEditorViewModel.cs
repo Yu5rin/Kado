@@ -1,6 +1,7 @@
 using Kado.Data.Models;
 using Kado.Google.Mapping;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Links;
 using Kado.Presentation.Sync;
 using Kado.Presentation.ViewModels;
 
@@ -65,6 +66,7 @@ public sealed class EventEditorViewModel : ObservableObject
 
     private readonly IAttachmentUploader _uploader;
     private readonly IFileDialogs _dialogs;
+    private readonly LinkLauncher _links;
 
     private List<EventAttachment> _attachments = [];
     private bool _attachmentsDirty;
@@ -96,12 +98,17 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <param name="calendars">選べるカレンダー。</param>
     /// <param name="now">いまの時刻。開始時刻の初期値に使う。</param>
     /// <param name="defaultCalendarId">入れ先の既定。左の一覧で選ばれているもの。</param>
+    /// <param name="uploader">添付をドライブへ上げる口。</param>
+    /// <param name="dialogs">ファイルを選ばせる口。</param>
+    /// <param name="links">添付を開く口。渡さなければ何も起動しない。</param>
     public EventEditorViewModel(DateOnly date, IReadOnlyList<SourceChoice> calendars, TimeOnly? now = null,
-        string? defaultCalendarId = null, IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null)
+        string? defaultCalendarId = null, IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null,
+        LinkLauncher? links = null)
     {
         Calendars = calendars;
         _uploader = uploader ?? NullAttachmentUploader.Instance;
         _dialogs = dialogs ?? NullFileDialogs.Instance;
+        _links = links ?? LinkLauncher.None;
         _date = date;
         _endDate = date;
         _calendarId = calendars.Any(c => string.Equals(c.Id, defaultCalendarId, StringComparison.Ordinal))
@@ -119,7 +126,7 @@ public sealed class EventEditorViewModel : ObservableObject
 
     /// <summary>すでにある予定を直す。</summary>
     public EventEditorViewModel(CalendarEvent value, IReadOnlyList<SourceChoice> calendars,
-        IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null)
+        IAttachmentUploader? uploader = null, IFileDialogs? dialogs = null, LinkLauncher? links = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -127,6 +134,7 @@ public sealed class EventEditorViewModel : ObservableObject
         Calendars = calendars;
         _uploader = uploader ?? NullAttachmentUploader.Instance;
         _dialogs = dialogs ?? NullFileDialogs.Instance;
+        _links = links ?? LinkLauncher.None;
 
         _title = value.Title;
         _date = value.Date;
@@ -630,39 +638,26 @@ public sealed class EventEditorViewModel : ObservableObject
 
     /// <summary>
     /// 開いてよい URL か。
-    /// <para>https 以外は開かない（安全のため）。呼び出し側（画面）はこれが true のときだけ
-    /// 既定のブラウザを開く。</para>
+    /// <para>https 以外は開かない（安全のため）。決まりは <see cref="LinkRules"/> に集めてあり、
+    /// 右クリックメニューの「添付を開く」も同じ決まりを通る。</para>
     /// </summary>
-    public static bool IsSafeToOpen(EventAttachment attachment) =>
-        attachment.FileUrl.StartsWith("https://", StringComparison.Ordinal);
+    public static bool IsSafeToOpen(EventAttachment attachment) => LinkRules.IsHttps(attachment.FileUrl);
 
     /// <summary>
     /// 添付を既定のブラウザで開く。
     /// <para>
     /// https 以外は開かない。<see cref="SettingsViewModel"/> の「Kado のページを開く」と
-    /// 同じ流儀（ShellExecute に無検証で文字列を渡さない）。
+    /// 同じ流儀（ShellExecute に無検証で文字列を渡さない）。確認と起動は右クリックメニューと
+    /// 共通の <see cref="LinkLauncher"/> が行い、開けなかった理由はここに出す。
     /// </para>
     /// </summary>
     public void OpenAttachment(EventAttachment attachment)
     {
         ArgumentNullException.ThrowIfNull(attachment);
 
-        if (!IsSafeToOpen(attachment))
-        {
-            AttachmentError = "この添付は開けません（https の URL ではありません）";
-            return;
-        }
+        var result = _links.OpenAttachment(attachment);
 
-        try
-        {
-            System.Diagnostics.Process.Start(
-                new System.Diagnostics.ProcessStartInfo(attachment.FileUrl) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
-            or IOException or PlatformNotSupportedException)
-        {
-            AttachmentError = $"開けませんでした（{ex.Message}）";
-        }
+        if (!result.Opened) AttachmentError = result.Message;
     }
 
     /// <summary>

@@ -22,6 +22,8 @@
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" />
+            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
             <Separator />
             <MenuItem Header="削除"
                       Command="{Binding PlacementTarget.Tag.DeleteEventCommand,
@@ -36,6 +38,8 @@
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Style="{StaticResource TaskLinkMenuItemStyle}" />
+            <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" />
             <Separator />
             <!-- 文言は完了・未完了で切り替える。既定は「完了にする」 -->
             <MenuItem Command="{Binding PlacementTarget.Tag.ToggleTaskDoneCommand,

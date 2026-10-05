@@ -4,6 +4,9 @@
 
     Google Tasks の期限は日付だけで時刻を持たないので、こちらも時刻は置かない。
     期限は「今日・明日・来週」から早入れできる。日付欄を開かずに決まることが多い。
+
+    URL と添付（ファイルの場所）は Google Tasks に無い、Kado だけの項目。手元にだけ持ち、
+    Google には送らない。添付は場所（フルパス）の記録で、ファイルの中身は持たない・上げない。
 -->
 <Window x:Class="Kado.App.Views.TaskEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -125,8 +128,63 @@
             </StackPanel>
 
             <TextBlock Text="詳細" Style="{StaticResource FieldLabelStyle}" />
-            <TextBox Style="{StaticResource FieldNoteBoxStyle}"
+            <TextBox Style="{StaticResource FieldNoteBoxStyle}" Margin="0,0,0,12"
                      Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}" />
+
+            <!-- 資料や図面の置き場所。予定の URL 欄と同じ見た目。右クリックの「リンクを開く」で開く -->
+            <TextBlock Text="URL" Style="{StaticResource FieldLabelStyle}" />
+            <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                     Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="{Binding UrlHint}" Style="{StaticResource CaptionTextStyle}"
+                       TextWrapping="Wrap" Margin="0,3,0,0"
+                       Visibility="{Binding UrlHint, Converter={StaticResource NullToVisibility}}" />
+
+            <!--
+                添付（ファイルの場所）。一覧の行を押すとその場所を開く（見つからなければ下に出る。
+                実行形式は実行せず、入っているフォルダを開く）。「外す」は場所の記録を外すだけで、
+                ファイルは消さない
+            -->
+            <TextBlock Text="添付（ファイルの場所）" Style="{StaticResource FieldLabelStyle}" Margin="0,12,0,4" />
+
+            <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Attachments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderThickness="1" BorderBrush="{DynamicResource LineBrush}"
+                                    CornerRadius="5" Padding="8,5" Margin="0,0,0,5">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="外す" Margin="8,0,0,0"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            Tag="{Binding}" Click="OnRemoveAttachmentClick" />
+
+                                    <StackPanel Tag="{Binding}" Cursor="Hand" Background="Transparent"
+                                                MouseLeftButtonUp="OnOpenAttachmentClick"
+                                                ToolTip="押すとこの場所を開きます">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Path}" Style="{StaticResource CaptionTextStyle}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Orientation="Horizontal">
+                <Button Content="ファイルを追加…" Style="{StaticResource GhostButtonStyle}" Margin="0,0,8,0"
+                        Click="OnAddFilesClick" />
+                <Button Content="フォルダを追加…" Style="{StaticResource GhostButtonStyle}"
+                        Click="OnAddFoldersClick" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding AttachmentMessage}" Style="{StaticResource CaptionTextStyle}"
+                       Foreground="{DynamicResource SundayBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Visibility="{Binding AttachmentMessage, Converter={StaticResource NullToVisibility}}" />
+
+            <!-- Google と同期するタスクでも、この2つはこの PC の Kado だけに残る -->
+            <TextBlock Text="{Binding LocalOnlyNote}"
+                       Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" Margin="0,8,0,0" />
         </StackPanel>
     </DockPanel>
 </Window>

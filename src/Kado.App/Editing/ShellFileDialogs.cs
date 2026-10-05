@@ -23,6 +23,32 @@ public sealed class ShellFileDialogs(Func<Window?> ownerProvider) : IFileDialogs
         return dialog.ShowDialog(ownerProvider()) == true ? dialog.FileName : null;
     }
 
+    public IReadOnlyList<string> PickOpenFiles(string title, string filter)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            CheckFileExists = true,
+            Multiselect = true,
+        };
+
+        return dialog.ShowDialog(ownerProvider()) == true ? dialog.FileNames : [];
+    }
+
+    public IReadOnlyList<string> PickFolders(string title)
+    {
+        // .NET 8 から WPF にもフォルダ選びがある（WinForms の FolderBrowserDialog は借りない。
+        // UseWindowsForms を足すと型名が衝突する。docs/README.md の「トレイ」の項と同じ理由）
+        var dialog = new OpenFolderDialog
+        {
+            Title = title,
+            Multiselect = true,
+        };
+
+        return dialog.ShowDialog(ownerProvider()) == true ? dialog.FolderNames : [];
+    }
+
     public string? PickSaveFile(string title, string filter, string suggestedName)
     {
         var dialog = new SaveFileDialog

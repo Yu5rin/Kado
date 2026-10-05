@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Kado.Data.Models;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
 
@@ -53,6 +54,37 @@ public partial class TaskEditorWindow : Window
     private void OnDuePresetClicked(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is DateOnly date) _editor.SetDue(date);
+    }
+
+    // ------------------------------------------------------------------
+    // 添付（ファイルの場所）。Kado だけが持ち、Google には送らない
+    // ------------------------------------------------------------------
+
+    private void OnAddFilesClick(object sender, RoutedEventArgs e) => _editor.AddFiles();
+
+    private void OnAddFoldersClick(object sender, RoutedEventArgs e) => _editor.AddFolders();
+
+    private void OnRemoveAttachmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: TaskAttachment attachment }) _editor.RemoveAttachment(attachment);
+    }
+
+    /// <summary>
+    /// 行を押すとその場所を開く。見つからない・開けないときは、画面の下に理由が出る。
+    /// <para>async void から例外が漏れるとアプリごと終わるので、ここが最後の砦（docs/README.md）。</para>
+    /// </summary>
+    private async void OnOpenAttachmentClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: TaskAttachment attachment }) return;
+
+        try
+        {
+            await _editor.OpenAttachmentAsync(attachment);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _editor.ReportAttachmentFailure(ex);
+        }
     }
 
     /// <summary>

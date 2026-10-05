@@ -338,7 +338,10 @@ public partial class App : Application
                 attachmentUploader: new Kado.Presentation.Sync.GoogleDriveAttachmentUploader(
                     _google, workspace.Settings, googleLog),
                 // 実働日の配信の取得。失敗は shell.log に残し、通信は認証付きプロキシ（407）にも対応する
-                feed: new WorkdayFeedClient(log: new NetworkLog(Shell.ShellDiagnosticsLog.Write))));
+                feed: new WorkdayFeedClient(log: new NetworkLog(Shell.ShellDiagnosticsLog.Write)),
+                // 右クリックメニューと編集画面の「リンクを開く」「添付を開く」。何を開いてよいかの
+                // 判断は Kado.Presentation.Links が済ませ、ここは言われたものを起動するだけ
+                linkOpener: new Kado.Presentation.Links.ShellLinkOpener()));
             StartupTrace.Mark("MainViewModel構築後");
 
             // ここでバインディングが評価される。年・一覧のビューは表示するまで

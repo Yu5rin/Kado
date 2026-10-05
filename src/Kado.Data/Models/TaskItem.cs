@@ -24,6 +24,25 @@ public sealed record TaskItem
     /// <summary>メモ。</summary>
     public string? Note { get; init; }
 
+    /// <summary>
+    /// 関連する URL。<b>Kado だけが持つ</b>項目で、Google には送らない。
+    /// <para>
+    /// Google Tasks の API には URL の欄が無い。メモ（notes）に混ぜて送ると、向こうで書き換えた
+    /// メモと食い違い、メモの本文まで汚れる。だから手元にだけ残す。同期で Google から
+    /// 受け取るときも、こちらの値を引き継ぐ（<c>TaskMapper.FromGoogle</c>）。
+    /// </para>
+    /// </summary>
+    public string? Url { get; init; }
+
+    /// <summary>
+    /// ファイルやフォルダの「場所」の一覧（JSON 配列）。<see cref="TaskAttachments"/> で読み書きする。
+    /// <para>
+    /// <b>Kado だけが持つ</b>項目で、Google には送らない（理由は <see cref="Url"/> と同じ）。
+    /// 持つのは<b>場所（フルパス）だけ</b>で、ファイルの中身は持たない・上げない。
+    /// </para>
+    /// </summary>
+    public string? Attachments { get; init; }
+
     /// <summary>所属タスクリスト。</summary>
     public string? TaskListId { get; init; }
 

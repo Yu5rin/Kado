@@ -14,6 +14,15 @@ public interface IFileDialogs
     /// <param name="filter">WPF の <c>OpenFileDialog.Filter</c> と同じ書式。</param>
     string? PickOpenFile(string title, string filter);
 
+    /// <summary>開くファイルを<b>複数</b>選ばせる。取り消されたら空。</summary>
+    /// <param name="title">ダイアログの見出し。</param>
+    /// <param name="filter">WPF の <c>OpenFileDialog.Filter</c> と同じ書式。</param>
+    IReadOnlyList<string> PickOpenFiles(string title, string filter);
+
+    /// <summary>フォルダを選ばせる（複数選べる）。取り消されたら空。</summary>
+    /// <param name="title">ダイアログの見出し。</param>
+    IReadOnlyList<string> PickFolders(string title);
+
     /// <summary>保存先を選ばせる。取り消されたら null。</summary>
     /// <param name="title">ダイアログの見出し。</param>
     /// <param name="filter">WPF の <c>SaveFileDialog.Filter</c> と同じ書式。</param>
@@ -35,6 +44,10 @@ public sealed class NullFileDialogs : IFileDialogs
     private NullFileDialogs() { }
 
     public string? PickOpenFile(string title, string filter) => null;
+
+    public IReadOnlyList<string> PickOpenFiles(string title, string filter) => [];
+
+    public IReadOnlyList<string> PickFolders(string title) => [];
 
     public string? PickSaveFile(string title, string filter, string suggestedName) => null;
 

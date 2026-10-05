@@ -183,7 +183,7 @@ ID をそのまま並べられないので、`SourceChoice`（ID と名前の組
 | 日付 | `start` / `end`（終日は日付、時刻付きは日時） | `due`（**日付のみ**。時刻を持たない） |
 | 繰り返し | `recurrence`（RRULE） | なし |
 | 場所 | `location` | なし |
-| URL | `source.url` | なし |
+| URL | `source.url` | なし（**Kado だけが持つ**。Google には送らない。下の「タスクの URL と添付」） |
 | 説明・詳細 | `description` | `notes` |
 | 所属 | `calendarId` | タスクリスト |
 | 完了 | なし | `status` |
@@ -193,6 +193,37 @@ Google Tasks の期限が日付だけなので、タスク側に時刻欄は置�
 **色の欄は置かない。** 所属カレンダーで決まる（`ICalendarPalette`）。1件ずつ選ばせると、
 左パネルの色見本と画面上の帯が食い違う。取り込んだ予定が持っている色は、上書きせず
 そのまま残す。
+
+### タスクの URL と添付は Kado だけの項目
+
+Google Tasks の API には URL も添付の欄も無い。タスクに持たせた **URL と添付（ファイルやフォルダの
+「場所」）は、手元（`tasks.url` / `tasks.attachments`、V12）にだけ持ち、Google には一切送らない**。
+メモ（`notes`）に混ぜて送ることもしない（向こうで直したメモと食い違い、本文が汚れる）。
+
+- 添付が持つのは場所（フルパス）だけで、ファイルの中身は持たない・上げない。`TaskAttachment` と
+  JSON の行き来は `TaskAttachments`（`Kado.Data`）
+- **同期で消えないことが要。** `TaskMapper.FromGoogle` は受け取るたびにタスクを作り直すので、
+  `CreatedAt`・`SortOrder` と同じく `existing` から引き継ぐ。`TaskMapper.ToGoogle` には入れない
+  （入れると `NeedsPush` が誤判定する）。`tests/Kado.Google.Tests/TaskLocalOnlyFieldsTests` が、取り込み・
+  書き戻しの応答・新規送信の応答・引き受け・リスト移動のどれでも残ることを押さえている
+- 検索の対象にはしない（予定の検索も `url` を見ていない）
+
+### リンクと添付を開く
+
+予定・タスクの右クリックメニューに「リンクを開く」「添付を開く」がある（編集の下）。開ける先が
+無いときは項目ごと隠す。開く処理と安全確認は編集画面と共通で、`Kado.Presentation/Links` に集めてある。
+
+- **開いてよい URL**（`LinkRules`）：リンクは http/https、予定の添付（Google ドライブ）は https だけ
+- **ファイルの場所**（`PathLaunchPlanner`。起動しない純粋な関数）：フルパス（`C:\…`、`\\server\share\…`）だけ。
+  フォルダはエクスプローラーで、ファイルはシェルで開く。**実行形式（.exe .bat .lnk など）は実行せず**、
+  入っているフォルダを開いてそのファイルを選んだ状態にする。見つからなければ開かず「見つかりません：パス」
+- 実際の起動は `ILinkOpener`（実物は `ShellLinkOpener`）。存在の確認は共有フォルダが落ちていると数十秒
+  返らないので、別のスレッドで行う（`LinkLauncher.OpenPathAsync`）
+- 右クリックの出し分けは `OpenTargets`（行の型ごとの振り分けは `OpenTargets.From`）。メニューの
+  項目は `Themes/Controls.xaml` の `EventLinkMenuItemStyle`・`TaskLinkMenuItemStyle`・
+  `OpenAttachmentMenuItemStyle`。**子メニューは別のポップアップで `ContextMenu` をたどれない**ので、
+  子の項目のコマンドは `MainViewModel.AttachmentMenuItems` が項目に持たせる。新しい右クリックメニューを
+  足したら、この項目も足す（`tests/Kado.App.Tests/ContextMenuOpenItemsTests` が見張る）
 
 ### まだ合わせられていない項目
 

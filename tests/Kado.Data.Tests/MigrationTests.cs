@@ -206,4 +206,35 @@ public class MigrationTests
         Assert.Equal(0L, db.Connection.ExecuteScalar<long>("SELECT google_missing FROM tasks WHERE id = 't1';"));
         Assert.Equal(0L, db.Connection.ExecuteScalar<long>("SELECT google_detached FROM calendars WHERE id = 'cal-a';"));
     }
+
+    /// <summary>
+    /// V12（タスクの URL と添付）が、V11 までの既存のタスクを壊さずに列を足すこと。
+    /// 既存のタスクは両方とも空（NULL）で、予定や他の列には触らない。
+    /// </summary>
+    [Fact]
+    public void V12は既存のタスクを変えずにURLと添付の列を足す()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 12).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO tasks (id, title, note, google_task_id, updated_at) VALUES ('t1', '集計', 'メモ', 'g1', 1);");
+
+        var applied = DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Contains(applied, m => m.Version == 12);
+        Assert.Equal(SchemaMigrations.LatestVersion, DatabaseMigrator.GetVersion(db.Connection));
+
+        Assert.Null(db.Connection.ExecuteScalar<string?>("SELECT url FROM tasks WHERE id = 't1';"));
+        Assert.Null(db.Connection.ExecuteScalar<string?>("SELECT attachments FROM tasks WHERE id = 't1';"));
+
+        // 既存の中身はそのまま
+        Assert.Equal("メモ", db.Connection.ExecuteScalar<string>("SELECT note FROM tasks WHERE id = 't1';"));
+        Assert.Equal("g1", db.Connection.ExecuteScalar<string>("SELECT google_task_id FROM tasks WHERE id = 't1';"));
+    }
 }

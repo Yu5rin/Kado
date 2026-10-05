@@ -93,6 +93,12 @@ public static class TaskMapper
             // （Google Tasks の作成日時は API で取れないため）
             CreatedAt = existing?.CreatedAt ?? now ?? DateTimeOffset.Now,
             SortOrder = existing?.SortOrder ?? 0,
+
+            // URL と添付（ファイルの場所）も Kado だけが持つ。Google の応答には入っていないので、
+            // 引き継がないと、Google から更新を受け取るたび、書き戻した応答を取り込むたびに消える。
+            // 向こうに送らないので（ToGoogle には入れない）、ここで守るのが唯一の砦
+            Url = existing?.Url,
+            Attachments = existing?.Attachments,
         };
     }
 
@@ -188,6 +194,10 @@ public static class TaskMapper
             // null を送ると期限を外す意味になる。「いつやるか未定」はそれで正しい
             ["due"] = value.Due is { } due ? FormatDue(due) : null,
             ["status"] = value.IsDone ? CompletedStatus : NeedsActionStatus,
+
+            // TaskItem.Url と TaskItem.Attachments はここに入れない。Google Tasks に
+            // その欄は無く、Kado だけが持つ。NeedsPush もこの本文を見るので、入れると
+            // 「送るものがある」と誤判定し続ける
         };
 
         // 完了に関わるキーは、使う人が完了・未完了を変えたときだけ送る。

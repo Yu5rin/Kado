@@ -38,6 +38,20 @@ internal sealed class FakeFileDialogs : IFileDialogs
         return FileToPick;
     }
 
+    /// <summary>複数のファイルを選ばせたことにするパス。空なら取り消し。</summary>
+    public List<string> FilesToPick { get; } = [];
+
+    /// <summary>フォルダを選ばせたことにするパス。空なら取り消し。</summary>
+    public List<string> FoldersToPick { get; } = [];
+
+    public IReadOnlyList<string> PickOpenFiles(string title, string filter)
+    {
+        WasAskedForFile = true;
+        return [.. FilesToPick];
+    }
+
+    public IReadOnlyList<string> PickFolders(string title) => [.. FoldersToPick];
+
     public string? PickSaveFile(string title, string filter, string suggestedName)
     {
         LastSuggestedName = suggestedName;

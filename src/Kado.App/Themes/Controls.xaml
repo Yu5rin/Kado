@@ -44,6 +44,12 @@
                             RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                   CommandParameter="{Binding PlacementTarget.DataContext,
                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <!--
+            リンクと添付の項目のスタイルは、このファイルのずっと下（MenuItem の暗黙スタイルの後）で
+            定義している。StaticResource は前方参照できないので、ここだけ DynamicResource で引く
+        -->
+        <MenuItem Style="{DynamicResource EventLinkMenuItemStyle}" />
+        <MenuItem Style="{DynamicResource OpenAttachmentMenuItemStyle}" />
         <Separator />
         <MenuItem Header="削除"
                   Command="{Binding PlacementTarget.Tag.DeleteMilestoneCommand,
@@ -1431,6 +1437,97 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!--
+        予定・タスクの右クリックメニューに足す「リンクを開く」「添付を開く」（と、その前の区切り線）。
+
+        開ける先があるときだけ出す。出し分けのために、項目自身の DataContext に「開ける先」
+        （OpenTargets）を置く。右クリックされた行の DataContext から OpenTargetsConverter が読む。
+        行の型は画面ごとに違う（月のチップ・右ペインの行・時間軸のブロックなど）が、振り分けは
+        OpenTargets.From が持つので、メニュー側は同じ書き方で済む。
+
+        使う側は <MenuItem Style="{StaticResource EventLinkMenuItemStyle}" /> と
+        <MenuItem Style="{StaticResource OpenAttachmentMenuItemStyle}" /> と書くだけ。
+        Command は、他の項目と同じく Tag に入れた MainViewModel を PlacementTarget 経由で引く。
+        ただし「添付を開く」の子メニューは別のポップアップに出て ContextMenu をたどれないので、
+        項目ごとの Command と CommandParameter は AttachmentMenuItemsConverter が項目に持たせる。
+
+        暗黙スタイル（上の MenuItem / Separator）を BasedOn で引き継ぐ。Style を明示すると暗黙の
+        スタイルは当たらなくなり、枠や色が Windows 既定に戻ってしまう。
+    -->
+    <conv:OpenTargetsConverter x:Key="OpenTargetsConverter" />
+    <conv:AttachmentMenuItemsConverter x:Key="AttachmentMenuItemsConverter" />
+
+    <Style x:Key="OpenLinkMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Header" Value="リンクを開く" />
+        <Setter Property="DataContext"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                        Converter={StaticResource OpenTargetsConverter}}" />
+        <Setter Property="Visibility"
+                Value="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+        <!-- 渡すのは URL そのもの。コマンド側でも http/https かを確かめ直す -->
+        <Setter Property="CommandParameter" Value="{Binding LinkUrl}" />
+    </Style>
+
+    <Style x:Key="EventLinkMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource OpenLinkMenuItemStyle}">
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.OpenEventLinkCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <Style x:Key="TaskLinkMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource OpenLinkMenuItemStyle}">
+        <Setter Property="Command"
+                Value="{Binding PlacementTarget.Tag.OpenTaskLinkCommand,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </Style>
+
+    <!--
+        添付は1件でも子メニューに並べる（件数で形を変えると、押す場所が変わって迷う）。
+        予定もタスクも同じスタイルで、子の項目が起こすコマンドだけがそれぞれ違う
+    -->
+    <Style x:Key="OpenAttachmentMenuItemStyle" TargetType="MenuItem"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Header" Value="添付を開く" />
+        <Setter Property="DataContext"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                        Converter={StaticResource OpenTargetsConverter}}" />
+        <Setter Property="Visibility"
+                Value="{Binding HasAttachments, Converter={StaticResource BoolToVisibility}}" />
+        <Setter Property="ItemsSource">
+            <Setter.Value>
+                <MultiBinding Converter="{StaticResource AttachmentMenuItemsConverter}">
+                    <Binding Path="PlacementTarget.Tag"
+                             RelativeSource="{RelativeSource AncestorType=ContextMenu}" />
+                    <Binding />
+                </MultiBinding>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                    <Setter Property="Header" Value="{Binding Label}" />
+                    <Setter Property="Command" Value="{Binding Command}" />
+                    <Setter Property="CommandParameter" Value="{Binding Parameter}" />
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 開ける先がどちらも無いときは、その前の区切り線も出さない（右ペインのタスクの行） -->
+    <Style x:Key="OpenSeparatorStyle" TargetType="Separator"
+           BasedOn="{StaticResource {x:Type Separator}}">
+        <Setter Property="DataContext"
+                Value="{Binding PlacementTarget.DataContext,
+                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                        Converter={StaticResource OpenTargetsConverter}}" />
+        <Setter Property="Visibility"
+                Value="{Binding HasAny, Converter={StaticResource BoolToVisibility}}" />
     </Style>
 
     <!--

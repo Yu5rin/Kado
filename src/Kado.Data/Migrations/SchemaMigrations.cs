@@ -369,6 +369,19 @@ public static class SchemaMigrations
         ALTER TABLE task_lists ADD COLUMN google_detached INTEGER NOT NULL DEFAULT 0;
         """;
 
+    /// <summary>
+    /// V12：タスクに URL と添付（ファイルやフォルダの場所）を持たせる。
+    /// <para>
+    /// <b><c>tasks.url</c> / <c>tasks.attachments</c></b>：Google Tasks の API には URL も添付も
+    /// 無いので、<b>Kado だけが持ち、Google には送らない</b>。<c>attachments</c> は場所（フルパス）の
+    /// JSON 配列で、ファイルの中身は入れない。既存のタスクは両方とも空（NULL）のまま。
+    /// </para>
+    /// </summary>
+    private const string V12 = """
+        ALTER TABLE tasks ADD COLUMN url TEXT;
+        ALTER TABLE tasks ADD COLUMN attachments TEXT;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -383,6 +396,7 @@ public static class SchemaMigrations
         new(9, "完了日で引くタスクの検索に効く索引を足す", V9),
         new(10, "Google 上で見つからない印と、Google から外れたカレンダーの印を持つ", V10),
         new(11, "Google から外れたタスクリストの印を持つ", V11),
+        new(12, "タスクに URL と添付（ファイルの場所）を持つ。Kado だけが持ち、Google には送らない", V12),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

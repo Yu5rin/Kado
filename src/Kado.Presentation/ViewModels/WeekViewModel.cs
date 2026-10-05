@@ -16,8 +16,9 @@ namespace Kado.Presentation.ViewModels;
 public sealed class TimeBlockViewModel
 {
     internal TimeBlockViewModel(string id, string title, TimeOnly start, TimeOnly end,
-        double top, double height, string? color, string? location)
+        double top, double height, string? color, string? location, CalendarEvent? source = null)
     {
+        Source = source;
         Id = id;
         Title = title;
         Start = start;
@@ -29,6 +30,12 @@ public sealed class TimeBlockViewModel
     }
 
     public string Id { get; }
+
+    /// <summary>
+    /// 元の予定。右クリックメニューの「リンクを開く」「添付を開く」が、開ける先を読むのに使う
+    /// （<see cref="Links.OpenTargets.From"/>）。
+    /// </summary>
+    public CalendarEvent? Source { get; }
 
     public string Title { get; }
 

@@ -1,6 +1,7 @@
 using Kado.Data.Models;
 using Kado.Google.Mapping;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Links;
 
 namespace Kado.Presentation.Editing;
 
@@ -20,6 +21,10 @@ public sealed record DuePreset(string Label, DateOnly Date);
 /// 期限は「決まっていない」を持てる（要件書 3.1）。日付欄を空にできない代わりに、
 /// 期限を付けるかどうかの切り替えを別に持つ。
 /// </para>
+/// <para>
+/// <b>URL と添付（ファイルの場所）は Kado だけの項目</b>で、Google Tasks には無い。手元にだけ持ち、
+/// Google には送らない（<see cref="LocalOnlyNote"/> で、画面にもそう書く）。
+/// </para>
 /// </summary>
 public sealed class TaskEditorViewModel : ObservableObject
 {
@@ -35,8 +40,13 @@ public sealed class TaskEditorViewModel : ObservableObject
     /// </summary>
     private const int NoteMaxLength = 8192;
 
+    /// <summary>ファイル選びの絞り込み。場所を持つだけなので、種類は問わない。</summary>
+    private const string AllFilesFilter = "すべてのファイル (*.*)|*.*";
+
     private readonly TaskItem? _original;
     private readonly DateOnly _today;
+    private readonly IFileDialogs _dialogs;
+    private readonly LinkLauncher _links;
 
     /// <summary>手元で、このタスクを親として指しているタスクがあるか（サブタスクを持つ親か）。</summary>
     private readonly bool _hasChildren;
@@ -47,6 +57,10 @@ public sealed class TaskEditorViewModel : ObservableObject
     private bool _isDone;
     private string? _note;
     private string? _taskListId;
+    private string? _url;
+    private IReadOnlyList<TaskAttachment> _attachments = [];
+    private bool _attachmentsDirty;
+    private string? _attachmentMessage;
 
     /// <summary>
     /// 新しく作る。
@@ -56,9 +70,17 @@ public sealed class TaskEditorViewModel : ObservableObject
     /// リストに固定されうる</b>ので、呼び出し側は極力渡すこと（項目2）。
     /// </para>
     /// </summary>
+    /// <param name="due">期限の初期値。</param>
+    /// <param name="taskLists">選べるタスクリスト。</param>
+    /// <param name="today">今日。</param>
+    /// <param name="defaultTaskListId">入れ先の既定。</param>
+    /// <param name="dialogs">添付のファイル・フォルダを選ばせる口。</param>
+    /// <param name="links">添付の場所を開く口。渡さなければ何も起動しない。</param>
     public TaskEditorViewModel(DateOnly due, IReadOnlyList<SourceChoice> taskLists, DateOnly today,
-        string? defaultTaskListId = null)
+        string? defaultTaskListId = null, IFileDialogs? dialogs = null, LinkLauncher? links = null)
     {
+        _dialogs = dialogs ?? NullFileDialogs.Instance;
+        _links = links ?? LinkLauncher.None;
         TaskLists = taskLists;
         _today = today;
         _due = due;
@@ -73,11 +95,15 @@ public sealed class TaskEditorViewModel : ObservableObject
     /// サブタスクを持つ親か。親子のタスクは Google でリストをまたいで移せないので、
     /// リスト欄を変えさせない（<see cref="TaskListLockReason"/>）。
     /// </param>
+    /// <param name="dialogs">添付のファイル・フォルダを選ばせる口。</param>
+    /// <param name="links">添付の場所を開く口。渡さなければ何も起動しない。</param>
     public TaskEditorViewModel(TaskItem value, IReadOnlyList<SourceChoice> taskLists, DateOnly today,
-        bool hasChildren = false)
+        bool hasChildren = false, IFileDialogs? dialogs = null, LinkLauncher? links = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        _dialogs = dialogs ?? NullFileDialogs.Instance;
+        _links = links ?? LinkLauncher.None;
         _original = value;
         _hasChildren = hasChildren;
         TaskLists = taskLists;
@@ -90,6 +116,8 @@ public sealed class TaskEditorViewModel : ObservableObject
         _isDone = value.IsDone;
         _note = value.Note;
         _taskListId = value.TaskListId;
+        _url = value.Url;
+        _attachments = TaskAttachments.Read(value.Attachments);
     }
 
     /// <summary>期限の早入れ。日付欄を開かずに決められる。</summary>
@@ -194,6 +222,107 @@ public sealed class TaskEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// URL と添付の欄の近くに出す、小さな一行。Google と同期するタスクでも、この2つはこの PC の
+    /// Kado にしか残らないことを、使う人に伝える。
+    /// </summary>
+    public string LocalOnlyNote => "URL と添付は Kado だけに保存され、Google には送られません";
+
+    /// <summary>
+    /// 関連する URL。<b>Kado だけが持ち、Google には送らない</b>。
+    /// <para>http または https のものだけ、右クリックメニューの「リンクを開く」から開ける。</para>
+    /// </summary>
+    public string? Url
+    {
+        get => _url;
+        set
+        {
+            if (Set(ref _url, value)) Raise(nameof(UrlHint));
+        }
+    }
+
+    /// <summary>
+    /// URL の欄に何か入っているのに、リンクとして開けない形のときの説明。問題が無ければ null。
+    /// <para>保存は止めない（メモ代わりに残したい人もいる）。開けない理由が分からないのが一番困る。</para>
+    /// </summary>
+    public string? UrlHint => string.IsNullOrWhiteSpace(_url) || LinkRules.WebUrl(_url) is not null
+        ? null
+        : "http:// または https:// で始まる URL だけ、リンクとして開けます";
+
+    /// <summary>添えたファイル・フォルダの場所。<b>Kado だけが持ち、Google には送らない</b>。</summary>
+    public IReadOnlyList<TaskAttachment> Attachments => _attachments;
+
+    /// <summary>
+    /// 場所を開いた結果や、開けなかった理由。無ければ null。
+    /// <para>実行形式を実行せずにフォルダを開いたときも、その旨をここに出す。</para>
+    /// </summary>
+    public string? AttachmentMessage
+    {
+        get => _attachmentMessage;
+        private set => Set(ref _attachmentMessage, value);
+    }
+
+    /// <summary>ファイルを選んで場所を足す。複数選べる。同じ場所は足さない。</summary>
+    public void AddFiles() => AddPlaces(_dialogs.PickOpenFiles("添付するファイルを選ぶ", AllFilesFilter));
+
+    /// <summary>フォルダを選んで場所を足す。複数選べる。同じ場所は足さない。</summary>
+    public void AddFolders() => AddPlaces(_dialogs.PickFolders("添付するフォルダを選ぶ"));
+
+    /// <summary>場所を足す。足したものがあれば、一覧を出し直す。</summary>
+    public void AddPlaces(IEnumerable<string> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+
+        var added = TaskAttachments.Add(_attachments, paths);
+
+        // 取り消し・すべて重複のときは、一覧にも「触った」印にも手を付けない
+        if (added.Count == _attachments.Count) return;
+
+        _attachments = added;
+        _attachmentsDirty = true;
+        AttachmentMessage = null;
+        Raise(nameof(Attachments));
+    }
+
+    /// <summary>場所を外す。ファイルそのものには触らない（場所の記録を外すだけ）。</summary>
+    public void RemoveAttachment(TaskAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        var remaining = TaskAttachments.Remove(_attachments, attachment.Path);
+        if (remaining.Count == _attachments.Count) return;
+
+        _attachments = remaining;
+        _attachmentsDirty = true;
+        AttachmentMessage = null;
+        Raise(nameof(Attachments));
+    }
+
+    /// <summary>
+    /// 場所を開く。見つからなければ開かず、理由を <see cref="AttachmentMessage"/> に出す。
+    /// <para>判断は <see cref="LinkLauncher.OpenPathAsync"/>（実行形式は実行しない）。右クリックメニューと同じ。</para>
+    /// </summary>
+    public async Task OpenAttachmentAsync(TaskAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        AttachmentMessage = null;
+
+        var result = await _links.OpenPathAsync(attachment.Path).ConfigureAwait(true);
+
+        AttachmentMessage = result.Message;
+    }
+
+    /// <summary>
+    /// 場所を開く処理で漏れた例外を、画面の文言にして出す。画面の <c>async void</c> が最後の砦として呼ぶ。
+    /// </summary>
+    public void ReportAttachmentFailure(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        AttachmentMessage = $"開けませんでした（{exception.Message}）";
+    }
+
     public string? TaskListId
     {
         get => _taskListId;
@@ -252,6 +381,12 @@ public sealed class TaskEditorViewModel : ObservableObject
             CompletedAt = _isDone ? _original?.CompletedAt ?? DateTimeOffset.Now : null,
             Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
             TaskListId = _taskListId,
+
+            // Kado だけの項目。Google には送らない（TaskMapper.ToGoogle に入れていない）。
+            // 添付は触っていなければ元の文字列のまま返す。読めなかった（壊れた）値を、
+            // 開いて保存し直しただけで空に書き換えてしまわないため
+            Url = string.IsNullOrWhiteSpace(_url) ? null : _url.Trim(),
+            Attachments = _attachmentsDirty ? TaskAttachments.ToJson(_attachments) : _original?.Attachments,
 
             // Google 側の情報は編集画面で触らない。消さずに引き継ぐ。
             //

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Presentation;
+using Kado.Presentation.Links;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -381,6 +382,41 @@ public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
         values is { Length: > 0 } && values.All(v => v is true)
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 右クリックされた行の中身（<c>PlacementTarget.DataContext</c>）から、開けるリンクと添付を読む。
+/// <para>
+/// 右クリックメニューの「リンクを開く」「添付を開く」の項目が、自分の <c>DataContext</c> にこの結果
+/// （<see cref="OpenTargets"/>）を置く。行の型は画面ごとに違うので、振り分けは
+/// <see cref="OpenTargets.From"/> に任せる。
+/// </para>
+/// </summary>
+public sealed class OpenTargetsConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        OpenTargets.From(value);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 「添付を開く」の子メニューの項目を作る。値は、本体の <c>MainViewModel</c> と <see cref="OpenTargets"/>。
+/// <para>
+/// 子メニューの項目は別のポップアップに出るので、<c>RelativeSource AncestorType=ContextMenu</c> で
+/// 本体をたどれない。押したときのコマンドを、項目自身に持たせて渡す（<c>MainViewModel.AttachmentMenuItems</c>）。
+/// </para>
+/// </summary>
+public sealed class AttachmentMenuItemsConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+        values is [Kado.Presentation.ViewModels.MainViewModel main, OpenTargets targets]
+            ? main.AttachmentMenuItems(targets)
+            : Array.Empty<OpenMenuItem>();
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

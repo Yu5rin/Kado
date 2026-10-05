@@ -36,6 +36,46 @@ public class EventRepositoryTests
     }
 
     [Fact]
+    public void URLと添付は書いて読める()
+    {
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+        const string attachments = """[{"path":"C:\\資料\\図面.pdf"}]""";
+
+        // INSERT 側
+        repo.Upsert(new TaskItem { Id = "t1", Title = "集計", Url = "https://example.com/spec", Attachments = attachments });
+
+        var inserted = repo.Find("t1")!;
+        Assert.Equal("https://example.com/spec", inserted.Url);
+        Assert.Equal(attachments, inserted.Attachments);
+
+        // ON CONFLICT（更新）側。変えた値も、外した（null に戻した）値も書ける
+        repo.Upsert(inserted with { Url = "https://example.com/other", Attachments = null });
+
+        var updated = repo.Find("t1")!;
+        Assert.Equal("https://example.com/other", updated.Url);
+        Assert.Null(updated.Attachments);
+
+        // 全件・期間の読み出しでも同じ列を読む
+        repo.Upsert(updated with { Due = D(2026, 9, 24), Attachments = attachments });
+        Assert.Equal(attachments, repo.All().Single().Attachments);
+        Assert.Equal("https://example.com/other", repo.DueInRange(D(2026, 9, 1), D(2026, 9, 30)).Single().Url);
+        Assert.Equal(attachments, repo.InRange(D(2026, 9, 1), D(2026, 9, 30)).Single().Attachments);
+    }
+
+    [Fact]
+    public void URLは検索の対象にしない()
+    {
+        // 予定の検索（EventRepository.SearchText）も url を見ていない。合わせてある
+        using var db = TestDatabase.Create();
+        var repo = new TaskRepository(db.Connection);
+
+        repo.Upsert(new TaskItem { Id = "t1", Title = "集計", Url = "https://example.com/needle" });
+
+        Assert.Empty(repo.SearchText("needle"));
+    }
+
+    [Fact]
     public void Google上で見つからない印は書いて読める()
     {
         using var db = TestDatabase.Create();

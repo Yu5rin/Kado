@@ -15,7 +15,7 @@ public sealed class TaskRepository(SqliteConnection connection)
 
     private const string Columns = """
         id AS Id, title AS Title, due AS Due, is_done AS IsDone,
-        note AS Note, task_list_id AS TaskListId,
+        note AS Note, url AS Url, attachments AS Attachments, task_list_id AS TaskListId,
         completed_at AS CompletedAt, parent_id AS ParentId, position AS Position,
         google_raw AS GoogleRaw,
         google_task_id AS GoogleTaskId, google_task_list_id AS GoogleTaskListId,
@@ -168,19 +168,20 @@ public sealed class TaskRepository(SqliteConnection connection)
         _connection.Execute(
             """
             INSERT INTO tasks (
-                id, title, due, is_done, note, task_list_id,
+                id, title, due, is_done, note, url, attachments, task_list_id,
                 completed_at, parent_id, position, google_raw,
                 google_task_id, google_task_list_id, google_updated, google_missing, source, updated_at,
                 created_at, sort_order
             ) VALUES (
-                @Id, @Title, @Due, @IsDone, @Note, @TaskListId,
+                @Id, @Title, @Due, @IsDone, @Note, @Url, @Attachments, @TaskListId,
                 @CompletedAt, @ParentId, @Position, @GoogleRaw,
                 @GoogleTaskId, @GoogleTaskListId, @GoogleUpdated, @GoogleMissing, @Source, @UpdatedAt,
                 @CreatedAt, @SortOrder
             )
             ON CONFLICT (id) DO UPDATE SET
                 title = excluded.title, due = excluded.due, is_done = excluded.is_done,
-                note = excluded.note, task_list_id = excluded.task_list_id,
+                note = excluded.note, url = excluded.url, attachments = excluded.attachments,
+                task_list_id = excluded.task_list_id,
                 completed_at = excluded.completed_at, parent_id = excluded.parent_id,
                 position = excluded.position, google_raw = excluded.google_raw,
                 google_task_id = excluded.google_task_id,

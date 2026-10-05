@@ -1,3 +1,4 @@
+using Kado.Data.Models;
 using Kado.Data.Repositories;
 
 namespace Kado.Presentation.ViewModels;
@@ -9,10 +10,16 @@ namespace Kado.Presentation.ViewModels;
 /// 以前は名前と日付しか持たない値だったので、押しても何もできなかった。
 /// </para>
 /// </summary>
-public sealed class MilestoneViewModel(string id, string name)
+public sealed class MilestoneViewModel(string id, string name, CalendarEvent? source = null)
 {
     /// <summary>元の予定の識別子。</summary>
     public string Id { get; } = id;
+
+    /// <summary>
+    /// 元の予定。右クリックメニューの「リンクを開く」「添付を開く」が、開ける先を読むのに使う
+    /// （<see cref="Links.OpenTargets.From"/>）。
+    /// </summary>
+    public CalendarEvent? Source { get; } = source;
 
     /// <summary>ラベルに出す名前。色もこれで決まる。</summary>
     public string Name { get; } = name;
@@ -56,7 +63,7 @@ public static class MilestoneRow
             // 旧 inaCalendar が Google 側にも書き込んでいたため。同じ名前は1つにする
             if (!seen.Add(scheduled.Source.Title)) continue;
 
-            result.Add(new MilestoneViewModel(scheduled.Source.Id, scheduled.Source.Title));
+            result.Add(new MilestoneViewModel(scheduled.Source.Id, scheduled.Source.Title, scheduled.Source));
         }
 
         return result;

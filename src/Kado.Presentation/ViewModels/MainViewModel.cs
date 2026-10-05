@@ -10,6 +10,7 @@ using Kado.Google.Mapping;
 using Kado.Google.OAuth;
 using Kado.Presentation.Editing;
 using Kado.Presentation.Infrastructure;
+using Kado.Presentation.Links;
 using Kado.Presentation.Net;
 using Kado.Presentation.Notifications;
 using Kado.Presentation.Settings;
@@ -45,6 +46,12 @@ public sealed class MainViewModel : ObservableObject
     private readonly IEditorPresenter _editors;
     private readonly IFileDialogs _files;
     private readonly Editing.IAttachmentUploader _attachmentUploader;
+
+    /// <summary>
+    /// リンクと添付を開く。右クリックメニューも、予定・タスクの編集画面も、これを通る
+    /// （確認の決まりを1か所に置くため）。
+    /// </summary>
+    private readonly LinkLauncher _links;
     private readonly GoogleClientSecretsStore? _googleClient;
 
     private readonly AppSettings? _settings;
@@ -116,7 +123,8 @@ public sealed class MainViewModel : ObservableObject
         INotifier? notifier = null,
         DockPlacement? shell = null,
         WorkdayFeedClient? feed = null,
-        Editing.IAttachmentUploader? attachmentUploader = null)
+        Editing.IAttachmentUploader? attachmentUploader = null,
+        ILinkOpener? linkOpener = null)
     {
         _clock = clock ?? TimeProvider.System;
         _feed = feed ?? new WorkdayFeedClient();
@@ -125,6 +133,7 @@ public sealed class MainViewModel : ObservableObject
         _editors = editors ?? NullEditorPresenter.Instance;
         _files = files ?? NullFileDialogs.Instance;
         _attachmentUploader = attachmentUploader ?? Editing.NullAttachmentUploader.Instance;
+        _links = new LinkLauncher(linkOpener ?? NullLinkOpener.Instance);
         _today = today;
 
         _sidePanelWidth = ReadWidth(SidePanelWidthKey, DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
@@ -326,6 +335,10 @@ public sealed class MainViewModel : ObservableObject
         EditTaskChipCommand = new RelayCommand<ScheduledTask?>(task => EditTaskBy(task?.Id));
         DeleteTaskChipCommand = new RelayCommand<ScheduledTask?>(task => DeleteTaskBy(task?.Id));
         ToggleTaskChipDoneCommand = new RelayCommand<ScheduledTask?>(ToggleTaskChipDone);
+        OpenEventLinkCommand = new RelayCommand<string?>(OpenLink);
+        OpenEventAttachmentCommand = new RelayCommand<EventAttachment?>(OpenEventAttachment);
+        OpenTaskLinkCommand = new RelayCommand<string?>(OpenLink);
+        OpenTaskAttachmentCommand = new RelayCommand<TaskAttachment?>(attachment => _ = OpenTaskAttachmentSafelyAsync(attachment));
         EditBlockCommand = new RelayCommand<TimeBlockViewModel?>(block => EditEventBy(block?.Id));
         EditMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => EditEventBy(m?.Id));
         DeleteMilestoneCommand = new RelayCommand<MilestoneViewModel?>(m => DeleteEventBy(m?.Id));
@@ -1775,6 +1788,30 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>日付の行のラベルを消す。</summary>
     public RelayCommand<MilestoneViewModel?> DeleteMilestoneCommand { get; }
 
+    /// <summary>
+    /// 予定の URL を既定のブラウザで開く。右クリックメニューの「リンクを開く」。
+    /// <para>引数は URL そのもの。http/https でなければ開かず、理由を <see cref="StatusMessage"/> に出す。</para>
+    /// </summary>
+    public RelayCommand<string?> OpenEventLinkCommand { get; }
+
+    /// <summary>
+    /// 予定の添付（Google ドライブのファイル）を既定のブラウザで開く。右クリックメニューの「添付を開く」。
+    /// <para>https のものだけ開く。</para>
+    /// </summary>
+    public RelayCommand<EventAttachment?> OpenEventAttachmentCommand { get; }
+
+    /// <summary>タスクの URL を既定のブラウザで開く。<see cref="OpenEventLinkCommand"/> と同じ決まり。</summary>
+    public RelayCommand<string?> OpenTaskLinkCommand { get; }
+
+    /// <summary>
+    /// タスクに添えたファイル・フォルダを開く。右クリックメニューの「添付を開く」。
+    /// <para>
+    /// 見つからなければ開かず、「見つかりません：パス」を <see cref="StatusMessage"/> に出す。
+    /// 実行形式は実行せず、入っているフォルダを開く（<see cref="PathLaunchPlanner"/>）。
+    /// </para>
+    /// </summary>
+    public RelayCommand<TaskAttachment?> OpenTaskAttachmentCommand { get; }
+
     /// <summary>週ビュー・日ビューの時間軸に置かれた予定を開く。</summary>
     public RelayCommand<TimeBlockViewModel?> EditBlockCommand { get; }
 
@@ -2969,7 +3006,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var editor = new EventEditorViewModel(
             SelectedDate, CalendarChoicesFor(null), NowTime, QuickCalendarId,
-            _attachmentUploader, _files);
+            _attachmentUploader, _files, _links);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
@@ -2992,7 +3029,7 @@ public sealed class MainViewModel : ObservableObject
 
         var editor = new EventEditorViewModel(
             date, CalendarChoicesFor(null), defaultCalendarId: QuickCalendarId,
-            uploader: _attachmentUploader, dialogs: _files)
+            uploader: _attachmentUploader, dialogs: _files, links: _links)
         {
             StartTimeText = TimeInput.Format(time),
         };
@@ -3033,7 +3070,8 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        var editor = new EventEditorViewModel(stored, CalendarChoicesFor(stored), _attachmentUploader, _files);
+        var editor = new EventEditorViewModel(
+            stored, CalendarChoicesFor(stored), _attachmentUploader, _files, _links);
 
         while (true)
         {
@@ -3125,7 +3163,8 @@ public sealed class MainViewModel : ObservableObject
 
         var editor = new TaskEditorViewModel(
             stored, TaskListChoicesFor(stored), _today,
-            hasChildren: TaskMapper.HasChildren(stored, _workspace.Tasks.All()));
+            hasChildren: TaskMapper.HasChildren(stored, _workspace.Tasks.All()),
+            dialogs: _files, links: _links);
 
         while (true)
         {
@@ -3170,13 +3209,94 @@ public sealed class MainViewModel : ObservableObject
             : "タスクが見つかりませんでした";
     }
 
+    // ------------------------------------------------------------------
+    // リンクと添付を開く（右クリックメニュー）
+    //
+    // 何を開いてよいかの決まりと起動は LinkLauncher が持つ。ここは結果を
+    // ステータス行に出すだけ。読むだけの機能なので、Google には何も送らない
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 右クリックメニューの「添付を開く」の子メニュー。
+    /// <para>
+    /// 子メニューの項目は、親の項目と違って <c>ContextMenu</c> をたどれず本体を引けない
+    /// （別のポップアップに出る）。そこで、押したときのコマンドと渡すものを、ここで項目に
+    /// 持たせて渡す。予定の添付とタスクの場所で、起こすコマンドが違う。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<OpenMenuItem> AttachmentMenuItems(OpenTargets? targets)
+    {
+        if (targets is null) return [];
+
+        return targets.Attachments
+            .Select(item => item.Target switch
+            {
+                EventAttachment attachment => new OpenMenuItem(item.Label, OpenEventAttachmentCommand, attachment),
+                TaskAttachment attachment => new OpenMenuItem(item.Label, OpenTaskAttachmentCommand, attachment),
+                _ => null,
+            })
+            .OfType<OpenMenuItem>()
+            .ToArray();
+    }
+
+    private void OpenLink(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+
+        Report(_links.OpenWeb(url));
+    }
+
+    private void OpenEventAttachment(EventAttachment? attachment)
+    {
+        if (attachment is null) return;
+
+        Report(_links.OpenAttachment(attachment));
+    }
+
+    /// <summary>
+    /// タスクのファイルの場所を開く。結果は <see cref="StatusMessage"/> に出る。
+    /// <para>
+    /// 存在の確認が共有フォルダで長くかかることがあるので非同期（<see cref="LinkLauncher.OpenPathAsync"/>）。
+    /// 完了まで待てるよう、テストにも公開してある。
+    /// </para>
+    /// </summary>
+    public async Task OpenTaskAttachmentAsync(TaskAttachment? attachment)
+    {
+        if (attachment is null) return;
+
+        Report(await _links.OpenPathAsync(attachment.Path).ConfigureAwait(true));
+    }
+
+    /// <summary>
+    /// 画面から呼ぶ入口。<c>async void</c> にせず、漏れた例外はここで文言にして止める
+    /// （通信・ファイルを伴う入口は、アプリごと終わらせないため。docs/README.md）。
+    /// </summary>
+    private async Task OpenTaskAttachmentSafelyAsync(TaskAttachment? attachment)
+    {
+        try
+        {
+            await OpenTaskAttachmentAsync(attachment).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            StatusMessage = $"開けませんでした（{ex.Message}）";
+        }
+    }
+
+    /// <summary>開けなかったとき、または伝えることがあるときだけ、ステータス行に出す。</summary>
+    private void Report(LaunchResult result)
+    {
+        if (result.Message is { } message) StatusMessage = message;
+    }
+
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
     private void AddTask() => Guard(AddTaskCore);
 
     private void AddTaskCore()
     {
         var editor = new TaskEditorViewModel(
-            SelectedDate, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
+            SelectedDate, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id,
+            dialogs: _files, links: _links);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
@@ -3189,7 +3309,7 @@ public sealed class MainViewModel : ObservableObject
     private void CreateEventOnCore(DateOnly date)
     {
         var editor = new EventEditorViewModel(
-            date, CalendarChoicesFor(null), NowTime, QuickCalendarId, _attachmentUploader, _files);
+            date, CalendarChoicesFor(null), NowTime, QuickCalendarId, _attachmentUploader, _files, _links);
         if (!_editors.ShowEventEditor(editor)) return;
 
         _workspace.AddEvent(editor.ToModel());
@@ -3202,7 +3322,8 @@ public sealed class MainViewModel : ObservableObject
     private void CreateTaskOnCore(DateOnly date)
     {
         var editor = new TaskEditorViewModel(
-            date, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id);
+            date, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id,
+            dialogs: _files, links: _links);
         if (!_editors.ShowTaskEditor(editor)) return;
 
         _workspace.AddTask(editor.ToModel());
