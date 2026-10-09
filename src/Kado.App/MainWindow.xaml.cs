@@ -926,7 +926,7 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>押した場所が並べ替えの取っ手の中か。</summary>
     private static bool IsGrip(DependencyObject? from)
     {
-        for (var node = from; node is not null; node = VisualTreeHelper.GetParent(node))
+        for (var node = from; node is not null; node = Views.TreeWalk.ParentOf(node))
         {
             if (node is FrameworkElement { Name: "Grip" }) return true;
         }

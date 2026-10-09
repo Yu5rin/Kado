@@ -340,7 +340,7 @@ public partial class DayPaneView : UserControl
     private static bool IsInteractiveControl(DependencyObject? from, DependencyObject? stopAt)
     {
         for (var node = from; node is not null && !ReferenceEquals(node, stopAt);
-             node = VisualTreeHelper.GetParent(node))
+             node = TreeWalk.ParentOf(node))
         {
             if (node is ButtonBase) return true;
         }

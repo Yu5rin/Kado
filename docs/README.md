@@ -388,6 +388,9 @@ Google に新規として作られる。同じ完了をもう一度受け取っ�
   視覚ツリーに居ないため。マスや行のダブルクリックはコードビハインドで受けている
 - **`RelayCommand` は `CommandManager` に乗っていない。** `RaiseCanExecuteChanged` を
   自分で呼ばないと、保存できるようになってもボタンが無効のまま戻らない
+- **押された要素は Visual とは限らない。** `TextBlock` の中の `Run`（タスクの「↻」など）を
+  押すと `e.OriginalSource` が `Run` になり、`VisualTreeHelper.GetParent` に渡すと例外で落ちる
+  （v1.1.0）。親は `Views/TreeWalk.ParentOf` でたどる（`TreeWalkWiringTests` が見張る）
 - **`Application.Shutdown()` は `Window.Closing` を出さない。** 更新のための終了は
   これを通るので、そこで保存していると何も残らない。ウィンドウの置き場所は動いた
   時点で控え、`Closed` で書き出している（`MainWindow.TrackPlacement`）

@@ -220,7 +220,7 @@ public partial class MonthView : UserControl
     /// <summary>その予定が乗っているマス。日を選ぶのに要る。</summary>
     private static DayCellViewModel? FindCell(DependencyObject? from)
     {
-        for (var node = from; node is not null; node = VisualTreeHelper.GetParent(node))
+        for (var node = from; node is not null; node = TreeWalk.ParentOf(node))
         {
             if (node is FrameworkElement { DataContext: DayCellViewModel cell }) return cell;
         }

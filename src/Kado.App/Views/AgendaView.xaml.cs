@@ -349,7 +349,7 @@ public partial class AgendaView : UserControl
     /// <summary>その中身が載っている行。日を選ぶのに要る。</summary>
     private static AgendaRowViewModel? Row(DependencyObject from)
     {
-        for (var at = from; at is not null; at = VisualTreeHelper.GetParent(at))
+        for (var at = from; at is not null; at = TreeWalk.ParentOf(at))
         {
             if (at is FrameworkElement { DataContext: AgendaRowViewModel row }) return row;
         }
