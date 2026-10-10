@@ -55,7 +55,7 @@ public class ResilienceWiringTests
     {
         var service = Read("Update/UpdateService.cs");
 
-        Assert.Contains("Task.Run(() => Apply(downloadedExe))", service, StringComparison.Ordinal);
+        Assert.Contains("Task.Run(() => Apply(downloadedExe, keepHidden))", service, StringComparison.Ordinal);
         Assert.Contains("ExecutableSwap.Run", service, StringComparison.Ordinal);
     }
 

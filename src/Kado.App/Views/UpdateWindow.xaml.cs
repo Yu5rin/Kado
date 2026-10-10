@@ -12,6 +12,7 @@ namespace Kado.App.Views;
 public partial class UpdateWindow : Window
 {
     private readonly UpdateService _updater;
+    private readonly AutoUpdater _auto;
     private readonly UpdateInfo _info;
     private readonly Action _shutdown;
 
@@ -23,14 +24,16 @@ public partial class UpdateWindow : Window
     /// <summary>入れ替えている最中か。この間は閉じさせない。</summary>
     private bool _applying;
 
-    public UpdateWindow(UpdateService updater, UpdateInfo info, Action shutdown)
+    internal UpdateWindow(UpdateService updater, AutoUpdater auto, UpdateInfo info, Action shutdown)
     {
         ArgumentNullException.ThrowIfNull(updater);
+        ArgumentNullException.ThrowIfNull(auto);
         ArgumentNullException.ThrowIfNull(info);
 
         InitializeComponent();
 
         _updater = updater;
+        _auto = auto;
         _info = info;
         _shutdown = shutdown;
 
@@ -76,17 +79,38 @@ public partial class UpdateWindow : Window
 
         try
         {
-            var progress = new Progress<double>(v => Progress.Value = v);
-            var downloaded = await _updater.DownloadAsync(_info, progress, _cancel.Token);
+            // 自動更新がもう落としてあって、照合も通る版なら、落とし直さずにそれで入れ替える
+            var staged = await _auto.FindUsableAsync(_info);
 
-            Say("入れ替えています…");
-            _applying = true;
+            SwapResult swap;
 
-            // 入れ替えは途中で止められない。押しても何も起きないボタンを残さない
-            LaterButton.IsEnabled = false;
+            if (staged is not null)
+            {
+                Say("落としてある版で入れ替えています…");
+                _applying = true;
+                LaterButton.IsEnabled = false;
 
-            // 70MB のコピーは別スレッドで行う。待つあいだに画面が描かれ、「入れ替えています…」が見える
-            var swap = await _updater.ApplyAsync(downloaded);
+                swap = await _auto.ApplyAsync(staged, keepHidden: false);
+            }
+            else
+            {
+                var progress = new Progress<double>(v => Progress.Value = v);
+                var downloaded = await _updater.DownloadAsync(_info, progress, _cancel.Token);
+
+                Say("入れ替えています…");
+                _applying = true;
+
+                // 入れ替えは途中で止められない。押しても何も起きないボタンを残さない
+                LaterButton.IsEnabled = false;
+
+                // 入れ替えたあとの最初の起動で「更新しました」と知らせるための控え
+                _auto.RecordApplied(StagedUpdate.From(_info, downloaded));
+
+                // 70MB のコピーは別スレッドで行う。待つあいだに画面が描かれ、「入れ替えています…」が見える
+                swap = await _updater.ApplyAsync(downloaded);
+
+                if (!swap.Succeeded) _auto.ClearApplied();
+            }
 
             if (swap.Succeeded)
             {

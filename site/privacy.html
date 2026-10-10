@@ -36,7 +36,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
 <body>
 <main>
   <h1>プライバシーポリシー</h1>
-  <p class="updated">Kado ／ 2026年10月3日</p>
+  <p class="updated">Kado ／ 2026年10月10日</p>
 
   <h2>要点</h2>
   <ul>
@@ -95,8 +95,14 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
     </tr>
     <tr>
       <th>更新の取得<br>（github.com ／ *.githubusercontent.com）</th>
-      <td>「更新する」を選んだときだけ、新しい実行ファイルを取ってきます。取得先は
-          HTTPS かつ GitHub の配信先であることを確かめてから通信します。</td>
+      <td>「更新する」を選んだとき、また設定の「自動で更新する」（既定でオン）が有効なときは
+          新しい版が見つかった時点で、新しい実行ファイルを取ってきます。自動のときは、
+          アプリを使っている画面とは別に、裏で取得します。取得先は
+          HTTPS かつ GitHub の配信先であることを確かめてから通信し、取得したファイルは
+          GitHub が示す SHA256 と照合して、合ったものだけを入れ替えに使います。
+          照合に使う値を得られなかったときは、自動では入れ替えません。
+          取得するのも、GitHub 側に渡るのも、更新の確認と同じく通信元の IP アドレスと
+          User-Agent（名乗り）だけです。「自動で更新する」を切ると、「更新する」を選んだときだけの取得になります。</td>
     </tr>
     <tr>
       <th>実働日データの配信元<br>（利用者が設定した HTTPS の URL）</th>

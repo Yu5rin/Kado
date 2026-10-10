@@ -297,7 +297,7 @@ public partial class DayPaneView : UserControl
         // つまんで動かしたのであって、押したのではない
         CancelTaskToggle();
 
-        DragDrop.DoDragDrop(source, candidate, DragDropEffects.Move);
+        DragActivity.DoDragDrop(source, candidate, DragDropEffects.Move);
     }
 
     /// <summary>タスクの行の上を通っているあいだ。落とせるかどうかをカーソルで示す。</summary>

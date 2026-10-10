@@ -15,6 +15,12 @@ internal static class StartupArguments
     /// </summary>
     internal const string AfterRestart = "--after-restart";
 
+    /// <summary>
+    /// 窓を出さずに、トレイに入った状態で始めるよう伝える合図（<c>UpdateService.KeepHiddenArgument</c> と同じ値）。
+    /// 常駐中の自動更新で、トレイに入っていた窓を、再起動のたびに前へ出さないため。
+    /// </summary>
+    internal const string KeepHidden = "--keep-hidden";
+
     /// <summary>前のプロセスが終わるのを待つ長さ。</summary>
     internal static readonly TimeSpan PreviousProcessWait = TimeSpan.FromSeconds(30);
 
@@ -28,4 +34,8 @@ internal static class StartupArguments
     internal static bool WaitsForPreviousProcess(IEnumerable<string> args) =>
         args.Any(a => string.Equals(a, AfterUpdate, StringComparison.Ordinal)
                       || string.Equals(a, AfterRestart, StringComparison.Ordinal));
+
+    /// <summary>窓を隠したまま始めるよう伝えられているか。</summary>
+    internal static bool KeepsHidden(IEnumerable<string> args) =>
+        args.Any(a => string.Equals(a, KeepHidden, StringComparison.Ordinal));
 }

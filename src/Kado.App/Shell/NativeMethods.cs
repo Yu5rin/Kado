@@ -374,4 +374,29 @@ internal static class NativeMethods
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool DeleteObject(IntPtr hObject);
+
+    // ------------------------------------------------------------------
+    // 操作の無い時間（自動更新の「手が空いたとき」の判定）
+    // ------------------------------------------------------------------
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct LASTINPUTINFO
+    {
+        public uint cbSize;
+
+        /// <summary>最後の操作があった時刻。<c>GetTickCount</c> と同じ32ビットのミリ秒。</summary>
+        public uint dwTime;
+    }
+
+    /// <summary>
+    /// キーボードとマウスの最後の操作の時刻を返す（このセッション全体。他のアプリを触っていても更新される）。
+    /// </summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    /// <summary>窓が操作を受け付ける状態か。モーダルの窓が開いているあいだ、持ち主の窓は受け付けない。</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindowEnabled(IntPtr hWnd);
 }

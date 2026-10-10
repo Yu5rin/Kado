@@ -878,7 +878,7 @@ public partial class MainWindow : Window, ISlideRevealHost
         }
 
         _dragging = null;
-        DragDrop.DoDragDrop((DependencyObject)sender, moved, DragDropEffects.Move);
+        Views.DragActivity.DoDragDrop((DependencyObject)sender, moved, DragDropEffects.Move);
     }
 
     private void OnSourceRowDragOver(object sender, DragEventArgs e)

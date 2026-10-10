@@ -592,6 +592,22 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 新しい版が見つかったら、裏で落として、手が空いたときに自動で入れ替えるか。
+    /// <para>切ると、通知と更新の窓だけになる。</para>
+    /// </summary>
+    public bool AutoUpdate
+    {
+        get => _settings.AutoUpdate;
+        set
+        {
+            if (_settings.AutoUpdate == value) return;
+
+            _settings.AutoUpdate = value;
+            Raise();
+        }
+    }
+
     /// <summary>自動起動を出せるか。扱えない環境では欄ごと隠す。</summary>
     public bool CanRunAtLogon => _startup.IsSupported;
 

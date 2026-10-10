@@ -70,8 +70,24 @@ public sealed class UpdateService
             ? new Version(v.Major, v.Minor, v.Build)
             : new Version(0, 0, 0);
 
-    /// <summary>落としたものを置く場所。</summary>
+    /// <summary>
+    /// 入れ替えの合図に付ける「窓は隠したままにする」印（<c>StartupArguments.KeepHidden</c> と同じ値）。
+    /// 常駐中の自動更新が、トレイに入っていた窓を、再起動のたびに前へ出さないための印。
+    /// </summary>
+    public const string KeepHiddenArgument = "--keep-hidden";
+
+    /// <summary>落としたものを置く場所（手で更新するとき。次の起動で片付ける）。</summary>
     private static string TempDir => Path.Combine(Path.GetTempPath(), "Kado", "update");
+
+    /// <summary>
+    /// 自動更新が落とした、入れ替え待ちのものを置く場所（データの保存先の <c>updates</c>）。
+    /// <para>
+    /// <see cref="TempDir"/> とは別。そちらは起動のたびに片付けるが、こちらは<b>次の起動でも残さなければ</b>
+    /// ならない（終了したあとの起動で入れ替えるため）。片付けは <see cref="CleanupStaleStagedFiles"/>。
+    /// </para>
+    /// </summary>
+    internal static string StagedDirectory =>
+        Path.Combine(Path.GetDirectoryName(Kado.Data.CalendarDatabase.DefaultPath)!, "updates");
 
     /// <summary>
     /// 新しい版があるか見る。
@@ -128,8 +144,10 @@ public sealed class UpdateService
     /// 各段階を1行ずつ記録する。失敗したときは、例外の連鎖と受信済みバイト数を残す。
     /// </para>
     /// </summary>
+    /// <param name="directory">置き場所。省くと <see cref="TempDir"/>（自動更新は <see cref="StagedDirectory"/> を渡す）。</param>
     public async Task<string> DownloadAsync(
-        UpdateInfo info, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        UpdateInfo info, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
+        string? directory = null)
     {
         ArgumentNullException.ThrowIfNull(info);
 
@@ -139,8 +157,9 @@ public sealed class UpdateService
             throw new InvalidOperationException("更新の取得先が許されていない場所です。");
         }
 
-        Directory.CreateDirectory(TempDir);
-        var path = Path.Combine(TempDir, $"Kado-{info.TagName}.exe");
+        var folder = directory ?? TempDir;
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"Kado-{info.TagName}.exe");
 
         _log($"更新のダウンロード: 開始 {UpdateDiagnostics.SafeUrl(info.DownloadUrl)}" +
              $"（想定 {info.SizeBytes}バイト, SHA256={(info.Sha256 is { Length: > 0 } ? "あり" : "なし")}）");
@@ -306,9 +325,15 @@ public sealed class UpdateService
     /// 起動に失敗したときも元の版へ巻き戻す（<see cref="ExecutableSwap"/>）。
     /// </para>
     /// </summary>
-    internal Task<SwapResult> ApplyAsync(string downloadedExe) => Task.Run(() => Apply(downloadedExe));
+    /// <param name="downloadedExe">入れ替える新しい exe。</param>
+    /// <param name="keepHidden">新しいほうに、窓を隠したまま起動するよう伝えるか（トレイに入っていたとき）。</param>
+    internal Task<SwapResult> ApplyAsync(string downloadedExe, bool keepHidden = false) =>
+        Task.Run(() => Apply(downloadedExe, keepHidden));
 
-    private SwapResult Apply(string downloadedExe)
+    /// <summary>
+    /// <see cref="ApplyAsync"/> の同期版。起動の最初（窓を出す前）の入れ替えで、画面のスレッドのまま使う。
+    /// </summary>
+    internal SwapResult Apply(string downloadedExe, bool keepHidden = false)
     {
         if (Environment.ProcessPath is not { Length: > 0 } current)
         {
@@ -318,15 +343,46 @@ public sealed class UpdateService
                 SwapOutcome.FailedUnchanged, new InvalidOperationException("exe の場所が不明"), string.Empty, string.Empty);
         }
 
-        return ExecutableSwap.Run(current, downloadedExe, Launch, _log);
+        return ExecutableSwap.Run(current, downloadedExe, exe => Launch(exe, keepHidden), _log);
     }
 
     /// <summary>入れ替えた exe を起動する。前のプロセスがまだ終わっていないので、待つよう伝える。</summary>
-    private static void Launch(string exe)
+    private static void Launch(string exe, bool keepHidden)
     {
         var start = new ProcessStartInfo(exe) { UseShellExecute = true };
         start.ArgumentList.Add(AfterUpdateArgument);
+        if (keepHidden) start.ArgumentList.Add(KeepHiddenArgument);
         Process.Start(start);
+    }
+
+    /// <summary>
+    /// 自動更新の置き場所に残った、使わないファイルを消す。起動時に呼ぶ。
+    /// <para>
+    /// 入れ替え待ちとして控えてあるファイル（<paramref name="keep"/>）以外を消す。入れ替えに失敗して残った
+    /// ものや、落とす途中で終わったものが、積み上がらないようにする。
+    /// </para>
+    /// </summary>
+    public void CleanupStaleStagedFiles(string? keep)
+    {
+        try
+        {
+            if (!Directory.Exists(StagedDirectory)) return;
+
+            foreach (var file in Directory.EnumerateFiles(StagedDirectory))
+            {
+                if (keep is not null &&
+                    string.Equals(Path.GetFullPath(file), Path.GetFullPath(keep), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                TryDelete(file);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 消せなくても支障はない。次の起動でまた試す
+        }
     }
 
     /// <summary>前回の入れ替えで残ったものを片付ける。起動時に呼ぶ。</summary>
@@ -371,13 +427,13 @@ public sealed class UpdateService
         return http;
     }
 
-    private static string ComputeSha256(string path)
+    internal static string ComputeSha256(string path)
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
-    private static void TryDelete(string path)
+    internal static void TryDelete(string path)
     {
         try
         {

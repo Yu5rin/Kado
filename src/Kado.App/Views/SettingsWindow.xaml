@@ -188,6 +188,13 @@
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
                                    Text="動かしているあいだに見つかったときは、画面を勝手に開かず、トレイの通知でお知らせします（押すと更新の窓が開きます）。&#10;切っても、更新の確認はいつでも「Kado について」タブの「更新を確認…」から行えます。" />
                     </StackPanel>
+
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <CheckBox Content="自動で更新する"
+                                  IsChecked="{Binding AutoUpdate}" Cursor="Hand" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="新しい版が見つかったら裏で落とし、手が空いたとき（10分ほど操作が無く、ほかの窓を開いていないとき）に入れ替えて再起動します。&#10;落としたファイルの SHA256 を照合できたときだけ入れ替えます。切ると、通知と更新の窓だけになります。" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- 画面端に寄せたとき -->

@@ -65,6 +65,29 @@ public partial class App : Application
     /// <summary>更新の窓を開いている最中か。重ねて開かない。</summary>
     private bool _updateWindowOpen;
 
+    /// <summary>自動更新の段取り（入れ替え待ちの控えと、各段階の記録）。</summary>
+    private AutoUpdater? _autoUpdater;
+
+    /// <summary>手が空いたかを1分おきに見回る。入れ替えてよいかの判断は <see cref="AutoUpdatePolicy"/>。</summary>
+    private DispatcherTimer? _autoUpdatePatrol;
+
+    /// <summary>裏で落としている最中か（重ねて落とさない・落としている間は入れ替えない）。</summary>
+    private bool _autoStaging;
+
+    /// <summary>入れ替えを始めた最中か（見回りが重ならないように）。</summary>
+    private bool _autoApplying;
+
+    /// <summary>入れ替えを待たせている理由の、前回記録したもの。同じ理由を毎分書かないため。</summary>
+    private AutoUpdateWait? _lastAutoWait;
+
+    /// <summary>更新後の最初の起動で知らせた、更新した版。知らせを押したら、変更点の窓を開く。</summary>
+    private StagedUpdate? _updatedNotice;
+
+    /// <summary>最後に出したトレイのバルーンが何の知らせか。押されたときの行き先を決める。</summary>
+    private enum BalloonTarget { None, UpdateAvailable, Updated }
+
+    private BalloonTarget _balloonTarget;
+
     /// <summary>
     /// 新しい版を見に行く先。
     /// <para>
@@ -250,6 +273,16 @@ public partial class App : Application
         // 配色が「自動」のときは、Windows の明暗の切り替えにも追随する
         WatchSystemTheme();
 
+        // 更新の仕組み。起動の最初の入れ替え（下）が使うので、窓を作る前に作る。
+        // 更新の確認・ダウンロードの各段階は shell.log に1行ずつ残す（会社のネットワークで
+        // だけ更新できない、という報告を、理由まで追えるようにするため）
+        _updater = StartupTrace.Measure(
+            "UpdateService構築", () => new UpdateService(UpdateApiUrl, Shell.ShellDiagnosticsLog.Write));
+        _autoUpdater = new AutoUpdater(_updater, settings, Shell.ShellDiagnosticsLog.Write);
+
+        // 前回の終了までに落としてあった新しい版があれば、メインウィンドウを出す前に入れ替えて起動し直す
+        if (StartupTrace.Measure("自動更新(起動時の入れ替え)", ApplyStagedUpdateAtStartup)) return;
+
         try
         {
             // 編集画面はウィンドウを親にして出す。その参照は作ったあとでないと渡せない
@@ -406,6 +439,19 @@ public partial class App : Application
 
             StartupTrace.Measure("SetUpShell", () => SetUpShell(window));
 
+            // 常駐中の自動更新で再起動したときは、トレイに入っていた窓を前へ出さない
+            // （最初の描画が済んでから隠す。トレイのアイコンが出ていないときは隠さない）
+            if (StartupArguments.KeepsHidden(e.Args) && window.DataContext is MainViewModel { Shell.IsAtEdge: false })
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+                {
+                    if (_tray?.IsShown == true) window.Hide();
+                });
+            }
+
+            // 更新したあとの最初の起動なら、一度だけ知らせる（トレイのアイコンができたあとに回す）
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, AnnounceUpdatedIfAny);
+
             // 保存されていたトークンが、退避して読み直してもなお復号できなかったときだけ、理由を一度伝える
             // （DpapiTokenStore.Load。1度目の失敗は一時的かもしれないので伝えない）。
             // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
@@ -428,10 +474,7 @@ public partial class App : Application
             // 最初の画面が出てからでよい。ApplicationIdle まで待たせば、初回描画の
             // あとに回る。CleanupOldFiles は他の起動処理を待たない独立した後片付けで、
             // 何かの前提になっていない（_updater フィールド自体はここで先に作っておく）
-            // 更新の確認・ダウンロードの各段階は shell.log に1行ずつ残す（会社のネットワークで
-            // だけ更新できない、という報告を、理由まで追えるようにするため）
-            _updater = StartupTrace.Measure(
-                "UpdateService構築", () => new UpdateService(UpdateApiUrl, Shell.ShellDiagnosticsLog.Write));
+            // （_updater は窓を作る前に作ってある）
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _updater.CleanupOldFiles());
 
             // 裏でも静かに同期する。押し忘れても、開いている間は追いついていく
@@ -484,6 +527,9 @@ public partial class App : Application
 
             // 常駐しているあいだも、1日1回、静かに確かめる（設定で切っていれば何もしない）
             StartUpdatePolling();
+
+            // 落としてある新しい版を、手が空いたときに入れ替える見回り
+            StartAutoUpdatePatrol();
 
             StartupTrace.Measure("WatchForResume", () => WatchForResume(window));
             StartupTrace.Mark("OnStartup終了");
@@ -603,6 +649,10 @@ public partial class App : Application
                 return;
 
             case UpdateCheckStatus.UpdateAvailable:
+                // 起動時の確認は、自動更新が入っていれば裏で落として入れ替え待ちにする（窓は出さない）。
+                // 押しての確認は、これまでどおり更新の窓（落としてあれば、窓がその控えを使う）
+                if (!showWhenLatest && await TryStageInBackgroundAsync(result.Info!).ConfigureAwait(true)) return;
+
                 // 窓で知らせた版は、常駐中の確認でもう一度通知しない（同じ版で何度も出さない）
                 _announcedUpdate = result.Info;
                 ShowUpdateWindow(result.Info!);
@@ -615,17 +665,238 @@ public partial class App : Application
     /// </summary>
     private void ShowUpdateWindow(UpdateInfo info)
     {
-        if (_updater is null || _updateWindowOpen) return;
+        if (_updater is null || _autoUpdater is null || _updateWindowOpen) return;
 
         _updateWindowOpen = true;
         try
         {
-            new UpdateWindow(_updater, info, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
+            new UpdateWindow(_updater, _autoUpdater, info, () => Shutdown()) { Owner = MainWindow }.ShowDialog();
         }
         finally
         {
             _updateWindowOpen = false;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // 自動更新（裏で落とす → 手が空いたときに入れ替える／次の起動の最初に入れ替える）
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 起動の最初（メインウィンドウを出す前）に、落としてある新しい版へ入れ替えて起動し直す。
+    /// <para>
+    /// 控えが無い・ファイルが無い・SHA256 が合わない・控えの版がいまの版以下、のときは控えを捨てて、
+    /// 普通に起動する（<see cref="AutoUpdater.TakeStagedForStartup"/>）。入れ替えに失敗したときも元の版へ
+    /// 戻してあるので（<see cref="ExecutableSwap"/>）、そのまま普通に起動する。
+    /// </para>
+    /// <para>
+    /// Windows のサインアウト・シャットダウンで終わるときは、終了の側では何もしない。入れ替えは
+    /// 「次の起動の最初」にだけ行うので、<see cref="Shell.SessionEndWatcher"/> の流れを邪魔しない。
+    /// </para>
+    /// </summary>
+    /// <returns>入れ替えて、新しいほうを起動した（このプロセスは終わる）。</returns>
+    private bool ApplyStagedUpdateAtStartup()
+    {
+        if (_autoUpdater is null) return false;
+
+        try
+        {
+            if (_autoUpdater.TakeStagedForStartup() is not { } staged) return false;
+
+            var result = _autoUpdater.ApplySync(staged);
+            if (!result.Succeeded) return false;
+
+            // 新しいほうがもう立ち上がって、こちらが終わるのを待っている
+            Shutdown();
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 更新できないことは、起動できない理由にならない
+            Shell.ShellDiagnosticsLog.Write($"自動更新: 起動時の入れ替えで想定外の失敗。{Kado.Core.Net.NetworkDiagnostics.Summarize(ex)}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 見つけた新しい版を、自動更新が入っていれば裏で落として入れ替え待ちにする（UI は止めない）。
+    /// </summary>
+    /// <returns>
+    /// 入れ替え待ちにした（またはもう控えてある・別の呼び出しが落としている）。true のときは、呼んだ側が
+    /// 通知や窓を出さない。false のときは、これまでどおりの通知や窓にする
+    /// （設定で切っている・SHA256 が取れない・落とせなかった、など）。
+    /// </returns>
+    private async Task<bool> TryStageInBackgroundAsync(UpdateInfo info)
+    {
+        if (_autoUpdater is null || _leaving || _settings is not { AutoUpdate: true }) return false;
+
+        // 別の確認が落としている最中。その結果に任せる
+        if (_autoStaging) return true;
+
+        _autoStaging = true;
+        try
+        {
+            return await _autoUpdater.TryStageAsync(info).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Shell.ShellDiagnosticsLog.Write($"自動更新: 落とす処理で想定外の失敗。{Kado.Core.Net.NetworkDiagnostics.Summarize(ex)}");
+            return false;
+        }
+        finally
+        {
+            _autoStaging = false;
+        }
+    }
+
+    /// <summary>入れ替え待ちを、手が空いたときに入れ替えるための見回りを始める。</summary>
+    private void StartAutoUpdatePatrol()
+    {
+        _autoUpdatePatrol = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = AutoUpdatePolicy.PatrolInterval,
+        };
+
+        _autoUpdatePatrol.Tick += (_, _) => _ = AutoApplyIfIdleAsync();
+        _autoUpdatePatrol.Start();
+
+        Exit += (_, _) => _autoUpdatePatrol?.Stop();
+    }
+
+    /// <summary>
+    /// 入れ替え待ちがあって、手が空いていれば、入れ替えて再起動する。
+    /// <para>
+    /// 判断は <see cref="AutoUpdatePolicy"/>。入れ替えと再起動は、手で更新するときと同じ部品
+    /// （<see cref="UpdateService"/>・<see cref="ExecutableSwap"/>）を使う。落とした70MBの照合は別スレッドで行う。
+    /// </para>
+    /// </summary>
+    private async Task AutoApplyIfIdleAsync()
+    {
+        if (_autoUpdater is null || _leaving || _autoApplying) return;
+
+        try
+        {
+            var staged = _autoUpdater.Staged;
+            var wait = AutoUpdatePolicy.Wait(BuildAutoUpdateState(staged is not null));
+
+            if (wait != AutoUpdateWait.None)
+            {
+                LogAutoUpdateWait(wait, staged);
+                return;
+            }
+
+            _autoApplying = true;
+            _lastAutoWait = null;
+
+            // 照合は70MBのハッシュ計算。画面のスレッドでは行わない
+            var verdict = await Task.Run(() => _autoUpdater.Verify(staged!)).ConfigureAwait(true);
+
+            if (verdict != StagedVerdict.Usable)
+            {
+                _autoUpdater.Discard(staged!, StagedUpdateCheck.Describe(verdict));
+                return;
+            }
+
+            // 照合のあいだに、操作が戻ったかもしれない。入れ替える直前にもう一度見る
+            var again = AutoUpdatePolicy.Wait(BuildAutoUpdateState(hasStaged: true));
+            if (again != AutoUpdateWait.None)
+            {
+                Shell.ShellDiagnosticsLog.Write(
+                    $"自動更新: {staged!.Tag} の照合は通ったが、{AutoUpdatePolicy.Describe(again)}ので見送る");
+                return;
+            }
+
+            // トレイに入っていた窓は、再起動のあとも前へ出さない
+            var keepHidden = MainWindow is { IsVisible: false } &&
+                             MainWindow.DataContext is MainViewModel { Shell.IsAtEdge: false };
+
+            var result = await _autoUpdater.ApplyAsync(staged!, keepHidden).ConfigureAwait(true);
+
+            // 新しいほうがもう立ち上がっている。こちらは速やかに終わる
+            if (result.Succeeded) Shutdown();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 見回りは1分おきに来る。想定外でも常駐を落とさない
+            Shell.ShellDiagnosticsLog.Write($"自動更新: 見回りで想定外の失敗。{Kado.Core.Net.NetworkDiagnostics.Summarize(ex)}");
+        }
+        finally
+        {
+            _autoApplying = false;
+        }
+    }
+
+    /// <summary>入れ替えてよいかを決めるための、いまの状態を集める（画面のスレッドで呼ぶ）。</summary>
+    private AutoUpdateState BuildAutoUpdateState(bool hasStaged)
+    {
+        var main = MainWindow?.DataContext as MainViewModel;
+
+        // メインウィンドウ以外の窓（編集画面・設定・更新の窓など）。隠れているものは数えない
+        var otherWindow = Windows.OfType<Window>()
+            .Any(w => !ReferenceEquals(w, MainWindow) && w.IsVisible);
+
+        // メッセージボックスなど、WPF の窓として数えられないモーダルの最中は、持ち主の窓が押せない
+        var modal = false;
+        if (MainWindow is { } owner)
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(owner).Handle;
+            modal = handle != IntPtr.Zero && !Shell.NativeMethods.IsWindowEnabled(handle);
+        }
+
+        return new AutoUpdateState(
+            Enabled: _settings is { AutoUpdate: true },
+            HasStaged: hasStaged,
+            Busy: _updateWindowOpen || _autoStaging || _leaving,
+            OtherWindowOpen: otherWindow,
+            ModalDialogOpen: modal,
+            MenuOrPopupOpen: Shell.PopupActivityHooks.Tracker.IsAnyOpen,
+            DragInProgress: Views.DragActivity.IsDragging,
+            SyncRunning: main?.Sync.IsBusy == true,
+            IdleFor: Shell.UserIdle.Current());
+    }
+
+    /// <summary>入れ替えを待たせている理由を、変わったときだけ shell.log に書く（毎分は書かない）。</summary>
+    private void LogAutoUpdateWait(AutoUpdateWait wait, StagedUpdate? staged)
+    {
+        if (_lastAutoWait == wait) return;
+
+        _lastAutoWait = wait;
+
+        // 待っているわけではない（切っている・待ちが無い）ものは書かない
+        if (staged is null || wait is AutoUpdateWait.Disabled or AutoUpdateWait.NothingStaged) return;
+
+        Shell.ShellDiagnosticsLog.Write($"自動更新: {staged.Tag} は入れ替え待ち。{AutoUpdatePolicy.Describe(wait)}ので待っている");
+    }
+
+    /// <summary>
+    /// 更新したあとの最初の起動で、一度だけ知らせる。押すと変更点を見られる。
+    /// </summary>
+    private void AnnounceUpdatedIfAny()
+    {
+        if (_autoUpdater?.TakeAppliedNotice() is not { } applied) return;
+
+        _updatedNotice = applied;
+        _balloonTarget = BalloonTarget.Updated;
+
+        if (MainWindow?.DataContext is MainViewModel main)
+        {
+            main.AnnounceStatus($"Kado を {applied.Tag} に更新しました");
+        }
+
+        _tray?.ShowBalloon("Kado", $"Kado を {applied.Tag} に更新しました。ここを押すと変更点を見られます。");
+    }
+
+    /// <summary>「更新しました」の知らせを押された。変更点（リリース本文）を文字のまま見せる。</summary>
+    private void ShowUpdatedNotice()
+    {
+        if (_updatedNotice is not { } applied) return;
+
+        var fallback = UpdateLinks.BuildReleasePageUrl(UpdateLinks.TryBuildAtomUrl(UpdateApiUrl), applied.Tag);
+        var window = new UpdatedNoticeWindow(applied, fallback);
+
+        if (MainWindow is { IsVisible: true } owner) window.Owner = owner;
+
+        window.ShowDialog();
     }
 
     // ------------------------------------------------------------------
@@ -708,6 +979,11 @@ public partial class App : Application
 
             case UpdateCheckStatus.UpdateAvailable:
                 _updateSchedule.MarkChecked(DateTime.Now);
+
+                // 自動更新が入っていれば、裏で落として入れ替え待ちにする（通知は出さない）。
+                // 落とせなかった・SHA256 が取れなかったときは、これまでどおりの通知
+                if (await TryStageInBackgroundAsync(result.Info!).ConfigureAwait(true)) return;
+
                 AnnounceUpdate(result.Info!);
                 return;
         }
@@ -731,12 +1007,19 @@ public partial class App : Application
             main.AnnounceStatus($"新しい版 {info.TagName} があります。⚙メニューの「更新を確認…」から更新できます");
         }
 
+        _balloonTarget = BalloonTarget.UpdateAvailable;
         _tray?.ShowBalloon("Kado", $"新しい版 {info.TagName} があります。ここを押すと更新の窓を開きます。");
     }
 
-    /// <summary>通知を押された。知らせた版の更新の窓を、前に出して開く。</summary>
+    /// <summary>通知を押された。知らせた内容に合わせて、更新の窓か、変更点の窓を前に出して開く。</summary>
     private void OnUpdateBalloonClicked()
     {
+        if (_balloonTarget == BalloonTarget.Updated)
+        {
+            ShowUpdatedNotice();
+            return;
+        }
+
         if (_announcedUpdate is not { } info) return;
 
         BringToFront();

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Kado.Core.WorkingDays;
 using Kado.Data.Repositories;
+using Kado.Presentation.Update;
 using Kado.Presentation.ViewModels;
 using Microsoft.Data.Sqlite;
 
@@ -90,6 +91,10 @@ public sealed class AppSettings
     private const string WindowPanesKey = "ui.panes.window";
     private const string EdgePanesKey = "ui.panes.edge";
     private const string CheckForUpdateOnStartupKey = "update.check_on_startup";
+    private const string AutoUpdateKey = "update.auto";
+    private const string StagedUpdateKey = "update.staged";
+    private const string AppliedUpdateKey = "update.applied";
+    private const string AutoUpdateBlockedTagKey = "update.auto_blocked_tag";
     private const string WorkdayOffsetPlansKey = "workday.offset_plans";
     private const string WorkdaySelectedPlanKey = "workday.offset_plan_selected";
 
@@ -128,6 +133,7 @@ public sealed class AppSettings
     private TimeOnly _summaryTime;
     private bool _notifySound;
     private bool _checkForUpdateOnStartup;
+    private bool _autoUpdate;
 
     public AppSettings(SettingsRepository store)
     {
@@ -164,6 +170,7 @@ public sealed class AppSettings
             : DefaultSummaryTime;
         _checkForUpdateOnStartup =
             !string.Equals(_store.Get(CheckForUpdateOnStartupKey), "false", StringComparison.Ordinal);
+        _autoUpdate = !string.Equals(_store.Get(AutoUpdateKey), "false", StringComparison.Ordinal);
         _dayStartHour = ReadHour(DayStartKey, DefaultDayStartHour);
         _dayEndHour = ReadHour(DayEndKey, DefaultDayEndHour);
 
@@ -746,6 +753,75 @@ public sealed class AppSettings
             _checkForUpdateOnStartup = value;
             Save(CheckForUpdateOnStartupKey, value ? "true" : "false");
             Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 新しい版が見つかったら、裏で落として、手が空いたときに自動で入れ替えるか。
+    /// <para>
+    /// 既定はオン。切ると、今までどおり通知と更新の窓だけになる。落としたものは SHA256 を
+    /// 照合できたときしか入れ替えない（<c>AutoUpdatePolicy</c>）。
+    /// </para>
+    /// </summary>
+    public bool AutoUpdate
+    {
+        get => _autoUpdate;
+        set
+        {
+            if (_autoUpdate == value) return;
+
+            _autoUpdate = value;
+            Save(AutoUpdateKey, value ? "true" : "false");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 落としてあって、入れ替えを待っている版（無ければ null）。
+    /// <para>画面の設定ではなく内部の控えなので、書き換えても <see cref="Changed"/> は出さない。</para>
+    /// </summary>
+    public StagedUpdate? StagedUpdate
+    {
+        get => StagedUpdate.TryParse(_store.Get(StagedUpdateKey));
+        set => WriteJsonOrRemove(StagedUpdateKey, value);
+    }
+
+    /// <summary>
+    /// 入れ替えを始めた版（無ければ null）。入れ替えたあとの最初の起動で「更新しました」と知らせ、
+    /// 変更点を見せるために使う。
+    /// </summary>
+    public StagedUpdate? AppliedUpdate
+    {
+        get => StagedUpdate.TryParse(_store.Get(AppliedUpdateKey));
+        set => WriteJsonOrRemove(AppliedUpdateKey, value);
+    }
+
+    /// <summary>自動の入れ替えを止めてあるタグ（前に入れ替えに失敗した版）。無ければ空。</summary>
+    public string AutoUpdateBlockedTag
+    {
+        get => _store.Get(AutoUpdateBlockedTagKey) ?? string.Empty;
+        set
+        {
+            if (string.IsNullOrEmpty(value)) RemoveKey(AutoUpdateBlockedTagKey);
+            else Save(AutoUpdateBlockedTagKey, value);
+        }
+    }
+
+    private void WriteJsonOrRemove(string key, StagedUpdate? value)
+    {
+        if (value is null) RemoveKey(key);
+        else Save(key, value.ToJson());
+    }
+
+    private void RemoveKey(string key)
+    {
+        try
+        {
+            _store.Remove(key);
+        }
+        catch (SqliteException ex)
+        {
+            SaveFailed?.Invoke(this, ex);
         }
     }
 

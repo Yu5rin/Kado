@@ -38,6 +38,8 @@
     <Compile Include="..\..\src\Kado.App\Shell\NativeMethods.cs" Link="Shell\NativeMethods.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\ShellGeometry.cs" Link="Shell\ShellGeometry.cs" />
     <Compile Include="..\..\src\Kado.App\Shell\PopupActivityTracker.cs" Link="Shell\PopupActivityTracker.cs" />
+    <!-- 操作の無い時間（自動更新の「手が空いたとき」）。差の計算は一周をまたいでも合う -->
+    <Compile Include="..\..\src\Kado.App\Shell\UserIdle.cs" Link="Shell\UserIdle.cs" />
     <!-- shell.log の書き手。呼んだスレッドでは行列に積むだけにして、別のスレッドがまとめて書く -->
     <Compile Include="..\..\src\Kado.App\Shell\BufferedLogWriter.cs" Link="Shell\BufferedLogWriter.cs" />
     <!-- コンバーターが色のブラシなどを使い回す入れ物（WPF に依存しない部分） -->

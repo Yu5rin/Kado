@@ -73,7 +73,7 @@ internal sealed class DragSession
 
         try
         {
-            DragDrop.DoDragDrop(source, moved, DragDropEffects.Move | DragDropEffects.Copy);
+            DragActivity.DoDragDrop(source, moved, DragDropEffects.Move | DragDropEffects.Copy);
         }
         finally
         {

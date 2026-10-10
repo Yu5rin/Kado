@@ -93,6 +93,23 @@ public class ResilienceRulesTests
         Assert.Contains($"AfterUpdateArgument = \"{StartupArguments.AfterUpdate}\"", update, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("--keep-hidden", true)]
+    [InlineData("--after-update", false)]
+    public void 窓を隠したままの合図を読める(string argument, bool expected)
+    {
+        Assert.Equal(expected, StartupArguments.KeepsHidden(["--after-update", argument]));
+    }
+
+    [Fact]
+    public void 窓を隠したままの合図は更新側の定数と同じ値()
+    {
+        // 食い違うと、トレイに入っていた窓が自動更新のたびに前へ出てくる
+        var update = File.ReadAllText(Path.Combine(AppDirectory(), "Update", "UpdateService.cs"));
+
+        Assert.Contains($"KeepHiddenArgument = \"{StartupArguments.KeepHidden}\"", update, StringComparison.Ordinal);
+    }
+
     private static string AppDirectory()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
