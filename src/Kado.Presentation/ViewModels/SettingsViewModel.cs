@@ -649,7 +649,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>異常終了の記録先。<c>App.xaml.cs</c> の書き出し先と同じ場所。</summary>
     private static string CrashLogPath => Path.Combine(
-        Path.GetDirectoryName(Kado.Data.CalendarDatabase.DefaultPath)!, "crash.log");
+        Kado.Data.DataLocation.Directory, "crash.log");
 
     /// <summary>1つ前の世代（1MB を超えたときに繰った分）。</summary>
     private static string PreviousCrashLogPath => CrashLogPath + ".1";
@@ -749,6 +749,19 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>データの保存先を開く。</summary>
     public Infrastructure.RelayCommand OpenDataFolderCommand { get; }
 
+    /// <summary>データの保存先のフォルダ（画面に出す）。</summary>
+    public string DataFolderPath => Kado.Data.DataLocation.Directory;
+
+    /// <summary>
+    /// 従来の場所（<c>%LOCALAPPDATA%\Kado</c>）を使っている理由。exe のフォルダの <c>data</c> を使っているときは null
+    /// （画面には出さない）。
+    /// </summary>
+    public string? DataFolderNote => Kado.Data.DataLocation.FallbackNote;
+
+    /// <summary>PC を引っ越すときの案内。</summary>
+    public string MoveToNewPcGuide =>
+        "PC を引っ越すときは、Kado を終了してから、exe と data フォルダをまとめて新しい PC にコピーしてください。";
+
     /// <summary>リポジトリのページをブラウザで開く。</summary>
     public Infrastructure.RelayCommand OpenRepositoryCommand { get; }
 
@@ -756,7 +769,7 @@ public sealed class SettingsViewModel : ObservableObject
     {
         try
         {
-            var folder = Path.GetDirectoryName(Kado.Data.CalendarDatabase.DefaultPath)!;
+            var folder = Kado.Data.DataLocation.Directory;
 
             // 中身をアプリが持ってしまうより、使い慣れたエクスプローラーに任せる
             System.Diagnostics.Process.Start(

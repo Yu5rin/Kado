@@ -500,6 +500,26 @@
                     </StackPanel>
 
                     <!--
+                        データの保存先。既定は exe と同じフォルダの data（DataLocation）。
+                        exe のフォルダに書けないときだけ、従来の %LOCALAPPDATA%\Kado を使うので、
+                        その理由を DataFolderNote に出す（使っていなければ null で見えない）
+                    -->
+                    <StackPanel Style="{StaticResource FieldGroupStyle}">
+                        <TextBlock Text="データの保存先" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Text="{Binding DataFolderPath}" TextWrapping="Wrap"
+                                   Style="{StaticResource FieldNoteStyle}"
+                                   ToolTip="{Binding DataFolderPath}" />
+                        <TextBlock Text="{Binding DataFolderNote}" TextWrapping="Wrap"
+                                   Style="{StaticResource FieldNoteStyle}"
+                                   Visibility="{Binding DataFolderNote, Converter={StaticResource NullToVisibility}}" />
+                        <Button Content="フォルダを開く" HorizontalAlignment="Left"
+                                Style="{StaticResource GhostButtonStyle}" Margin="0,8,0,0"
+                                Command="{Binding OpenDataFolderCommand}" />
+                        <TextBlock Text="{Binding MoveToNewPcGuide}" TextWrapping="Wrap"
+                                   Style="{StaticResource FieldNoteStyle}" Margin="0,8,0,0" />
+                    </StackPanel>
+
+                    <!--
                         AutoBackupService（Kado.Data/Backup）が起動のたびに世代保存で
                         残しているバックアップの説明。手動保存しか見えていなかったので足した
                     -->
@@ -507,9 +527,8 @@
                         <TextBlock Text="自動バックアップ" Style="{StaticResource FieldLabelStyle}" />
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
                                    Text="起動のたびに、直近5回分のバックアップを自動で残しています。" />
-                        <Button Content="保存先のフォルダを開く" HorizontalAlignment="Left"
-                                Style="{StaticResource GhostButtonStyle}" Margin="0,8,0,0"
-                                Command="{Binding OpenDataFolderCommand}" />
+                        <TextBlock Style="{StaticResource FieldNoteStyle}"
+                                   Text="バックアップは、データの保存先の backups フォルダにあります。" />
                     </StackPanel>
 
                     <!--
@@ -589,7 +608,7 @@
                                 Command="{Binding CheckUpdateConnectionCommand}"
                                 ToolTip="更新に使う3か所へ実際に接続して、届くかどうかを確かめます" />
                         <TextBlock Style="{StaticResource FieldNoteStyle}"
-                                   Text="更新の一覧・リリース情報・配布ファイルの置き場へ実際に接続し、届くかを確かめます。最新版でも押せます。ファイルは保存しません。結果は、データの保存先の shell.log にも残ります。" />
+                                   Text="更新の一覧・リリース情報・配布ファイルの置き場へ実際に接続し、届くかを確かめます。最新版でも押せます。ファイルは保存しません。結果は、データの保存先の shell.log にも残ります（設定の「データ」で場所を確かめられます）。" />
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
                                    Foreground="{DynamicResource Ink2Brush}"
                                    Text="{Binding ConnectionCheckText}"

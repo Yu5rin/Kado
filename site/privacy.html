@@ -36,7 +36,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
 <body>
 <main>
   <h1>プライバシーポリシー</h1>
-  <p class="updated">Kado ／ 2026年10月10日</p>
+  <p class="updated">Kado ／ 2026年10月13日</p>
 
   <h2>要点</h2>
   <ul>
@@ -51,7 +51,9 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
   <table>
     <tr>
       <th>予定・タスク</th>
-      <td>端末内のデータベースに保存します。Google と同期している場合は、
+      <td>端末内のデータベースに保存します。保存先は、既定では Kado の実行ファイルと同じ場所にある
+          data フォルダーです（そこに書き込めないときは、従来の場所の
+          <code>%LOCALAPPDATA%\Kado</code> を使います）。Google と同期している場合は、
           利用者自身の Google カレンダーおよび Google ToDo リストとの間でのみやり取りします。
           同期している予定・タスクについては、差分の判定に使うため、Google から受け取った
           生のデータ（画面には出していない参加者のメールアドレス、会議の URL、説明欄の全文を
@@ -73,7 +75,9 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
     <tr>
       <th>認証情報</th>
       <td>Google の認可で受け取ったトークンを、OS の仕組み（Windows では DPAPI）で
-          保護して端末内に保存します。作者はこれを受け取りません。</td>
+          保護して端末内（上と同じ保存先）に保存します。この保護は、その PC のその Windows ユーザー
+          でしか解けないため、フォルダーを別の PC へコピーしても、トークンは読めません
+          （Google へ接続し直す必要があります）。作者はこれを受け取りません。</td>
     </tr>
   </table>
 
@@ -152,7 +156,9 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
   <ul>
     <li>アプリ内から連携を解除すると、保存しているトークンを削除し、
         Google 側の許可も取り消します</li>
-    <li>端末内のデータは、保存先のフォルダーを削除すれば消えます</li>
+    <li>端末内のデータは、保存先のフォルダー（既定では実行ファイルと同じ場所にある data フォルダー。
+        以前の版から更新した場合は、元の <code>%LOCALAPPDATA%\Kado</code> も残っているので、
+        あわせて）を削除すれば消えます</li>
     <li>Google アカウント側からは
         <a href="https://myaccount.google.com/permissions">アカウントにアクセスできるアプリ</a>
         でいつでもアクセス権を取り消せます</li>

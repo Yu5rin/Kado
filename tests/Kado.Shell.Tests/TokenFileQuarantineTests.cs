@@ -160,4 +160,27 @@ public class TokenFileQuarantineTests : IDisposable
 
         Assert.False(File.Exists(Live + TokenFileQuarantine.UnreadableSuffix));
     }
+
+    [Fact]
+    public void 別のPCから持ってきて読めないトークンは消さずに退避し二度目で伝える()
+    {
+        // DPAPI は PC とユーザーに結び付く。フォルダごと別の PC へコピーすると、復号できない
+        File.WriteAllBytes(Live, TokenBytes());
+        _canDecrypt = false;
+
+        var first = Create().Load();
+        Assert.Null(first.Tokens);
+        Assert.Equal(TokenLoadState.FirstFailure, first.State);
+        Assert.False(File.Exists(Live));
+        Assert.True(File.Exists(Live + TokenFileQuarantine.UnreadableSuffix));
+
+        // 次の起動でも読めなければ、ここで一度だけ伝える（Google への再接続を促す案内）。控えは捨てない
+        var second = Create().Load();
+        Assert.Null(second.Tokens);
+        Assert.Equal(TokenLoadState.Persisting, second.State);
+        Assert.True(File.Exists(Live + TokenFileQuarantine.AnnouncedSuffix));
+
+        // 以後は黙って未接続として扱う
+        Assert.Equal(TokenLoadState.PersistingAnnounced, Create().Load().State);
+    }
 }

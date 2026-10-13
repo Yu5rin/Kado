@@ -79,7 +79,7 @@ public static class WorkAreaGuard
 
     /// <summary>DB を介さない印の置き場所。データベースと同じフォルダ。</summary>
     private static string MarkerPath => Path.Combine(
-        Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "workarea.reserved");
+        DataLocation.Directory, "workarea.reserved");
 
     /// <summary>
     /// 全モニタのワークエリアをモニタ全体に戻す。

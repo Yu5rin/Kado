@@ -7,7 +7,7 @@ namespace Kado.Data;
 /// <summary>
 /// データベースへの接続を作る。
 /// <para>
-/// 保存先は <c>%LOCALAPPDATA%\Kado\data.db</c>（要件書 3.2）。
+/// 保存先は exe と同じフォルダの <c>data\data.db</c>（<see cref="DataLocation"/>。要件書 3.2 の <c>%LOCALAPPDATA%\Kado</c> から改めた）。
 /// </para>
 /// </summary>
 public sealed class CalendarDatabase
@@ -23,64 +23,24 @@ public sealed class CalendarDatabase
         _connectionString = connectionString;
     }
 
-    /// <summary>既定の保存先（<c>%LOCALAPPDATA%\Kado\data.db</c>）を開く。</summary>
+    /// <summary>既定の保存先（<see cref="DataLocation"/> が決めたフォルダの <c>data.db</c>）を開く。</summary>
     public static CalendarDatabase OpenDefault() => OpenFile(DefaultPath);
 
-    /// <summary>保存先のフォルダ名。</summary>
-    private const string FolderName = "Kado";
+    /// <summary>従来の保存先（<c>%LOCALAPPDATA%</c> の下）のフォルダ名。</summary>
+    internal const string FolderName = "Kado";
 
     /// <summary>
-    /// 改名する前（SlideinaCalendar）の保存先のフォルダ名。
+    /// 改名する前（SlideinaCalendar）の保存先のフォルダ名。<b>変えてはいけない。</b>
     /// <para>
     /// 予定・タスク・実働日・設定・バックアップ・Google のトークンは、すべて
     /// ここ1つのフォルダに入っている。名前だけ変えて置き去りにすると、更新した
-    /// とたんに中身が空になったように見える。
+    /// とたんに中身が空になったように見える。引っ越しの判断は <see cref="DataLocation"/>。
     /// </para>
     /// </summary>
-    private const string LegacyFolderName = "SlideinaCalendar";
+    internal const string LegacyFolderName = "SlideinaCalendar";
 
-    /// <summary>
-    /// 既定の保存先のフォルダ。
-    /// <para>
-    /// 初めて求められたときに1回だけ決める。<see cref="ResolveDataDirectory"/> が
-    /// 旧い名前からの引っ越しも兼ねているので、プロセスの途中で行き先が
-    /// 変わらないようにしてある。
-    /// </para>
-    /// </summary>
-    private static readonly Lazy<string> DataDirectory = new(() => ResolveDataDirectory(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)));
-
-    /// <summary>既定の保存先。</summary>
-    public static string DefaultPath => System.IO.Path.Combine(DataDirectory.Value, "data.db");
-
-    /// <summary>
-    /// 保存先のフォルダを決める。旧い名前のフォルダしか無ければ、新しい名前へ移す。
-    /// <para>
-    /// 同じドライブの中なので、移すといっても名前を付け替えるだけで中身は動かない。
-    /// <b>移せなかったときは旧い場所をそのまま使う。</b>アプリの名前が変わったという
-    /// 都合で、書いてきたものを見失わせるわけにはいかない。
-    /// </para>
-    /// </summary>
-    /// <param name="root">%LOCALAPPDATA% にあたるフォルダ。</param>
-    internal static string ResolveDataDirectory(string root)
-    {
-        var target = System.IO.Path.Combine(root, FolderName);
-        var legacy = System.IO.Path.Combine(root, LegacyFolderName);
-
-        // 新しい側がもう在るなら引っ越しは済んでいる。旧い側が無いなら
-        // 引っ越すものが無い（新しく入れた人）
-        if (Directory.Exists(target) || !Directory.Exists(legacy)) return target;
-
-        try
-        {
-            Directory.Move(legacy, target);
-            return target;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return legacy;
-        }
-    }
+    /// <summary>既定の保存先。決め方は <see cref="DataLocation"/>。</summary>
+    public static string DefaultPath => DataLocation.DatabasePath;
 
     /// <summary>ファイルを開く。親ディレクトリが無ければ作る。</summary>
     public static CalendarDatabase OpenFile(string path)

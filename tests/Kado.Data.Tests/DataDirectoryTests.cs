@@ -32,7 +32,7 @@ public sealed class DataDirectoryTests : IDisposable
     [Fact]
     public void 新しく入れた人はそのまま新しい名前のフォルダを使う()
     {
-        var directory = CalendarDatabase.ResolveDataDirectory(_root);
+        var directory = DataLocation.ResolveLocalAppData(_root);
 
         Assert.Equal(Path.Combine(_root, "Kado"), directory);
         // 決めるだけで作りはしない。作るのは実際に開くとき
@@ -47,7 +47,7 @@ public sealed class DataDirectoryTests : IDisposable
         File.WriteAllText(Path.Combine(legacy, "data.db"), "予定とタスク");
         File.WriteAllText(Path.Combine(legacy, "google-tokens.dat"), "トークン");
 
-        var directory = CalendarDatabase.ResolveDataDirectory(_root);
+        var directory = DataLocation.ResolveLocalAppData(_root);
 
         Assert.Equal(Path.Combine(_root, "Kado"), directory);
         Assert.Equal("予定とタスク", File.ReadAllText(Path.Combine(directory, "data.db")));
@@ -65,7 +65,7 @@ public sealed class DataDirectoryTests : IDisposable
         File.WriteAllText(Path.Combine(legacy, "data.db"), "旧");
         File.WriteAllText(Path.Combine(target, "data.db"), "新");
 
-        var directory = CalendarDatabase.ResolveDataDirectory(_root);
+        var directory = DataLocation.ResolveLocalAppData(_root);
 
         Assert.Equal(target, directory);
         Assert.Equal("旧", File.ReadAllText(Path.Combine(legacy, "data.db")));

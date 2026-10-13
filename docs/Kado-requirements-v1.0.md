@@ -114,7 +114,9 @@ UI上は週・日ビューの時間軸に置かれるが、データとしては
 
 ### 3.2 保存先
 
-`%LOCALAPPDATA%\Kado\data.db`（SQLite）。検索は FTS5 を使う。
+`<exe のフォルダ>\data\data.db`（SQLite）。検索は FTS5 を使う。
+（初版は `%LOCALAPPDATA%\Kado\data.db` だった。exe ごと PC を引っ越せるよう `data` へ改めた。
+exe のフォルダに書き込めないときは従来の場所を使う。決め方は `docs/README.md` の「データの保存先」）
 リフレッシュトークンは DPAPI（`ProtectedData.Protect`、CurrentUserスコープ）で暗号化して別ファイルに保存。
 
 ---

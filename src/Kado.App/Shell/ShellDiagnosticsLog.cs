@@ -48,7 +48,7 @@ internal static class ShellDiagnosticsLog
 
     /// <summary>データベースと同じ場所に置く（crash.log と同じ置き場所の考え方）。</summary>
     private static string LogPath => Path.Combine(
-        Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "shell.log");
+        DataLocation.Directory, "shell.log");
 
     /// <summary>1行、時刻付きで書き足す（行列に積むだけ）。失敗しても投げない。</summary>
     internal static void Write(string message)

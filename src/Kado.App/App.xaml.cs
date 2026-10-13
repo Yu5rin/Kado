@@ -129,7 +129,7 @@ public partial class App : Application
 
     /// <summary>異常終了の記録先。データベースと同じ場所に置く。</summary>
     private static string CrashLogPath => System.IO.Path.Combine(
-        System.IO.Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "crash.log");
+        DataLocation.Directory, "crash.log");
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -155,6 +155,14 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        // 保存先を決める。初回だけ、従来の場所（%LOCALAPPDATA%\Kado）からの引っ越しも行う。
+        // データベース・設定・トークン・ログを開く前に済ませる。単一起動を確保したあとにするのは、
+        // 2本が同時に引っ越して、同じ写し先を取り合わないようにするため。
+        // この時点ではまだ shell.log を開けなかったので、溜めておいた行をここで書く
+        var location = DataLocation.EnsureResolved();
+        foreach (var note in location.Notes) Shell.ShellDiagnosticsLog.Write(note);
+        Shell.ShellDiagnosticsLog.Write($"保存先: {location.Directory}");
 
         // 2本目の起動の合図は、できるだけ早く受け付ける。データベースを開く・案内を出す・窓を作る
         // あいだに2本目を起動されても、前に出てこないままにしない（窓がまだ無ければ何もしない）
@@ -294,7 +302,7 @@ public partial class App : Application
             // 秘密として扱えないので暗号化しない。守るべきはトークンのほう
             var googleClient = new Kado.Google.OAuth.GoogleClientSecretsStore(
                 Path.Combine(
-                    Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-client.json"));
+                    DataLocation.Directory, "google-client.json"));
 
             // トークンは DPAPI で守る。守るべきはこちら。クライアント設定のほうは
             // デスクトップアプリ型である以上どのみち手元に置かれ、秘密として扱えない
@@ -303,7 +311,7 @@ public partial class App : Application
             // 先に別スレッドで読み始める（DpapiTokenStore は読み込みを1本にして、復号できた
             // 控えを覚える。あとで画面のスレッドが呼んでも二重には復号しない）
             var tokenStore = new DpapiTokenStore(
-                Path.Combine(Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "google-tokens.dat"),
+                Path.Combine(DataLocation.Directory, "google-tokens.dat"),
                 Shell.ShellDiagnosticsLog.Write);
             _ = Task.Run(() => tokenStore.Load());
 
@@ -452,6 +460,13 @@ public partial class App : Application
             // 更新したあとの最初の起動なら、一度だけ知らせる（トレイのアイコンができたあとに回す）
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, AnnounceUpdatedIfAny);
 
+            // exe と data をまとめて別の場所へ移したとき、自動起動の登録は元の場所を指したまま。
+            // 自動起動が有効なときだけ、いまの場所に書き直す（無効なら何もしない）
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+            {
+                if (new StartupRegistration().RepairIfMoved() is { } line) Shell.ShellDiagnosticsLog.Write(line);
+            });
+
             // 保存されていたトークンが、退避して読み直してもなお復号できなかったときだけ、理由を一度伝える
             // （DpapiTokenStore.Load。1度目の失敗は一時的かもしれないので伝えない）。
             // 黙って「Google 未接続」に戻ると、Windows パスワードの強制リセットや
@@ -464,8 +479,10 @@ public partial class App : Application
                 Dispatcher.InvokeAsync(
                     () => Shell.FrontMessageBox.Show(
                         "保存されていた Google の接続情報を、何度か試しても読めませんでした。"
-                        + "Google に接続し直してください。\n\n"
-                        + "Windows のパスワードを変えた、または別の PC やプロファイルへ移したときに起こります。",
+                        + "別の PC から移した場合などは、Google にもう一度接続してください"
+                        + "（予定とタスクはそのまま残っています）。\n\n"
+                        + "接続情報はその PC のその Windows ユーザーだけが読める形で守っているので、"
+                        + "別の PC・別のユーザーへ移したり、Windows のパスワードを変えたりすると読めなくなります。",
                         Shell.FrontButtons.Ok, Shell.FrontIcon.Warning),
                     DispatcherPriority.ApplicationIdle);
             }

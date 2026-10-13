@@ -26,7 +26,7 @@ public static class AutoBackupService
 
     /// <summary>既定の書き出し先。</summary>
     public static string DefaultDirectory => Path.Combine(
-        Path.GetDirectoryName(CalendarDatabase.DefaultPath)!, "backups");
+        DataLocation.Directory, "backups");
 
     /// <summary>
     /// 1本書き出し、直近 <see cref="KeepCount"/> 本だけを残す。

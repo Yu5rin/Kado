@@ -71,7 +71,8 @@ internal sealed class AutoUpdater
 
             // 古い控えが別のファイルなら、もう要らない
             if (previous is not null &&
-                !string.Equals(previous.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(previous.FilePath, path, StringComparison.OrdinalIgnoreCase) &&
+                StagedUpdateCheck.IsInside(UpdateService.StagedDirectory, previous.FilePath))
             {
                 UpdateService.TryDelete(previous.FilePath);
             }
@@ -120,7 +121,12 @@ internal sealed class AutoUpdater
     {
         _log($"自動更新: {staged.Tag} の控えを捨てる。{reason}");
 
-        UpdateService.TryDelete(staged.FilePath);
+        // 置き場所の外のファイルは消さない。保存先を引っ越したあと、控えが従来の場所
+        // （%LOCALAPPDATA%\Kado\updates）を指していても、元の場所には触れない（設定の控えだけ捨てる）
+        if (StagedUpdateCheck.IsInside(UpdateService.StagedDirectory, staged.FilePath))
+        {
+            UpdateService.TryDelete(staged.FilePath);
+        }
 
         if (Staged is { } now && string.Equals(now.Tag, staged.Tag, StringComparison.OrdinalIgnoreCase))
         {

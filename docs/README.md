@@ -1081,6 +1081,72 @@ HTTP と相手役の偽物で試しているだけ。認可・スコープ・実
 繰り返しの例外回をこちらから作る道筋（画面で「この回だけ」を変える操作）はまだ無い。
 取り込みと表示だけができる。
 
+## データの保存先
+
+保存先は `Kado.Data.DataLocation` 1か所で決める。データベース・設定（データベースの中）・
+Google のトークンとクライアント設定・`shell.log`／`crash.log`・自動バックアップ・
+自動更新の入れ替え待ち（`updates`）・ワークエリアの印は、すべてここを通る。
+`Environment.SpecialFolder.LocalApplicationData` を直に使ってよいのは `DataLocation.cs` だけ
+（`DataLocationWiringTests` がソースを読んで見張る）。`%TEMP%\Kado\update`
+（手で更新するときの落とし先。起動のたびに消す）は一時置き場なので対象外。
+
+### 決め方
+
+既定は **exe のフォルダの `data`**。PC を引っ越すとき、exe と `data` をまとめてコピーすれば持っていける。
+exe のフォルダは `Environment.ProcessPath` から取る（単一ファイル発行では `Assembly.Location` が空になる。
+`dotnet Kado.dll` で動かしたときだけ `AppContext.BaseDirectory`）。
+
+判断は `DataLocation.Decide(書き込めるか, dataにあるか, 従来のKadoにあるか, 旧い名前にあるか)`
+という純粋な関数で、ファイルに触れない。
+
+| 書き込めるか | `data` にデータ | 従来の `Kado` に | `SlideinaCalendar` に | 結果 |
+|---|---|---|---|---|
+| いいえ | - | - | - | 従来の `%LOCALAPPDATA%\Kado` を使い続ける |
+| はい | ある | - | - | `data` をそのまま使う |
+| はい | 無い | ある | - | `Kado` から `data` へ写してから使う |
+| はい | 無い | 無い | ある | `SlideinaCalendar` から**直接** `data` へ写してから使う |
+| はい | 無い | 無い | 無い | 新しく入れた人。`data` を使う |
+
+「データがある」は `data.db` の有無。「書き込めるか」は、`data`（無ければその親）に小さなファイルを
+実際に作って消して確かめる（権限の表示は当てにならない）。
+
+### 引っ越しの流れ（`DataMigration.Copy`）
+
+**写して、確かめて、元は消さずに残す。** 起動の最初、単一起動を確保したあと（2本が同時に写さない）、
+データベース・設定・ログを開く前に `App.OnStartup` が `DataLocation.EnsureResolved()` を呼ぶ。
+この時点では shell.log をまだ開けないので、決めた経緯は `DataLocationResult.Notes` に溜めておき、
+そのあと shell.log へ書く。
+
+1. `data.migrating`（別名のフォルダ）へ写す。途中で終わっても `data` には現れない
+2. `data.db` は `SqliteConnection.BackupDatabase` で写す（-wal / -shm を取りこぼさない）
+3. 写したものを開き直し、`PRAGMA integrity_check` が `ok`、`user_version` と表・索引の数が元と同じか確かめる
+4. 設定・トークン・ログ・`backups` などはそのまま写す。`updates` は写さない
+5. 通ったら `data` の名前にする。元のフォルダには**何も消さず**、`移しました.txt`（いつ・どこへ）だけ置く
+
+失敗したら写しかけを片付け、その回は元の場所のまま起動する（`LocalFallbackReason.MigrationFailed`）。
+次の起動で、`data` に `data.db` が無いのでもう一度試す。
+
+旧い名前（`SlideinaCalendar`）の引っ越しも、書き込めるときは同じ手順で `data` へ写す
+（元は残す）。`LegacyFolderName` は変えない。書き込めずに従来の場所を使うときだけは、これまでどおり
+`SlideinaCalendar` を `Kado` に名前の付け替えで移す（`DataLocation.ResolveLocalAppData`）。
+
+### 書き込めないとき
+
+Program Files に置いた、読み取り専用の共有フォルダなど。従来の `%LOCALAPPDATA%\Kado` を使い続け、
+`shell.log` に理由を残す（`保存先: exe のフォルダに書き込めないため…`）。設定の「データの保存先」にも
+「exe のフォルダに書き込めないため、こちらを使っています」と出す（`DataLocation.FallbackNote`）。
+あとで書ける場所へ exe を置き直せば、次の起動で `data` へ写す。
+
+### 別の PC へ持っていったとき
+
+- Google のトークンは DPAPI（CurrentUser）で守っているので、別の PC・別のユーザーでは復号できない。
+  守りを弱めて持ち運べるようにはしない。`TokenFileQuarantine` が、1度目は消さずに退避し、
+  次の起動でも読めなければ一度だけ「Google にもう一度接続してください（予定とタスクはそのまま
+  残っています）」と案内する。以後は黙って未接続として扱う
+- Windows ログオン時の自動起動が有効なら、登録された exe の場所がいまの exe と違うとき、
+  起動時にいまの場所へ書き直す（`StartupRegistration.RepairIfMoved`。無効なら何もしない。
+  判断は `StartupPathCheck`）
+
 ## 更新のしかた
 
 `VoiceDock` と同じやり方にしてある。GitHub Releases の最新を見て、新しければ落として
@@ -1138,7 +1204,10 @@ HTTPS で、GitHub の配信先であることを確かめてから取りに行�
 1. **見つけた** 起動時の確認と常駐中の確認で新しい版が見つかったら、画面を止めずに落とす
    （`TryStageInBackgroundAsync`）。⚙の「更新を確認…」で押したときだけは、これまでどおり
    更新の窓を出す
-2. **落とした・照合した** 落とし先は、データの保存先の `updates\`（`%LOCALAPPDATA%\Kado\updates\`）。
+2. **落とした・照合した** 落とし先は、データの保存先の `updates\`（既定は `<exe>\data\updates\`。
+   書き込めないときは `%LOCALAPPDATA%\Kado\updates\`）。入れ替えるのは exe だけで、`data` には触れない
+   （`ExecutableSwapTests`）。引っ越し直後は、設定に写った控えが従来の場所を指しているが、
+   置き場所の外なので `StagedUpdateCheck` が捨てる（従来の場所のファイルは消さない）。
    手で更新するときの置き場所（`%TEMP%\Kado\update`。起動のたびに片付ける）とは別にした。
    入れ替え待ちを**次の起動まで残す**ため。`DownloadAsync` が SHA256 を照合し、合わなければ消して
    例外にする。通ったものだけ、版・ファイルの場所・SHA256・リリースのページ・変更点の本文を

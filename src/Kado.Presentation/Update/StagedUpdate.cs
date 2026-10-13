@@ -130,7 +130,8 @@ public static class StagedUpdateCheck
         _ => verdict.ToString(),
     };
 
-    private static bool IsInside(string directory, string path)
+    /// <summary><paramref name="path"/> が <paramref name="directory"/> の中にあるか。</summary>
+    public static bool IsInside(string directory, string path)
     {
         if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(path)) return false;
 

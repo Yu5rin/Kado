@@ -149,4 +149,25 @@ public class ExecutableSwapTests : IDisposable
         Assert.Contains(@"C:\k\Kado.exe.old", result.Message, StringComparison.Ordinal);
         Assert.Contains(@"C:\k\Kado.exe", result.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void 入れ替えはexeだけで隣のdataフォルダには触れない()
+    {
+        // exe と data を並べて置く形（保存先の既定）。更新で exe を差し替えても、データは動かさない
+        Prepare();
+        var data = Path.Combine(_folder, "data");
+        Directory.CreateDirectory(Path.Combine(data, "updates"));
+        File.WriteAllText(Path.Combine(data, "data.db"), "予定とタスク");
+        File.WriteAllText(Path.Combine(data, "google-tokens.dat"), "トークン");
+        File.WriteAllText(Path.Combine(data, "shell.log"), "ログ");
+
+        var result = ExecutableSwap.Run(Current, Downloaded, _ => { });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("予定とタスク", File.ReadAllText(Path.Combine(data, "data.db")));
+        Assert.Equal("トークン", File.ReadAllText(Path.Combine(data, "google-tokens.dat")));
+        Assert.Equal("ログ", File.ReadAllText(Path.Combine(data, "shell.log")));
+        Assert.True(Directory.Exists(Path.Combine(data, "updates")));
+        Assert.Equal(4, Directory.GetFileSystemEntries(data).Length);
+    }
 }

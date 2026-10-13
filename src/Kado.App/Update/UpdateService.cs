@@ -87,7 +87,7 @@ public sealed class UpdateService
     /// </para>
     /// </summary>
     internal static string StagedDirectory =>
-        Path.Combine(Path.GetDirectoryName(Kado.Data.CalendarDatabase.DefaultPath)!, "updates");
+        Path.Combine(Kado.Data.DataLocation.Directory, "updates");
 
     /// <summary>
     /// 新しい版があるか見る。
