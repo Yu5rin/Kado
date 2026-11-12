@@ -1320,6 +1320,9 @@ public sealed class ShellController : IDisposable
 
         var after = new WindowInteropHelper(_window).Handle;
 
+        // ボタンを出し直すと、アイコンが渡らずに既定の絵になることがある
+        if (show) TaskbarIcon.Refresh(_window);
+
         ShellDiagnosticsLog.Write(
             $"ShowInTaskbar mode={mode} -> {show} hwnd=0x{before.ToInt64():X}->0x{after.ToInt64():X}" +
             (before != after ? " ハンドルが作り直された" : string.Empty));
@@ -1549,6 +1552,9 @@ public sealed class ShellController : IDisposable
         finally
         {
             _relayouting = false;
+
+            // 倍率が変わると、WPF が作り直したタスクバーのアイコンが渡らないことがある
+            TaskbarIcon.Refresh(_window);
         }
     }
 

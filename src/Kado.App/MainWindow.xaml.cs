@@ -81,7 +81,11 @@ public partial class MainWindow : Window, ISlideRevealHost
         _clock.Tick += (_, _) => ViewModel?.UpdateNow(DateTime.Now);
 
         // 窓ができた時点で入れる。出してから動かすと、一度出てから飛ぶのが見える
-        SourceInitialized += (_, _) => RestorePlacement();
+        SourceInitialized += (_, _) =>
+        {
+            RestorePlacement();
+            Shell.TaskbarIcon.Refresh(this);
+        };
 
         // 幅を伝えるとツールバーの詰め方が決まり、レイアウトが走る。ドラッグの
         // あいだ毎回やると重いので、手が止まってから1回だけにする
