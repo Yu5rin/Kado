@@ -2703,6 +2703,8 @@ public sealed partial class MainViewModel : ObservableObject
         IsBusy = true;
         StatusMessage = $"{title}を実行しています…";
 
+        _workspace.Log?.Invoke($"{title}: 開始（{Path.GetFileName(path)}）");
+
         try
         {
             using var stream = File.OpenRead(path);
@@ -2721,6 +2723,7 @@ public sealed partial class MainViewModel : ObservableObject
             // 書き込み先のデータベースが書けない（ディスクいっぱい・ロック）ときは SqliteException
             var reason = FailureReason(e);
 
+            _workspace.Log?.Invoke($"{title}: 失敗。{e.GetType().Name}: {e.Message}（{Path.GetFileName(path)}）");
             StatusMessage = $"{title}に失敗しました（{reason}）";
             _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{reason}");
         }

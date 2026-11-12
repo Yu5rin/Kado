@@ -551,6 +551,17 @@ public sealed class CalendarWorkspace
     /// 消えない（要件書 4.1）。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// 実働日の取り込みなどの経緯を1行ずつ書く先（アプリでは shell.log）。
+    /// <para>
+    /// 取り込んだのに休業日が出ない、という報告をログから追えなかったため。
+    /// どの期間を読み、どのカレンダーへ何件書いたかを残す。
+    /// </para>
+    /// </summary>
+    public Action<string>? Log { get; set; }
+
+    private void Write(string message) => Log?.Invoke(message);
+
     public ImportResult ImportWorkingDays(Stream xlsx)
     {
         ArgumentNullException.ThrowIfNull(xlsx);
@@ -568,6 +579,11 @@ public sealed class CalendarWorkspace
         // ReloadWorkingDays → BackfillMilestones → WriteClosedDays → ReloadWorkingDays と、
         // この中だけで通知が4回起きる。画面はどのみち引き直すたびに全体を作り直すので、
         // 途中の状態を見せる意味は無い。まとめて最後に1回だけ出す
+        Write(
+            $"実働日の取り込み: 読んだ版={result.Version ?? "(なし)"} 稼働日={result.WorkingDays.Count} 件 " +
+            $"期間={result.WorkingDayRangeStart:yyyy-MM-dd}〜{result.WorkingDayRangeEnd:yyyy-MM-dd} " +
+            $"マイルストーン={result.Milestones.Count} 件 警告={result.Warnings.Count} 件");
+
         using (SuppressNotify())
         {
             WorkingDayStore.Apply(result);
@@ -583,6 +599,10 @@ public sealed class CalendarWorkspace
             // いるので、そのままだと端の月が「未登録」のままになる
             ReloadWorkingDays();
         }
+
+        Write(
+            $"実働日の取り込み: 終わり。保存済みの期間={WorkingDays.RangeStart:yyyy-MM-dd}〜{WorkingDays.RangeEnd:yyyy-MM-dd} " +
+            $"入れ先の候補={DescribeWorkingDayCalendars()}");
 
         return result;
     }
@@ -677,8 +697,16 @@ public sealed class CalendarWorkspace
             }
         }
 
-        Replace(closed, from, to, IsClosedDayId, calendar.Id, now);
-        Replace(open, from, to, IsOpenDayId, calendar.Id, now);
+        var closedCounts = Replace(closed, from, to, IsClosedDayId, calendar.Id, now);
+        var openCounts = Replace(open, from, to, IsOpenDayId, calendar.Id, now);
+
+        Write(
+            $"実働日の取り込み: 休業日と特別出勤を書き出した 入れ先={DescribeCalendar(calendar)} " +
+            $"期間={from:yyyy-MM-dd}〜{to:yyyy-MM-dd} " +
+            $"休業日={closed.Count} 件（書き込み {closedCounts.Written}・消去 {closedCounts.Removed}） " +
+            $"特別出勤={open.Count} 件（書き込み {openCounts.Written}・消去 {openCounts.Removed}） " +
+            $"よそから来た印と重なって作らなかった日={already.Count} " +
+            $"表示されない印={HiddenMarks(from, to, calendar.Id)}");
 
         NotifyChanged();
     }
@@ -748,8 +776,45 @@ public sealed class CalendarWorkspace
             })
             .ToArray();
 
-        Replace(wanted, from, to, IsMilestoneId, calendar.Id, now);
+        var counts = Replace(wanted, from, to, IsMilestoneId, calendar.Id, now);
+        if (counts.Written > 0 || counts.Removed > 0)
+        {
+            Write(
+                $"実働日のマイルストーンを書き出した 入れ先={DescribeCalendar(calendar)} " +
+                $"期間={from:yyyy-MM-dd}〜{to:yyyy-MM-dd} {wanted.Length} 件（書き込み {counts.Written}・消去 {counts.Removed}）");
+        }
+
         NotifyChanged();
+    }
+
+    /// <summary>ログ用に、カレンダーの名前・置き場所・表示の有無を1つの文字列にする。</summary>
+    private static string DescribeCalendar(CalendarSource value) =>
+        $"「{value.DisplayName}」({(IsLocal(value) ? "この PC だけ" : "Google")}" +
+        $"{(value.IsVisible ? string.Empty : "・左パネルで非表示")}" +
+        $"{(value.IsDetached ? "・Google から切り離し済み" : string.Empty)})";
+
+    /// <summary>実働日の入れ先になりうるカレンダー（「Kado」と旧い名前）を並べる。2つ以上あると割れている。</summary>
+    private string DescribeWorkingDayCalendars()
+    {
+        var all = WorkingDayCalendars().Concat(LegacyWorkingDayCalendars()).Distinct().ToArray();
+        return all.Length == 0 ? "(なし)" : string.Join(" ", all.Select(DescribeCalendar));
+    }
+
+    /// <summary>
+    /// 書き出した印のうち、画面に出ない状態のものの数。取り消し（cancelled）や
+    /// Google に見当たらない印は、書き出しても月表示に出ない。
+    /// </summary>
+    private string HiddenMarks(DateOnly from, DateOnly to, string calendarId)
+    {
+        var marks = Events.InRange(from, to)
+            .Where(e => IsClosedDayId(e.Id) || IsOpenDayId(e.Id))
+            .ToArray();
+
+        var cancelled = marks.Count(e => string.Equals(e.Status, "cancelled", StringComparison.OrdinalIgnoreCase));
+        var missing = marks.Count(e => e.GoogleMissing);
+        var elsewhere = marks.Count(e => !string.Equals(e.CalendarId, calendarId, StringComparison.Ordinal));
+
+        return $"取り消し {cancelled}・Google に無い {missing}・別のカレンダー {elsewhere}";
     }
 
     /// <summary>
@@ -764,7 +829,7 @@ public sealed class CalendarWorkspace
     /// ありうるので、期間内を丸ごと消してはいけない。
     /// </para>
     /// </summary>
-    private void Replace(
+    private (int Written, int Removed) Replace(
         IReadOnlyList<CalendarEvent> wanted, DateOnly from, DateOnly to,
         Func<string?, bool> mine, string calendarId, DateTimeOffset now)
     {
@@ -796,7 +861,7 @@ public sealed class CalendarWorkspace
                 : x.Wanted)
             .ToArray();
 
-        if (stale.Length == 0 && toUpsert.Length == 0) return;
+        if (stale.Length == 0 && toUpsert.Length == 0) return (0, 0);
 
         // 消す分・入れ替える分をまとめて1つのトランザクションで書く。
         // 1件ずつ確定していたころは、取り込みのたびに件数ぶんの書き込みが起きていた
@@ -818,6 +883,8 @@ public sealed class CalendarWorkspace
         foreach (var value in toUpsert) Events.Upsert(value, transaction);
 
         transaction.Commit();
+
+        return (toUpsert.Length, stale.Length);
     }
 
     /// <summary>

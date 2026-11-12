@@ -255,6 +255,7 @@ public partial class App : Application
         _ = AutoBackupService.RunInBackgroundAsync();
 
         var workspace = StartupTrace.Measure("CalendarWorkspace(画面用)", () => new CalendarWorkspace(_connection));
+        workspace.Log = Shell.ShellDiagnosticsLog.Write;
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         // 設定を読み、選ばれている配色に切り替える。自動のままなら当て直しても変わらない

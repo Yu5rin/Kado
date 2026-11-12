@@ -670,3 +670,28 @@ public class WorkingDayCalendarImportTests
         Assert.False(second.WorkingDays.IsWorkingDay(new DateOnly(2026, 9, 30)));
     }
 }
+
+/// <summary>取り込みの経緯が記録に残る（取り込んだのに休業日が出ない、という報告をログで追えなかったため）。</summary>
+public class WorkingDayImportLogTests
+{
+    [Fact]
+    public void 取り込むと読んだ期間と書き出した先と件数が記録に残る()
+    {
+        using var test = TestWorkspace.Create(withWorkingDays: false);
+        var lines = new List<string>();
+        test.Workspace.Log = lines.Add;
+
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && directory.GetFiles("実働日サンプル.xlsx", SearchOption.AllDirectories).Length == 0)
+        {
+            directory = directory.Parent;
+        }
+
+        var path = directory!.GetFiles("実働日サンプル.xlsx", SearchOption.AllDirectories)[0].FullName;
+        using (var file = File.OpenRead(path)) test.Workspace.ImportWorkingDays(file);
+
+        Assert.Contains(lines, l => l.StartsWith("実働日の取り込み: 読んだ版=", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.Contains("休業日と特別出勤を書き出した 入れ先=「Kado」", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.StartsWith("実働日の取り込み: 終わり。", StringComparison.Ordinal));
+    }
+}
