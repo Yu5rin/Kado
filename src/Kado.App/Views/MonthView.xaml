@@ -272,11 +272,22 @@
                                       ItemTemplate="{StaticResource MilestoneTagTemplate}" />
                     </Grid>
 
-                    <!-- 祝日名。休みの理由が読めると予定を立てやすい -->
-                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding HolidayName}" LineHeight="13"
-                               Foreground="{DynamicResource SundayBrush}"
+                    <!-- 祝日名・休業日・特別出勤。休みの理由が読めると予定を立てやすい。
+                         休業日と特別出勤は、色だけだと取り込んでも何も変わらないように見えたので文字でも出す -->
+                    <TextBlock Text="{Binding Note.Text}" LineHeight="13"
                                TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
+                               Visibility="{Binding Note.Text, Converter={StaticResource NullToVisibility}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource MicroTextStyle}">
+                                <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Note.IsOpenDay}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource OpenDayTextBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <ItemsControl ItemsSource="{Binding Bands}"
                                   ItemTemplate="{StaticResource EventBandSlotTemplate}" />

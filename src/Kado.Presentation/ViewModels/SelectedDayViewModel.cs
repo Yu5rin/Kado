@@ -246,6 +246,9 @@ public sealed class SelectedDayViewModel : ObservableObject
     /// <summary>この日の祝日名。祝日でなければ null。予定ではなく添え書きとして出す。</summary>
     public string? HolidayName => _workspace.Holidays.NameOf(_date);
 
+    /// <summary>日付に添える一言（祝日名・休業日・特別出勤）。</summary>
+    public DayNote Note => DayNote.Of(_date, HolidayName, _workspace.WorkingDays);
+
     /// <summary>非稼働日か。データ範囲外は false（判断できないため）。</summary>
     public bool IsNonWorkingDay =>
         _workspace.WorkingDays.HasDataFor(_date) && !_workspace.WorkingDays.IsWorkingDay(_date);
@@ -440,7 +443,7 @@ public sealed class SelectedDayViewModel : ObservableObject
             .ToArray();
 
         Raise(nameof(Title), nameof(WorkingDayLabel), nameof(IsNonWorkingDay),
-              nameof(Milestones), nameof(HolidayName), nameof(DoneTaskCount), nameof(RemainingTaskCount),
+              nameof(Milestones), nameof(HolidayName), nameof(Note), nameof(DoneTaskCount), nameof(RemainingTaskCount),
               nameof(EventCountText), nameof(TaskCountText), nameof(RemainingInMonthText),
               nameof(HasNoEvents), nameof(HasNoTasks));
     }

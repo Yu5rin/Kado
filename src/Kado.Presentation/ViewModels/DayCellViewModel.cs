@@ -106,6 +106,7 @@ public sealed class DayCellViewModel : ObservableObject
 
         HasWorkingDayData = workingDays.HasDataFor(date);
         IsWorkingDay = workingDays.IsWorkingDay(date);
+        Note = DayNote.Of(date, holidayName, workingDays);
         // 日付の行に出すものは呼び出し側が組み立てる（左パネルのチェックを効かせるため）。
         // 渡されなければ実働日データから直に引く
         Milestones = milestones ?? [];
@@ -175,6 +176,9 @@ public sealed class DayCellViewModel : ObservableObject
 
     /// <summary>土曜か。</summary>
     public bool IsSaturday => Date.DayOfWeek == DayOfWeek.Saturday;
+
+    /// <summary>日付に添える一言（祝日名・休業日・特別出勤）。</summary>
+    public DayNote Note { get; }
 
     /// <summary>この日のマイルストーン。</summary>
     public IReadOnlyList<MilestoneViewModel> Milestones { get; }

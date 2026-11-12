@@ -61,8 +61,9 @@ public static class MilestoneRow
         {
             if (!decide.IncludesMilestone(scheduled.Source)) continue;
 
-            // 「休業日」「特別出勤」は文字として出さない。マスの色で示す。
-            // Google カレンダー側では今までどおり文字で見える
+            // 「休業日」「特別出勤」はここ（マイルストーンの並び）には出さない。マスの色と、
+            // 祝日名と同じ欄の一言（DayNote）で示す。予定から拾うと、Google から来た印と
+            // こちらが書いた印が二重に並ぶうえ、取り込み前の古い印まで出てしまう
             if (IsDayMark(scheduled.Source.Title)) continue;
 
             // 実働日 Excel と Google の Kado に同じものが入っていることがある。

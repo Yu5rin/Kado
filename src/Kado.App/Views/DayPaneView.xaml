@@ -276,11 +276,21 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
-                        <!-- 祝日名。予定ではなく日付の添え書きとして出す -->
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding HolidayName}" Margin="0,0,8,0"
-                                   Foreground="{DynamicResource SundayBrush}"
-                                   Visibility="{Binding HolidayName,
-                                               Converter={StaticResource NullToVisibility}}" />
+                        <!-- 祝日名・休業日・特別出勤。予定ではなく日付の添え書きとして出す -->
+                        <TextBlock Text="{Binding Note.Text}" Margin="0,0,8,0"
+                                   Visibility="{Binding Note.Text,
+                                               Converter={StaticResource NullToVisibility}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+                                    <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Note.IsOpenDay}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource OpenDayTextBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
 
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding WorkingDayLabel}"
                                    Foreground="{DynamicResource AccentBrush}"
