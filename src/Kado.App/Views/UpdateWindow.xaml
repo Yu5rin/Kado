@@ -9,47 +9,55 @@
         Title="新しい版があります" Width="460" SizeToContent="Height"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        Background="{DynamicResource BackgroundBrush}"
+        Background="{DynamicResource PanelBrush}"
         Foreground="{DynamicResource InkBrush}">
 
-    <StackPanel Margin="18">
-        <!-- この窓には別立ての見出し帯が無いので、本文中でいちばんの見出し役を担う。
-             SubheadingTextStyle（他ダイアログの見出しと同格）を当てる -->
-        <TextBlock x:Name="VersionText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold" Margin="0,0,0,10"
-                   TextWrapping="Wrap" />
-
-        <Border CornerRadius="5" Padding="10" MaxHeight="220"
-                Background="{DynamicResource SunkenBrush}"
-                BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="NotesText" TextWrapping="Wrap"
-                           Foreground="{DynamicResource Ink2Brush}" />
-            </ScrollViewer>
+    <!-- ほかのダイアログと同じ3段の骨組み（見出しの帯／中身／ボタンの帯） -->
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="16,13,16,11"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <TextBlock x:Name="VersionText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
         </Border>
 
-        <!-- 落としている間だけ出す。70MB あるので、止まって見えないようにする -->
-        <ProgressBar x:Name="Progress" Height="4" Margin="0,12,0,0"
-                     Visibility="Collapsed" Minimum="0" Maximum="1" />
+        <Border DockPanel.Dock="Bottom" Padding="16,11"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <DockPanel>
+                <Button x:Name="UpdateButton" DockPanel.Dock="Right" Content="更新する"
+                        Style="{StaticResource PrimaryButtonStyle}" MinWidth="96"
+                        Click="Update_Click" />
 
-        <TextBlock x:Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Visibility="Collapsed"
-                   Foreground="{DynamicResource Ink3Brush}" />
+                <Button x:Name="LaterButton" DockPanel.Dock="Right" Content="あとで"
+                        Style="{StaticResource GhostButtonStyle}" MinWidth="72" Margin="0,0,8,0"
+                        Click="Later_Click" />
 
-        <DockPanel Margin="0,16,0,0">
-            <Button x:Name="UpdateButton" DockPanel.Dock="Right" Content="更新する"
-                    Style="{StaticResource PrimaryButtonStyle}" MinWidth="96"
-                    Click="Update_Click" />
+                <Button Content="リリースのページを開く" HorizontalAlignment="Left"
+                        Style="{StaticResource GhostButtonStyle}"
+                        Click="OpenPage_Click" />
+            </DockPanel>
+        </Border>
 
-            <Button x:Name="LaterButton" DockPanel.Dock="Right" Content="あとで"
-                    Style="{StaticResource GhostButtonStyle}" MinWidth="72" Margin="0,0,8,0"
-                    Click="Later_Click" />
+        <StackPanel Margin="16,14">
+            <!-- 本文はリリース本文を文字のまま出す（Markdown としては解釈しない） -->
+            <Border CornerRadius="5" Padding="10" MaxHeight="220"
+                    Background="{DynamicResource SunkenBrush}"
+                    BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="NotesText" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Ink2Brush}" />
+                </ScrollViewer>
+            </Border>
 
-            <Button Content="リリースのページを開く" HorizontalAlignment="Left"
-                    Style="{StaticResource GhostButtonStyle}"
-                    Click="OpenPage_Click" />
-        </DockPanel>
-    </StackPanel>
+            <!-- 落としている間だけ出す。70MB あるので、止まって見えないようにする -->
+            <ProgressBar x:Name="Progress" Height="4" Margin="0,12,0,0"
+                         Visibility="Collapsed" Minimum="0" Maximum="1" />
+
+            <TextBlock x:Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Visibility="Collapsed"
+                       Foreground="{DynamicResource Ink3Brush}" />
+        </StackPanel>
+    </DockPanel>
 </Window>

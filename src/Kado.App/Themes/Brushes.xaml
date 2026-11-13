@@ -9,6 +9,8 @@
     <SolidColorBrush x:Key="PanelBrush" Color="{DynamicResource PanelColor}" />
     <SolidColorBrush x:Key="LineBrush" Color="{DynamicResource LineColor}" />
     <SolidColorBrush x:Key="LineStrongBrush" Color="{DynamicResource LineStrongColor}" />
+    <!-- 入力欄・チェックボックスの枠（3:1 以上）。区切り線は LineStrongBrush のまま -->
+    <SolidColorBrush x:Key="ControlBorderBrush" Color="{DynamicResource ControlBorderColor}" />
     <SolidColorBrush x:Key="InkBrush" Color="{DynamicResource InkColor}" />
     <SolidColorBrush x:Key="Ink2Brush" Color="{DynamicResource Ink2Color}" />
     <SolidColorBrush x:Key="Ink3Brush" Color="{DynamicResource Ink3Color}" />

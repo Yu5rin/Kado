@@ -9,37 +9,47 @@
         Title="更新しました" Width="460" SizeToContent="Height"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterScreen"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        Background="{DynamicResource BackgroundBrush}"
+        Background="{DynamicResource PanelBrush}"
         Foreground="{DynamicResource InkBrush}">
 
-    <StackPanel Margin="18">
-        <TextBlock x:Name="TitleText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
-                   Margin="0,0,0,10" TextWrapping="Wrap" />
-
-        <Border CornerRadius="5" Padding="10" MaxHeight="260"
-                Background="{DynamicResource SunkenBrush}"
-                BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="NotesText" TextWrapping="Wrap"
-                           Foreground="{DynamicResource Ink2Brush}" />
-            </ScrollViewer>
+    <!-- ほかのダイアログと同じ3段の骨組み（見出しの帯／中身／ボタンの帯） -->
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="16,13,16,11"
+                BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+            <TextBlock x:Name="TitleText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
         </Border>
 
-        <TextBlock x:Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Visibility="Collapsed"
-                   Foreground="{DynamicResource Ink3Brush}" />
+        <Border DockPanel.Dock="Bottom" Padding="16,11"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="閉じる"
+                        Style="{StaticResource PrimaryButtonStyle}" MinWidth="96"
+                        IsDefault="True" IsCancel="True" Click="Close_Click" />
 
-        <DockPanel Margin="0,16,0,0">
-            <Button DockPanel.Dock="Right" Content="閉じる"
-                    Style="{StaticResource PrimaryButtonStyle}" MinWidth="96"
-                    IsDefault="True" IsCancel="True" Click="Close_Click" />
+                <Button x:Name="OpenPageButton" Content="リリースのページを開く" HorizontalAlignment="Left"
+                        Style="{StaticResource GhostButtonStyle}"
+                        Click="OpenPage_Click" />
+            </DockPanel>
+        </Border>
 
-            <Button x:Name="OpenPageButton" Content="リリースのページを開く" HorizontalAlignment="Left"
-                    Style="{StaticResource GhostButtonStyle}"
-                    Click="OpenPage_Click" />
-        </DockPanel>
-    </StackPanel>
+        <StackPanel Margin="16,14">
+            <!-- 本文はリリース本文を文字のまま出す（Markdown としては解釈しない） -->
+            <Border CornerRadius="5" Padding="10" MaxHeight="260"
+                    Background="{DynamicResource SunkenBrush}"
+                    BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="NotesText" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Ink2Brush}" />
+                </ScrollViewer>
+            </Border>
+
+            <TextBlock x:Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Visibility="Collapsed"
+                       Foreground="{DynamicResource Ink3Brush}" />
+        </StackPanel>
+    </DockPanel>
 </Window>

@@ -46,7 +46,7 @@
                     ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnMilestoneClicked"
                     Cursor="Hand">
-                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
+                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
         </DataTemplate>
@@ -77,13 +77,13 @@
                             Command="{Binding DataContext.DeleteEventCommand,
                                       RelativeSource={RelativeSource AncestorType={x:Type views:DayPaneView}}}"
                             CommandParameter="{Binding}">
-                        <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
+                        <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="14" Height="14"
                               StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold" LineHeight="18"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource InkBrush}" />
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" Margin="0,1,0,0"
@@ -130,7 +130,8 @@
                         行のそれ以外の所は、1回押しは何もせず、2回押しで編集が開く（OnTaskClicked）。
                         ToggleButton は押下を自分で受けて止めるので、行の受け手とは二重に効かない
                     -->
-                    <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
+                    <!-- 押せる範囲 24x24 のうち、はみ出す余白ぶんを Margin で引いて、行の高さを変えない -->
+                    <CheckBox DockPanel.Dock="Left" Margin="-4,-3,5,-3"
                               Style="{StaticResource TaskCheckBoxStyle}"
                               IsChecked="{Binding IsDone, Mode=OneWay}" Focusable="False"
                               Command="{Binding DataContext.ToggleTaskDoneCommand,
@@ -142,13 +143,13 @@
                             Command="{Binding DataContext.DeleteTaskCommand,
                                       RelativeSource={RelativeSource AncestorType={x:Type views:DayPaneView}}}"
                             CommandParameter="{Binding}">
-                        <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="12" Height="12"
+                        <Path Data="{StaticResource IconTrash}" Stretch="Uniform" Width="14" Height="14"
                               StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" FontWeight="SemiBold" LineHeight="18" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="TaskTitle" FontWeight="SemiBold" TextWrapping="Wrap"
                                    Foreground="{DynamicResource InkBrush}">
                             <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
                         </TextBlock>
@@ -187,7 +188,8 @@
 
                 <!-- 遅れて完了したものが期限日に残した跡は、行ごと薄く出す。片付けたのはこの日ではない -->
                 <DataTrigger Binding="{Binding IsFaint}" Value="True">
-                    <Setter TargetName="Row" Property="Opacity" Value="0.55" />
+                    <!-- 0.55 だと文字が 3:1 を割るため 0.75 に上げる -->
+                    <Setter TargetName="Row" Property="Opacity" Value="0.75" />
                 </DataTrigger>
 
                 <!-- 済みは取り消し線で沈める -->
@@ -358,7 +360,7 @@
                     <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding EventCountText}"
                                Foreground="{DynamicResource Ink3Brush}"
                                Typography.NumeralAlignment="Tabular" />
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="予定" Foreground="{DynamicResource Ink3Brush}" />
+                    <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="予定" />
                 </DockPanel>
 
                 <!-- 「＋ 予定を追加」（項目1）。作られる場所（この一覧）の真上に置く -->
@@ -386,7 +388,7 @@
                     <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding TaskCountText}"
                                Foreground="{DynamicResource Ink3Brush}"
                                Typography.NumeralAlignment="Tabular" />
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスク" Foreground="{DynamicResource Ink3Brush}" />
+                    <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="タスク" />
                 </DockPanel>
 
                 <!-- 「✓＋ タスクを追加」（項目1）。予定と同じ理由・同じ形 -->
@@ -424,7 +426,7 @@
                         <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Right" Text="{Binding NoDueTaskCount}"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Typography.NumeralAlignment="Tabular" />
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="期限なしのタスク" Foreground="{DynamicResource Ink3Brush}" />
+                        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="期限なしのタスク" />
                     </DockPanel>
 
                     <ItemsControl ItemsSource="{Binding NoDueTasks}" ItemTemplate="{StaticResource TaskRowTemplate}" />

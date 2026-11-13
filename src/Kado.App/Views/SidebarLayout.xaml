@@ -58,7 +58,7 @@
                             Command="{Binding OpenWorkingDayCalculatorCommand}"
                             ToolTip="実働日計算を開く（Ctrl＋K）">
                         <Path Data="{StaticResource IconCalc}" Stretch="Uniform"
-                              Width="12" Height="12"
+                              Width="14" Height="14"
                               Stroke="{Binding Foreground,
                                        RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5"
@@ -69,7 +69,7 @@
                     <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="前の月"
                             Command="{Binding PaneMonthPreviousCommand}">
                         <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
-                              Width="12" Height="12"
+                              Width="14" Height="14"
                               Stroke="{Binding Foreground,
                                        RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5"
@@ -78,7 +78,7 @@
                     <Button Style="{StaticResource SmallIconButtonStyle}" ToolTip="次の月"
                             Command="{Binding PaneMonthNextCommand}">
                         <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
-                              Width="12" Height="12"
+                              Width="14" Height="14"
                               Stroke="{Binding Foreground,
                                        RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5"
@@ -104,7 +104,7 @@
                     <TextBlock Style="{StaticResource BodyTextStyle}" FontSize="14" FontWeight="SemiBold"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}">
-                        <Run Text="{Binding PaneTitleYear, Mode=OneWay}" FontSize="11" FontWeight="Medium"
+                        <Run Text="{Binding PaneTitleYear, Mode=OneWay}" FontSize="12" FontWeight="Normal"
                              Foreground="{DynamicResource Ink3Brush}" /><Run Text=" " /><Run
                              Text="{Binding PaneTitleMonth, Mode=OneWay}" />
                     </TextBlock>

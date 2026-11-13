@@ -11,6 +11,8 @@
 
     <Color x:Key="LineColor">#2C313B</Color>
     <Color x:Key="LineStrongColor">#3A4150</Color>
+    <!-- 入力欄・チェックボックスの枠。Panel（#20242C）上 3:1 以上 -->
+    <Color x:Key="ControlBorderColor">#626D87</Color>
 
     <!--
         Ink3 は Panel 上で 5.02:1。以前の #727A89 は 3.60:1 で、付いている
@@ -18,7 +20,8 @@
     -->
     <Color x:Key="InkColor">#E6E9EF</Color>
     <Color x:Key="Ink2Color">#A8B0BE</Color>
-    <Color x:Key="Ink3Color">#8A93A3</Color>
+    <!-- 休業日の面の上でも 4.5:1 を保つため #8A93A3 から #939CAA へ明るくした -->
+    <Color x:Key="Ink3Color">#939CAA</Color>
 
     <Color x:Key="AccentColor">#7AA5DF</Color>
     <Color x:Key="AccentSoftColor">#233247</Color>
@@ -30,8 +33,8 @@
     -->
     <Color x:Key="OnAccentColor">#0F1720</Color>
 
-    <!-- DoneColor（完了したタスクの面）に重ねるチェック印の色。白で約5.9:1 出るので据え置き -->
-    <Color x:Key="OnDoneColor">#FFFFFF</Color>
+    <!-- DoneColor（完了したタスクの面）に重ねるチェック印の色。Done を #939CAA に上げたため、白では 2.8:1 に落ちる。濃色 #0F1720 なら 6:1 以上 -->
+    <Color x:Key="OnDoneColor">#0F1720</Color>
 
     <Color x:Key="SundayColor">#E0827C</Color>
     <Color x:Key="SaturdayColor">#7AA5DF</Color>
@@ -54,7 +57,7 @@
     <Color x:Key="CategoryAmberColor">#D59A55</Color>
 
     <!-- 完了したタスクの文字色。取り消し線が「済み」を担うため、Ink3 と同値でよい -->
-    <Color x:Key="DoneColor">#8A93A3</Color>
+    <Color x:Key="DoneColor">#939CAA</Color>
 
     <Color x:Key="MilestoneSpecFaceColor">#4A3A14</Color>
     <Color x:Key="MilestoneSpecTextColor">#E8CD7E</Color>

@@ -25,9 +25,9 @@
         5段階に絞り、それぞれ何に使うものかをコメントで示す。
 
         直書きサイズとの対応（近い段階に丸める。カッコ内は実際の出現箇所の例）:
-          9, 9.5, 10           → MicroTextStyle   （祝日名・終日ラベル・実働日の通し番号など最小の添え書き）
-          10.5, 11, 11.5       → CaptionTextStyle （曜日・補助ラベル・ツールチップ本文相当）
-          12, 12.5, 13         → BodyTextStyle    （通常の本文・入力欄・一覧の行。強調は SemiBold で足りるため
+          9, 9.5, 10, 11       → MicroTextStyle   （祝日名・終日ラベル・実働日の通し番号など最小の添え書き）
+          10.5, 11.5, 12       → CaptionTextStyle （曜日・補助ラベル・ツールチップ本文相当）
+          12.5, 13             → BodyTextStyle    （通常の本文・入力欄・一覧の行。強調は SemiBold で足りるため
                                                      旧 EmphasisTextStyle（13, 14）はここへ統合した）
           14, 15, 16, 17       → SubheadingTextStyle（ダイアログ見出し・ビュー見出し・日付ヘッダの数字などの準見出し）
           18, 19               → HeadingTextStyle （月の見出しなど画面の主見出し）
@@ -36,34 +36,50 @@
     <!-- 本文。通常のテキスト・入力欄・一覧の行に使う基準サイズ -->
     <Style x:Key="BodyTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="18" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     <!-- 補助ラベル・キャプション。曜日やツールチップ本文など、本文より一段静かに扱う文字 -->
     <Style x:Key="CaptionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="16" />
         <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+    </Style>
+
+    <!--
+        節の見出し（右パネルの「予定」「タスク」「期限なしのタスク」、左パネルの「カレンダー」「タスクリスト」）。
+        Caption を基に、補助色（Ink3）より濃い Ink2 の SemiBold にして、一覧の中身と見分ける。
+        Caption の後ろに置く（StaticResource の BasedOn は定義より前から引けない）
+    -->
+    <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <!-- 最小の添え書き。祝日名・終日レーンのラベル・実働日の通し番号など、いちばん小さく静かな表記 -->
     <Style x:Key="MicroTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
-        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="LineHeight" Value="15" />
     </Style>
 
     <!--
         準見出し。週・日ビューの日付の数字、ダイアログの見出し、一覧・年・日ビューの
         見出しなど、本文より大きいが画面の主見出しほどではないもの。
-        以前は16pxだったが15pxへ下げ、ダイアログ見出し（旧15px直値）もここに乗るようにした
+        Segoe UI／Yu Gothic UI の小さい文字が読みづらかったため、全体を1段上げた
+        （Micro 10→11・Caption 11→12・Body 12.5→13・Subheading 15→16・Heading 19→20）。
+        行の高さ（LineHeight）はスタイルに持たせる：Micro 15・Caption 16・Body 18・Subheading 22
     -->
     <Style x:Key="SubheadingTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="LineHeight" Value="22" />
     </Style>
 
     <!-- 見出し。ツールバーの月の見出しなど、画面でいちばん大きく扱う文字 -->
     <Style x:Key="HeadingTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
-        <Setter Property="FontSize" Value="19" />
+        <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 

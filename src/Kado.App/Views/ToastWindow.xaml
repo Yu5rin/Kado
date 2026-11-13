@@ -17,39 +17,46 @@
 
     <!--
         影と文字を同じ Border に載せると文字が滲む（docs/README.md・項目7と同じ落とし穴）。
-        後ろに影だけを落とす Border、前に中身を載せる Effect 無しの Border を重ねる
-    -->
-    <Grid Margin="12">
-        <Border CornerRadius="10"
-                Background="{DynamicResource PanelBrush}">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="20" ShadowDepth="3" Opacity="0.45" Color="#000000" />
-            </Border.Effect>
-        </Border>
+        後ろに影だけを落とす Border、前に中身を載せる Effect 無しの Border を重ねる。
+        影は Themes/Controls.xaml の PopupShadowEffect を共有する（Blur 16 / Depth 2 / Opacity 0.30）。
+        影の広がりが切れないよう、外側の余白は 16
 
-        <Border CornerRadius="10" Padding="20,16"
+        枠は LineStrong の 1px、左に Accent の縦線 4px（以前は Accent の 2px 枠）。角丸は 8。
+        縦線は枠の内側に収めるため、角丸は枠の内側の半径（8 - 1 = 7）に合わせる
+    -->
+    <Grid Margin="16">
+        <Border CornerRadius="8"
                 Background="{DynamicResource PanelBrush}"
-                BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"
+                Effect="{StaticResource PopupShadowEffect}" />
+
+        <Border CornerRadius="8"
+                Background="{DynamicResource PanelBrush}"
+                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}"
                 Cursor="Hand" MouseLeftButtonDown="OnClicked">
             <DockPanel>
-                <!-- 閉じる。読み終わるのを待たずに消せるように -->
-                <Button DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0"
-                        Style="{DynamicResource SmallIconButtonStyle}"
-                        ToolTip="閉じる" Click="OnCloseClicked">
-                    <Path Data="{DynamicResource IconClose}" Stretch="Uniform" Width="12" Height="12"
-                          StrokeThickness="1.5" StrokeStartLineCap="Round"
-                          Stroke="{DynamicResource Ink3Brush}" />
-                </Button>
+                <Border DockPanel.Dock="Left" Width="4" CornerRadius="7,0,0,7"
+                        Background="{DynamicResource AccentBrush}" />
 
-                <StackPanel>
-                    <TextBlock x:Name="TitleText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource InkBrush}" />
-                    <TextBlock x:Name="MessageText" Style="{StaticResource BodyTextStyle}" LineHeight="19" Margin="0,5,0,0"
-                               TextWrapping="Wrap"
-                               Typography.NumeralAlignment="Tabular"
-                               Foreground="{DynamicResource Ink2Brush}" />
-                </StackPanel>
+                <DockPanel Margin="16,14,12,14">
+                    <!-- 閉じる。読み終わるのを待たずに消せるように（24x24） -->
+                    <Button DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,-4,0,0"
+                            Style="{DynamicResource SmallIconButtonStyle}"
+                            ToolTip="閉じる" Click="OnCloseClicked">
+                        <Path Data="{DynamicResource IconClose}" Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round"
+                              Stroke="{DynamicResource Ink3Brush}" />
+                    </Button>
+
+                    <StackPanel>
+                        <TextBlock x:Name="TitleText" Style="{StaticResource SubheadingTextStyle}" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource InkBrush}" />
+                        <TextBlock x:Name="MessageText" Style="{StaticResource BodyTextStyle}" LineHeight="20" Margin="0,5,0,0"
+                                   TextWrapping="Wrap"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource Ink2Brush}" />
+                    </StackPanel>
+                </DockPanel>
             </DockPanel>
         </Border>
     </Grid>

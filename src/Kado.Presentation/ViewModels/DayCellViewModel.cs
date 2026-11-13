@@ -24,11 +24,18 @@ public sealed class DayCellViewModel : ObservableObject
     /// </summary>
     public const int DefaultMaxChips = 3;
 
-    /// <summary>1件ぶんの高さ。チップの行の高さ 16 に上の余白 2 を足したもの。</summary>
-    private const double ChipHeight = 18;
+    /// <summary>
+    /// 1件ぶんの高さ。チップの行の高さ 16（Caption）に上下の余白 2 と上の間 2 を足した 20 に、
+    /// 帯の1段（MonthView の EventBandSlotTemplate、22）に合わせた余裕を足して 22。
+    /// 文字を1段上げる前は 18。小さく見積もると「＋N」がマスの下で切れる
+    /// </summary>
+    private const double ChipHeight = 22;
 
-    /// <summary>日付の行と「＋N」に要る高さ。上下の余白を含む。</summary>
-    private const double Reserved = 40;
+    /// <summary>
+    /// 日付の行（丸 22）と「＋N」（Caption の行 16 + 上の間 1）に要る高さ。上下の余白を含む。
+    /// 文字を1段上げる前は 40
+    /// </summary>
+    private const double Reserved = 46;
 
     /// <summary>
     /// この高さのマスに何件並べられるか。

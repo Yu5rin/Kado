@@ -14,7 +14,7 @@
         Icon="/Assets/app.png"
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"
@@ -29,7 +29,7 @@
         <Border DockPanel.Dock="Bottom" Padding="16,11"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <Button Content="閉じる" HorizontalAlignment="Right"
-                    Style="{StaticResource PrimaryButtonStyle}"
+                    Style="{StaticResource GhostButtonStyle}"
                     IsCancel="True" IsDefault="True" Click="OnCloseClick" />
         </Border>
 

@@ -28,6 +28,21 @@
     <conv:HexBrushConverter x:Key="HexBrush" />
 
     <!--
+        カレンダーの色を、いまの配色の地に合わせて明るさだけ直したブラシにする（表示専用。
+        保存する色・Google に送る色・色の選択画面の見本は HexBrush のまま元の色を出す）
+    -->
+    <conv:DisplayHexBrushConverter x:Key="DisplayHexBrush" />
+
+    <!--
+        ポップアップ（右クリックメニュー・ツールチップ・ComboBox の一覧）、サイドバーの面、通知の影。
+        8か所に同じ値を直書きしていたのを1つにまとめる（Blur 16 / Depth 2 / Opacity 0.30）。
+        文字を載せる Border に直接掛けると文字が滲むので、使う側は影だけを持つ Border に掛ける。
+        辞書の先頭に置く（StaticResource は定義より前から引けない）
+    -->
+    <DropShadowEffect x:Key="PopupShadowEffect" BlurRadius="16" ShadowDepth="2" Opacity="0.30"
+                      Direction="270" Color="#000000" />
+
+    <!--
         キーボードで辿ったときの焦点の輪（項目8）。
         Tab で回っても居場所が分からなかった。IconButtonStyle / GhostButtonStyle /
         SegmentButtonStyle / MiniDayStyle の FocusVisualStyle に共通で当てる。
@@ -46,10 +61,10 @@
     </Style>
 
     <!--
-        無効表示の不透明度。0.4〜0.5 だと、既に薄い Ink3 系の文字がさらに沈んで
-        読み取れなくなる箇所があったため、0.55 まで底上げする
+        無効表示の不透明度。0.55 でも、既に薄い Ink3 系の文字がさらに沈んで読み取れなくなる箇所が
+        あったため、0.7 まで上げる（Ink3 の上でも文字として読める濃さ。押せないことは Cursor でも示す）
     -->
-    <sys:Double x:Key="DisabledOpacity">0.55</sys:Double>
+    <sys:Double x:Key="DisabledOpacity">0.7</sys:Double>
 
     <!-- アイコンボタン -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
@@ -141,7 +156,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border x:Name="Root" CornerRadius="4" Margin="3"
+                    <Border x:Name="Root" CornerRadius="4" Margin="2"
                             Background="{DynamicResource LineStrongBrush}" />
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -256,8 +271,10 @@
     <Style x:Key="GhostButtonStyle" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
+        <!-- ダイアログのボタンの幅を揃える。幅を詰めたい所（ツールバーなど）は MinWidth="0" を明示する -->
+        <Setter Property="MinWidth" Value="80" />
         <Setter Property="Padding" Value="11,0" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
@@ -293,6 +310,39 @@
     </Style>
 
     <!--
+        取り返しのつかない操作のボタン（削除・「元に戻せません」の節）。
+        Ghost と同じ寸法で、文字と枠を日曜色（赤）にする。ホバーはマイルストーン（出発）の面と文字。
+        Ghost のテンプレートはホバーで文字をアクセント色に替えるので、赤のまま残すためテンプレートを持つ
+    -->
+    <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root" Background="Transparent" CornerRadius="5"
+                            BorderThickness="1" BorderBrush="{DynamicResource SundayBrush}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource MilestoneGoFaceBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource MilestoneGoTextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LineStrongBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource DisabledOpacity}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         ビュー切替のセグメント。
         RadioButton の既定テンプレートだと丸印が出てしまうので、丸ごと差し替える。
         選択中はアクセントで塗り、区切り線は右側に引く（最後だけ BorderThickness=0）。
@@ -312,7 +362,7 @@
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="13,0" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
         <Setter Property="BorderThickness" Value="0,0,1,0" />
         <Setter Property="Cursor" Value="Hand" />
@@ -367,13 +417,18 @@
     <Style x:Key="TaskCheckBoxStyle" TargetType="CheckBox">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="VerticalAlignment" Value="Top" />
-        <Setter Property="Margin" Value="0,2,0,0" />
+        <!--
+            押せる範囲は 24x24（四角は 16x16、外側の透明な余白が当たりを広げる）。
+            余白のぶん Margin を負にして、並べたときの占有は 16x18（本文1行の高さ）に収める
+        -->
+        <Setter Property="Margin" Value="-4,-3,-4,-3" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <Border x:Name="Box" Width="15" Height="15" CornerRadius="3.5"
+                    <Border Width="24" Height="24" Background="Transparent">
+                    <Border x:Name="Box" Width="16" Height="16" CornerRadius="3.5"
                             Background="{DynamicResource PanelBrush}"
-                            BorderThickness="1.5" BorderBrush="{DynamicResource LineStrongBrush}">
+                            BorderThickness="1.5" BorderBrush="{DynamicResource ControlBorderBrush}">
                         <!--
                             チェックが付いたときの面は DoneBrush（完了を静かに沈める中間トーン）。
                             アクセント面用の OnAccentBrush はここでは向きが逆になることがあるため、
@@ -383,6 +438,7 @@
                               Stroke="{DynamicResource OnDoneBrush}" StrokeThickness="2.2" Visibility="Collapsed"
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Stretch="Uniform" Width="9" Height="9" />
+                    </Border>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
@@ -404,17 +460,17 @@
     <Style TargetType="CheckBox">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal" Background="Transparent">
-                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="3.5"
+                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="3.5"
                                 Margin="0,0,7,0" VerticalAlignment="Center"
                                 Background="{DynamicResource BackgroundBrush}"
-                                BorderThickness="1.5" BorderBrush="{DynamicResource LineStrongBrush}">
+                                BorderThickness="1.5" BorderBrush="{DynamicResource ControlBorderBrush}">
                             <Path x:Name="Mark" Data="{StaticResource IconCheck}"
                                   Stroke="{DynamicResource OnAccentBrush}" StrokeThickness="2.2"
                                   Visibility="Collapsed"
@@ -446,9 +502,10 @@
 
     <!-- 検索ボックス -->
     <Style x:Key="SearchBoxStyle" TargetType="TextBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="Width" Value="190" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="CaretBrush" Value="{DynamicResource InkBrush}" />
@@ -456,7 +513,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="Root" CornerRadius="5" Background="{DynamicResource BackgroundBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}"
+                            BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}"
                             Padding="9,0">
                         <DockPanel>
                             <!-- アイコンの粒度を16px@1.7に揃える（項目11） -->
@@ -493,8 +550,9 @@
         書き方の例をそのまま透かして出す。
     -->
     <Style x:Key="QuickInputBoxStyle" TargetType="TextBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="CaretBrush" Value="{DynamicResource InkBrush}" />
@@ -502,11 +560,11 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="Root" CornerRadius="5" Background="{DynamicResource BackgroundBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}"
+                            BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}"
                             Padding="9,0">
                         <Grid>
                             <TextBlock x:Name="Placeholder" Text="例: 明日15時 打合せ @会議室A"
-                                       FontSize="11"
+                                       FontSize="12"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        VerticalAlignment="Center" IsHitTestVisible="False"
                                        TextTrimming="CharacterEllipsis"
@@ -548,7 +606,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Root" CornerRadius="3" Background="Transparent"
                             BorderThickness="0" BorderBrush="{DynamicResource AccentBrush}"
-                            Padding="0,2.5">
+                            Padding="0,5">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -596,10 +654,10 @@
         </Setter>
     </Style>
 
-    <!-- ミニ月暦の前月・次月（.mini-hd .ib）。20x20 とツールバーより一回り小さい -->
+    <!-- ミニ月暦の前月・次月（.mini-hd .ib）。押せる最小の 24x24（ツールバーの 28 より一回り小さい） -->
     <Style x:Key="SmallIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
-        <Setter Property="Width" Value="20" />
-        <Setter Property="Height" Value="20" />
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
     </Style>
 
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
@@ -611,7 +669,7 @@
     -->
     <Style x:Key="SourceListRowStyle" TargetType="ToggleButton">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -634,9 +692,9 @@
                     <Border x:Name="RowBackground" Background="Transparent" Padding="0,3.5">
                         <DockPanel>
                             <Border x:Name="Swatch" DockPanel.Dock="Left"
-                                    Width="11" Height="11" CornerRadius="3" Margin="0,0,8,0"
+                                    Width="14" Height="14" CornerRadius="4" Margin="0,0,8,0"
                                     VerticalAlignment="Center"
-                                    Background="{Binding SwatchColor, Converter={StaticResource HexBrush}}"
+                                    Background="{Binding SwatchColor, Converter={StaticResource DisplayHexBrush}}"
                                     BorderThickness="0" BorderBrush="{DynamicResource LineStrongBrush}" />
 
                             <!--
@@ -670,7 +728,7 @@
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border Background="Transparent" Padding="2">
                                             <Path x:Name="Shape" Data="{StaticResource IconBellOff}"
-                                                  Stretch="Uniform" Width="12" Height="12"
+                                                  Stretch="Uniform" Width="14" Height="14"
                                                   StrokeThickness="1.5" StrokeStartLineCap="Round"
                                                   StrokeEndLineCap="Round"
                                                   Stroke="{DynamicResource Ink3Brush}" />
@@ -696,7 +754,7 @@
                             -->
                             <Path x:Name="DefaultMark" DockPanel.Dock="Right"
                                   Data="{StaticResource IconStar}" Stretch="Uniform"
-                                  Width="12" Height="12" Margin="4,0,0,0"
+                                  Width="14" Height="14" Margin="4,0,0,0"
                                   VerticalAlignment="Center"
                                   Fill="{DynamicResource AccentBrush}"
                                   ToolTip="新しい予定はここに入ります"
@@ -708,7 +766,7 @@
                             -->
                             <TextBlock x:Name="StatusMark" DockPanel.Dock="Right"
                                        Text="{Binding StatusMarkText}" Margin="4,0,0,0"
-                                       VerticalAlignment="Center" FontSize="10.5"
+                                       VerticalAlignment="Center" FontSize="11"
                                        Foreground="{DynamicResource Ink3Brush}"
                                        ToolTip="{Binding StatusNote}"
                                        Visibility="{Binding HasStatusNote,
@@ -802,14 +860,19 @@
         モックに編集画面は無いので、既存の部品の寸法に合わせて組み立てている。
     -->
     <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
 
+    <!--
+        入力欄の焦点は ComboBox・DatePicker と同じ見え方に揃える：枠を Accent にし（大きさは変えない）、
+        キーボードで来たときは FocusRingStyle の輪も出す
+    -->
     <Style x:Key="FieldTextBoxStyle" TargetType="TextBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="CaretBrush" Value="{DynamicResource InkBrush}" />
@@ -818,7 +881,7 @@
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="Root" CornerRadius="5" Padding="9,0"
                             Background="{DynamicResource BackgroundBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                            BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}">
                         <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -846,7 +909,7 @@
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="Root" CornerRadius="5" Padding="9,5"
                             Background="{DynamicResource BackgroundBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
+                            BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}">
                         <ScrollViewer x:Name="PART_ContentHost" VerticalScrollBarVisibility="Auto" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -860,8 +923,465 @@
     </Style>
 
     <!--
+        読み取り専用の複数行の欄（取り込み結果の報告・同期の警告）。
+        既定のテンプレートは面を OS の色で描くので、暗い配色では白い四角が浮く。面と枠は
+        テーマの色に揃える。使う側が Background や BorderThickness を直に書けば、そちらが勝つ
+        （報告の窓は外側の Border が枠を持つので、枠なし・透明にしている）。
+        IsReadOnly は使う側が指す（ここでは決めない）
+    -->
+    <Style x:Key="ReadOnlyTextStyle" TargetType="TextBox">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Root" CornerRadius="5"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        日付を選ぶ暦（DatePicker を開いたときに出る Calendar）をテーマの色にする。
+        既定は白い面と黒い文字を自前で持っていて、暗い配色にしても白いまま浮いていた。
+
+        <b>テンプレートの PART 名と VisualState の名前は WPF 既定のままに保つ。</b>
+          CalendarItem      … PART_Root・PART_PreviousButton・PART_HeaderButton・PART_NextButton・
+                              PART_MonthView・PART_YearView・PART_DisabledVisual・DayTitleTemplate
+          CalendarDayButton … CommonStates／SelectionStates／CalendarButtonFocusStates／ActiveStates／
+                              DayStates／BlackoutDayStates
+          CalendarButton    … CommonStates／SelectionStates／ActiveStates／CalendarButtonFocusStates
+        状態の見た目は、面の Opacity だけを VisualState で動かす。色は DynamicResource で面に当てておく
+        （Storyboard の値に DynamicResource は書けないため）。Calendar 自身のテンプレートは差し替えない。
+
+        選択日は AccentSoft の面＋Accent の枠、今日は Accent の細い枠、マウスを載せた日は Sunken の面。
+        文字の色を状態で替えられない（Storyboard に DynamicResource が書けない）ので、どの状態でも
+        Ink の文字が読める面だけを使う。前後の月の日は Opacity 0.6 に落とす（暦の中の添え物なので）。
+    -->
+    <Style x:Key="FieldCalendarDayButtonStyle" TargetType="CalendarDayButton">
+        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CalendarDayButton">
+                    <Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="MouseOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="HighlightBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="HighlightBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="0.4"
+                                                         Storyboard.TargetName="NormalText"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="SelectionStates">
+                                <VisualState x:Name="Unselected" />
+                                <VisualState x:Name="Selected">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="SelectedBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="CalendarButtonFocusStates">
+                                <VisualState x:Name="CalendarButtonFocused">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Duration="0"
+                                                                       Storyboard.TargetName="DayButtonFocusVisual"
+                                                                       Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <Visibility>Visible</Visibility>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="CalendarButtonUnfocused" />
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="ActiveStates">
+                                <VisualState x:Name="Active" />
+                                <VisualState x:Name="Inactive">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="0.6"
+                                                         Storyboard.TargetName="NormalText"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="DayStates">
+                                <VisualState x:Name="RegularDay" />
+                                <VisualState x:Name="Today">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="TodayBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="BlackoutDayStates">
+                                <VisualState x:Name="NormalDay" />
+                                <VisualState x:Name="BlackoutDay">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="0.35"
+                                                         Storyboard.TargetName="NormalText"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Rectangle x:Name="TodayBackground" Opacity="0" RadiusX="4" RadiusY="4"
+                                   Fill="Transparent" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" />
+                        <Rectangle x:Name="SelectedBackground" Opacity="0" RadiusX="4" RadiusY="4"
+                                   Fill="{DynamicResource AccentSoftBrush}"
+                                   Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" />
+                        <Rectangle x:Name="HighlightBackground" Opacity="0" RadiusX="4" RadiusY="4"
+                                   Fill="{DynamicResource SunkenBrush}" />
+                        <ContentPresenter x:Name="NormalText"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="5,1,5,1" />
+                        <Rectangle x:Name="DayButtonFocusVisual" Visibility="Collapsed" IsHitTestVisible="False"
+                                   RadiusX="4" RadiusY="4"
+                                   Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 月・年を選ぶ段（暦の見出しを押したときに出る 4x3 の表）のボタン -->
+    <Style x:Key="FieldCalendarButtonStyle" TargetType="CalendarButton">
+        <Setter Property="MinWidth" Value="56" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CalendarButton">
+                    <Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="MouseOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="HighlightBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="HighlightBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="0.4"
+                                                         Storyboard.TargetName="NormalText"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="SelectionStates">
+                                <VisualState x:Name="Unselected" />
+                                <VisualState x:Name="Selected">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="SelectedBackground"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="ActiveStates">
+                                <VisualState x:Name="Active" />
+                                <VisualState x:Name="Inactive">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="0.6"
+                                                         Storyboard.TargetName="NormalText"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="CalendarButtonFocusStates">
+                                <VisualState x:Name="CalendarButtonFocused">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Duration="0"
+                                                                       Storyboard.TargetName="CalendarButtonFocusVisual"
+                                                                       Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <Visibility>Visible</Visibility>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="CalendarButtonUnfocused" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Rectangle x:Name="SelectedBackground" Opacity="0" RadiusX="4" RadiusY="4"
+                                   Fill="{DynamicResource AccentSoftBrush}"
+                                   Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" />
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" />
+                        <Rectangle x:Name="HighlightBackground" Opacity="0" RadiusX="4" RadiusY="4"
+                                   Fill="{DynamicResource SunkenBrush}" />
+                        <ContentPresenter x:Name="NormalText"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="1,0,1,1" />
+                        <Rectangle x:Name="CalendarButtonFocusVisual" Visibility="Collapsed" IsHitTestVisible="False"
+                                   RadiusX="4" RadiusY="4"
+                                   Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 暦の本体（見出しの帯・前後の月のボタン・月の格子・年の格子） -->
+    <Style x:Key="FieldCalendarItemStyle" TargetType="CalendarItem">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CalendarItem">
+                    <ControlTemplate.Resources>
+                        <!-- 曜日の見出し。CalendarItem が DayTitleTemplate の名前で探す -->
+                        <DataTemplate x:Key="{x:Static CalendarItem.DayTitleTemplateResourceKey}">
+                            <TextBlock FontWeight="SemiBold" FontSize="12"
+                                       Foreground="{DynamicResource Ink3Brush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="0,4,0,6" Text="{Binding}" />
+                        </DataTemplate>
+
+                        <ControlTemplate x:Key="CalendarPreviousButtonTemplate" TargetType="Button">
+                            <Border x:Name="Root" Background="Transparent" CornerRadius="4">
+                                <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
+                                      Width="12" Height="12" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+
+                        <ControlTemplate x:Key="CalendarNextButtonTemplate" TargetType="Button">
+                            <Border x:Name="Root" Background="Transparent" CornerRadius="4">
+                                <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
+                                      Width="12" Height="12" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+
+                        <ControlTemplate x:Key="CalendarHeaderButtonTemplate" TargetType="Button">
+                            <Border x:Name="Root" Background="Transparent" CornerRadius="4" Padding="8,2">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </ControlTemplate.Resources>
+
+                    <Grid x:Name="PART_Root">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Duration="0" To="1"
+                                                         Storyboard.TargetName="PART_DisabledVisual"
+                                                         Storyboard.TargetProperty="Opacity" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <Grid Margin="8,6,8,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Button x:Name="PART_PreviousButton" Grid.Column="0" Grid.Row="0"
+                                        Focusable="False" HorizontalAlignment="Left" Height="24" Width="28"
+                                        Foreground="{DynamicResource Ink2Brush}"
+                                        Template="{StaticResource CalendarPreviousButtonTemplate}" />
+                                <Button x:Name="PART_HeaderButton" Grid.Column="1" Grid.Row="0"
+                                        Focusable="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        FontWeight="SemiBold" FontSize="13"
+                                        Foreground="{DynamicResource InkBrush}"
+                                        Template="{StaticResource CalendarHeaderButtonTemplate}" />
+                                <Button x:Name="PART_NextButton" Grid.Column="2" Grid.Row="0"
+                                        Focusable="False" HorizontalAlignment="Right" Height="24" Width="28"
+                                        Foreground="{DynamicResource Ink2Brush}"
+                                        Template="{StaticResource CalendarNextButtonTemplate}" />
+
+                                <Grid x:Name="PART_MonthView" Grid.ColumnSpan="3" Grid.Row="1"
+                                      Margin="0,2,0,0" HorizontalAlignment="Center" Visibility="Visible">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                </Grid>
+
+                                <Grid x:Name="PART_YearView" Grid.ColumnSpan="3" Grid.Row="1"
+                                      Margin="0,2,0,0" HorizontalAlignment="Center" Visibility="Hidden">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <Rectangle x:Name="PART_DisabledVisual" Opacity="0" Visibility="Collapsed"
+                                   IsHitTestVisible="False" RadiusX="8" RadiusY="8"
+                                   Fill="{DynamicResource PanelBrush}" Stretch="Fill" />
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                        <!-- 見出しを押して月・年の表に切り替えたとき -->
+                        <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource AncestorType={x:Type Calendar}}}"
+                                     Value="Year">
+                            <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden" />
+                            <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource AncestorType={x:Type Calendar}}}"
+                                     Value="Decade">
+                            <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden" />
+                            <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        暦。テンプレートは既定のまま（StackPanel の PART_Root に CalendarItem を1つ置くだけ）にして、
+        面・枠・文字と、下の3つのスタイルを差し替える。FieldDatePickerStyle の CalendarStyle に付ける
+    -->
+    <Style x:Key="FieldCalendarStyle" TargetType="Calendar">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="CalendarItemStyle" Value="{StaticResource FieldCalendarItemStyle}" />
+        <Setter Property="CalendarDayButtonStyle" Value="{StaticResource FieldCalendarDayButtonStyle}" />
+        <Setter Property="CalendarButtonStyle" Value="{StaticResource FieldCalendarButtonStyle}" />
+    </Style>
+
+    <!--
         日付欄。既定の DatePicker は枠も高さも周りと揃わないので、外側だけ差し替える。
-        ポップアップの暦は既定のまま。ここを作り替えるのは別の仕事なので手を付けない。
+        ポップアップの暦は FieldCalendarStyle（上）でテーマの色にする。
     -->
     <!--
         日付欄の中の入力部分。
@@ -905,12 +1425,13 @@
     <Style x:Key="FieldDatePickerStyle" TargetType="DatePicker">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Background" Value="{DynamicResource BackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="CalendarStyle" Value="{StaticResource FieldCalendarStyle}" />
 
         <!-- 中の入力部分にも当てる。型で指すので、この欄の中だけに効く -->
         <Style.Resources>
@@ -943,7 +1464,7 @@
     <!-- 一覧に出す行 -->
     <Style x:Key="FieldComboBoxItemStyle" TargetType="ComboBoxItem">
         <Setter Property="Padding" Value="9,5" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Template">
             <Setter.Value>
@@ -987,7 +1508,7 @@
     <Style x:Key="FieldComboBoxStyle" TargetType="ComboBox">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource FieldComboBoxItemStyle}" />
         <Setter Property="Template">
@@ -996,7 +1517,7 @@
                     <Grid>
                         <Border x:Name="Root" CornerRadius="5"
                                 Background="{DynamicResource BackgroundBrush}"
-                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}" />
+                                BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}" />
 
                         <ToggleButton HorizontalAlignment="Stretch" Width="Auto" Background="Transparent"
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
@@ -1022,12 +1543,8 @@
                                AllowsTransparency="True"
                                IsOpen="{TemplateBinding IsDropDownOpen}">
                             <Grid MinWidth="{TemplateBinding ActualWidth}" Margin="6,2,6,6">
-                                <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                                    <Border.Effect>
-                                        <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                          Direction="270" Color="#000000" />
-                                    </Border.Effect>
-                                </Border>
+                                <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                Effect="{StaticResource PopupShadowEffect}" />
                                 <Border MaxHeight="240"
                                         CornerRadius="8" Background="{DynamicResource PanelBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
@@ -1072,7 +1589,7 @@
     -->
     <Style x:Key="TimeComboBoxStyle" TargetType="ComboBox">
         <Setter Property="Height" Value="28" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="IsEditable" Value="True" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource FieldComboBoxItemStyle}" />
@@ -1087,7 +1604,7 @@
 
                         <Border x:Name="Root" Grid.ColumnSpan="2" CornerRadius="5"
                                 Background="{DynamicResource BackgroundBrush}"
-                                BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}" />
+                                BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}" />
 
                         <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
                                  Margin="9,0,0,0" Padding="0"
@@ -1105,12 +1622,8 @@
                                AllowsTransparency="True"
                                IsOpen="{TemplateBinding IsDropDownOpen}">
                             <Grid MinWidth="{TemplateBinding ActualWidth}" Margin="6,2,6,6">
-                                <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                                    <Border.Effect>
-                                        <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                          Direction="270" Color="#000000" />
-                                    </Border.Effect>
-                                </Border>
+                                <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                Effect="{StaticResource PopupShadowEffect}" />
                                 <Border MaxHeight="240"
                                         CornerRadius="8" Background="{DynamicResource PanelBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
@@ -1136,7 +1649,9 @@
     <Style x:Key="ChipButtonStyle" TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
         <Setter Property="Height" Value="24" />
         <Setter Property="Padding" Value="10,0" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="12" />
+        <!-- 小さい枠線ボタンなので、Ghost の MinWidth 80 は打ち消す -->
+        <Setter Property="MinWidth" Value="0" />
         <Setter Property="Margin" Value="0,0,6,0" />
     </Style>
 
@@ -1144,14 +1659,16 @@
     <Style x:Key="PrimaryButtonStyle" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingStyle}" />
         <Setter Property="Height" Value="28" />
+        <Setter Property="MinWidth" Value="80" />
         <Setter Property="Padding" Value="16,0" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Root" CornerRadius="5" Background="{DynamicResource AccentBrush}">
+                    <Border x:Name="Root" CornerRadius="5" Background="{DynamicResource AccentBrush}"
+                            BorderThickness="1" BorderBrush="Transparent">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Margin="{TemplateBinding Padding}" />
                     </Border>
@@ -1163,8 +1680,15 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Root" Property="Opacity" Value="0.8" />
                         </Trigger>
+                        <!--
+                            無効時。面を沈め、文字を補助色にして枠を引く。以前は LineStrong の面に
+                            OnAccent の文字で、Light では白文字が灰色の面に溶けて読めなかった
+                            （Ink3 は Sunken 上でも 4.5:1 以上）
+                        -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LineStrongBrush}" />
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SunkenBrush}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -1175,8 +1699,10 @@
 
     <!-- 行に重ねる削除ボタン。並んでいるときは出さず、指した行にだけ出す -->
     <Style x:Key="RowDeleteButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
-        <Setter Property="Width" Value="20" />
-        <Setter Property="Height" Value="20" />
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <!-- 押せる範囲 24x24 のうち、はみ出す余白ぶんを引いて、行の高さを変えない（行の上下の余白 6 の中に収まる） -->
+        <Setter Property="Margin" Value="0,-3" />
         <Setter Property="Opacity" Value="0" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="ToolTip" Value="削除" />
@@ -1280,12 +1806,8 @@
                         使ってやってくれる。ここに書くのは中身（枠と背景と影）だけでよい
                     -->
                     <Grid Margin="6">
-                        <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                  Direction="270" Color="#000000" />
-                            </Border.Effect>
-                        </Border>
+                        <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                Effect="{StaticResource PopupShadowEffect}" />
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
@@ -1323,7 +1845,7 @@
         名前を変えると入れ子のメニューが正しく振る舞わない
     -->
     <Style TargetType="MenuItem">
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
@@ -1368,12 +1890,8 @@
                                    HorizontalOffset="2" VerticalOffset="-6"
                                    IsOpen="{TemplateBinding IsSubmenuOpen}">
                                 <Grid Margin="6">
-                                    <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                                        <Border.Effect>
-                                            <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                              Direction="270" Color="#000000" />
-                                        </Border.Effect>
-                                    </Border>
+                                    <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                Effect="{StaticResource PopupShadowEffect}" />
                                     <Border CornerRadius="8" Padding="4"
                                             Background="{DynamicResource PanelBrush}"
                                             BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
@@ -1519,8 +2037,8 @@
     <!-- 子メニューの1件。名前の前に色見本（カレンダー・リストの色）を出す。色が無ければ名前だけ -->
     <DataTemplate x:Key="MenuChoiceTemplate">
         <StackPanel Orientation="Horizontal">
-            <Border Width="11" Height="11" CornerRadius="3" Margin="0,0,8,0" VerticalAlignment="Center"
-                    Background="{Binding Color, Converter={StaticResource HexBrush}}"
+            <Border Width="14" Height="14" CornerRadius="4" Margin="0,0,8,0" VerticalAlignment="Center"
+                    Background="{Binding Color, Converter={StaticResource DisplayHexBrush}}"
                     Visibility="{Binding HasColor, Converter={StaticResource BoolToVisibility}}" />
             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
         </StackPanel>
@@ -1897,7 +2415,7 @@
         <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="8,5" />
         <!--
             HasDropShadow は Windows のクラシックな落ち方（右下にずれた濃い影）で
@@ -1909,12 +2427,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
                     <Grid Margin="6">
-                        <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                  Direction="270" Color="#000000" />
-                            </Border.Effect>
-                        </Border>
+                        <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                Effect="{StaticResource PopupShadowEffect}" />
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"

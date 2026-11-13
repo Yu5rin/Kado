@@ -72,8 +72,8 @@
                     MouseLeftButtonDown="OnDayClicked">
                 <StackPanel VerticalAlignment="Center">
                     <!-- 帯の最小幅（160〜220px）では常にマスが最小になるため、下限でも読める大きさにする -->
-                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="10"
-                               HorizontalAlignment="Center" LineHeight="11"
+                    <TextBlock x:Name="Mark" Text="{Binding DayOfWeekMark}" FontSize="11"
+                               HorizontalAlignment="Center" LineHeight="13"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <!--
@@ -97,7 +97,7 @@
                     <TextBlock x:Name="Number" Text="{Binding DayNumber}"
                                FontSize="{Binding DataContext.DayFontSize,
                                           RelativeSource={RelativeSource AncestorType=UserControl}}"
-                               HorizontalAlignment="Center" LineHeight="14"
+                               HorizontalAlignment="Center" LineHeight="16"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}" />
 
@@ -117,8 +117,11 @@
                 <DataTrigger Binding="{Binding IsOffDay}" Value="True">
                     <Setter TargetName="Cell" Property="Background"
                             Value="{DynamicResource OffDayBrush}" />
-                    <Setter TargetName="Number" Property="Opacity" Value="0.45" />
-                    <Setter TargetName="Mark" Property="Opacity" Value="0.45" />
+                    <!-- Opacity 0.45 で薄くすると文字が 4.5:1 を大きく割るため、色を Ink3Brush に固定して休みを示す -->
+                    <Setter TargetName="Number" Property="Foreground"
+                            Value="{DynamicResource Ink3Brush}" />
+                    <Setter TargetName="Mark" Property="Foreground"
+                            Value="{DynamicResource Ink3Brush}" />
                 </DataTrigger>
 
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
@@ -146,8 +149,8 @@
                 <!--
                     今日は面をやわらかく塗って示す（項目2）。マスが幅15pxまで縮むので
                     月ビューのような日付の数字だけを丸く塗る形は取れず、マス全体を
-                    薄いアクセントで塗る。休業日と重なっても Number/Mark の Opacity
-                    低下で休みだと分かるようにしてある
+                    薄いアクセントで塗る。休業日と重なっても Number/Mark を
+                    Ink3Brush にして休みだと分かるようにしてある
                 -->
                 <DataTrigger Binding="{Binding IsToday}" Value="True">
                     <Setter TargetName="Cell" Property="Background"
@@ -164,7 +167,7 @@
             <Border x:Name="Row" Padding="6,3" CornerRadius="4" Margin="0,0,0,2">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="{Binding Label}" Width="40"
-                               FontSize="12" FontWeight="Medium" VerticalAlignment="Center"
+                               FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}" />
 
@@ -172,7 +175,7 @@
                     <Border DockPanel.Dock="Right" Width="52" CornerRadius="4" Padding="6,2"
                             VerticalAlignment="Center" Margin="8,0,0,0"
                             Background="{DynamicResource AccentSoftBrush}">
-                        <TextBlock FontSize="11" HorizontalAlignment="Center"
+                        <TextBlock FontSize="12" HorizontalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource Ink2Brush}">
                             <Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
@@ -200,7 +203,7 @@
 
         <!-- カレンダー表示の曜日見出し(1文字)。日曜は赤、土曜は青(月ビューと同じ扱い) -->
         <DataTemplate x:Key="GridWeekDayHeaderTemplate">
-            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="9.5"
+            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="11"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource Ink3Brush}" />
             <DataTemplate.Triggers>
@@ -225,7 +228,7 @@
                     BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-                        <TextBlock DockPanel.Dock="Right" FontSize="10.5" VerticalAlignment="Center"
+                        <TextBlock DockPanel.Dock="Right" FontSize="11" VerticalAlignment="Center"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource Ink3Brush}">
                             <Run Text="実働 " /><Run Text="{Binding WorkingDayCountText, Mode=OneWay}"
@@ -233,7 +236,7 @@
                                  Foreground="{DynamicResource AccentBrush}" /><Run Text=" 日" />
                         </TextBlock>
 
-                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource InkBrush}" />
                     </DockPanel>
 
@@ -307,8 +310,8 @@
                                             </ItemsControl>
                                         </Border>
 
-                                        <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="10.5"
-                                                   HorizontalAlignment="Center" LineHeight="14"
+                                        <TextBlock x:Name="Number" Text="{Binding DayNumber}" FontSize="11"
+                                                   HorizontalAlignment="Center" LineHeight="16"
                                                    Typography.NumeralAlignment="Tabular"
                                                    Foreground="{DynamicResource InkBrush}" />
 
@@ -416,7 +419,7 @@
                            FontWeight="SemiBold" VerticalAlignment="Center"
                            Typography.NumeralAlignment="Tabular" />
 
-                <TextBlock Text="{Binding WorkingDayTotalText}" FontSize="11.5" Margin="14,0,0,0"
+                <TextBlock Text="{Binding WorkingDayTotalText}" FontSize="12" Margin="14,0,0,0"
                            VerticalAlignment="Center"
                            Typography.NumeralAlignment="Tabular"
                            Foreground="{DynamicResource Ink3Brush}" />
@@ -443,7 +446,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Label}" FontSize="10"
+                                <TextBlock Text="{Binding Label}" FontSize="11"
                                            Margin="0,0,1,0"
                                            Width="{Binding DataContext.DayWidth,
                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -454,13 +457,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Text="上期（4〜9月）" FontSize="11" FontWeight="SemiBold"
+                    <TextBlock Text="上期（4〜9月）" FontSize="12" FontWeight="SemiBold"
                                Margin="6,0,0,4"
                                Foreground="{DynamicResource Ink3Brush}" />
                     <ItemsControl ItemsSource="{Binding FirstHalf}"
                                   ItemTemplate="{StaticResource MonthStripTemplate}" />
 
-                    <TextBlock Text="下期（10〜3月）" FontSize="11" FontWeight="SemiBold"
+                    <TextBlock Text="下期（10〜3月）" FontSize="12" FontWeight="SemiBold"
                                Margin="6,12,0,4"
                                Foreground="{DynamicResource Ink3Brush}" />
                     <ItemsControl ItemsSource="{Binding SecondHalf}"

@@ -17,7 +17,7 @@
         xmlns:conv="clr-namespace:Kado.App.Converters"
         Title="Kado" Height="760" Width="1180" MinWidth="280" MinHeight="520"
         Icon="/Assets/app.png"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource BackgroundBrush}"
@@ -179,9 +179,9 @@
         </DataTemplate>
 
         <!-- 「このアプリ」「Google」の小見出し（.subsec）。10px は Ink3 の 4.5:1 基準を
-             割るため 11px（CaptionTextStyle 相当）に上げる -->
+             割るため CaptionTextStyle 相当（12px）に上げる -->
         <Style x:Key="SourceGroupHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="Margin" Value="0,0,0,3" />
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
@@ -364,7 +364,7 @@
                            VerticalAlignment="Center" FontWeight="SemiBold"
                            Visibility="{Binding ShowsToolbarDate, Converter={StaticResource BoolToVisibility}}"
                            Typography.NumeralAlignment="Tabular">
-                    <Run Text="{Binding TitleYear, Mode=OneWay}" FontSize="14" FontWeight="Medium"
+                    <Run Text="{Binding TitleYear, Mode=OneWay}" FontSize="15" FontWeight="Normal"
                          Foreground="{DynamicResource Ink3Brush}" /><Run Text=" " /><Run
                          Text="{Binding TitleMonth, Mode=OneWay}" />
                 </TextBlock>
@@ -389,7 +389,7 @@
                     無くても消さない（項目10）。380px を切ったらアイコンだけに畳む。
                     T キーでも同じことができる
                 -->
-                <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0"
+                <Button DockPanel.Dock="Left" Content="今日" Margin="8,0,0,0" MinWidth="0"
                         Style="{StaticResource GhostButtonStyle}" Command="{Binding TodayCommand}"
                         ToolTip="今日へ戻る（T）"
                         Visibility="{Binding UsesCompactTodayButton, Converter={StaticResource InverseBoolToVisibility}}" />
@@ -729,13 +729,15 @@
                         <!--
                             同期の丸（項目10）。6px は Light の琥珀（警告）が 3.55:1 しか
                             無く小さすぎて読み取りにくかったため 8px に上げ、色も濃くした
-                            （Themes/Light.xaml の CategoryAmberColor）。警告・失敗のときは
-                            丸の中に「！」も出し、色だけに頼らせない
+                            （Themes/Light.xaml の CategoryAmberColor）。さらに 10px に上げ、
+                            警告・失敗のときは丸の中に「！」も出し、色だけに頼らせない。
+                            「！」の色は白固定をやめて PanelBrush にする（Dark／Night でも丸の色と
+                            3:1 以上離れる）。印は 6px
                         -->
-                        <Grid Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center">
+                        <Grid Width="10" Height="10" Margin="0,0,5,0" VerticalAlignment="Center">
                             <Ellipse Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
                             <Path Data="{StaticResource IconWarning}" Stretch="Uniform"
-                                  Width="4" Height="4" Stroke="White" StrokeThickness="1.8"
+                                  Width="6" Height="6" Stroke="{DynamicResource PanelBrush}" StrokeThickness="1.8"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                   Visibility="{Binding Sync.State, Converter={StaticResource SyncStateIsAlert}}" />
                         </Grid>
@@ -768,10 +770,10 @@
                             </Style.Triggers>
                         </Style>
                     </Button.Style>
-                    <Grid Width="8" Height="8">
+                    <Grid Width="10" Height="10">
                         <Ellipse Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
                         <Path Data="{StaticResource IconWarning}" Stretch="Uniform"
-                              Width="4" Height="4" Stroke="White" StrokeThickness="1.8"
+                              Width="6" Height="6" Stroke="{DynamicResource PanelBrush}" StrokeThickness="1.8"
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Visibility="{Binding Sync.State, Converter={StaticResource SyncStateIsAlert}}" />
                     </Grid>
@@ -809,12 +811,8 @@
                             後ろに影だけの Border、前に中身を載せる Effect 無しの Border を重ねる
                         -->
                         <Grid MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxWidth="440" Margin="0,6,0,6">
-                            <Border CornerRadius="8" Background="{DynamicResource PanelBrush}">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                                      Direction="270" Color="#000000" />
-                                </Border.Effect>
-                            </Border>
+                            <Border CornerRadius="8" Background="{DynamicResource PanelBrush}"
+                                    Effect="{StaticResource PopupShadowEffect}" />
                         <Border MaxHeight="420" CornerRadius="8"
                                 Background="{DynamicResource PanelBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource LineStrongBrush}">
@@ -928,7 +926,7 @@
                                                           RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="次の月">
                                             <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform"
-                                                  Width="12" Height="12" StrokeThickness="1.5"
+                                                  Width="14" Height="14" StrokeThickness="1.5"
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
@@ -937,7 +935,7 @@
                                                           RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="前の月">
                                             <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform"
-                                                  Width="12" Height="12" StrokeThickness="1.5"
+                                                  Width="14" Height="14" StrokeThickness="1.5"
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
@@ -986,14 +984,13 @@
                                                 Command="{Binding AddCalendarCommand}"
                                                 ToolTip="カレンダーを追加">
                                             <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
-                                                  Width="12" Height="12"
+                                                  Width="14" Height="14"
                                                   Stroke="{Binding Foreground,
                                                            RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeThickness="1.5"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
-                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="カレンダー" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="カレンダー" VerticalAlignment="Center" />
                                     </DockPanel>
                                     <!--
                                         このアプリのものと Google のものを分けて並べる。
@@ -1027,14 +1024,13 @@
                                                 Command="{Binding AddTaskListCommand}"
                                                 ToolTip="タスクリストを追加">
                                             <Path Data="{StaticResource IconPlus}" Stretch="Uniform"
-                                                  Width="12" Height="12"
+                                                  Width="14" Height="14"
                                                   Stroke="{Binding Foreground,
                                                            RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeThickness="1.5"
                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                                         </Button>
-                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="タスクリスト" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource Ink3Brush}" />
+                                        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="タスクリスト" VerticalAlignment="Center" />
                                     </DockPanel>
                                     <TextBlock Text="このアプリ"
                                                Style="{StaticResource SourceGroupHeaderStyle}"
@@ -1214,13 +1210,9 @@
               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16"
               MaxWidth="{Binding ActualWidth, ElementName=Root,
                          Converter={StaticResource ShrinkWidth}, ConverterParameter=24:560}">
-            <Border CornerRadius="6" Background="{DynamicResource PanelBrush}">
-                <Border.Effect>
-                    <!-- ポップアップの影（Themes/Controls.xaml）と同じ値に揃える -->
-                    <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.25"
-                                       Direction="270" Color="#000000" />
-                </Border.Effect>
-            </Border>
+            <!-- ポップアップの影（Themes/Controls.xaml の PopupShadowEffect）と同じ値を共有する -->
+            <Border CornerRadius="6" Background="{DynamicResource PanelBrush}"
+                    Effect="{StaticResource PopupShadowEffect}" />
 
             <Border CornerRadius="6" Padding="12,8"
                     Background="{DynamicResource PanelBrush}"
@@ -1233,11 +1225,11 @@
                             失敗の知らせは自動では消えない。×を押すか、次の知らせが出るまで残る
                             （成功の知らせはこれまでどおり数秒で消える。ただしカーソルが載っているあいだは消えない）
                         -->
-                        <Button DockPanel.Dock="Right" Content="×" Padding="8,2" Margin="6,0,0,0"
+                        <Button DockPanel.Dock="Right" Content="×" Padding="8,2" Margin="6,0,0,0" MinWidth="0"
                                 Style="{StaticResource GhostButtonStyle}"
                                 Command="{Binding DismissStatusCommand}" ToolTip="閉じる"
                                 Visibility="{Binding IsStatusFailure, Converter={StaticResource BoolToVisibility}}" />
-                        <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2"
+                        <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2" MinWidth="0"
                                 Command="{Binding UndoCommand}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
@@ -1261,7 +1253,7 @@
                     -->
                     <DockPanel LastChildFill="True"
                                Visibility="{Binding ShowsOnboarding, Converter={StaticResource BoolToVisibility}}">
-                        <Button DockPanel.Dock="Right" Content="閉じる" Padding="8,2" Margin="6,0,0,0"
+                        <Button DockPanel.Dock="Right" Content="閉じる" Padding="8,2" Margin="6,0,0,0" MinWidth="0"
                                 Style="{StaticResource GhostButtonStyle}"
                                 Command="{Binding DismissOnboardingCommand}" />
                         <!--

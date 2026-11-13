@@ -33,15 +33,15 @@
                     <Border DockPanel.Dock="Left" Width="3" CornerRadius="2" Margin="0,1,9,1"
                             Background="{Binding Color, Converter={StaticResource EventColorBrush}}" />
 
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding TimeText}" Width="48" LineHeight="17"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding TimeText}" Width="48"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource Ink2Brush}" />
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" LineHeight="17"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource InkBrush}" />
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding SubText, Converter={StaticResource NullToVisibility}}" />
@@ -61,26 +61,26 @@
                         押せるチェック。行の押下（OnTaskClicked）とは別に、ここを押したときだけ完了を切り替える。
                         ToggleButton は押下を自分で受けて止めるので、行の「その日を選ぶ」には流れない
                     -->
-                    <CheckBox DockPanel.Dock="Left" Margin="0,0,9,0" VerticalAlignment="Center"
+                    <CheckBox DockPanel.Dock="Left" Margin="-4,-3,5,-3" VerticalAlignment="Center"
                               Style="{StaticResource TaskCheckBoxStyle}"
                               IsChecked="{Binding IsDone, Mode=OneWay}" Focusable="False"
                               Command="{Binding DataContext.ToggleTaskDoneCommand,
                                         RelativeSource={RelativeSource AncestorType=Window}}"
                               CommandParameter="{Binding}" />
 
-                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding DayLabel}" Width="48" LineHeight="17"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding DayLabel}" Width="48"
                                Foreground="{DynamicResource Ink3Brush}" />
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title" LineHeight="17"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="Title"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource InkBrush}">
                             <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
                         </TextBlock>
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DueText}"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding DueText, Converter={StaticResource NullToVisibility}}" />
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DoneText}" LineHeight="15"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding DoneText}"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding DoneText, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
@@ -90,7 +90,8 @@
             <DataTemplate.Triggers>
                 <!-- 遅れて完了したものが期限日に残した跡は、行ごと薄く出す。片付けたのはこの日ではない -->
                 <DataTrigger Binding="{Binding IsFaint}" Value="True">
-                    <Setter TargetName="Row" Property="Opacity" Value="0.55" />
+                    <!-- 0.55 だと文字が 3:1 を割るため 0.75 に上げる -->
+                    <Setter TargetName="Row" Property="Opacity" Value="0.75" />
                 </DataTrigger>
 
                 <!-- 済んだものは取り消し線。消さずに残すのは、いつ片付いたかを見るため -->
@@ -113,23 +114,23 @@
                     MouseLeftButtonDown="OnRowClicked">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Left" Width="132" Margin="0,0,12,0">
-                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DateText" Text="{Binding DateText}" FontWeight="Medium" LineHeight="18"
+                        <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DateText" Text="{Binding DateText}" FontWeight="SemiBold"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource InkBrush}" />
 
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding WorkingDayText}" LineHeight="14"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding WorkingDayText}"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding WorkingDayText, Converter={StaticResource NullToVisibility}}" />
 
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding HolidayName}" LineHeight="14"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding HolidayName}"
                                    Foreground="{DynamicResource SundayBrush}"
                                    Visibility="{Binding HolidayName, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
 
                     <StackPanel>
                         <!-- 畳んだ行。消さずに残すのは、間がどれだけ空いているかを示すため -->
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding GapText}" LineHeight="17"
+                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding GapText}"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    Visibility="{Binding GapText, Converter={StaticResource NullToVisibility}}" />
 

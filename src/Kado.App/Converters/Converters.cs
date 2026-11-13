@@ -189,15 +189,20 @@ public sealed class EventTimeConverter : IValueConverter
 /// 色は所属カレンダーで決まる（<c>ICalendarPalette</c>）。決まっていなければ
 /// 既定のアクセント色に倒す。
 /// </para>
+/// <para>
+/// <b>表示のときだけ</b>、いまの配色の地（PanelColor）に対するコントラストが 3:1 に満たない色を、
+/// 明るさだけ直して使う（<see cref="Kado.Presentation.Infrastructure.DisplayColor"/>）。保存している色・Google に送る色は
+/// 変えない。配色を替えたら結び直す（<see cref="IThemeSensitiveConverter"/>）。
+/// </para>
 /// </summary>
 public sealed class EventColorBrushConverter : IValueConverter, IThemeSensitiveConverter
 {
     /// <summary>
-    /// 色の文字列ごとに、凍結したブラシを1つだけ作って使い回す（<see cref="BrushCache"/>）。
+    /// 色の文字列と地の色ごとに、凍結したブラシを1つだけ作って使い回す（<see cref="BrushCache"/>）。
     /// 壊れた色・色なしは、既定のアクセント色（配色の辞書から。当て直すまで使い回す）。
     /// </summary>
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is string { Length: > 0 } hex && BrushCache.Solid(hex) is { } brush
+        value is string { Length: > 0 } hex && BrushCache.Solid(hex, DisplayBackground.Current()) is { } brush
             ? brush
             : ThemeResources.Find("AccentBrush");
 
@@ -207,12 +212,12 @@ public sealed class EventColorBrushConverter : IValueConverter, IThemeSensitiveC
 
 /// <summary>
 /// 予定の色から面のブラシを作る。
-/// <para>帯の色を薄く敷く。モックは rgba で 10〜12% の不透明度を使っている。</para>
+/// <para>帯の色を薄く敷く（<see cref="BrushCache.FaceAlpha"/>）。帯と同じく、地に合わせて明るさを直した色を使う。</para>
 /// </summary>
 public sealed class EventColorFaceConverter : IValueConverter, IThemeSensitiveConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is string { Length: > 0 } hex && BrushCache.Face(hex) is { } brush
+        value is string { Length: > 0 } hex && BrushCache.Face(hex, DisplayBackground.Current()) is { } brush
             ? brush
 
             // 既定の藍には専用の面色がある
@@ -224,7 +229,7 @@ public sealed class EventColorFaceConverter : IValueConverter, IThemeSensitiveCo
 
 /// <summary>
 /// <c>#rrggbb</c> の文字列からブラシを作る。
-/// <para>カレンダーの色見本に使う。色はデータ側が文字列で持っているため。</para>
+/// <para>カレンダーの色を<b>元のまま</b>出す（色を選ぶ画面の見本）。色はデータ側が文字列で持っているため。</para>
 /// </summary>
 public sealed class HexBrushConverter : IValueConverter
 {
@@ -237,6 +242,32 @@ public sealed class HexBrushConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
+}
+
+/// <summary>
+/// <c>#rrggbb</c> の文字列から、いまの配色の地に合わせて明るさを直したブラシを作る（表示専用）。
+/// <para>
+/// 左パネルの一覧・右クリックメニューの色の四角に使う。予定の帯（<see cref="EventColorBrushConverter"/>）と
+/// 同じ色で出すため。色を選ぶ画面の見本は <see cref="HexBrushConverter"/>（元の色のまま）。
+/// </para>
+/// </summary>
+public sealed class DisplayHexBrushConverter : IValueConverter, IThemeSensitiveConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string { Length: > 0 } hex ? BrushCache.Solid(hex, DisplayBackground.Current()) : null;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>色を表示に合わせて直すときの「地」。いまの配色の PanelColor。</summary>
+internal static class DisplayBackground
+{
+    /// <summary>辞書から引けなければ白（ライトの Panel）。</summary>
+    public static System.Windows.Media.Color Current() =>
+        ThemeResources.Find("PanelColor") is System.Windows.Media.Color color
+            ? color
+            : System.Windows.Media.Colors.White;
 }
 
 /// <summary>false なら表示、true なら畳む。</summary>

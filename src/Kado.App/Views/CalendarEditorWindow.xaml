@@ -10,7 +10,7 @@
         Icon="/Assets/app.png"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"

@@ -27,7 +27,7 @@
         Title="設定" Width="720" Height="560" MinWidth="620" MinHeight="420"
         Icon="/Assets/app.png"
         WindowStartupLocation="CenterOwner"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource BackgroundBrush}"
@@ -78,24 +78,20 @@
             </Setter>
         </Style>
 
-        <!-- 右の見出し -->
-        <Style x:Key="PageHeadStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="15" />
+        <!-- 右の見出し。共通の準見出し（Subheading）に乗せる -->
+        <Style x:Key="PageHeadStyle" TargetType="TextBlock" BasedOn="{StaticResource SubheadingTextStyle}">
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,0,0,14" />
         </Style>
 
         <!-- 節の中の小見出し。1つの節に複数のまとまりを収めるときに挟む -->
-        <Style x:Key="SubHeadStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12.5" />
+        <Style x:Key="SubHeadStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,2,0,10" />
         </Style>
 
-        <!-- 項目の説明。何が変わるのかを一行で添える。10.5px は Ink3 の 4.5:1 基準を
-             割るため 11px（CaptionTextStyle 相当）に上げる -->
-        <Style x:Key="FieldNoteStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
+        <!-- 項目の説明。何が変わるのかを一行で添える。共通の Caption（Ink3 で 4.5:1 を確保した段）に乗せる -->
+        <Style x:Key="FieldNoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
             <Setter Property="Margin" Value="0,3,0,0" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
@@ -119,11 +115,11 @@
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="閉じる"
-                        Style="{StaticResource PrimaryButtonStyle}"
+                        Style="{StaticResource GhostButtonStyle}"
                         IsCancel="True" />
 
                 <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
-                    <TextBlock Text="{Binding Message}" FontSize="11"
+                    <TextBlock Text="{Binding Message}" FontSize="12"
                                TextWrapping="Wrap"
                                Foreground="{DynamicResource SundayBrush}"
                                Visibility="{Binding Message, Converter={StaticResource NullToVisibility}}" />
@@ -132,7 +128,7 @@
                         設定の中で押した操作の結果（バックアップ・書き出し・重複整理・取り込みなど）。
                         本体の窓の帯に出るが、この窓が前にあると見えない。成功は通常の色、失敗は赤
                     -->
-                    <TextBlock Text="{Binding Notice}" FontSize="11"
+                    <TextBlock Text="{Binding Notice}" FontSize="12"
                                TextWrapping="Wrap"
                                Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}">
                         <TextBlock.Style>
@@ -431,7 +427,7 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Ellipse Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
                                          Fill="{Binding Sync.State, Converter={StaticResource SyncStateBrush}}" />
-                                <TextBlock Text="{Binding Sync.StatusText}" FontSize="12.5" />
+                                <TextBlock Text="{Binding Sync.StatusText}" FontSize="13" />
                             </StackPanel>
                         </StackPanel>
 
@@ -443,6 +439,7 @@
                                     Visibility="{Binding Sync.HasUnreadWarnings, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{Binding Sync.WarningHeader}" Style="{StaticResource FieldLabelStyle}" />
                             <TextBox Text="{Binding Sync.WarningsText, Mode=OneWay}" IsReadOnly="True"
+                                     Style="{StaticResource ReadOnlyTextStyle}"
                                      TextWrapping="Wrap" MaxHeight="150" Padding="6,4" FontSize="12"
                                      VerticalScrollBarVisibility="Auto" />
                             <Button Content="警告を確認済みにする" Style="{StaticResource GhostButtonStyle}"
@@ -486,7 +483,7 @@
                             <TextBlock Text="詳細" Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink3Brush}"
                                        Margin="0,0,0,6" />
                             <Button Content="自分のクライアント設定を使う…" HorizontalAlignment="Left"
-                                    Style="{StaticResource GhostButtonStyle}" FontSize="11"
+                                    Style="{StaticResource GhostButtonStyle}" FontSize="12"
                                     Command="{Binding ImportGoogleClientCommand}"
                                     ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
                         </StackPanel>
@@ -559,13 +556,13 @@
                     <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}"
                             Margin="0,0,0,18" Padding="0,16,0,0">
                         <StackPanel>
-                            <TextBlock Text="ここから下は元に戻せません" FontSize="11" FontWeight="SemiBold"
+                            <TextBlock Text="ここから下は元に戻せません" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{DynamicResource SundayBrush}" Margin="0,0,0,12" />
 
                             <StackPanel Style="{StaticResource FieldGroupStyle}">
                                 <Button Content="旧 inaCalendar のバックアップを取り込む…"
                                         HorizontalAlignment="Left"
-                                        Style="{StaticResource GhostButtonStyle}"
+                                        Style="{StaticResource DangerButtonStyle}"
                                         Command="{Binding ImportLegacyBackupCommand}" />
                                 <TextBlock Style="{StaticResource DangerNoteStyle}"
                                            Text="旧データからの移行時に1回だけ使います。同じ予定・タスクは上書きされます。" />
@@ -573,7 +570,7 @@
 
                             <StackPanel Margin="0,0,0,0">
                                 <Button Content="バックアップから復元…" HorizontalAlignment="Left"
-                                        Style="{StaticResource GhostButtonStyle}"
+                                        Style="{StaticResource DangerButtonStyle}"
                                         Command="{Binding RestoreCommand}"
                                         ToolTip="いまの内容はすべて置き換わります。復元後にアプリを立ち上げ直します" />
                                 <TextBlock Style="{StaticResource DangerNoteStyle}"
@@ -603,7 +600,7 @@
 
                     <StackPanel Style="{StaticResource FieldGroupStyle}">
                         <TextBlock Text="{Binding AppName}" Style="{StaticResource HeadingTextStyle}" />
-                        <TextBlock FontSize="12.5" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}">
+                        <TextBlock FontSize="13" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}">
                             <Run Text="バージョン " /><Run Text="{Binding AppVersion, Mode=OneWay}" />
                         </TextBlock>
                     </StackPanel>

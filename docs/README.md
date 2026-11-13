@@ -83,6 +83,25 @@ CI は Linux なので、画面と Windows の仕組みと Google との実際�
 
 `--desk`（モックの外側の背景）はモック用の色なので実装しない。
 
+### 見た目の見直しで足した色と決まり
+
+- **`ControlBorderColor`／`ControlBorderBrush`**：入力欄（TextBox・ComboBox・DatePicker）とチェックボックスの枠。
+  地（Panel）に対して 3:1 以上（Light `#8A92A8`・Dark `#626D87`・Night `#8D8D8D`）。`LineStrong` は区切り線用で、枠には使わない
+- **補助文字 `Ink3`（と、同じ値の `Done`）**：Light `#5D6473`・Dark `#939CAA`・Night `#A7AFBA`。Panel・Sunken・休業日の面の
+  どれの上でも 4.5:1 以上。**前後の月・年ビューの休業日は Opacity で薄くせず、Foreground を Ink3 に固定する**
+  （Opacity で薄くすると 4.5:1 を割る）。数値は `tests/Kado.App.Tests/ThemeDesignTests` が計算で見張る
+- **文字の段**：Micro 11／Caption 12／Body 13／Subheading 16／Heading 20。行の高さは各スタイルが持つ
+  （Micro 15・Caption 16・Body 18・Subheading 22）。月のマスに入る件数は `DayCellViewModel.ChipHeight`（22）と
+  `Reserved`（46）で計算するので、チップの背を変えたら合わせて直す
+- **カレンダーの色は表示のときだけ直す**：地（PanelColor）に対して 3:1 に満たない色は、HSL の明るさだけを地から遠ざけて
+  使う（`Kado.Presentation.Infrastructure.DisplayColor`、`EventColorBrushConverter`／`DisplayHexBrushConverter`）。
+  `BrushCache` の鍵に地の色を含めるので、配色を替えても古い色は残らない。**保存する色・Google に送る色・色を選ぶ画面の見本
+  （`HexBrushConverter`）は元の色のまま**。この関数を保存や送信の経路に使わない
+- **影は `PopupShadowEffect` を共有する**（`Controls.xaml` の先頭、Blur 16／Depth 2／Opacity 0.30）。文字を載せた Border に
+  直接掛けず、影だけを持つ Border に掛ける
+- **日付を選ぶ暦**：`FieldCalendarStyle`（`CalendarItem`・`CalendarDayButton`・`CalendarButton` のテンプレートを持つ）。
+  PART 名と VisualState 名は WPF 既定のまま。状態の見た目は面の Opacity だけで出す（Storyboard に DynamicResource は書けない）
+
 ## モックから写した月ビューの寸法
 
 要件書には書かれていないが、モックの月グリッドが持っている表示。実装はこれに合わせた。
@@ -90,7 +109,7 @@ CI は Linux なので、画面と Windows の仕組みと Google との実際�
 | 要素 | モック | 内容 |
 |---|---|---|
 | マス | `padding 3px 5px 4px` / `gap 2px` / `overflow hidden` | 溢れは切る |
-| 日付 | `12px` / `weight 500` / 等幅数字 | 前後の月は日付だけ `opacity .4` |
+| 日付 | `12px` / `weight 500` / 等幅数字 | 前後の月は日付だけ薄く（実装は Opacity ではなく Ink3 の色。下の「見た目の見直し」） |
 | 祝日名 | `.hol` `10px` / 日曜色 | 日付の下に出す |
 | マイルストーン | `.ms` `10px` / `weight 600` / `padding 0 5px` / `radius 3px` | 日付の右で中央寄せ |
 | 予定 | `.chip` `11px` / `padding 1px 5px` / `radius 3px` / 左に `3px` の帯 | 「09:00 計画レビュー」と時刻を頭に付ける |

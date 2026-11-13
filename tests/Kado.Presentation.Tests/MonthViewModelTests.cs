@@ -644,9 +644,9 @@ public class MonthViewModelTests
     [Theory]
     [InlineData(0, 3)]        // 高さが分からないうちは既定
     [InlineData(-1, 3)]
-    [InlineData(100, 3)]      // (100-40)/18 = 3
-    [InlineData(150, 6)]
-    [InlineData(200, 8)]
+    [InlineData(100, 2)]      // (100-46)/22 = 2
+    [InlineData(150, 4)]      // (150-46)/22 = 4
+    [InlineData(200, 7)]      // (200-46)/22 = 7
     [InlineData(50, 1)]       // どんなに狭くても1件は出す
     public void マスの高さで並べる件数が決まる(double height, int expected)
     {

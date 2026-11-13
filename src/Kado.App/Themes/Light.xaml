@@ -15,20 +15,20 @@
     <!-- 罫線 -->
     <Color x:Key="LineColor">#E2E4EA</Color>
     <Color x:Key="LineStrongColor">#C8CCD6</Color>
+    <!-- 入力欄・チェックボックスの枠。LineStrong（区切り線用）は白上 1.6:1 で枠には薄いため、白上 3:1 以上の別色にする -->
+    <Color x:Key="ControlBorderColor">#8A92A8</Color>
 
     <!--
         文字（主／副／補助）。
-        Ink3 は白パネル上で 4.57:1、一段沈めた面（Sunken）上で 4.08:1。
-        付いているのは CaptionTextStyle（11px）・MicroTextStyle（10px）が中心で、
-        いずれも小さい文字なので WCAG の 4.5:1 を満たす値まで上げてある
-        （旧 #8F96A4 は白上 2.97:1・選択マス上 2.12:1 だった）。
+        Ink3 が付いているのは CaptionTextStyle・MicroTextStyle が中心で、いずれも小さい文字なので
+        WCAG の 4.5:1 を満たす値まで上げてある（旧 #8F96A4 は白上 2.97:1・選択マス上 2.12:1 だった）。
 
-        ただし Sunken（#F1F2F5）のような薄い面の上では旧 #6E7686 でも 4.08:1 しか
-        出ず 4.5 を割っていたため、白上 5.44:1・Sunken 上 4.86:1 まで再度上げる
+        休業日の面（OffDay #DDE1E8）の上でも 4.5:1 を保つため、#626A79 から #5D6473 へ濃くした
+        （白上 5.94:1・OffDay 上 4.53:1）
     -->
     <Color x:Key="InkColor">#1C2029</Color>
     <Color x:Key="Ink2Color">#585F6E</Color>
-    <Color x:Key="Ink3Color">#626A79</Color>
+    <Color x:Key="Ink3Color">#5D6473</Color>
 
     <!-- アクセント（藍） -->
     <Color x:Key="AccentColor">#27528F</Color>
@@ -76,14 +76,14 @@
 
     <!--
         予定のカテゴリ色。モックの ok / amber の変数に対応する。
-        琥珀は白上 3.55:1 しか無く、同期の丸（8px）や文字に使うには足りないため
-        4.74:1 まで濃くした
+        緑・琥珀とも白上 5.94:1 まで濃くした
+        （旧 #2F7D5B は 4.99:1、旧 #A8621C は 4.74:1。文字に使っても余裕が出る値）
     -->
-    <Color x:Key="CategoryGreenColor">#2F7D5B</Color>
-    <Color x:Key="CategoryAmberColor">#A8621C</Color>
+    <Color x:Key="CategoryGreenColor">#2A7052</Color>
+    <Color x:Key="CategoryAmberColor">#925518</Color>
 
     <!-- 完了したタスクの文字色。取り消し線が「済み」を担うため、Ink3 と同値でよい -->
-    <Color x:Key="DoneColor">#626A79</Color>
+    <Color x:Key="DoneColor">#5D6473</Color>
 
     <!-- マイルストーン（要件書 4.2）。面と文字は対にして使う -->
     <Color x:Key="MilestoneSpecFaceColor">#FAEDC4</Color>

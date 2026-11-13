@@ -71,7 +71,6 @@
                                     Background="{Binding Name, Converter={StaticResource MilestoneBrush},
                                                 ConverterParameter=Face}">
                                 <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold"
-                                           LineHeight="15"
                                            Foreground="{Binding Name,
                                                        Converter={StaticResource MilestoneBrush}}" />
                             </Border>
@@ -164,7 +163,8 @@
 
                                         <!-- 期限日に残した跡は薄く出す。片付けたのはこの日ではない -->
                                         <DataTrigger Binding="{Binding IsFaint}" Value="True">
-                                            <Setter TargetName="Box" Property="Opacity" Value="0.55" />
+                                            <!-- 0.55 だと文字が 3:1 を割るため 0.75 に上げる -->
+                                            <Setter TargetName="Box" Property="Opacity" Value="0.75" />
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
@@ -193,7 +193,7 @@
                                 -->
                                 <Border Height="{Binding DataContext.HourHeight, ElementName=Root}">
                                     <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding}" VerticalAlignment="Top"
-                                               TextAlignment="Right" Padding="0,0,6,0" Margin="0,-5,0,0"
+                                               TextAlignment="Right" Padding="0,0,6,0" Margin="0,-6,0,0"
                                                Foreground="{DynamicResource Ink3Brush}"
                                                Typography.NumeralAlignment="Tabular" />
                                 </Border>

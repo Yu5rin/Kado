@@ -22,6 +22,9 @@ public partial class EventEditorWindow : Window
         InitializeComponent();
         DataContext = _editor = editor;
 
+        // 中身が高くても窓が作業領域からはみ出さないようにする（中身は ScrollViewer がスクロールする）
+        MaxHeight = SystemParameters.WorkArea.Height;
+
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
         DeleteCommand = new RelayCommand(Delete, () => editor.CanDelete);
         RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);

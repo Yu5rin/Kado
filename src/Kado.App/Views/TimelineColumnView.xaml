@@ -104,7 +104,7 @@
                                 正確な時刻はマウスを載せれば出る
                             -->
                             <StackPanel ClipToBounds="True">
-                                <TextBlock Text="{Binding Title}" FontSize="11" LineHeight="14"
+                                <TextBlock Text="{Binding Title}" FontSize="12" LineHeight="16"
                                            Foreground="{DynamicResource InkBrush}"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>

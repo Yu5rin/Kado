@@ -17,7 +17,7 @@
         Title="{Binding HeaderText}" Width="440" SizeToContent="Height"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        FontFamily="{DynamicResource UiFontFamily}" FontSize="12.5"
+        FontFamily="{DynamicResource UiFontFamily}" FontSize="13"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource PanelBrush}"
@@ -47,8 +47,8 @@
                 </StackPanel>
 
                 <!-- 既存のタスクを編集しているときだけ出す。新規作成では消すものが無い -->
-                <Button Content="削除" DockPanel.Dock="Left" Style="{StaticResource GhostButtonStyle}"
-                        Foreground="{DynamicResource SundayBrush}" Margin="0,0,10,0"
+                <Button Content="削除" DockPanel.Dock="Left" Style="{StaticResource DangerButtonStyle}"
+                        Margin="0,0,10,0"
                         Command="{Binding DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                         Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}" />
 
@@ -59,6 +59,12 @@
             </DockPanel>
         </Border>
 
+        <!--
+            中身はスクロールできる。見出しと下のボタンの帯は外に固定する。窓の高さは中身に合わせる
+            （SizeToContent="Height"）が、作業領域より高くはならない（コードビハインドの MaxHeight）。
+            欄が増えた・DPI が高い・画面が低いとき、保存ボタンが画面の外に出てしまうのを防ぐ
+        -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="16,14">
             <!--
                 同期で「Google 上で見つからない」印が付いたタスクにだけ出す。以後は Google へ送られない。
@@ -177,7 +183,7 @@
                             <Border BorderThickness="1" BorderBrush="{DynamicResource LineBrush}"
                                     CornerRadius="5" Padding="8,5" Margin="0,0,0,5">
                                 <DockPanel>
-                                    <Button DockPanel.Dock="Right" Content="外す" Margin="8,0,0,0"
+                                    <Button DockPanel.Dock="Right" Content="外す" Margin="8,0,0,0" MinWidth="0"
                                             Style="{StaticResource GhostButtonStyle}"
                                             Tag="{Binding}" Click="OnRemoveAttachmentClick" />
 
@@ -210,5 +216,6 @@
             <TextBlock Text="{Binding LocalOnlyNote}"
                        Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" Margin="0,8,0,0" />
         </StackPanel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

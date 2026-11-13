@@ -75,7 +75,7 @@
                     ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
-                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}" LineHeight="16"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
                            Typography.NumeralAlignment="Tabular"
@@ -100,7 +100,7 @@
                     ContextMenu="{StaticResource EventContextMenu}"
                     MouseLeftButtonDown="OnEventChipClicked"
                     MouseMove="OnChipDragging">
-                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Text}" LineHeight="16"
+                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Text}"
                            Foreground="{DynamicResource InkBrush}"
                            TextTrimming="CharacterEllipsis"
                            Typography.NumeralAlignment="Tabular"
@@ -146,10 +146,12 @@
 
         <!--
             帯の1段。予定が無くても高さぶんの場所を空ける。空けないと、その日だけ
-            下の予定がせり上がって、隣の日と段が揃わない
+            下の予定がせり上がって、隣の日と段が揃わない。
+            高さは 22：チップの文字が 12px（行の高さ 16）+ 上下の余白 2 + 上の間 2 = 20 に収まり、
+            さらに 2px の余裕を持たせる（DayCellViewModel.ChipHeight と揃える）
         -->
         <DataTemplate x:Key="EventBandSlotTemplate">
-            <ContentControl Height="20" Content="{Binding Chip}"
+            <ContentControl Height="22" Content="{Binding Chip}"
                             ContentTemplate="{StaticResource EventBandTemplate}"
                             HorizontalContentAlignment="Stretch" />
         </DataTemplate>
@@ -165,7 +167,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Ellipse x:Name="Dot" Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
                              Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
-                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}" LineHeight="16"
+                    <TextBlock x:Name="Title" Style="{StaticResource CaptionTextStyle}"
                                Foreground="{DynamicResource Ink2Brush}"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding Tooltip}">
                         <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="{Binding RepeatMark, Mode=OneWay}" Foreground="{DynamicResource Ink3Brush}" />
@@ -192,7 +194,8 @@
 
                 <!-- 期限日に残した跡は薄く出す。片付けたのはこの日ではない -->
                 <DataTrigger Binding="{Binding IsFaint}" Value="True">
-                    <Setter TargetName="Chip" Property="Opacity" Value="0.55" />
+                    <!-- 0.55 だと Ink 系の文字が 3:1 を割るため 0.75 に上げる（題名の色の付け替えは構造が絡むのでしない） -->
+                    <Setter TargetName="Chip" Property="Opacity" Value="0.75" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -213,7 +216,7 @@
                     MouseLeftButtonDown="OnMilestoneClicked"
                     MouseMove="OnChipDragging"
                     Cursor="Hand">
-                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold" LineHeight="15"
+                <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding Name}" FontWeight="SemiBold"
                            Foreground="{Binding Name, Converter={StaticResource MilestoneBrush}}" />
             </Border>
         </DataTemplate>
@@ -257,11 +260,11 @@
                             NumberFace と同じ構造にする。選択は Cell 側の枠で示すので、
                             このマル自体は既定では透明
                         -->
-                        <Border x:Name="DayNumberFace" Grid.Column="0" CornerRadius="9"
-                                Width="18" Height="18" Background="Transparent"
+                        <Border x:Name="DayNumberFace" Grid.Column="0" CornerRadius="11"
+                                Width="22" Height="22" Background="Transparent"
                                 HorizontalAlignment="Left" VerticalAlignment="Center">
                             <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="DayNumber"
-                                       Text="{Binding DayNumber}" FontWeight="Medium"
+                                       Text="{Binding DayNumber}" FontSize="14" FontWeight="SemiBold"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Typography.NumeralAlignment="Tabular"
                                        Foreground="{DynamicResource InkBrush}" />
@@ -274,11 +277,11 @@
 
                     <!-- 祝日名・休業日・特別出勤。休みの理由が読めると予定を立てやすい。
                          休業日と特別出勤は、色だけだと取り込んでも何も変わらないように見えたので文字でも出す -->
-                    <TextBlock Text="{Binding Note.Text}" LineHeight="13"
+                    <TextBlock Text="{Binding Note.Text}"
                                TextTrimming="CharacterEllipsis"
                                Visibility="{Binding Note.Text, Converter={StaticResource NullToVisibility}}">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource MicroTextStyle}">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
                                 <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Note.IsOpenDay}" Value="True">
@@ -300,7 +303,7 @@
                         入りきらなかった件数。隠れたまま気づけないのを防ぐ。
                         休業日の面の上でも 4.5:1 を確保できるよう Ink2Brush を使う
                     -->
-                    <TextBlock Style="{StaticResource MicroTextStyle}" Text="{Binding OverflowLabel}" Margin="3,1,0,0"
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding OverflowLabel}" Margin="3,1,0,0"
                                Foreground="{DynamicResource Ink2Brush}"
                                Visibility="{Binding OverflowLabel, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
@@ -321,17 +324,6 @@
                             Value="{DynamicResource OffDayBrush}" />
                 </DataTrigger>
 
-                <!--
-                    前後の月は面を沈めず、日付の Opacity だけで示す（項目3）。
-                    休業日の面（OffDayBrush）と前後の月が同じ調子の灰色だと見分けが
-                    付かなかったため、面を分けるのをやめて「灰色の面＝休業日」の
-                    一対一にする。セル全体を薄くすると予定まで読めなくなる。
-                    0.4 だと薄すぎて読みづらかったため 0.6 に上げる
-                -->
-                <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                    <Setter TargetName="DayNumber" Property="Opacity" Value="0.6" />
-                </DataTrigger>
-
                 <DataTrigger Binding="{Binding IsSaturday}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground"
                             Value="{DynamicResource SaturdayBrush}" />
@@ -344,6 +336,18 @@
                 <DataTrigger Binding="{Binding IsSundayLike}" Value="True">
                     <Setter TargetName="DayNumber" Property="Foreground"
                             Value="{DynamicResource SundayBrush}" />
+                </DataTrigger>
+
+                <!--
+                    前後の月は面を沈めず、日付の色だけで示す（項目3）。休業日の面（OffDayBrush）と
+                    前後の月が同じ調子の灰色だと見分けが付かなかったため、面を分けるのをやめて
+                    「灰色の面＝休業日」の一対一にする。セル全体を薄くすると予定まで読めなくなる。
+                    Opacity で薄くすると Ink3 がさらに沈んで 4.5:1 を割るため、Opacity はやめて
+                    Foreground を Ink3Brush に固定する（土日の色は付けない。土日の色より後に置いて勝たせる）
+                -->
+                <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                    <Setter TargetName="DayNumber" Property="Foreground"
+                            Value="{DynamicResource Ink3Brush}" />
                 </DataTrigger>
 
                 <!-- 前後の月と同じ色にすると、載せているのか月の外なのか読めない -->
@@ -441,7 +445,7 @@
                         </ItemsControl>
                     </Border>
 
-                    <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="CompactNumber" Text="{Binding DayNumber}" LineHeight="15" Margin="0,0,0,1"
+                    <TextBlock Style="{StaticResource BodyTextStyle}" x:Name="CompactNumber" Text="{Binding DayNumber}" LineHeight="17" Margin="0,0,0,1"
                                HorizontalAlignment="Center"
                                Typography.NumeralAlignment="Tabular"
                                Foreground="{DynamicResource InkBrush}" />

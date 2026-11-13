@@ -18,13 +18,14 @@
 
     <Color x:Key="LineColor">#4A4F54</Color>
     <Color x:Key="LineStrongColor">#555555</Color>
+    <!-- 入力欄・チェックボックスの枠。Panel（#3E4348）上 3:1 以上 -->
+    <Color x:Key="ControlBorderColor">#8D8D8D</Color>
 
     <!--
         文字（主／副／補助）。
         3:1 は 18.66px 太字以上の大きい文字の基準で、Ink3 が付いているのは
-        CaptionTextStyle（11px）・MicroTextStyle（10px）なので 4.5:1 が要る。
-        Ink3 は Panel 上 4.20:1（#A0A9B4）で据え置き。Night は他テーマより落とす
-        設計なので、4.5 は超えずここで止める（設計上の判断）。
+        CaptionTextStyle・MicroTextStyle なので 4.5:1 が要る。
+        旧 #A0A9B4 は Panel 上 4.20:1 で足りなかったため、#A7AFBA（Panel 上 4.51:1）へ上げた。
 
         見出し・本文・補助の3段が文字サイズでしか区別できない問題があったため、
         InkColor と Ink2Color を明度差がはっきり付くところまで引き上げた。
@@ -33,7 +34,7 @@
     -->
     <Color x:Key="InkColor">#DDE2E8</Color>
     <Color x:Key="Ink2Color">#B9C1CA</Color>
-    <Color x:Key="Ink3Color">#A0A9B4</Color>
+    <Color x:Key="Ink3Color">#A7AFBA</Color>
 
     <Color x:Key="AccentColor">#6DC1E7</Color>
     <!--
@@ -58,9 +59,9 @@
     -->
     <Color x:Key="OnDoneColor">#0F1720</Color>
 
-    <!-- 赤字（日曜色）が 3.44:1 と読みづらかったため、Panel 上 4.49:1 まで明るくする -->
-    <Color x:Key="SundayColor">#F0968B</Color>
-    <Color x:Key="SaturdayColor">#7FB3D5</Color>
+    <!-- 赤・青の文字。旧 #F0968B／#7FB3D5 は Panel 上 4.5:1 を割っていたため、#F0978C／#82B5D6 で 4.5:1 以上にする -->
+    <Color x:Key="SundayColor">#F0978C</Color>
+    <Color x:Key="SaturdayColor">#82B5D6</Color>
 
     <!-- 稼働日は塗らない（Panel と同値） -->
     <Color x:Key="WorkingDayColor">#3E4348</Color>
@@ -73,21 +74,21 @@
     <!--
         マスを押したときと、マウスを載せたときの面。
         以前は CellHover が Panel とほぼ同色（明度差2.1）で乗せても分からなかった。
-        Panel から明度をはっきり離す。
 
         選択は「内側に引く2pxのアクセント枠」で示すので、面はもう強く塗らない。
-        以前の #437CA3 は面としては強すぎ、その上の日曜色 #E07B6E が 1.55:1 まで
-        沈んで読めなくなっていた。Ink 上 5.64:1・日曜色上 3.61:1 を保てる
-        濃い面（枠の内側に敷く程度の濃さ）まで落とす。Panel 比 1.29:1（#48545F）
+        ホバーの面は、旧 #48545F だと Ink3 などの補助文字が 3.3:1 前後まで沈んだ
+        （日曜色 3.48:1・NowLine 2.67:1）。Panel より少し暗い #333B43 にすると、
+        日曜色・土曜色・Ink3 のいずれも 5:1 以上を保てる（Panel 比は 1.2:1 前後で、
+        ホバーとわかる程度の差は残る）
     -->
-    <Color x:Key="CellHoverColor">#48545F</Color>
+    <Color x:Key="CellHoverColor">#333B43</Color>
     <Color x:Key="CellSelectedColor">#274257</Color>
 
     <Color x:Key="CategoryGreenColor">#8FDAD2</Color>
-    <Color x:Key="CategoryAmberColor">#D9A24A</Color>
+    <Color x:Key="CategoryAmberColor">#DAA54F</Color>
 
     <!-- 完了したタスクの文字色。取り消し線が「済み」を担うため、Ink3 と同値でよい -->
-    <Color x:Key="DoneColor">#A0A9B4</Color>
+    <Color x:Key="DoneColor">#A7AFBA</Color>
 
     <Color x:Key="MilestoneSpecFaceColor">#4A4530</Color>
     <Color x:Key="MilestoneSpecTextColor">#E5CE8E</Color>
@@ -106,6 +107,6 @@
     <Color x:Key="OpenDayTextColor">#E2AE5A</Color>
 
     <!-- 今の時刻を示す線。暦の中でここだけが「いま」を指す -->
-    <Color x:Key="NowLineColor">#E07B6E</Color>
+    <Color x:Key="NowLineColor">#E79B91</Color>
 
 </ResourceDictionary>
