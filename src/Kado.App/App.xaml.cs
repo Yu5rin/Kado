@@ -488,6 +488,16 @@ public partial class App : Application
                     DispatcherPriority.ApplicationIdle);
             }
 
+            // 残してある古い写し（%LOCALAPPDATA%\Kado）で立ち上げているときは、その旨を一度だけ伝える。
+            // 黙っていると、新しいほうに入れたはずの予定が無い理由が分からない。
+            // 案内は最初の画面が出たあとに回す（上のトークンの案内と同じ理由）
+            if (DataLocation.Warning is { Length: > 0 } dataWarning)
+            {
+                Dispatcher.InvokeAsync(
+                    () => Shell.FrontMessageBox.Show(dataWarning, Shell.FrontButtons.Ok, Shell.FrontIcon.Warning),
+                    DispatcherPriority.ApplicationIdle);
+            }
+
             // 前回の入れ替えで残ったものを片付ける。ファイルの削除（同期I/O）なので、
             // 最初の画面が出てからでよい。ApplicationIdle まで待たせば、初回描画の
             // あとに回る。CleanupOldFiles は他の起動処理を待たない独立した後片付けで、
@@ -522,7 +532,10 @@ public partial class App : Application
                     token => Dispatcher.InvokeAsync(
                         () => main.Sync.SyncQuietlyAsync(token)).Task.Unwrap());
 
-                _background.Start();
+                // 古い写しで立ち上げているときは、自動の同期を始めない。古い内容のまま Google と
+                // 同期すると、新しいほうで済ませた変更の上に、古い内容の送信や取り込みが重なる。
+                // 手で押す同期は止めない
+                if (!DataLocation.PausesBackgroundSync) _background.Start();
 
                 // 手で押した同期や、繋いだ直後の同期がうまくいったら、失敗で延びた間隔を戻す
                 main.Sync.Succeeded += (_, _) => _background?.ReportSuccess();

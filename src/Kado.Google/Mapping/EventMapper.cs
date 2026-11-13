@@ -1,3 +1,4 @@
+using Kado.Core;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -161,8 +162,10 @@ public static class EventMapper
             ? parsed
             : null;
 
+        // 開始日（ReadStart）と同じく、この PC の時刻に直してから日付を取る。文字列のオフセットの
+        // ままの日付だと、PC のタイムゾーンと予定のタイムゾーンが違うとき、除外日が1日ずれる
         return ParseDateTime(original.Text("dateTime")) is { } moment
-            ? DateOnly.FromDateTime(moment.DateTime)
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(moment, LocalZone.Current).DateTime)
             : null;
     }
 
@@ -732,7 +735,7 @@ public static class EventMapper
         {
             // この PC の時刻に直す。書き戻すときもこの PC の時差を付けるので、
             // ここで合わせておかないと往復するたびに時刻がずれる
-            var local = moment.ToLocalTime();
+            var local = TimeZoneInfo.ConvertTime(moment, LocalZone.Current);
             return (DateOnly.FromDateTime(local.DateTime), TimeOnly.FromDateTime(local.DateTime));
         }
 
@@ -760,7 +763,7 @@ public static class EventMapper
 
         if (ParseDateTime(value.Text("dateTime")) is not { } moment) return (null, null);
 
-        var local = moment.ToLocalTime();
+        var local = TimeZoneInfo.ConvertTime(moment, LocalZone.Current);
         var endDate = DateOnly.FromDateTime(local.DateTime);
         var endTime = TimeOnly.FromDateTime(local.DateTime);
 
@@ -818,7 +821,7 @@ public static class EventMapper
     {
         if (originalZoneId is { Length: > 0 } id && FindZone(id) is { } zone)
         {
-            var instant = new DateTimeOffset(localClock, TimeZoneInfo.Local.GetUtcOffset(localClock));
+            var instant = new DateTimeOffset(localClock, LocalZone.Current.GetUtcOffset(localClock));
             var inZone = TimeZoneInfo.ConvertTime(instant, zone);
 
             return new JsonObject
@@ -979,7 +982,7 @@ public static class EventMapper
     private static string FormatDateTime(DateOnly date, TimeOnly time)
     {
         var local = date.ToDateTime(time, DateTimeKind.Unspecified);
-        var offset = TimeZoneInfo.Local.GetUtcOffset(local);
+        var offset = LocalZone.Current.GetUtcOffset(local);
 
         return new DateTimeOffset(local, offset).ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture);
     }

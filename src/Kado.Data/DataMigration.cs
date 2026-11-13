@@ -85,6 +85,15 @@ public static class DataMigration
         return new DataMigrationResult(true, "整合性の確認: ok");
     }
 
+    /// <summary>
+    /// 移し先を機械が読める形で書く行の頭。
+    /// <para>
+    /// 文面は人に向けて書くので、読み取りに使うと言い回しを直しただけで壊れる。移し先は
+    /// この行にも書く（<see cref="ReadMovedTarget"/>）。
+    /// </para>
+    /// </summary>
+    internal const string MovedToKey = "KADO-MOVED-TO=";
+
     /// <summary>元のフォルダに置く、移したことを知らせる文面。</summary>
     internal static string BuildMovedMarker(string target, DateTimeOffset now) =>
         $"このフォルダの中身は、{now:yyyy-MM-dd HH:mm} に次の場所へ移しました。{Environment.NewLine}" +
@@ -92,7 +101,50 @@ public static class DataMigration
         $"    {target}{Environment.NewLine}" +
         $"{Environment.NewLine}" +
         $"Kado はこれからそちらを使います。このフォルダは念のため消さずに残してあります。{Environment.NewLine}" +
-        $"新しい場所で問題なく使えていることを確かめてから、削除して構いません。{Environment.NewLine}";
+        $"新しい場所で問題なく使えていることを確かめてから、削除して構いません。{Environment.NewLine}" +
+        $"{Environment.NewLine}" +
+        $"{MovedToKey}{target}{Environment.NewLine}";
+
+    /// <summary>
+    /// 元のフォルダの印（<see cref="MovedMarkerFileName"/>）があるか。
+    /// <para>
+    /// あるなら、このフォルダの中身はすでにどこかへ写してある。exe だけ別のフォルダで起動したときに、
+    /// 写し直して古い内容で立ち上げないための手がかり（<see cref="DataLocation.Decide"/>）。
+    /// </para>
+    /// </summary>
+    internal static bool HasMovedMarker(string folder) =>
+        File.Exists(Path.Combine(folder, MovedMarkerFileName));
+
+    /// <summary>
+    /// 印に書かれた移し先。読めなければ null。
+    /// <para>
+    /// 機械用の行（<see cref="MovedToKey"/>）を先に見る。それが無い古い印は、本文の中の
+    /// 字下げした1行（移し先のパス）を読む。
+    /// </para>
+    /// </summary>
+    internal static string? ReadMovedTarget(string folder)
+    {
+        try
+        {
+            var lines = File.ReadAllLines(Path.Combine(folder, MovedMarkerFileName));
+
+            foreach (var line in lines)
+            {
+                if (line.StartsWith(MovedToKey, StringComparison.Ordinal) &&
+                    line[MovedToKey.Length..].Trim() is { Length: > 0 } path)
+                {
+                    return path;
+                }
+            }
+
+            // 古い印：「    <パス>」の字下げの行
+            return lines.FirstOrDefault(l => l.StartsWith("    ", StringComparison.Ordinal) && l.Trim().Length > 0)?.Trim();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private static void WriteMovedMarker(string source, string target, DateTimeOffset now) =>
         File.WriteAllText(Path.Combine(source, MovedMarkerFileName), BuildMovedMarker(target, now));

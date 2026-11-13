@@ -157,4 +157,56 @@ public class UndoStackTests
 
         Assert.Equal(0, notified);
     }
+
+    // ------------------------------------------------------------------
+    // まとめた編集が途中で転んだとき、半端に残さない
+    // ------------------------------------------------------------------
+
+    /// <summary>決めたほうの向きで例外を投げる編集。</summary>
+    private sealed class FailingEdit(bool failOnApply, bool failOnRevert = false) : IUndoableEdit
+    {
+        public string Description => "転ぶ編集";
+        public void Apply() { if (failOnApply) throw new InvalidOperationException("書き込めない"); }
+        public void Revert() { if (failOnRevert) throw new InvalidOperationException("書き込めない"); }
+    }
+
+    [Fact]
+    public void まとめた編集の実行が途中で転んだら済ませた分を戻して例外を返す()
+    {
+        var first = new CountingEdit();
+        var second = new CountingEdit();
+        var composite = new CompositeEdit("まとめ", [first, second, new FailingEdit(failOnApply: true)]);
+        var stack = new UndoStack();
+
+        Assert.Throws<InvalidOperationException>(() => stack.Execute(composite));
+
+        // 済んでいた2つは逆順に戻る。半端に残らない
+        Assert.Equal(1, first.Reverted);
+        Assert.Equal(1, second.Reverted);
+
+        // 履歴にも積まれない
+        Assert.False(stack.CanUndo);
+    }
+
+    [Fact]
+    public void まとめた編集の巻き戻しが途中で転んだら戻した分をやり直して例外を返す()
+    {
+        var first = new CountingEdit();
+        var last = new CountingEdit();
+        var composite = new CompositeEdit("まとめ", [first, new FailingEdit(failOnApply: false, failOnRevert: true), last]);
+        var stack = new UndoStack();
+        stack.Execute(composite);
+
+        // 逆順なので、最後の編集は戻り、真ん中で転ぶ
+        Assert.Throws<InvalidOperationException>(() => stack.Undo());
+
+        // 戻していた最後の編集は、もう一度当て直される（全部適用済みの姿に揃う）
+        Assert.Equal(1, last.Reverted);
+        Assert.Equal(2, last.Applied);
+        Assert.Equal(0, first.Reverted);
+
+        // 履歴は動かない。もう一度元に戻す機会が残る
+        Assert.True(stack.CanUndo);
+        Assert.False(stack.CanRedo);
+    }
 }

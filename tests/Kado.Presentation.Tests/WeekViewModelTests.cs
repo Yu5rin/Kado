@@ -148,6 +148,63 @@ public class WeekViewModelTests
     }
 
     [Fact]
+    public void 日をまたぐ予定は初日は開始から終わりまで最終日は0時から終了まで中日は終日レーンに置く()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "泊まり込みの試験", Date = D(2026, 9, 22), EndDate = D(2026, 9, 24),
+            StartTime = T(10), EndTime = T(2),
+        });
+
+        // 0 時から 23:59 まで全部見える時間軸
+        var vm = new WeekViewModel(
+            test.Workspace, D(2026, 9, 24), D(2026, 9, 24), dayStart: T(0), dayEnd: new TimeOnly(23, 59));
+
+        var first = vm.Days.Single(d => d.Date == D(2026, 9, 22));
+        var middle = vm.Days.Single(d => d.Date == D(2026, 9, 23));
+        var last = vm.Days.Single(d => d.Date == D(2026, 9, 24));
+
+        // 初日：10:00 から日の終わりまで
+        var firstBlock = Assert.Single(first.Blocks);
+        Assert.Equal(44 * 10, firstBlock.Top);
+        Assert.Equal(44 * 14 - 3, firstBlock.Height, 1.0);
+        Assert.Empty(first.AllDayEvents);
+
+        // 中日：時間軸には置かず、終日レーンに置く
+        Assert.Empty(middle.Blocks);
+        Assert.Equal("e1", Assert.Single(middle.AllDayEvents).Id);
+
+        // 最終日：0:00 から終了（2:00）まで
+        var lastBlock = Assert.Single(last.Blocks);
+        Assert.Equal(0, lastBlock.Top);
+        Assert.Equal(44 * 2 - 3, lastBlock.Height);
+        Assert.Empty(last.AllDayEvents);
+    }
+
+    [Fact]
+    public void 繰り返しの複数日予定も日ごとに置き場所が変わる()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 毎週 月 22:00 〜 火 02:00（9/21 は月曜）
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "夜間バッチ", Date = D(2026, 9, 21), EndDate = D(2026, 9, 22),
+            StartTime = T(22), EndTime = T(2), Recurrence = "FREQ=WEEKLY;BYDAY=MO",
+        });
+
+        var vm = new WeekViewModel(
+            test.Workspace, D(2026, 9, 24), D(2026, 9, 24), dayStart: T(0), dayEnd: new TimeOnly(23, 59));
+
+        Assert.Single(vm.Days.Single(d => d.Date == D(2026, 9, 21)).Blocks);
+
+        var tuesday = Assert.Single(vm.Days.Single(d => d.Date == D(2026, 9, 22)).Blocks);
+        Assert.Equal(0, tuesday.Top);
+        Assert.Equal(44 * 2 - 3, tuesday.Height);
+    }
+
+    [Fact]
     public void 終了時刻の無い予定にも高さを与える()
     {
         using var test = TestWorkspace.Create();

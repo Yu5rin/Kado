@@ -147,6 +147,76 @@ public class DragMoveTests
     }
 
     [Fact]
+    public void タスクを複製すると繰り返しの曜日も複製先の日付に合わせる()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 木曜（9/24）に毎週繰り返すタスクを、金曜（9/25）へ複製する
+        test.Workspace.AddTask(new TaskItem
+        {
+            Id = "t1", Title = "週報", Due = Today, Repeat = "FREQ=WEEKLY;BYDAY=TH",
+        });
+
+        Create(test).MoveTaskTo("t1", Tomorrow, copy: true);
+
+        Assert.Equal("FREQ=WEEKLY;BYDAY=TH", test.Workspace.Tasks.Find("t1")!.Repeat);
+
+        var copy = test.Workspace.Tasks.All().Single(t => t.Id != "t1");
+        Assert.Equal(Tomorrow, copy.Due);
+        Assert.Equal("FREQ=WEEKLY;BYDAY=FR", copy.Repeat);
+    }
+
+    private static CalendarEvent Overnight(string id) => new()
+    {
+        Id = id, Title = "夜間作業", Date = Today, EndDate = Tomorrow,
+        StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(2, 0),
+    };
+
+    [Fact]
+    public void 日をまたぐ予定を時間軸で動かしても長さを保つ()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Overnight("e1"));
+
+        // 22:00〜翌02:00（4時間）を、同じ日の 23:00 に置き直す
+        Assert.True(Create(test).MoveEventToTime("e1", Today, new TimeOnly(23, 0)));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Equal(Today, moved.Date);
+        Assert.Equal(new TimeOnly(23, 0), moved.StartTime);
+        Assert.Equal(Tomorrow, moved.EndDate);
+        Assert.Equal(new TimeOnly(3, 0), moved.EndTime);
+    }
+
+    [Fact]
+    public void 日をまたぐ予定を早い時刻へ動かすと同じ日に収まり終了日を外す()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Overnight("e1"));
+
+        Assert.True(Create(test).MoveEventToTime("e1", Today, new TimeOnly(9, 0)));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Null(moved.EndDate);
+        Assert.Equal(new TimeOnly(13, 0), moved.EndTime);
+    }
+
+    [Fact]
+    public void 日をまたぐ予定を別の日へ動かすと終了日も同じだけずれる()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Overnight("e1"));
+
+        var later = Tomorrow.AddDays(1);
+        Assert.True(Create(test).MoveEventToTime("e1", later, new TimeOnly(20, 0)));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+        Assert.Equal(later, moved.Date);
+        Assert.Equal(later.AddDays(1), moved.EndDate);
+        Assert.Equal(TimeOnly.MinValue, moved.EndTime);
+    }
+
+    [Fact]
     public void 無い予定を移そうとしても落ちない()
     {
         using var test = TestWorkspace.Create();

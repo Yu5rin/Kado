@@ -290,7 +290,10 @@ public sealed class TaskSyncEngine(
             deleted += RemoveVanished(taskListId, localListId, items, warnings);
         }
 
-        settings.SetSyncState(SinceKey(taskListId), startedAt.ToString("O"));
+        // 読む上限のページ数で打ち切ったときは、印を進めない。進めると、取り込みきれなかった分は
+        // 次回の「前回より後に変わったもの」に入らず、永久に来ない。使う人には知らせる
+        if (complete) settings.SetSyncState(SinceKey(taskListId), startedAt.ToString("O"));
+        else warnings.Add(SyncReport.TooManyItemsWarning);
 
         return new SyncReport
         {
@@ -331,6 +334,13 @@ public sealed class TaskSyncEngine(
         if (TaskRepeating.NextOccurrence(received, today, environment.IsWorkday, environment.WeekStart, now) is not { } next)
         {
             return received;
+        }
+
+        // 別の端末で完了にして、次の回がすでに届いている。二重に作らず、そちらに繰り返しを引き継ぐ
+        if (TaskRepeating.FindExistingNext(tasks.DueInRange(next.Due!.Value, next.Due.Value), next) is { } already)
+        {
+            tasks.Upsert(TaskRepeating.WithRepeatOf(already, next));
+            return TaskRepeating.WithoutRepeat(received);
         }
 
         tasks.Upsert(next with { SortOrder = tasks.NextSortOrder(next.Due) });

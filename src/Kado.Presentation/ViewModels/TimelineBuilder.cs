@@ -109,8 +109,9 @@ public sealed class TimelineBuilder
 
             columns.Add(new WeekDayColumnViewModel(
                 date, today, _workspace.WorkingDays, _workspace.Holidays.NameOf(date),
-                // 終日はレーン、時刻付きは時間軸と、置き場所が違う
-                events.Where(x => x.Source.IsAllDay).ToArray(),
+                // 終日はレーン、時刻付きは時間軸と、置き場所が違う。
+                // 日をまたぐ予定の中日（初日でも最終日でもない日）は、一日中なので終日レーンに置く
+                events.Where(x => x.Source.IsAllDay || IsMiddleDay(x)).ToArray(),
                 tasks,
                 Layout(events),
                 _sources,
@@ -129,8 +130,27 @@ public sealed class TimelineBuilder
         {
             if (scheduled.Source.StartTime is not { } start) continue;
 
-            // 終了時刻が無い予定は 30 分の枠で置く。潰れて読めないのを避ける
-            var end = scheduled.Source.EndTime ?? start.AddMinutes(30);
+            // 中日は終日レーンに置く（Build）。時間軸には置かない
+            if (IsMiddleDay(scheduled)) continue;
+
+            // 日をまたぐ予定は、日ごとに置き場所が違う。初日は開始〜24:00、最終日は 0:00〜終了。
+            // 終了時刻だけを見て置くと、終わりが始まりより前になって、どちらの日にも出ない
+            TimeOnly end;
+            if (scheduled.IsContinuation)
+            {
+                start = TimeOnly.MinValue;
+                end = scheduled.Source.EndTime ?? start.AddMinutes(30);
+            }
+            else if (!scheduled.IsLastDay)
+            {
+                end = EndOfDay;
+            }
+            else
+            {
+                // 終了時刻が無い予定は 30 分の枠で置く。潰れて読めないのを避ける
+                end = scheduled.Source.EndTime ?? start.AddMinutes(30);
+            }
+
             if (Place(start, end) is not { } placed) continue;
 
             result.Add(new TimeBlockViewModel(
@@ -144,6 +164,13 @@ public sealed class TimelineBuilder
 
         return result.OrderBy(b => b.Start).ToArray();
     }
+
+    /// <summary>その日の終わり。<c>TimeOnly</c> は 24:00 を表せないので、最後の1分で持つ。</summary>
+    private static readonly TimeOnly EndOfDay = new(23, 59);
+
+    /// <summary>時刻つきで日をまたぐ予定の、初日でも最終日でもない日か。</summary>
+    private static bool IsMiddleDay(ScheduledEvent scheduled) =>
+        scheduled.Source.StartTime is not null && scheduled.IsContinuation && !scheduled.IsLastDay;
 
     /// <summary>
     /// 置き場所を決める。表示時間帯からはみ出す分は端で切る。

@@ -92,6 +92,12 @@ public sealed record SyncReport
     /// </summary>
     public const string BusyWarning = "Google が混み合っていたので、一部を次回に回しました";
 
+    /// <summary>
+    /// 一覧が長すぎて、読む上限のページ数で打ち切ったときの警告。同期の印は進めない。
+    /// <b>同じ文で出す</b>（<see cref="BusyWarning"/> と同じ理由）。
+    /// </summary>
+    public const string TooManyItemsWarning = "件数が多く、一部を取り込めませんでした";
+
     /// <summary>伝えきれなかったことがら。止めるほどではないが、黙らせない。</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 

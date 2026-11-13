@@ -272,6 +272,75 @@ public class EventSyncEngineLossTests : IDisposable
     }
 
     // ------------------------------------------------------------------
+    // 同じ ID が2つのカレンダーに載る（招待された予定と、主催者のカレンダー）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 同じIDが2つのカレンダーに載っても先に取り込んだ行を書き換えない()
+    {
+        _remote.Add("g1", "打ち合わせ", "2026-09-24");
+        await Engine.SyncAsync("primary", "local:mine");
+
+        // 主催者のカレンダーにも同じ ID で載り、中身が少し違う。元のカレンダーにはまだ居る
+        _remote.Edit("g1", "打ち合わせ（主催者側の表記）");
+        _remote.Located[("primary", "g1")] = LiveAt("g1", "打ち合わせ");
+
+        await Engine.SyncAsync("organizer", "local:organizer");
+
+        var stored = Assert.Single(Events.All());
+        Assert.Equal("local:mine", stored.CalendarId);
+        Assert.Equal("primary", stored.GoogleCalendarId);
+        Assert.Equal("打ち合わせ", stored.Title);
+    }
+
+    [Fact]
+    public async Task 元のカレンダーで見つからなければ別のカレンダーへ移されたとして追従する()
+    {
+        _remote.Add("g1", "打ち合わせ", "2026-09-24");
+        await Engine.SyncAsync("primary", "local:mine");
+
+        _remote.Edit("g1", "打ち合わせ");
+        _remote.Items["g1"]["updated"] = "2026-09-20T00:00:00.000Z";
+        _remote.Absent.Add(("primary", "g1"));
+
+        await Engine.SyncAsync("organizer", "local:organizer");
+
+        var stored = Assert.Single(Events.All());
+        Assert.Equal("local:organizer", stored.CalendarId);
+        Assert.Equal("organizer", stored.GoogleCalendarId);
+        Assert.Contains(("primary", "g1"), _remote.Got);
+    }
+
+    // ------------------------------------------------------------------
+    // 結び付いていないものを引き受けても、こちらだけの項目を落とさない
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task 結び付いていない予定を引き受けても通知の指定と色と送る前の添付が残る()
+    {
+        var pending = Kado.Google.Mapping.EventMapper.ToPendingAttachmentsJson(
+            [new EventAttachment("f1", "https://drive.google.com/file/d/f1", "資料", null)]);
+
+        Events.Upsert(new CalendarEvent
+        {
+            Id = "e1", Title = "棚卸し", Date = D(2026, 9, 24), CalendarId = "local:shigoto",
+            Notify = true, Color = "#ff0000", PendingAttachments = pending,
+        });
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+
+        await Engine.SyncAsync("primary", "local:shigoto");
+
+        var stored = Assert.Single(Events.All());
+        Assert.Equal("e1", stored.Id);
+        Assert.Equal("g1", stored.GoogleEventId);
+        Assert.True(stored.Notify);
+        Assert.Equal("#ff0000", stored.Color);
+
+        // 送る前の添付は、引き受けたあとの送信で Google へ出ている（消えていない）
+        Assert.NotNull(_remote.Items["g1"]["attachments"]);
+    }
+
+    // ------------------------------------------------------------------
     // 結び付いていない同じものを探す範囲
     // ------------------------------------------------------------------
 

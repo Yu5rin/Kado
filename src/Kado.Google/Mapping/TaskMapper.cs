@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Kado.Core.Recurrence;
 using Kado.Data.Models;
 
 namespace Kado.Google.Mapping;
@@ -57,12 +58,14 @@ public static class TaskMapper
 
         var isDone = string.Equals(element.Text("status"), CompletedStatus, StringComparison.OrdinalIgnoreCase);
 
+        var due = ReadDue(element.Text("due"));
+
         return new TaskItem
         {
             Id = existing?.Id ?? $"google:{googleId}",
 
             Title = element.Text("title") ?? string.Empty,
-            Due = ReadDue(element.Text("due")),
+            Due = due,
             IsDone = isDone,
             Note = element.Text("notes"),
 
@@ -104,7 +107,13 @@ public static class TaskMapper
             // 引き継がないと同期のたびに繰り返しが消える。
             // ここは「引き継ぐ」だけ。Google 側で完了にされたときの次の回づくりは
             // TaskSyncEngine が受け取りの前後を見比べて行う
-            Repeat = existing?.Repeat,
+            //
+            // Google 側で期限が動いていたら、暦どおりの指定（毎週の曜日・毎月の日など）は新しい期限日で
+            // 指定し直す。直さないと、次の回が元の曜日・日付のまま作られる。稼働日基準のものと
+            // 読めない指定はそのまま（Respec が消さない）
+            Repeat = existing?.Repeat is { } repeat && existing.Due != due && due is { } movedTo
+                ? TaskRepeat.Respec(repeat, movedTo)
+                : existing?.Repeat,
         };
     }
 

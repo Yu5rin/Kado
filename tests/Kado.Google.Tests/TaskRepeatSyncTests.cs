@@ -117,6 +117,27 @@ public class TaskRepeatSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task 次の回がすでに届いていれば作らずそちらに繰り返しを引き継ぐ()
+    {
+        await SeedRepeatingAsync();
+
+        // 別の端末で完了にして次の回を作り、Google 経由でこちらにも届いている
+        // （繰り返しは Kado だけの項目なので、届いたほうには付いていない）
+        Tasks.Upsert(new TaskItem
+        {
+            Id = "already", Title = "週報", Due = D(2026, 9, 28), TaskListId = "local:mytasks",
+        });
+
+        CompleteOnGoogle("g1");
+        var report = await EngineWith().SyncAsync("@default", "local:mytasks");
+
+        Assert.Equal(2, Tasks.All().Count);
+        Assert.Equal(WeeklyMonday, Tasks.Find("already")!.Repeat);
+        Assert.Null(Tasks.All().Single(t => t.GoogleTaskId == "g1").Repeat);
+        Assert.DoesNotContain(report.Notes, n => n.Contains("次の回を作りました", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task 同じ完了を2度受け取っても次の回は二重に作らない()
     {
         await SeedRepeatingAsync();

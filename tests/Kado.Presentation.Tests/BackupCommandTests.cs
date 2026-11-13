@@ -67,6 +67,22 @@ public class BackupCommandTests
     }
 
     [Fact]
+    public void 復元の確認にはGoogleと結び付いたものが次の同期で合わせ直されることを添える()
+    {
+        using var test = TestWorkspace.Create();
+        var files = new FakeFileDialogs { FileToPick = @"C:\temp\backup.db", Confirms = false };
+
+        var main = new MainViewModel(test.Workspace, Today, files: files) { RestoreBackup = _ => { } };
+        main.RestoreCommand.Execute(null);
+
+        Assert.Contains(
+            "Google と結び付いた予定・タスクは、次の同期で Google の今の状態に合わせ直されます。" +
+            "Google 側で消したものは戻りません。",
+            files.LastConfirmMessage,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void 復元は断られたら何もしない()
     {
         using var test = TestWorkspace.Create();

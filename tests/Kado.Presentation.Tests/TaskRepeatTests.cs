@@ -156,26 +156,143 @@ public class TaskRepeatTests
     }
 
     [Fact]
-    public void 完了を取り消しても次の回は消えず何も作らない()
+    public void 次の回がすでにあれば作らずそちらに繰り返しを引き継ぐ()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        // 別の端末で完了にして、次の回が同期で届いている（繰り返しは Kado だけの項目なので付いていない）
+        ws.AddTask(new TaskItem
+        {
+            Id = "already", Title = "週報", Due = D(2026, 9, 28), TaskListId = "local:mytasks",
+        });
+        ws.AddTask(Repeating());
+
+        var result = ws.ToggleTask("t1", Today);
+
+        Assert.Equal(new TaskToggleResult(true, D(2026, 9, 28)), result);
+        Assert.Equal(2, ws.Tasks.Count());
+        Assert.Equal(WeeklyMonday, ws.Tasks.Find("already")!.Repeat);
+        Assert.Null(ws.Tasks.Find("t1")!.Repeat);
+
+        // 1手で戻る。届いていた次の回は消えず、繰り返しだけが外れる
+        ws.UndoLast();
+        Assert.Equal(2, ws.Tasks.Count());
+        Assert.Null(ws.Tasks.Find("already")!.Repeat);
+        Assert.Equal(WeeklyMonday, ws.Tasks.Find("t1")!.Repeat);
+    }
+
+    [Fact]
+    public void 題名やリストが違うタスクは次の回とみなさず作る()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+
+        ws.AddTask(new TaskItem { Id = "other1", Title = "別件", Due = D(2026, 9, 28), TaskListId = "local:mytasks" });
+        ws.AddTask(new TaskItem { Id = "other2", Title = "週報", Due = D(2026, 9, 28), TaskListId = "local:other" });
+        ws.AddTask(Repeating());
+
+        ws.ToggleTask("t1", Today);
+
+        Assert.Equal(4, ws.Tasks.Count());
+    }
+
+    [Fact]
+    public void 完了を取り消すと完了で作った次の回を消して繰り返しを元のタスクに戻す()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(Repeating());
+        ws.ToggleTask("t1", Today);
+        Assert.Equal(2, ws.Tasks.Count());
+
+        // 完了 → 未完了（誤って完了にして、手でチェックを外した）
+        var result = ws.ToggleTask("t1", Today);
+
+        Assert.Equal(new TaskToggleResult(false, null), result);
+
+        // 次の回は消え、↻ が元のタスクに戻る
+        var only = Assert.Single(ws.Tasks.All());
+        Assert.Equal("t1", only.Id);
+        Assert.False(only.IsDone);
+        Assert.Null(only.CompletedAt);
+        Assert.Equal(WeeklyMonday, only.Repeat);
+
+        // もう一度完了にすれば、次の回はまた1つだけ作られる
+        var again = ws.ToggleTask("t1", Today);
+
+        Assert.Equal(new TaskToggleResult(true, D(2026, 9, 28)), again);
+        Assert.Equal(2, ws.Tasks.Count());
+    }
+
+    [Fact]
+    public void 完了の取り消しは次の回の削除と合わせて1手で戻る()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(Repeating());
+        ws.ToggleTask("t1", Today);
+        ws.ToggleTask("t1", Today);
+
+        Assert.Equal("タスクの完了を取り消す（次の回も取り消し）", ws.Undo.UndoDescription);
+
+        ws.UndoLast();
+
+        // 完了に戻り、繰り返しは外れ、次の回が戻る
+        Assert.Equal(2, ws.Tasks.Count());
+        Assert.True(ws.Tasks.Find("t1")!.IsDone);
+        Assert.Null(ws.Tasks.Find("t1")!.Repeat);
+    }
+
+    [Fact]
+    public void 完了で作った次の回がGoogleと結び付いていれば消したことを記録する()
     {
         using var test = TestWorkspace.Create();
         var ws = test.Workspace;
         ws.AddTask(Repeating());
         ws.ToggleTask("t1", Today);
 
-        // 完了 → 未完了
-        var result = ws.ToggleTask("t1", Today);
+        // 次の回は同期でGoogleに送られ、中身はそのまま
+        var next = ws.Tasks.All().Single(t => t.Id != "t1");
+        ws.Tasks.Upsert(next with { GoogleTaskId = "g2", GoogleTaskListId = "@default" });
 
-        Assert.Equal(new TaskToggleResult(false, null), result);
+        ws.ToggleTask("t1", Today);
+
+        Assert.Single(ws.Tasks.All());
+        Assert.NotNull(ws.Tombstones.Find(next.Id, TombstoneRepository.TaskKind));
+    }
+
+    [Fact]
+    public void 次の回の中身を直してあれば完了を取り消しても触らない()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(Repeating());
+        ws.ToggleTask("t1", Today);
+
+        // 次の回のメモを書き換えた。別のタスクとして使っているかもしれない
+        var next = ws.Tasks.All().Single(t => t.Id != "t1");
+        ws.Tasks.Upsert(next with { Note = "書き足した" });
+
+        ws.ToggleTask("t1", Today);
+
         Assert.Equal(2, ws.Tasks.Count());
-        Assert.False(ws.Tasks.Find("t1")!.IsDone);
-
-        // 取り消して完了し直しても、繰り返しはもう外れているので二重にならない
         Assert.Null(ws.Tasks.Find("t1")!.Repeat);
-        var again = ws.ToggleTask("t1", Today);
+        Assert.False(ws.Tasks.Find("t1")!.IsDone);
+    }
 
-        Assert.Equal(new TaskToggleResult(true, null), again);
-        Assert.Equal(2, ws.Tasks.Count());
+    [Fact]
+    public void 繰り返しの無い完了済みのタスクを取り消すだけなら今までどおり()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(Repeating(repeat: null));
+        ws.ToggleTask("t1", Today);
+
+        ws.ToggleTask("t1", Today);
+
+        Assert.Single(ws.Tasks.All());
+        Assert.Null(ws.Tasks.Find("t1")!.Repeat);
     }
 
     [Fact]

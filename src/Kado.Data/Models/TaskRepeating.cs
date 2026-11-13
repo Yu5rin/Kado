@@ -95,6 +95,39 @@ public static class TaskRepeating
         };
     }
 
+    /// <summary>
+    /// 次の回として作ろうとしているタスクと同じものが、すでにあるか探す。
+    /// <para>
+    /// 2台で使うと、片方で完了にした次の回が同期でもう片方へ届いたあと、そちらでも同じタスクを
+    /// 完了にして（または完了の知らせを受け取って）次の回をもう一度作り、二重になる。
+    /// 作る前に、<b>同じリスト・同じ題名・同じ期限で、未完了</b>のタスクを探す。Kado の中の完了でも
+    /// 同期経由の完了でも、この1か所を通す。
+    /// </para>
+    /// </summary>
+    /// <param name="candidates">期限が次の回と同じ日のタスク（それ以外が混ざっていてもよい）。</param>
+    /// <param name="next"><see cref="NextOccurrence"/> で求めた次の回。</param>
+    /// <returns>すでにあるタスク。無ければ null。</returns>
+    public static TaskItem? FindExistingNext(IEnumerable<TaskItem> candidates, TaskItem next)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(next);
+
+        return candidates.FirstOrDefault(t =>
+            !t.IsDone &&
+            !string.Equals(t.Id, next.Id, StringComparison.Ordinal) &&
+            t.Due == next.Due &&
+            string.Equals(t.TaskListId ?? string.Empty, next.TaskListId ?? string.Empty, StringComparison.Ordinal) &&
+            string.Equals(t.Title, next.Title, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// すでにある次の回に、繰り返しを引き継がせる。すでに自分の繰り返しを持つなら、そのまま。
+    /// </summary>
+    public static TaskItem WithRepeatOf(TaskItem existingNext, TaskItem next) =>
+        existingNext.Repeat is null
+            ? existingNext with { Repeat = next.Repeat, UpdatedAt = next.UpdatedAt }
+            : existingNext;
+
     /// <summary>完了にしたほうのタスクから、繰り返しを外す（取り消して完了し直しても次の回が二重にならない）。</summary>
     public static TaskItem WithoutRepeat(TaskItem completed) => completed with { Repeat = null };
 

@@ -97,6 +97,72 @@ public class ScheduleQueryTests
     }
 
     [Fact]
+    public void 繰り返しの複数日予定は各回を長さぶん開き2日目以降に続きの印を付ける()
+    {
+        var (db, query, events, _) = Setup();
+        using var _db = db;
+
+        // 毎週 月〜火（9/7 は月曜）
+        events.Upsert(Event("weekly", D(2026, 9, 7)) with
+        {
+            EndDate = D(2026, 9, 8),
+            Recurrence = "FREQ=WEEKLY;BYDAY=MO",
+        });
+
+        var found = query.EventsInRange(D(2026, 9, 1), D(2026, 9, 30));
+
+        Assert.Equal(
+            [D(2026, 9, 7), D(2026, 9, 8), D(2026, 9, 14), D(2026, 9, 15),
+             D(2026, 9, 21), D(2026, 9, 22), D(2026, 9, 28), D(2026, 9, 29)],
+            found.Select(e => e.Date));
+        Assert.Equal(
+            [false, true, false, true, false, true, false, true],
+            found.Select(e => e.IsContinuation));
+        Assert.All(found, e => Assert.True(e.IsRecurrence));
+    }
+
+    [Fact]
+    public void 期間の始めより前に始まって期間に掛かる回も拾う()
+    {
+        var (db, query, events, _) = Setup();
+        using var _db = db;
+
+        events.Upsert(Event("weekly", D(2026, 9, 7)) with
+        {
+            EndDate = D(2026, 9, 8),
+            Recurrence = "FREQ=WEEKLY;BYDAY=MO",
+        });
+
+        // 火曜から始まる週。月曜に始まった回の2日目だけが掛かる
+        var found = query.EventsInRange(D(2026, 9, 15), D(2026, 9, 16));
+
+        var only = Assert.Single(found);
+        Assert.Equal(D(2026, 9, 15), only.Date);
+        Assert.True(only.IsContinuation);
+    }
+
+    [Fact]
+    public void 長さが間隔より長い繰り返しでも同じ日に二重に出ない()
+    {
+        var (db, query, events, _) = Setup();
+        using var _db = db;
+
+        // 毎日、3日間（長さが間隔を超えて重なる）
+        events.Upsert(Event("daily", D(2026, 9, 1)) with
+        {
+            EndDate = D(2026, 9, 3),
+            Recurrence = "FREQ=DAILY",
+        });
+
+        var found = query.EventsInRange(D(2026, 9, 3), D(2026, 9, 5));
+
+        Assert.Equal([D(2026, 9, 3), D(2026, 9, 4), D(2026, 9, 5)], found.Select(e => e.Date));
+
+        // どの日も、その日に始まる回として出る
+        Assert.All(found, e => Assert.False(e.IsContinuation));
+    }
+
+    [Fact]
     public void 繰り返しの除外日は展開されない()
     {
         var (db, query, events, _) = Setup();

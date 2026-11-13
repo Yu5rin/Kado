@@ -572,4 +572,109 @@ public class ReminderTests
 
         Assert.True(notifier.LastWithSound);
     }
+
+    // ------------------------------------------------------------------
+    // 再起動しても出し直さない（出した記録を設定に控える）
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 再起動しても今日の予定の朝のまとめは出し直さない()
+    {
+        using var test = TestWorkspace.Create();
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+
+        void Configure(AppSettings s)
+        {
+            s.SummaryEnabled = true;
+            s.SummaryTime = new TimeOnly(8, 0);
+        }
+
+        var (first, firstService) = Create(test, Configure);
+        firstService.Check(new DateTime(2026, 9, 24, 8, 5, 0));
+        Assert.Single(first.Sent);
+
+        // アプリを閉じて開き直した（同じデータベースに、新しいサービス）
+        var (second, secondService) = Create(test, Configure);
+        secondService.Check(new DateTime(2026, 9, 24, 8, 30, 0));
+
+        Assert.Empty(second.Sent);
+
+        // 翌日にはまた出る
+        secondService.Check(new DateTime(2026, 9, 25, 8, 5, 0));
+        Assert.Single(second.Sent);
+    }
+
+    [Fact]
+    public void 再起動しても出した開始前の通知は2回出ない()
+    {
+        using var test = TestWorkspace.Create();
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+
+        void Configure(AppSettings s)
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+        }
+
+        var (first, firstService) = Create(test, Configure);
+        firstService.Check(new DateTime(2026, 9, 24, 9, 51, 0));
+        Assert.Single(first.Sent);
+
+        var (second, secondService) = Create(test, Configure);
+        secondService.Check(new DateTime(2026, 9, 24, 9, 53, 0));
+
+        Assert.Empty(second.Sent);
+    }
+
+    [Fact]
+    public void 日が変わったら前の日の通知の控えは捨てる()
+    {
+        using var test = TestWorkspace.Create();
+        AddEvent(test, "e1", new TimeOnly(10, 0));
+
+        var (_, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 9, 51, 0));
+        Assert.Contains("e1", test.Workspace.Settings.Get(ReminderService.NotifiedKey));
+
+        // 2日後（昨日より前の記録は捨てる）
+        service.Check(new DateTime(2026, 9, 26, 0, 1, 0));
+
+        Assert.DoesNotContain("e1", test.Workspace.Settings.Get(ReminderService.NotifiedKey));
+    }
+
+    // ------------------------------------------------------------------
+    // 日をまたぐ予定
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void 複数日の時刻つき予定は2日目以降には開始前の通知を出さない()
+    {
+        using var test = TestWorkspace.Create();
+
+        // 9/23 22:00 〜 9/25 02:00。2日目（9/24）の 22:00 に「そろそろ始まる」と出してはいけない
+        test.Workspace.AddEvent(new CalendarEvent
+        {
+            Id = "e1", Title = "泊まり込み", Date = new DateOnly(2026, 9, 23), EndDate = new DateOnly(2026, 9, 25),
+            StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(2, 0),
+        });
+
+        var (notifier, service) = Create(test, s =>
+        {
+            s.NotifyEnabled = true;
+            s.NotifyLeadMinutes = 10;
+        });
+
+        service.Check(new DateTime(2026, 9, 24, 21, 51, 0));
+
+        Assert.Empty(notifier.Sent);
+
+        // 初日の通知は出る
+        service.Check(new DateTime(2026, 9, 23, 21, 51, 0));
+        Assert.Single(notifier.Sent);
+    }
 }

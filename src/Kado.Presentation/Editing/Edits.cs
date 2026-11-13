@@ -280,14 +280,56 @@ public sealed class CompositeEdit(string description, IReadOnlyList<IUndoableEdi
 
     public string Description { get; } = description;
 
-    public void Apply()
-    {
-        foreach (var edit in _edits) edit.Apply();
-    }
+    /// <summary>
+    /// 中の編集を順に実行する。<b>途中で転んだら、ここまでに済ませたものを逆順に戻してから</b>例外を返す。
+    /// <para>
+    /// 完了＋次の回、重複の整理は、いくつかの編集で1手を作る。書き込みで転んだ（ディスクいっぱい・
+    /// ロック）ときに、そのまま投げ出すと、完了だけ済んで次の回が無い、重複が半分だけ消えた、という半端な姿が
+    /// 残る。中の編集は自前の接続で書くので、1つの SQLite トランザクションには入れられない。
+    /// 代わりに、済ませた分を元へ戻す形で、全部か何もかを守る。
+    /// </para>
+    /// </summary>
+    public void Apply() => RunAll(_edits, forward: true);
 
-    public void Revert()
+    /// <summary>
+    /// 中の編集を逆順に戻す。戻すときは逆順。順に依存する編集が混ざっても筋が通る。
+    /// 途中で転んだら、ここまでに戻した分をやり直して、元の姿に揃えてから例外を返す。
+    /// </summary>
+    public void Revert() => RunAll(_edits, forward: false);
+
+    private static void RunAll(IReadOnlyList<IUndoableEdit> edits, bool forward)
     {
-        // 戻すときは逆順。順に依存する編集が混ざっても筋が通る
-        for (var i = _edits.Count - 1; i >= 0; i--) _edits[i].Revert();
+        var done = new List<IUndoableEdit>();
+
+        try
+        {
+            for (var i = 0; i < edits.Count; i++)
+            {
+                var edit = forward ? edits[i] : edits[edits.Count - 1 - i];
+
+                if (forward) edit.Apply();
+                else edit.Revert();
+
+                done.Add(edit);
+            }
+        }
+        catch
+        {
+            // 済ませた分を、逆の向きに、逆の順で打ち消す。打ち消しで転んでも、元の例外を優先する
+            for (var i = done.Count - 1; i >= 0; i--)
+            {
+                try
+                {
+                    if (forward) done[i].Revert();
+                    else done[i].Apply();
+                }
+                catch (Exception)
+                {
+                    // 元の失敗を隠さない。ここで転んだ分は、これ以上どうにもできない
+                }
+            }
+
+            throw;
+        }
     }
 }

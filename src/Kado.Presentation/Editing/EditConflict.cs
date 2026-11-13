@@ -37,7 +37,8 @@ public static class EditConflict
 
         if (latest is null) return EditConflictKind.Deleted;
 
-        return GoogleChanged(opened.GoogleUpdated, opened.GoogleRaw, latest.GoogleUpdated, latest.GoogleRaw)
+        return GoogleChanged(opened.GoogleUpdated, opened.GoogleRaw, latest.GoogleUpdated, latest.GoogleRaw) &&
+               !SameEditableContent(opened, latest)
             ? EditConflictKind.GoogleChanged
             : EditConflictKind.None;
     }
@@ -49,10 +50,42 @@ public static class EditConflict
 
         if (latest is null) return EditConflictKind.Deleted;
 
-        return GoogleChanged(opened.GoogleUpdated, opened.GoogleRaw, latest.GoogleUpdated, latest.GoogleRaw)
+        return GoogleChanged(opened.GoogleUpdated, opened.GoogleRaw, latest.GoogleUpdated, latest.GoogleRaw) &&
+               !SameEditableContent(opened, latest)
             ? EditConflictKind.GoogleChanged
             : EditConflictKind.None;
     }
+
+    /// <summary>
+    /// 利用者が編集画面で変えられる中身が、開いた時点といまとで同じか。
+    /// <para>
+    /// 編集中に、同期が<b>こちらの変更を送っただけ</b>でも、Google の更新時刻と生データは動く。
+    /// それを「Google 側で変わりました」と聞くと、何も変わっていないのに上書きを尋ねることになる。
+    /// 画面に出る項目（題・日時・場所・メモ・URL・色・繰り返し・カレンダー）が同じなら、
+    /// 上書きして失うものは無いので、競合とは見なさない。ゲストなど画面で触らない項目だけが
+    /// 変わっていても同じ（保存は <c>patch</c> で、触っていない項目は消えない）。
+    /// </para>
+    /// </summary>
+    private static bool SameEditableContent(CalendarEvent a, CalendarEvent b) =>
+        string.Equals(a.Title, b.Title, StringComparison.Ordinal) &&
+        a.Date == b.Date &&
+        a.EndDate == b.EndDate &&
+        a.StartTime == b.StartTime &&
+        a.EndTime == b.EndTime &&
+        string.Equals(a.Location, b.Location, StringComparison.Ordinal) &&
+        string.Equals(a.Note, b.Note, StringComparison.Ordinal) &&
+        string.Equals(a.Url, b.Url, StringComparison.Ordinal) &&
+        string.Equals(a.Color, b.Color, StringComparison.Ordinal) &&
+        string.Equals(a.Recurrence, b.Recurrence, StringComparison.Ordinal) &&
+        string.Equals(a.CalendarId, b.CalendarId, StringComparison.Ordinal);
+
+    /// <summary>タスク版。題・期限・完了・メモ・リスト。</summary>
+    private static bool SameEditableContent(TaskItem a, TaskItem b) =>
+        string.Equals(a.Title, b.Title, StringComparison.Ordinal) &&
+        a.Due == b.Due &&
+        a.IsDone == b.IsDone &&
+        string.Equals(a.Note, b.Note, StringComparison.Ordinal) &&
+        string.Equals(a.TaskListId, b.TaskListId, StringComparison.Ordinal);
 
     private static bool GoogleChanged(string? openedUpdated, string? openedRaw, string? latestUpdated, string? latestRaw) =>
         !string.Equals(openedUpdated, latestUpdated, StringComparison.Ordinal) ||

@@ -207,23 +207,75 @@ public class EditDuringSyncTests
     }
 
     [Fact]
-    public void 更新時刻が変わっていればGoogle側の変更と判断する()
+    public void 更新時刻が変わり中身も変わっていればGoogle側の変更と判断する()
     {
         var opened = Synced();
 
         Assert.Equal(
             EditConflictKind.GoogleChanged,
-            EditConflict.Check(opened, opened with { GoogleUpdated = "2026-09-20T00:00:00.000Z" }));
+            EditConflict.Check(
+                opened, opened with { GoogleUpdated = "2026-09-20T00:00:00.000Z", Location = "会議室B" }));
     }
 
     [Fact]
-    public void 控えた生データが変わっていればGoogle側の変更と判断する()
+    public void 同期がこちらの変更を送っただけで中身が同じなら競合しない()
+    {
+        var opened = Synced();
+
+        // 編集中に同期がこちらの変更を送り、Google の更新時刻と生データだけが進んだ
+        var afterPush = opened with
+        {
+            GoogleUpdated = "2026-09-20T00:00:00.000Z",
+            GoogleRaw = """{"id":"g1","summary":"定例","updated":"2026-09-20T00:00:00.000Z","etag":"x"}""",
+        };
+
+        Assert.Equal(EditConflictKind.None, EditConflict.Check(opened, afterPush));
+    }
+
+    [Theory]
+    [InlineData("題")]
+    [InlineData("日付")]
+    [InlineData("終了日")]
+    [InlineData("開始時刻")]
+    [InlineData("終了時刻")]
+    [InlineData("場所")]
+    [InlineData("メモ")]
+    [InlineData("URL")]
+    [InlineData("色")]
+    [InlineData("繰り返し")]
+    [InlineData("カレンダー")]
+    public void 画面で編集できるどの項目が変わってもGoogle側の変更と判断する(string field)
+    {
+        var opened = Synced();
+        var touched = opened with { GoogleUpdated = "2026-09-20T00:00:00.000Z" };
+
+        touched = field switch
+        {
+            "題" => touched with { Title = "別の題" },
+            "日付" => touched with { Date = D(2026, 9, 25) },
+            "終了日" => touched with { EndDate = D(2026, 9, 26) },
+            "開始時刻" => touched with { StartTime = new TimeOnly(10, 0) },
+            "終了時刻" => touched with { EndTime = new TimeOnly(11, 0) },
+            "場所" => touched with { Location = "会議室" },
+            "メモ" => touched with { Note = "メモ" },
+            "URL" => touched with { Url = "https://example.com" },
+            "色" => touched with { Color = "#ff0000" },
+            "繰り返し" => touched with { Recurrence = "FREQ=DAILY" },
+            _ => touched with { CalendarId = "cal-z" },
+        };
+
+        Assert.Equal(EditConflictKind.GoogleChanged, EditConflict.Check(opened, touched));
+    }
+
+    [Fact]
+    public void 控えた生データが変わり中身も変わっていればGoogle側の変更と判断する()
     {
         var opened = Synced();
 
         Assert.Equal(
             EditConflictKind.GoogleChanged,
-            EditConflict.Check(opened, opened with { GoogleRaw = """{"id":"g1","summary":"別の題"}""" }));
+            EditConflict.Check(
+                opened, opened with { Title = "別の題", GoogleRaw = """{"id":"g1","summary":"別の題"}""" }));
     }
 
     [Fact]
@@ -396,6 +448,39 @@ public class EditDuringSyncTests
         Assert.NotNull(saved.GoogleRaw);
         Assert.Equal("parent-1", saved.ParentId);
         Assert.Equal("00000000000000000001", saved.Position);
+    }
+
+    [Fact]
+    public void タスクは同期がこちらの変更を送っただけで中身が同じなら競合しない()
+    {
+        var opened = SyncedTask();
+
+        Assert.Equal(
+            EditConflictKind.None,
+            EditConflict.Check(opened, opened with { GoogleUpdated = "2026-09-20T00:00:00.000Z", GoogleRaw = "{}" }));
+    }
+
+    [Theory]
+    [InlineData("題")]
+    [InlineData("期限")]
+    [InlineData("完了")]
+    [InlineData("メモ")]
+    [InlineData("リスト")]
+    public void タスクの編集できるどの項目が変わってもGoogle側の変更と判断する(string field)
+    {
+        var opened = SyncedTask();
+        var touched = opened with { GoogleUpdated = "2026-09-20T00:00:00.000Z" };
+
+        touched = field switch
+        {
+            "題" => touched with { Title = "別の題" },
+            "期限" => touched with { Due = D(2026, 9, 30) },
+            "完了" => touched with { IsDone = true },
+            "メモ" => touched with { Note = "メモ" },
+            _ => touched with { TaskListId = "list-z" },
+        };
+
+        Assert.Equal(EditConflictKind.GoogleChanged, EditConflict.Check(opened, touched));
     }
 
     // ------------------------------------------------------------------

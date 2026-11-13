@@ -67,6 +67,25 @@ public sealed class DataLocationTests : IDisposable
         Assert.Equal(expected, DataLocation.Decide(writable, beside, local, legacy));
     }
 
+    [Theory]
+    // 書き込めるか, data にある, 従来の Kado にある, 旧い名前にある, Kado に移した印, 旧い名前に移した印 → 答え
+    [InlineData(true, false, true, false, true, false, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    [InlineData(true, false, true, true, true, false, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    [InlineData(true, false, false, true, false, true, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    // 印があっても、data にあればそちらを使う（いつもどおり）
+    [InlineData(true, true, true, false, true, false, DataPlacement.UseBesideExe)]
+    // 書けないなら、印があっても従来どおり
+    [InlineData(false, false, true, false, true, false, DataPlacement.UseLocalAppData)]
+    // 印が無ければ、今までどおり写す
+    [InlineData(true, false, true, false, false, false, DataPlacement.MigrateFromLocalAppData)]
+    [InlineData(true, false, false, true, false, false, DataPlacement.MigrateFromLegacy)]
+    public void すでに移した印があれば自動で写さない(
+        bool writable, bool beside, bool local, bool legacy, bool localMoved, bool legacyMoved,
+        DataPlacement expected)
+    {
+        Assert.Equal(expected, DataLocation.Decide(writable, beside, local, legacy, localMoved, legacyMoved));
+    }
+
     [Fact]
     public void exeのフォルダはProcessPathから取る()
     {
@@ -152,6 +171,74 @@ public sealed class DataLocationTests : IDisposable
         Assert.Equal("予定A", ReadTitle(Path.Combine(Local, "data.db")));
         Assert.Equal("トークン", File.ReadAllText(Path.Combine(Local, "google-tokens.dat")));
         Assert.True(File.Exists(Path.Combine(Local, DataMigration.MovedMarkerFileName)));
+    }
+
+    [Fact]
+    public void 印には移し先を機械が読める形でも書く()
+    {
+        MakeData(Local, "予定A");
+
+        DataLocation.Resolve(Exe, LocalAppData);
+
+        var text = File.ReadAllText(Path.Combine(Local, DataMigration.MovedMarkerFileName));
+
+        // 既存の文面は保ったまま、1行足す
+        Assert.Contains("次の場所へ移しました", text);
+        Assert.Contains(DataMigration.MovedToKey + Beside, text);
+        Assert.Equal(Beside, DataMigration.ReadMovedTarget(Local));
+    }
+
+    [Fact]
+    public void 古い形の印からも移し先を読める()
+    {
+        Directory.CreateDirectory(Local);
+        File.WriteAllText(
+            Path.Combine(Local, DataMigration.MovedMarkerFileName),
+            "このフォルダの中身は、2026-09-01 10:00 に次の場所へ移しました。\n\n    D:\\Apps\\Kado\\data\n\nKado は…\n");
+
+        Assert.Equal("D:\\Apps\\Kado\\data", DataMigration.ReadMovedTarget(Local));
+    }
+
+    [Fact]
+    public void exeだけ別のフォルダで起動しても残してある古い写しを写し直さず注意を出す()
+    {
+        // 前の exe の隣の data へ引っ越し済み。その後、exe だけを別のフォルダへ置いて起動した
+        MakeData(Local, "古い写し");
+        var firstExe = Path.Combine(_root, "first-exe");
+        Directory.CreateDirectory(firstExe);
+        DataLocation.Resolve(firstExe, LocalAppData);
+        var firstData = Path.Combine(firstExe, "data");
+        Assert.True(File.Exists(Path.Combine(firstData, "data.db")));
+
+        var result = DataLocation.Resolve(Exe, LocalAppData);
+
+        // 写さない。この exe の隣に data は作らず、古い写しを使う
+        Assert.Equal(Local, result.Directory);
+        Assert.Equal(LocalFallbackReason.AlreadyMovedElsewhere, result.Reason);
+        Assert.False(Directory.Exists(Beside));
+        Assert.Equal("古い写し", ReadTitle(Path.Combine(Local, "data.db")));
+
+        // 画面に出す注意：移し先と、どうすればよいか
+        Assert.NotNull(result.Warning);
+        Assert.Contains(firstData, result.Warning, StringComparison.Ordinal);
+        Assert.Contains("data フォルダをこの exe の隣へコピーしてください", result.Warning, StringComparison.Ordinal);
+
+        // 古いデータのまま Google と自動で同期しない
+        Assert.True(result.PausesBackgroundSync);
+    }
+
+    [Fact]
+    public void ふつうの起動では注意を出さず自動の同期も止めない()
+    {
+        MakeData(Local, "予定A");
+
+        var migrated = DataLocation.Resolve(Exe, LocalAppData);
+        var second = DataLocation.Resolve(Exe, LocalAppData);
+
+        Assert.Null(migrated.Warning);
+        Assert.False(migrated.PausesBackgroundSync);
+        Assert.Null(second.Warning);
+        Assert.False(second.PausesBackgroundSync);
     }
 
     [Fact]

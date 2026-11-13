@@ -1369,6 +1369,15 @@ public sealed class CalendarWorkspace
 
         if (Tasks.Find(after.Id) is not { } before) return false;
 
+        // 完了を取り消すときは、完了で作った次の回を片付けて、繰り返しを戻す
+        if (before.IsDone && !after.IsDone && FindNextMadeBy(before) is { } madeNext)
+        {
+            after = TaskRepeating.Normalize(after with { Repeat = madeNext.Repeat }, before);
+
+            Run(UncompleteRepeating(before, after, madeNext));
+            return true;
+        }
+
         after = TaskRepeating.Normalize(after, before);
 
         if (!before.IsDone && after.IsDone && NextOccurrence(after, today, weekStart) is { } next)
@@ -1414,11 +1423,70 @@ public sealed class CalendarWorkspace
     /// やり直しで、また作られる。
     /// </para>
     /// </summary>
-    private CompositeEdit CompleteRepeating(TaskItem before, TaskItem completed, TaskItem next) =>
-        new("タスクを完了にする（次の回を作成）",
+    private CompositeEdit CompleteRepeating(TaskItem before, TaskItem completed, TaskItem next)
+    {
+        // 2台で使うと、同期で次の回がすでに届いていることがある。二重に作らず、そちらに繰り返しを
+        // 引き継ぐ（同期経由の完了と同じ部品を通す。TaskRepeating.FindExistingNext）
+        var already = TaskRepeating.FindExistingNext(Tasks.DueInRange(next.Due!.Value, next.Due.Value), next);
+
+        IUndoableEdit second = already is null
+            ? new AddTaskEdit(Tasks, next, Tombstones)
+            : new UpdateTaskEdit(Tasks, already, TaskRepeating.WithRepeatOf(already, next));
+
+        return new("タスクを完了にする（次の回を作成）",
         [
             new UpdateTaskEdit(Tasks, before, TaskRepeating.WithoutRepeat(completed)),
-            new AddTaskEdit(Tasks, next, Tombstones),
+            second,
+        ]);
+    }
+
+    /// <summary>
+    /// 完了を取り消すタスクが、繰り返しの完了で作った「次の回」を探す。見つからなければ null。
+    /// <para>
+    /// 完了したほうからは繰り返しを外してあるので（<see cref="TaskRepeating.WithoutRepeat"/>）、
+    /// 手がかりは次の回のほうにある。次の回は題名・メモ・URL・添付・リストを引き継ぎ、繰り返しを持ち、
+    /// 未完了で、期限が完了したタスクより後。<b>作ったときのままの中身</b>のものだけを対象にする
+    /// （Google に送ったあとでも、中身を直されていなければ同じ）。直されていたら、別のタスクとして
+    /// 使われているとみなして触らない。
+    /// </para>
+    /// <para>完了にした時刻より前に作られたものは、完了で作った次の回ではない。</para>
+    /// </summary>
+    private TaskItem? FindNextMadeBy(TaskItem completed)
+    {
+        if (completed.Repeat is not null || completed.Due is not { } due) return null;
+        if (TaskRepeating.CannotRepeat(due, completed.ParentId)) return null;
+
+        return Tasks.All()
+            .Where(t =>
+                !t.IsDone &&
+                t.Repeat is not null &&
+                !string.Equals(t.Id, completed.Id, StringComparison.Ordinal) &&
+                t.Due > due &&
+                string.IsNullOrEmpty(t.ParentId) &&
+                string.Equals(t.TaskListId ?? string.Empty, completed.TaskListId ?? string.Empty, StringComparison.Ordinal) &&
+                string.Equals(t.Title, completed.Title, StringComparison.Ordinal) &&
+                string.Equals(t.Note, completed.Note, StringComparison.Ordinal) &&
+                string.Equals(t.Url, completed.Url, StringComparison.Ordinal) &&
+                string.Equals(t.Attachments, completed.Attachments, StringComparison.Ordinal) &&
+                (completed.CompletedAt is not { } at || t.CreatedAt >= at - TimeSpan.FromSeconds(5)))
+            .OrderBy(t => t.Due)
+            .ThenBy(t => t.CreatedAt)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// 繰り返しのタスクの完了を取り消す。完了で作った次の回を消し、元のタスクに繰り返しを戻す。
+    /// <b>1手で戻せる</b>（元に戻すと、完了に戻り、繰り返しが外れ、次の回が戻る）。
+    /// <para>
+    /// 次の回が Google と結び付いていれば、消したことも記録して Google からも消す
+    /// （<see cref="DeleteTaskEdit"/>）。
+    /// </para>
+    /// </summary>
+    private CompositeEdit UncompleteRepeating(TaskItem before, TaskItem restored, TaskItem next) =>
+        new("タスクの完了を取り消す（次の回も取り消し）",
+        [
+            new UpdateTaskEdit(Tasks, before, restored),
+            new DeleteTaskEdit(Tasks, next, Tombstones),
         ]);
 
     // ------------------------------------------------------------------
@@ -1484,7 +1552,10 @@ public sealed class CalendarWorkspace
     /// <summary>
     /// タスクの完了を切り替える。繰り返し付きのタスクを完了にしたときは、次の回も作る
     /// （<see cref="UpdateTask(TaskItem, out DateOnly?, DateOnly?, DayOfWeek, string?)"/> と同じ。1手で戻せる）。
-    /// <para>完了を取り消す（完了 → 未完了）ときは何もしない。作った次の回は残る。</para>
+    /// <para>
+    /// 完了を取り消す（完了 → 未完了）ときは、完了で作った次の回が見つかれば消して、元のタスクに繰り返しを戻す
+    /// （<see cref="UncompleteRepeating"/>。1手で戻せる）。見つからなければ、完了を取り消すだけ。
+    /// </para>
     /// </summary>
     /// <param name="id">タスクの ID。</param>
     /// <param name="today">今日。次の回の期限の計算に使う。渡さなければ端末の今日。</param>
@@ -1511,6 +1582,14 @@ public sealed class CalendarWorkspace
         {
             Run(CompleteRepeating(before, after, next));
             return new TaskToggleResult(true, next.Due);
+        }
+
+        // 誤って完了にして手で外したとき。完了で作った次の回が残ると、↻ が消えたうえに
+        // 同じタスクが二重に並ぶ。次の回を片付けて、繰り返しを元のタスクに戻す
+        if (!isDone && FindNextMadeBy(before) is { } madeNext)
+        {
+            Run(UncompleteRepeating(before, after with { Repeat = madeNext.Repeat }, madeNext));
+            return new TaskToggleResult(false, null);
         }
 
         Run(new UpdateTaskEdit(Tasks, before, after));

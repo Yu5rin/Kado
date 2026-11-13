@@ -2550,7 +2550,9 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_files.Confirm(
                 "バックアップから復元します",
                 "いまの予定・タスク・設定・実働日データは、すべてファイルの内容に置き換わります。"
-                + "元に戻すことはできません。\n\n復元したあとアプリを立ち上げ直します。"))
+                + "元に戻すことはできません。\n\n"
+                + RestoreSyncNotice
+                + "\n\n復元したあとアプリを立ち上げ直します。"))
         {
             return;
         }
@@ -2574,6 +2576,18 @@ public sealed partial class MainViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    /// <summary>
+    /// 復元の確認に添える、Google との関わりの注意。
+    /// <para>
+    /// 復元しても Google の側は戻らない。バックアップのあとに Google 側で消した予定・タスクは、
+    /// 復元した内容に載っていても、次の同期で Google の今の状態に合わせ直される（戻ってはこない）。
+    /// 知らずに押すと、戻したつもりの内容が静かに食い違う。
+    /// </para>
+    /// </summary>
+    internal const string RestoreSyncNotice =
+        "Google と結び付いた予定・タスクは、次の同期で Google の今の状態に合わせ直されます。"
+        + "Google 側で消したものは戻りません。";
 
     private const string BackupFilter = "Kado のバックアップ (*.db)|*.db|すべてのファイル (*.*)|*.*";
 
@@ -2850,7 +2864,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         moved = change switch
         {
-            TimeChange.SetTo when start is { } at => moved with { StartTime = at, EndTime = EndOf(at, found) },
+            TimeChange.SetTo when start is { } at => PlaceAt(found, moved, date, at),
             TimeChange.Clear => moved with { StartTime = null, EndTime = null },
             _ => moved,
         };
@@ -2884,6 +2898,42 @@ public sealed partial class MainViewModel : ObservableObject
 
         StatusMessage = "予定を複製しました";
         return true;
+    }
+
+    /// <summary>
+    /// 時刻を置き直した予定を組み立てる。
+    /// <para>
+    /// 日をまたぐ時刻つきの予定（22:00〜翌02:00 など）は、長さを<b>日付込み</b>（開始日時〜終了日時）で
+    /// 保ち、動かしたあとの終了日と終了時刻を計算し直す。時刻だけで長さを測ると、終わりが始まりより前になって
+    /// 1時間と見なされ、終了日はそのまま次の日に残って25時間の予定になる。
+    /// </para>
+    /// <para>
+    /// もともと日をまたいでいない予定を遅い時刻に置いたときは、これまでどおり、その日の終わりで止める
+    /// （<see cref="EndOf"/>）。
+    /// </para>
+    /// </summary>
+    private static CalendarEvent PlaceAt(CalendarEvent found, CalendarEvent moved, DateOnly date, TimeOnly at)
+    {
+        if (found.StartTime is { } from && found.EndTime is { } to &&
+            found.EndDate is { } lastDate && lastDate > found.Date)
+        {
+            var length = lastDate.ToDateTime(to) - found.Date.ToDateTime(from);
+
+            if (length > TimeSpan.Zero)
+            {
+                var end = date.ToDateTime(at) + length;
+                var endDate = DateOnly.FromDateTime(end);
+
+                return moved with
+                {
+                    StartTime = at,
+                    EndDate = endDate > date ? endDate : null,
+                    EndTime = TimeOnly.FromDateTime(end),
+                };
+            }
+        }
+
+        return moved with { StartTime = at, EndTime = EndOf(at, found) };
     }
 
     /// <summary>予定の長さ。時刻を持たない予定は1時間として扱う。</summary>
@@ -2924,6 +2974,10 @@ public sealed partial class MainViewModel : ObservableObject
             StatusMessage = "タスクの期限を移しました";
             return true;
         }
+
+        // 複製先の日付で、暦どおりの繰り返し（毎週の曜日・毎月の日など）を指定し直す。
+        // 元のままだと、複製を完了にしたとき次の回が元の曜日・日付で作られる
+        moved = TaskRepeating.Normalize(moved, found);
 
         _workspace.AddTask(moved with
         {

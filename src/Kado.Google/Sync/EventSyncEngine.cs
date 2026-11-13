@@ -306,6 +306,16 @@ public sealed class EventSyncEngine(
             // こちらで消したものは復活させない
             if (tombstones.ContainsGoogleId(googleId, TombstoneRepository.EventKind)) continue;
 
+            // 招待された予定は、主催者のカレンダーにも同じ ID で載る。2つ目のカレンダーの取り込みで
+            // 1つ目の行を「Google 側で移された」と読んで入れ先を書き換えると、自分のカレンダーから
+            // 予定が消える。元のカレンダーにまだ居るなら、書き換えずに飛ばす
+            if (existing is not null &&
+                await IsStillInOtherCalendarAsync(existing, calendarId, localCalendarId, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                continue;
+            }
+
             // 相手が変わっていなければ触らない。全部取り直したときに、まだ送れていない
             // こちらの変更を押し潰してしまう。相手が変わっていれば、方針どおり相手を採る
             if (existing is not null &&
@@ -336,7 +346,12 @@ public sealed class EventSyncEngine(
                 // 同じ予定が2件に増えないよう、結び付いていないものを探して引き受ける
                 if (FindUnlinkedMatch(mapped, localCalendarId) is { } orphan)
                 {
-                    events.Upsert(mapped with { Id = orphan.Id });
+                    // existing: null で組み立てると、この予定だけの通知の指定・色・送る前の添付が
+                    // 消える。引き受ける行を渡してやり直す。送る前の添付は FromGoogle が空にする
+                    // （Google から受け取った姿だという扱い）ので、まだ送っていない行のものを戻す
+                    events.Upsert(
+                        EventMapper.FromGoogle(item, localCalendarId, orphan, now, calendarId)
+                        with { PendingAttachments = orphan.PendingAttachments });
                     updated++;
                     continue;
                 }
@@ -359,7 +374,13 @@ public sealed class EventSyncEngine(
             deleted += RemoveVanished(calendarId, localCalendarId, items, warnings);
         }
 
-        if (nextToken is { Length: > 0 }) settings.SetSyncState(TokenKey(calendarId), nextToken);
+        // 一覧を最後まで読めなかったとき（件数が上限のページ数を超えた）は、印を進めない。
+        // 印は最後のページにしか付かないので、ここで進めることはないが、読み切れていない
+        // 一覧の印を万一受け取っても残りを読み飛ばさないよう、条件に入れておく。
+        // 使う人には、一部を取り込めなかったことを知らせる
+        if (complete && nextToken is { Length: > 0 }) settings.SetSyncState(TokenKey(calendarId), nextToken);
+
+        if (!complete) warnings.Add(SyncReport.TooManyItemsWarning);
 
         return new SyncReport
         {
@@ -409,6 +430,43 @@ public sealed class EventSyncEngine(
         }
 
         return events.Delete(existing.Id);
+    }
+
+    /// <summary>
+    /// 別のカレンダーに結び付いている行が、いまもそのカレンダーに居るか。
+    /// <para>
+    /// 同じ Google の予定 ID が2つのカレンダーに載ることがある（招待された予定と、主催者の
+    /// カレンダー）。行は先に取り込んだ側（自分のカレンダー）を正とし、後から来た側では書き換えない。
+    /// </para>
+    /// <para>
+    /// 一方、Google で本当に別のカレンダーへ移された場合は、元のカレンダーからは居なくなる。
+    /// 元のカレンダーに予定が無い（見つからない・取り消し・読めない）と確かめられたら、
+    /// 移されたものとして今回のカレンダーへ追従する。こちらで入れ先をこのカレンダーへ変えていた
+    /// （<see cref="CalendarEvent.CalendarId"/> が今回の取り込み先）ときも、追従する側に倒す。
+    /// 出し直せば直る失敗（呼びすぎ・サーバー側）は上へ返し、次の同期でやり直す。
+    /// </para>
+    /// </summary>
+    private async Task<bool> IsStillInOtherCalendarAsync(
+        CalendarEvent existing, string calendarId, string localCalendarId, CancellationToken cancellationToken)
+    {
+        if (existing.GoogleEventId is not { Length: > 0 } googleId) return false;
+        if (existing.GoogleCalendarId is not { Length: > 0 } origin) return false;
+        if (string.Equals(origin, calendarId, StringComparison.Ordinal)) return false;
+        if (string.Equals(existing.CalendarId, localCalendarId, StringComparison.Ordinal)) return false;
+
+        // 元のカレンダーで見つからないと、すでに分かっている行は、確かめ直すまでもない
+        if (existing.GoogleMissing) return false;
+
+        try
+        {
+            var found = await gateway.GetAsync(origin, googleId, cancellationToken).ConfigureAwait(false);
+
+            return !EventMapper.IsCancelled(found);
+        }
+        catch (GoogleApiException ex) when (!ex.IsTransient)
+        {
+            return false;
+        }
     }
 
     /// <summary>まだ Google に送っていない編集（内容・添付）を持っているか。</summary>

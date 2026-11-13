@@ -16,6 +16,15 @@ public enum DataPlacement
 
     /// <summary>従来の <c>%LOCALAPPDATA%\Kado</c> を使い続ける。</summary>
     UseLocalAppData,
+
+    /// <summary>
+    /// 従来の場所を使うが、写さない。そこには<b>すでに別の場所へ移した</b>印（<c>移しました.txt</c>）がある。
+    /// <para>
+    /// exe だけを別のフォルダへ置いて起動したときなど。印を無視して写すと、残してある古い写しで
+    /// 新しい <c>data</c> を作り、古いデータで立ち上がる。
+    /// </para>
+    /// </summary>
+    UseLocalAppDataAlreadyMoved,
 }
 
 /// <summary>従来の場所（<c>%LOCALAPPDATA%\Kado</c>）を使っている理由。</summary>
@@ -29,13 +38,28 @@ public enum LocalFallbackReason
 
     /// <summary>引っ越しに失敗した。次の起動でもう一度試す。</summary>
     MigrationFailed,
+
+    /// <summary>従来の場所のデータは、すでに別の場所へ移してある（古い写しのまま立ち上げている）。</summary>
+    AlreadyMovedElsewhere,
 }
 
 /// <summary>保存先の決定の結果。</summary>
 /// <param name="Directory">使うフォルダ。</param>
 /// <param name="Reason">従来の場所を使っているときの理由。</param>
 /// <param name="Notes">shell.log に残す行（この時点ではまだログを開けないので溜めておく）。</param>
-public sealed record DataLocationResult(string Directory, LocalFallbackReason Reason, IReadOnlyList<string> Notes);
+/// <param name="Warning">起動時に画面で一度だけ知らせる注意。無ければ null（<see cref="Notes"/> はログ用で、これは利用者向け）。</param>
+public sealed record DataLocationResult(
+    string Directory, LocalFallbackReason Reason, IReadOnlyList<string> Notes, string? Warning = null)
+{
+    /// <summary>
+    /// 古い写しで立ち上げているか。そのとき Google との自動の同期を始めない。
+    /// <para>
+    /// 古いデータで同期を始めると、新しいほうで済ませた変更の上に、古い内容の送信や取り込みが重なる。
+    /// 手で押す同期は止めない（使う人が分かったうえでなら出来る）。
+    /// </para>
+    /// </summary>
+    public bool PausesBackgroundSync => Reason == LocalFallbackReason.AlreadyMovedElsewhere;
+}
 
 /// <summary>
 /// データの保存先を決める、ただ1つの入口。
@@ -85,6 +109,12 @@ public static class DataLocation
     /// <summary>shell.log に残す、保存先を決めたときの行。</summary>
     public static IReadOnlyList<string> Notes => Current.Value.Notes;
 
+    /// <summary>起動時に一度だけ画面で知らせる注意。無ければ null。</summary>
+    public static string? Warning => Current.Value.Warning;
+
+    /// <summary>古い写しで立ち上げているため、Google との自動の同期を始めないか。</summary>
+    public static bool PausesBackgroundSync => Current.Value.PausesBackgroundSync;
+
     /// <summary>設定画面に出す、従来の場所を使っている理由。使っていなければ null。</summary>
     public static string? FallbackNote => DescribeFallback(Current.Value.Reason);
 
@@ -93,6 +123,7 @@ public static class DataLocation
     {
         LocalFallbackReason.NotWritable => "exe のフォルダに書き込めないため、こちらを使っています",
         LocalFallbackReason.MigrationFailed => "exe のフォルダの data へ移せなかったため、今回はこちらを使っています（次の起動でもう一度試します）",
+        LocalFallbackReason.AlreadyMovedElsewhere => "すでに別の場所へ移したデータがあるため、残してある古い内容を使っています",
         _ => null,
     };
 
@@ -107,7 +138,11 @@ public static class DataLocation
     /// <param name="besideHasData"><c>data</c> にもうデータ（data.db）があるか。</param>
     /// <param name="localHasData"><c>%LOCALAPPDATA%\Kado</c> にデータがあるか。</param>
     /// <param name="legacyHasData"><c>%LOCALAPPDATA%\SlideinaCalendar</c> にデータがあるか。</param>
-    public static DataPlacement Decide(bool writable, bool besideHasData, bool localHasData, bool legacyHasData)
+    /// <param name="localMoved"><c>%LOCALAPPDATA%\Kado</c> に「移しました.txt」があるか（すでに別の場所へ移してある）。</param>
+    /// <param name="legacyMoved"><c>%LOCALAPPDATA%\SlideinaCalendar</c> に「移しました.txt」があるか。</param>
+    public static DataPlacement Decide(
+        bool writable, bool besideHasData, bool localHasData, bool legacyHasData,
+        bool localMoved = false, bool legacyMoved = false)
     {
         // 書けないなら、従来どおり。書けなければ写せもしない
         if (!writable) return DataPlacement.UseLocalAppData;
@@ -116,8 +151,12 @@ public static class DataLocation
         // 古い場所にデータが残っていても、新しいほうを使う
         if (besideHasData) return DataPlacement.UseBesideExe;
 
-        if (localHasData) return DataPlacement.MigrateFromLocalAppData;
-        if (legacyHasData) return DataPlacement.MigrateFromLegacy;
+        // 従来の場所に「移しました.txt」があるときは、写さない。印があるのは、この中身をすでに
+        // どこかの data へ写したということ。exe だけを別のフォルダで起動した、などで data が無いからと
+        // 写し直すと、残してある古い内容で新しい data を作り、古いデータで立ち上がる。
+        // 古い場所をそのまま使い、使う人に知らせる（Resolve が注意を出す）。何も失わない側に倒す
+        if (localHasData) return localMoved ? DataPlacement.UseLocalAppDataAlreadyMoved : DataPlacement.MigrateFromLocalAppData;
+        if (legacyHasData) return legacyMoved ? DataPlacement.UseLocalAppDataAlreadyMoved : DataPlacement.MigrateFromLegacy;
 
         // 何も無い（新しく入れた人）
         return DataPlacement.UseBesideExe;
@@ -164,7 +203,9 @@ public static class DataLocation
         var notes = new List<string>();
 
         var writable = CanWrite(target, out var writeError);
-        var placement = Decide(writable, HasData(target), HasData(local), HasData(legacy));
+        var placement = Decide(
+            writable, HasData(target), HasData(local), HasData(legacy),
+            DataMigration.HasMovedMarker(local), DataMigration.HasMovedMarker(legacy));
 
         switch (placement)
         {
@@ -176,6 +217,22 @@ public static class DataLocation
                 var directory = ResolveLocalAppData(localAppData);
                 notes.Add($"保存先: exe のフォルダに書き込めないため、従来の場所を使う（{directory}）。理由: {writeError}");
                 return new DataLocationResult(directory, LocalFallbackReason.NotWritable, notes);
+            }
+
+            case DataPlacement.UseLocalAppDataAlreadyMoved:
+            {
+                // 印のあるほう（新しい名前のフォルダを先に見る）。印から移し先を読む
+                var markedFolder = HasData(local) && DataMigration.HasMovedMarker(local) ? local : legacy;
+                var recorded = DataMigration.ReadMovedTarget(markedFolder);
+                var directory = ResolveLocalAppData(localAppData);
+
+                notes.Add(
+                    $"保存先: {markedFolder} は {recorded ?? "別の場所"} へ移した記録があるので、写さずに従来の場所を使う" +
+                    $"（{directory}）。{target} にデータが無い");
+
+                return new DataLocationResult(
+                    directory, LocalFallbackReason.AlreadyMovedElsewhere, notes,
+                    BuildAlreadyMovedWarning(recorded, directory));
             }
 
             default:
@@ -196,6 +253,19 @@ public static class DataLocation
             }
         }
     }
+
+    /// <summary>
+    /// 「すでに別の場所へ移した」とき、画面で知らせる注意。
+    /// </summary>
+    /// <param name="recorded">印に書かれた移し先。読めなければ null。</param>
+    /// <param name="usedDirectory">今回使っている従来の場所。</param>
+    internal static string BuildAlreadyMovedWarning(string? recorded, string usedDirectory) =>
+        (recorded is { Length: > 0 }
+            ? $"以前 {recorded} に移したデータがあります。"
+            : "以前、別の場所へ移したデータがあります。") +
+        "そちらの Kado を使うか、data フォルダをこの exe の隣へコピーしてください。\n\n" +
+        $"いまはこの exe の隣に data が無いため、残してある古い内容（{usedDirectory}）で起動しています。" +
+        "古い内容のまま Google と同期しないよう、自動の同期は止めています。";
 
     /// <summary>
     /// 従来の場所のフォルダ。旧い名前（SlideinaCalendar）のフォルダしか無ければ、名前を付け替える。

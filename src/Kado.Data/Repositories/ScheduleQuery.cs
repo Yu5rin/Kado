@@ -17,12 +17,23 @@ namespace Kado.Data.Repositories;
 /// <param name="Date">この回が現れる日。</param>
 /// <param name="IsContinuation">複数日予定の2日目以降か。先頭の日だけ強調したいときに使う。</param>
 /// <param name="IsRecurrence">繰り返しから展開された回か。</param>
+/// <param name="OccurrenceLastDate">
+/// この回の最終日。繰り返しから展開した複数日の回は、元の予定の終了日ではなく、その回の開始日から数える。
+/// 単発のときは null（元の予定の <see cref="CalendarEvent.LastDate"/>）。
+/// </param>
 public sealed record ScheduledEvent(
     CalendarEvent Source,
     DateOnly Date,
     bool IsContinuation = false,
-    bool IsRecurrence = false)
+    bool IsRecurrence = false,
+    DateOnly? OccurrenceLastDate = null)
 {
+    /// <summary>この回が占める最終日。</summary>
+    public DateOnly LastDay => OccurrenceLastDate ?? Source.LastDate;
+
+    /// <summary>この回の最終日か（1日だけの回は、その日が最終日）。</summary>
+    public bool IsLastDay => Date >= LastDay;
+
     /// <summary>並べ替え用のキー。終日を先に、そのあと開始時刻順。</summary>
     public (int AllDayFirst, TimeOnly Time) SortKey =>
         (Source.IsAllDay ? 0 : 1, Source.StartTime ?? TimeOnly.MinValue);
@@ -94,6 +105,9 @@ public sealed class ScheduleQuery(EventRepository events, TaskRepository tasks, 
     /// <summary>展開しても壊れないよう、1件の繰り返し予定から取り出す回数に上限を設ける。</summary>
     private const int MaxOccurrencesPerRule = 1000;
 
+    /// <summary>繰り返しの1回が占める日数の上限。壊れたデータで検索の範囲が際限なく広がらないようにする。</summary>
+    private const int MaxSpanDays = 366;
+
     private readonly EventRepository _events = events ?? throw new ArgumentNullException(nameof(events));
     private readonly TaskRepository _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
 
@@ -144,12 +158,40 @@ public sealed class ScheduleQuery(EventRepository events, TaskRepository tasks, 
                 continue;
             }
 
+            // 複数日の繰り返し（毎週 月〜火 など）は、各回を長さ（終了日 − 開始日）ぶん開く。
+            // 期間より前に始まって期間に掛かる回も拾うため、検索の始めを長さぶん手前に取る
+            var length = Math.Clamp(source.LastDate.DayNumber - source.Date.DayNumber, 0, MaxSpanDays);
+            var searchFrom = from.DayNumber - length < DateOnly.MinValue.DayNumber
+                ? DateOnly.MinValue
+                : from.AddDays(-length);
+
+            // 長い回が重なると、同じ日に2回ぶん現れる。その日は初日として出るほうを残す
+            var seen = new Dictionary<DateOnly, ScheduledEvent>();
+
             var count = 0;
-            foreach (var date in rule.Occurrences(source.Date, from, to))
+            foreach (var start in rule.Occurrences(source.Date, searchFrom, to))
             {
                 if (++count > MaxOccurrencesPerRule) break;
-                result.Add(new ScheduledEvent(source, date, IsRecurrence: true));
+
+                for (var offset = 0; offset <= length; offset++)
+                {
+                    if (start.DayNumber + offset > DateOnly.MaxValue.DayNumber) break;
+
+                    var date = start.AddDays(offset);
+                    if (date < from || date > to) continue;
+
+                    var occurrence = new ScheduledEvent(
+                        source, date, IsContinuation: offset > 0, IsRecurrence: true,
+                        OccurrenceLastDate: start.AddDays(length));
+
+                    if (!seen.TryGetValue(date, out var current) || (current.IsContinuation && !occurrence.IsContinuation))
+                    {
+                        seen[date] = occurrence;
+                    }
+                }
             }
+
+            result.AddRange(seen.Values);
         }
 
         return result

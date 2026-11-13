@@ -25,6 +25,9 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
 
     public GoogleApiException? ThrowOnWrite { get; set; }
 
+    /// <summary>一覧がいつまでも次のページを返し続ける（件数が上限を超えた場面）。</summary>
+    public bool EndlessPages { get; set; }
+
     /// <summary>書き込みのたびにこの例外を投げ続ける。呼びすぎ・Google の不調が続く場面を作る。</summary>
     public GoogleApiException? ThrowOnEveryWrite { get; set; }
 
@@ -49,7 +52,8 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
             .Select(pair => Parse(pair.Value))
             .ToArray();
 
-        return Task.FromResult(new GooglePage(items, null, null));
+        // 終わらない一覧。読む上限のページ数で打ち切られる場面を作る
+        return Task.FromResult(new GooglePage(items, EndlessPages ? "next" : null, null));
     }
 
     /// <summary>リストごとに「そこに確かにある」タスク。一覧（<see cref="Items"/>）はリストを区別しない。</summary>

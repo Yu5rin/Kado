@@ -55,6 +55,18 @@ public class EventSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 一覧を打ち切ったときは印を保存せず警告する()
+    {
+        _remote.Add("g1", "棚卸し", "2026-09-24");
+        _remote.EndlessPages = true;
+
+        var report = await Engine.SyncAsync("primary", "local:shigoto");
+
+        Assert.True(string.IsNullOrEmpty(Settings.GetSyncState(EventSyncEngine.TokenKey("primary"))));
+        Assert.Contains(SyncReport.TooManyItemsWarning, report.Warnings);
+    }
+
+    [Fact]
     public async Task こちらにだけある予定を送る()
     {
         Events.Upsert(new CalendarEvent
@@ -723,6 +735,9 @@ public class EventSyncEngineTests : IDisposable
         // Google 側で動いた（内容は同じでも updated が進む）
         _remote.Edit("g1", "棚卸し");
         _remote.Items["g1"]["updated"] = "2026-09-20T00:00:00.000Z";
+
+        // 本当に移された。元のカレンダー（A）にはもう無い
+        _remote.Absent.Add(("cal-a", "g1"));
 
         // B を先に取り込む
         await Engine.SyncAsync("cal-b", "cal-b");

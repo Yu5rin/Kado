@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Kado.Core.WorkingDays;
 using Kado.Data.Models;
 using Kado.Presentation.Settings;
@@ -29,12 +30,27 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
     /// その間の予定の通知が毎分出た。まとめを切っていると逆に一度も消えず、溜まり続けた。
     /// </para>
     /// </summary>
-    private readonly HashSet<(string Id, DateOnly Date)> _notified = [];
+    private readonly HashSet<(string Id, DateOnly Date, TimeOnly Start)> _notified = [];
 
     /// <summary>知らせた記録の件数（テスト用）。</summary>
     internal int NotifiedCount => _notified.Count;
 
     private DateOnly? _summarySentOn;
+
+    /// <summary>
+    /// 設定に控えた「もう知らせたもの」を読み込んだか。
+    /// <para>
+    /// 控えが無いと、アプリを再起動するたびに朝のまとめが出直し、開始前の通知も2回出る。
+    /// 初めて見るときに一度だけ読む。
+    /// </para>
+    /// </summary>
+    private bool _restored;
+
+    /// <summary>朝のまとめを出した日を控える設定のキー。</summary>
+    internal const string SummarySentOnKey = "reminder.summarySentOn";
+
+    /// <summary>出した開始前の通知（予定の ID と開始日時）を控える設定のキー。当日以降のぶんだけ持つ。</summary>
+    internal const string NotifiedKey = "reminder.notified";
 
     /// <summary>
     /// いま知らせるものがあるか見る。1分ごとに呼ぶ。
@@ -46,10 +62,72 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
 
         var today = DateOnly.FromDateTime(now);
 
+        Restore();
         Prune(today);
 
         if (_settings.SummaryEnabled) CheckSummary(now, today);
         if (_settings.NotifyEnabled) CheckUpcoming(now, today);
+    }
+
+    /// <summary>設定に控えた記録を読み込む。読めなければ空のまま（知らせ直すだけで、壊れはしない）。</summary>
+    private void Restore()
+    {
+        if (_restored) return;
+        _restored = true;
+
+        try
+        {
+            if (_workspace.Settings.Get(SummarySentOnKey) is { Length: > 0 } sent &&
+                DateOnly.TryParseExact(sent, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var sentOn))
+            {
+                _summarySentOn = sentOn;
+            }
+
+            if (_workspace.Settings.Get(NotifiedKey) is not { Length: > 0 } json) return;
+
+            foreach (var line in JsonSerializer.Deserialize<string[]>(json) ?? [])
+            {
+                // 日付 \t 開始時刻 \t ID（ID は最後に置き、中に区切りがあっても壊れないようにする）
+                var parts = line.Split('\t', 3);
+
+                if (parts.Length == 3 &&
+                    DateOnly.TryParseExact(parts[0], "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var date) &&
+                    TimeOnly.TryParseExact(parts[1], "HH:mm", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var start))
+                {
+                    _notified.Add((parts[2], date, start));
+                }
+            }
+        }
+        catch (Exception e) when (e is JsonException or Microsoft.Data.Sqlite.SqliteException or InvalidOperationException)
+        {
+            // 控えが壊れていても、知らせは止めない
+        }
+    }
+
+    /// <summary>出した開始前の通知を設定に控える。当日以降のぶんだけ（日が変わったら捨てる）。</summary>
+    private void SaveNotified(DateOnly today)
+    {
+        try
+        {
+            var lines = _notified
+                .Where(key => key.Date >= today)
+                .OrderBy(key => key.Date).ThenBy(key => key.Start).ThenBy(key => key.Id, StringComparer.Ordinal)
+                .Select(key => string.Join(
+                    '\t',
+                    key.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    key.Start.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    key.Id))
+                .ToArray();
+
+            _workspace.Settings.Set(NotifiedKey, JsonSerializer.Serialize(lines));
+        }
+        catch (Exception e) when (e is Microsoft.Data.Sqlite.SqliteException or InvalidOperationException)
+        {
+            // 控えられなくても、知らせは止めない
+        }
     }
 
     /// <summary>
@@ -63,7 +141,7 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
     private void Prune(DateOnly today)
     {
         var oldest = today.AddDays(-1);
-        _notified.RemoveWhere(key => key.Date < oldest);
+        if (_notified.RemoveWhere(key => key.Date < oldest) > 0) SaveNotified(today);
     }
 
     /// <summary>朝のまとめ。指定した時刻を過ぎていれば、その日は1回だけ出す。</summary>
@@ -73,6 +151,16 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
         if (TimeOnly.FromDateTime(now) < _settings.SummaryTime) return;
 
         _summarySentOn = today;
+
+        // 控えておく。再起動のたびに「今日の予定」が出直さないように
+        try
+        {
+            _workspace.Settings.Set(SummarySentOnKey, today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        }
+        catch (Exception e) when (e is Microsoft.Data.Sqlite.SqliteException or InvalidOperationException)
+        {
+            // 控えられなくても、まとめは出す
+        }
 
         // 画面に出していないカレンダーは数に入れない。同じ予定を2つのカレンダーに
         // 持っていると、まとめにも二度出る。
@@ -170,19 +258,24 @@ public sealed class ReminderService(CalendarWorkspace workspace, AppSettings set
             if (value.StartTime is not { } start) continue;
             if (CalendarWorkspace.IsMilestoneMark(value)) continue;
 
+            // 日をまたぐ予定の2日目以降は、始まる予定ではない。開始時刻だけを日付に貼り付けて
+            // 数えると、毎日「そろそろ始まる」と知らせてしまう
+            if (scheduled.IsContinuation) continue;
+
             var at = scheduled.Date.ToDateTime(start);
             var when = at - lead;
 
             // 知らせる時刻を過ぎていて、まだ予定が始まっていないものだけ
             if (when > now || at <= now) continue;
 
-            var key = (value.Id, scheduled.Date);
+            var key = (value.Id, scheduled.Date, start);
             if (_notified.Contains(key)) continue;
 
             calendars ??= _workspace.Sources.Calendars();
             if (!CalendarWorkspace.NotifiesFor(value, calendars)) continue;
 
             _notified.Add(key);
+            SaveNotified(today);
 
             _notifier.Notify(value.Title, Detail(value, start), _settings.NotifySound);
         }

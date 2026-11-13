@@ -18,6 +18,39 @@ public class TaskMapperTests
     private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement;
 
     [Fact]
+    public void Google側で期限が動いたら繰り返しの曜日も新しい期限日に合わせる()
+    {
+        // 月曜に毎週繰り返すタスク。Google 側で期限を水曜（2026/9/23）に動かされた
+        var existing = new TaskItem
+        {
+            Id = "t1", Title = "週報", Due = D(2026, 9, 21), Repeat = "FREQ=WEEKLY;BYDAY=MO",
+            GoogleTaskId = "t1", GoogleTaskListId = "@default",
+        };
+
+        var value = TaskMapper.FromGoogle(Json("""
+            { "id": "t1", "title": "週報", "status": "needsAction", "due": "2026-09-23T00:00:00.000Z" }
+            """), "@default", "local:mytasks", existing);
+
+        Assert.Equal(D(2026, 9, 23), value.Due);
+        Assert.Equal("FREQ=WEEKLY;BYDAY=WE", value.Repeat);
+    }
+
+    [Fact]
+    public void 期限が動いていなければ繰り返しの指定はそのまま()
+    {
+        var existing = new TaskItem
+        {
+            Id = "t1", Title = "週報", Due = D(2026, 9, 21), Repeat = "FREQ=WEEKLY;BYDAY=MO",
+        };
+
+        var value = TaskMapper.FromGoogle(Json("""
+            { "id": "t1", "title": "週報（改）", "status": "needsAction", "due": "2026-09-21T00:00:00.000Z" }
+            """), "@default", "local:mytasks", existing);
+
+        Assert.Equal("FREQ=WEEKLY;BYDAY=MO", value.Repeat);
+    }
+
+    [Fact]
     public void タスクを読める()
     {
         var value = TaskMapper.FromGoogle(Json("""

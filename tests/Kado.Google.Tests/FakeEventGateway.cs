@@ -35,6 +35,9 @@ internal sealed class FakeEventGateway : IEventGateway
     /// <summary>一覧が取る期間の始まり（timeMin）。無ければ全期間。</summary>
     public DateTimeOffset? ListFrom { get; set; }
 
+    /// <summary>一覧がいつまでも次のページを返し続ける（件数が上限を超えた場面）。</summary>
+    public bool EndlessPages { get; set; }
+
     /// <summary>一度だけ 410 を返す。syncToken が古くなった場面を作る。</summary>
     public bool FailNextWithGone { get; set; }
 
@@ -79,7 +82,10 @@ internal sealed class FakeEventGateway : IEventGateway
 
         if (NextSyncToken is { Length: > 0 }) _tokens[NextSyncToken] = _clock;
 
-        return Task.FromResult(new GooglePage(items, null, NextSyncToken));
+        // 終わらない一覧。印は最後のページにしか付かないので、打ち切られれば印は来ない
+        return Task.FromResult(EndlessPages
+            ? new GooglePage(items, "next", null)
+            : new GooglePage(items, null, NextSyncToken));
     }
 
     /// <summary>
@@ -94,9 +100,14 @@ internal sealed class FakeEventGateway : IEventGateway
     /// <summary>GetAsync で引かれた先。</summary>
     public List<(string CalendarId, string EventId)> Got { get; } = [];
 
+    /// <summary>このカレンダーには無いことにする組。Google で別のカレンダーへ移された場面を作る。</summary>
+    public HashSet<(string CalendarId, string EventId)> Absent { get; } = [];
+
     public Task<JsonElement> GetAsync(string calendarId, string eventId, CancellationToken cancellationToken)
     {
         Got.Add((calendarId, eventId));
+
+        if (Absent.Contains((calendarId, eventId))) throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
 
         if (Located.TryGetValue((calendarId, eventId), out var located)) return Task.FromResult(Parse(located));
 

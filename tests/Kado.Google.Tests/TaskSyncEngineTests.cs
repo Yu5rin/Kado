@@ -55,6 +55,30 @@ public class TaskSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task 一覧を打ち切ったときは前回の印を進めず警告する()
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+        _remote.EndlessPages = true;
+
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        // 進めると、取り込みきれなかった分が次回の差分に入らず、永久に来ない
+        Assert.True(string.IsNullOrEmpty(Settings.GetSyncState(TaskSyncEngine.SinceKey("@default"))));
+        Assert.Contains(SyncReport.TooManyItemsWarning, report.Warnings);
+    }
+
+    [Fact]
+    public async Task 一覧を最後まで読めたときは印を進めて警告しない()
+    {
+        _remote.Add("g1", "台数計画の確定", due: "2026-09-24");
+
+        var report = await Engine.SyncAsync("@default", "local:mytasks");
+
+        Assert.False(string.IsNullOrEmpty(Settings.GetSyncState(TaskSyncEngine.SinceKey("@default"))));
+        Assert.DoesNotContain(SyncReport.TooManyItemsWarning, report.Warnings);
+    }
+
+    [Fact]
     public async Task こちらにだけあるタスクを送る()
     {
         Tasks.Upsert(new TaskItem

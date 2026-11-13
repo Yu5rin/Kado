@@ -58,7 +58,14 @@ internal sealed class FakeFileDialogs : IFileDialogs
         return FileToSave;
     }
 
-    public bool Confirm(string title, string message) => Confirms;
+    /// <summary>最後に尋ねた確認の文面。</summary>
+    public string? LastConfirmMessage { get; private set; }
+
+    public bool Confirm(string title, string message)
+    {
+        LastConfirmMessage = message;
+        return Confirms;
+    }
 
     public void ShowReport(string title, string message)
     {
