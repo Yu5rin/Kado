@@ -34,8 +34,8 @@ public class ContextMenuOpenItemsTests
                 "EventLinkMenuItemStyle",
                 "OpenAttachmentMenuItemStyle",
                 "-",
-                "EventDuplicateMenuItemStyle",
                 "EventMoveMenuItemStyle",
+                "EventDuplicateMenuItemStyle",
                 "EventCopyMenuItemStyle",
                 "-",
                 "EventDeleteMenuItemStyle",
@@ -48,13 +48,13 @@ public class ContextMenuOpenItemsTests
     {
         Assert.Equal(
             [
-                "TaskEditMenuItemStyle",
                 "TaskDoneMenuItemStyle",
-                "TaskDueMenuItemStyle",
-                "TaskListMoveMenuItemStyle",
+                "TaskEditMenuItemStyle",
                 "TaskLinkMenuItemStyle",
                 "OpenAttachmentMenuItemStyle",
                 "-",
+                "TaskDueMenuItemStyle",
+                "TaskListMoveMenuItemStyle",
                 "TaskDuplicateMenuItemStyle",
                 "TaskCopyMenuItemStyle",
                 "-",
@@ -69,9 +69,9 @@ public class ContextMenuOpenItemsTests
         var row = Items(TaskRow).ToList();
         var plain = Items(Task).ToList();
 
-        // 削除の上に「上へ移動」「下へ移動」を、区切り線で分けて置く
+        // 削除の上に「上へ」「下へ」を、区切り線で分けて置く
         var at = row.IndexOf("TaskMoveUpMenuItemStyle");
-        Assert.True(at > 0, "「上へ移動」が無い");
+        Assert.True(at > 0, "「上へ」が無い");
         Assert.Equal(["TaskMoveUpMenuItemStyle", "TaskMoveDownMenuItemStyle", "-"], row.GetRange(at, 3));
         Assert.Equal("TaskDeleteMenuItemStyle", row[^1]);
         Assert.Equal("-", row[at - 1]);

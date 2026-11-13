@@ -228,7 +228,7 @@
                      Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
 
             <!--
-                添付。Google 連携のカレンダーの予定だけ（ローカルだけのカレンダーやタスクには
+                添付。Google 連携のカレンダーの予定だけ（このアプリだけのカレンダーやタスクには
                 Google 側に書き戻す先が無い）。一覧の行を押すと既定のブラウザで開く
                 （https のものだけ。EventEditorViewModel.IsSafeToOpen）。「外す」は予定から
                 外すだけで、ドライブのファイルは消さない
@@ -259,7 +259,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Button Content="ファイルを追加" Style="{StaticResource GhostButtonStyle}"
+                <Button Content="ファイルを追加…" Style="{StaticResource GhostButtonStyle}"
                         HorizontalAlignment="Left" IsEnabled="{Binding CanAddAttachment}"
                         Click="OnAddAttachmentClick" />
 

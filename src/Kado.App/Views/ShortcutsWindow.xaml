@@ -3,6 +3,9 @@
 
     グローバルホットキーは、押せることを知らないと一生使われない。どこにも
     書いていなかったので、⚙ から開ける一覧にした。中身は Shortcuts が持つ。
+
+    モードレス（Show）で出す。見ながら本体のキーを試せるように。モードレスの窓では
+    IsCancel だけでは閉じないので、「閉じる」は Click で、Esc は窓で受けて閉じる。
 -->
 <Window x:Class="Kado.App.Views.ShortcutsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -27,7 +30,7 @@
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <Button Content="閉じる" HorizontalAlignment="Right"
                     Style="{StaticResource PrimaryButtonStyle}"
-                    IsCancel="True" IsDefault="True" />
+                    IsCancel="True" IsDefault="True" Click="OnCloseClick" />
         </Border>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14">

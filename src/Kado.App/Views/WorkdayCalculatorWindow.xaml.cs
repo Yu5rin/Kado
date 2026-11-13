@@ -37,7 +37,13 @@ public partial class WorkdayCalculatorWindow : Window
         // 「閉じる」も Esc も、フォーカスを動かさずに閉じる。いまは実働日数欄が
         // PropertyChanged で確定するので実害は無いが、閉じ方によらず確定させておく
         Closing += (_, _) => CommitFocusedBinding();
+
+        // モードレス（Show）なので IsCancel では閉じない。Esc は窓で受けて閉じる
+        ModelessWindow.CloseOnEscape(this);
     }
+
+    /// <summary>「閉じる」。モードレスの窓は <c>IsCancel</c> だけでは閉じないので、自分で閉じる。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     /// <summary>いまフォーカスしている要素の Text 系バインディングを確定させる。</summary>
     private static void CommitFocusedBinding()

@@ -37,7 +37,7 @@ public sealed class EventMenuInfo
     public bool CanEdit { get; }
 
     /// <summary>先頭の項目の名前。編集できなければ「詳細を見る」。</summary>
-    public string EditLabel => CanEdit ? "編集" : "詳細を見る";
+    public string EditLabel => CanEdit ? "編集…" : "詳細を見る…";
 
     /// <summary>複製できない理由。できるなら null。</summary>
     public string? DuplicateDisabledReason { get; }

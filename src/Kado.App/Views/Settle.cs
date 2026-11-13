@@ -45,6 +45,14 @@ internal sealed class Settle : IDisposable
         _timer.Start();
     }
 
+    /// <summary>待っているものがあれば、走らせずに取りやめる。</summary>
+    internal void Cancel()
+    {
+        if (_disposed) return;
+
+        _timer.Stop();
+    }
+
     /// <summary>待たずに今すぐ走らせる。</summary>
     internal void Now()
     {

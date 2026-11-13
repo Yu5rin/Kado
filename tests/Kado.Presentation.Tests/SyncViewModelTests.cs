@@ -399,9 +399,9 @@ public class SyncViewModelTests
 
         var running = vm.SyncAsync();
 
-        // 走っている間だけ「中止」に切り替わる
+        // 走っている間は、押すと止まることを文言で伝える
         Assert.True(vm.IsBusy);
-        Assert.Equal("中止", vm.ActionLabel);
+        Assert.Equal("同期中…（押すと中止）", vm.ActionLabel);
         Assert.True(vm.CancelSyncCommand.CanExecute(null));
 
         vm.CancelSyncCommand.Execute(null);
@@ -441,6 +441,71 @@ public class SyncViewModelTests
     {
         var vm = new SyncViewModel(new FakeGoogle());
 
-        Assert.Equal("Google 未接続", vm.ActionLabel);
+        // 状態の文（StatusText）は「Google 未接続」のまま。ボタンには押すと起きることを出す
+        Assert.Equal("Google に接続…", vm.ActionLabel);
+        Assert.Equal("Google 未接続", vm.StatusText);
+    }
+
+    [Fact]
+    public void 繋いでいなければ押すと設定のGoogleを開く側に倒す()
+    {
+        var vm = new SyncViewModel(new FakeGoogle());
+
+        Assert.True(vm.NeedsSettings);
+        Assert.Equal("Google カレンダーと ToDo リストを同期します", vm.ActionToolTip);
+        Assert.Equal("Google に接続…", vm.MenuLabel);
+
+        // 同期のキー（F5）は繋いでいないと効かないので、メニューに添えない
+        Assert.Equal(string.Empty, vm.MenuGesture);
+    }
+
+    [Fact]
+    public async Task 繋いでいれば今すぐ同期する側のまま()
+    {
+        var vm = new SyncViewModel(new FakeGoogle { IsConnected = true });
+
+        Assert.False(vm.NeedsSettings);
+        Assert.Equal("押すと今すぐ同期します", vm.ActionToolTip);
+        Assert.Equal("今すぐ同期", vm.MenuLabel);
+        Assert.Equal("F5", vm.MenuGesture);
+
+        await vm.SyncAsync();
+
+        Assert.False(vm.NeedsSettings);
+    }
+
+    [Fact]
+    public async Task 繋ぎ直しが要る失敗も設定のGoogleを開く側に倒す()
+    {
+        // 更新トークンが死んでいる（同意画面がテストのまま7日で失効・Google 側で許可を取り消した）
+        var vm = new SyncViewModel(new FakeGoogle
+        {
+            IsConnected = true,
+            ThrowOnSync = new Kado.Google.OAuth.OAuthException("失効", "invalid_grant"),
+        });
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.True(vm.NeedsSettings);
+        Assert.Equal("Google に接続…", vm.MenuLabel);
+        Assert.Contains("設定", vm.ActionToolTip);
+    }
+
+    [Fact]
+    public async Task ふつうの失敗は繋ぎ直さずに同期を試し直せる()
+    {
+        // ネットワークの失敗などは、設定を開いても直らない。押すとまた同期する
+        var vm = new SyncViewModel(new FakeGoogle
+        {
+            IsConnected = true,
+            ThrowOnSync = new HttpRequestException("切れた"),
+        });
+
+        await vm.SyncAsync();
+
+        Assert.Equal(SyncState.Failed, vm.State);
+        Assert.False(vm.NeedsSettings);
+        Assert.Equal("押すと今すぐ同期します", vm.ActionToolTip);
     }
 }

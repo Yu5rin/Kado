@@ -119,7 +119,7 @@ public sealed class TaskListItemViewModel(
         null => null,
         { Kind: DueKind.CalendarDays } => "この期間は実働日データが未登録のため、暦日で数えています。",
         { IsSnapped: true } d =>
-            $"期限の {Task.Due:M/d} は非稼働日のため、直前の実働日 {d.EffectiveDue:M/d} までで数えています。",
+            $"期限の {Task.Due:M/d} は実働日ではないため、直前の実働日 {d.EffectiveDue:M/d} までで数えています。",
         _ => null,
     };
 }

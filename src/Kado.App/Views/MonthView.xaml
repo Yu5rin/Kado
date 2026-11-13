@@ -561,7 +561,7 @@
             空の一文（IsEmpty）と同じ、中央に重ねる形にする
         -->
         <TextBlock Style="{StaticResource BodyTextStyle}"
-                   Text="ダブルクリックで予定を追加 ／ ⚙→設定→実働日データ で会社の暦を取り込む"
+                   Text="ダブルクリックで予定を追加 ／ ⚙ →「Excel から実働日を取り込む…」で会社の暦を取り込む"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    TextAlignment="Center" TextWrapping="Wrap" MaxWidth="320"
                    Foreground="{DynamicResource Ink3Brush}"

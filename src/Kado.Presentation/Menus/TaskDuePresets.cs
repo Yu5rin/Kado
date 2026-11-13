@@ -50,8 +50,8 @@ public static class TaskDuePresets
         [
             new(TaskDueKind.Today, "今日", today),
             new(TaskDueKind.Tomorrow, "明日", today.AddDays(1)),
-            new(TaskDueKind.NextWorkday, "次の稼働日", NextWorkday(today, isWorkday)),
-            new(TaskDueKind.NextWeekStart, "来週の週始め（最初の稼働日）", NextWeekFirstWorkday(today, weekStart, isWorkday)),
+            new(TaskDueKind.NextWorkday, "次の実働日", NextWorkday(today, isWorkday)),
+            new(TaskDueKind.NextWeekStart, "来週の週始め（最初の実働日）", NextWeekFirstWorkday(today, weekStart, isWorkday)),
             new(TaskDueKind.None, "期限なし", null),
         ];
     }

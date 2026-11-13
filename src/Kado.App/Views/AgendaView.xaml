@@ -50,16 +50,23 @@
             </Border>
         </DataTemplate>
 
-        <!-- タスク1件。予定と見分けがつくよう丸印を添える -->
+        <!-- タスク1件。予定と見分けがつくようチェックを添える。押すとその場で完了を切り替える -->
         <DataTemplate x:Key="AgendaTaskTemplate">
             <Border x:Name="Row" Background="Transparent" Padding="0,3" Cursor="Hand"
                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                     ContextMenu="{StaticResource TaskContextMenu}"
                     MouseLeftButtonDown="OnTaskClicked">
                 <DockPanel>
-                    <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,9,0"
-                             VerticalAlignment="Center"
-                             Stroke="{DynamicResource Ink3Brush}" StrokeThickness="1.5" />
+                    <!--
+                        押せるチェック。行の押下（OnTaskClicked）とは別に、ここを押したときだけ完了を切り替える。
+                        ToggleButton は押下を自分で受けて止めるので、行の「その日を選ぶ」には流れない
+                    -->
+                    <CheckBox DockPanel.Dock="Left" Margin="0,0,9,0" VerticalAlignment="Center"
+                              Style="{StaticResource TaskCheckBoxStyle}"
+                              IsChecked="{Binding IsDone, Mode=OneWay}" Focusable="False"
+                              Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                              CommandParameter="{Binding}" />
 
                     <TextBlock Style="{StaticResource CaptionTextStyle}" DockPanel.Dock="Left" Text="{Binding DayLabel}" Width="48" LineHeight="17"
                                Foreground="{DynamicResource Ink3Brush}" />

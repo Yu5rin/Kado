@@ -122,10 +122,31 @@
                         Style="{StaticResource PrimaryButtonStyle}"
                         IsCancel="True" />
 
-                <TextBlock Text="{Binding Message}" FontSize="11" VerticalAlignment="Center"
-                           TextWrapping="Wrap" Margin="0,0,10,0"
-                           Foreground="{DynamicResource SundayBrush}"
-                           Visibility="{Binding Message, Converter={StaticResource NullToVisibility}}" />
+                <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding Message}" FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource SundayBrush}"
+                               Visibility="{Binding Message, Converter={StaticResource NullToVisibility}}" />
+
+                    <!--
+                        設定の中で押した操作の結果（バックアップ・書き出し・重複整理・取り込みなど）。
+                        本体の窓の帯に出るが、この窓が前にあると見えない。成功は通常の色、失敗は赤
+                    -->
+                    <TextBlock Text="{Binding Notice}" FontSize="11"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding NoticeIsFailure}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource SundayBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -424,7 +445,7 @@
                             <TextBox Text="{Binding Sync.WarningsText, Mode=OneWay}" IsReadOnly="True"
                                      TextWrapping="Wrap" MaxHeight="150" Padding="6,4" FontSize="12"
                                      VerticalScrollBarVisibility="Auto" />
-                            <Button Content="確認した（警告を消す）" Style="{StaticResource GhostButtonStyle}"
+                            <Button Content="警告を確認済みにする" Style="{StaticResource GhostButtonStyle}"
                                     HorizontalAlignment="Left" Margin="0,6,0,0"
                                     Command="{Binding Sync.AcknowledgeWarningsCommand}" />
                         </StackPanel>
@@ -451,7 +472,7 @@
                                 CanConnect が変わったら SyncViewModel.RefreshAvailability が
                                 Raise(nameof(CanConnect)) を呼ぶので、表示も連動して変わる
                             -->
-                            <TextBlock Text="この配布物には Google への接続設定が入っていません。下の「自分のクライアント設定を使う…（JSON）」から、Google Cloud で作ったクライアント設定を読み込むと接続できます。"
+                            <TextBlock Text="この配布物には Google への接続設定が入っていません。下の「自分のクライアント設定を使う…」から、Google Cloud で作ったクライアント設定を読み込むと接続できます。"
                                        Style="{StaticResource FieldNoteStyle}" TextWrapping="Wrap" Margin="0,4,0,0"
                                        Visibility="{Binding Sync.CanConnect, Converter={StaticResource InverseBoolToVisibility}}" />
                         </StackPanel>
@@ -464,7 +485,7 @@
                         <StackPanel Style="{StaticResource FieldGroupStyle}" Margin="0,8,0,0">
                             <TextBlock Text="詳細" Style="{StaticResource CaptionTextStyle}" Foreground="{DynamicResource Ink3Brush}"
                                        Margin="0,0,0,6" />
-                            <Button Content="自分のクライアント設定を使う…（JSON）" HorizontalAlignment="Left"
+                            <Button Content="自分のクライアント設定を使う…" HorizontalAlignment="Left"
                                     Style="{StaticResource GhostButtonStyle}" FontSize="11"
                                     Command="{Binding ImportGoogleClientCommand}"
                                     ToolTip="自分の Google Cloud プロジェクトで使いたいときだけ。ふつうは要りません" />
@@ -542,12 +563,12 @@
                                        Foreground="{DynamicResource SundayBrush}" Margin="0,0,0,12" />
 
                             <StackPanel Style="{StaticResource FieldGroupStyle}">
-                                <Button Content="旧 inaCalendar のバックアップを取り込む…（JSON）"
+                                <Button Content="旧 inaCalendar のバックアップを取り込む…"
                                         HorizontalAlignment="Left"
                                         Style="{StaticResource GhostButtonStyle}"
                                         Command="{Binding ImportLegacyBackupCommand}" />
                                 <TextBlock Style="{StaticResource DangerNoteStyle}"
-                                           Text="旧データからの移行時に1回だけ使います。同じ識別子の予定とタスクは上書きされます。" />
+                                           Text="旧データからの移行時に1回だけ使います。同じ予定・タスクは上書きされます。" />
                             </StackPanel>
 
                             <StackPanel Margin="0,0,0,0">

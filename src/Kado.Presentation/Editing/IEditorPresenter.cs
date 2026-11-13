@@ -30,6 +30,13 @@ public interface IEditorPresenter
     bool Confirm(string title, string message);
 
     /// <summary>
+    /// 押す側のボタンの文言まで指定して尋ねる（［削除］［キャンセル］、［破棄する］［編集に戻る］など）。
+    /// <para>既定の応答は「取り消す側」。誤って Enter を押しても、消えたり捨てたりしない。</para>
+    /// </summary>
+    /// <returns>進めてよければ true。</returns>
+    bool Confirm(string title, string message, string acceptLabel, string cancelLabel);
+
+    /// <summary>
     /// 編集中に Google 側で内容が変わっていたとき、こちらの内容で上書きしてよいか尋ねる。
     /// <para>「はい」「いいえ」で答えさせる。いいえなら編集画面に戻る。</para>
     /// </summary>
@@ -62,6 +69,8 @@ public sealed class NullEditorPresenter : IEditorPresenter
     public bool ConfirmDelete(string title) => false;
 
     public bool Confirm(string title, string message) => false;
+
+    public bool Confirm(string title, string message, string acceptLabel, string cancelLabel) => false;
 
     public bool ConfirmOverwrite(string title, string message) => false;
 

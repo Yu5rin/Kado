@@ -42,7 +42,7 @@ public class TaskContextMenuTests : IDisposable
     // ------------------------------------------------------------------
 
     [Fact]
-    public void 期限の選択肢は今日_明日_次の稼働日_来週の週始め_期限なしの順に並ぶ()
+    public void 期限の選択肢は今日_明日_次の実働日_来週の週始め_期限なしの順に並ぶ()
     {
         _test.Workspace.AddTask(Task(due: D(2026, 9, 30)));
         var vm = Create(D(2026, 9, 18));
@@ -50,24 +50,24 @@ public class TaskContextMenuTests : IDisposable
         var info = vm.TaskMenuFor(_test.Workspace.Tasks.Find("t1"));
 
         Assert.Equal(
-            ["今日", "明日", "次の稼働日", "来週の週始め（最初の稼働日）", "期限なし"],
+            ["今日", "明日", "次の実働日", "来週の週始め（最初の実働日）", "期限なし"],
             info.DueChoices.Select(c => c.Label));
     }
 
     [Fact]
-    public void 次の稼働日と来週の週始めは稼働日データの休みを飛ばす()
+    public void 次の実働日と来週の週始めは稼働日データの休みを飛ばす()
     {
-        // 9/18 は金曜。土日を除くだけなら次の稼働日は 9/21（月）だが、会社の休みで 9/21〜23 は休み。
+        // 9/18 は金曜。土日を除くだけなら次の実働日は 9/21（月）だが、会社の休みで 9/21〜23 は休み。
         // 稼働日データを優先して 9/24（木）になる
         _test.Workspace.AddTask(Task(due: D(2026, 9, 30)));
         var vm = Create(D(2026, 9, 18));
 
         var info = vm.TaskMenuFor(_test.Workspace.Tasks.Find("t1"));
 
-        Assert.Equal(new TaskDueRequest("t1", D(2026, 9, 24)), Due(info, "次の稼働日").Parameter);
+        Assert.Equal(new TaskDueRequest("t1", D(2026, 9, 24)), Due(info, "次の実働日").Parameter);
 
-        // 週は日曜始まり。今週は 9/13〜9/19、来週の頭は 9/20（日）。最初の稼働日は 9/24（木）
-        Assert.Equal(new TaskDueRequest("t1", D(2026, 9, 24)), Due(info, "来週の週始め（最初の稼働日）").Parameter);
+        // 週は日曜始まり。今週は 9/13〜9/19、来週の頭は 9/20（日）。最初の実働日は 9/24（木）
+        Assert.Equal(new TaskDueRequest("t1", D(2026, 9, 24)), Due(info, "来週の週始め（最初の実働日）").Parameter);
     }
 
     [Fact]
@@ -77,11 +77,11 @@ public class TaskContextMenuTests : IDisposable
 
         // 9/24（木）。月曜始まりなら今週は 9/21〜9/27、来週の頭は 9/28（月）
         var monday = Create(D(2026, 9, 24), DayOfWeek.Monday).TaskMenuFor(_test.Workspace.Tasks.Find("t1"));
-        Assert.Equal(D(2026, 9, 28), ((TaskDueRequest)Due(monday, "来週の週始め（最初の稼働日）").Parameter!).Due);
+        Assert.Equal(D(2026, 9, 28), ((TaskDueRequest)Due(monday, "来週の週始め（最初の実働日）").Parameter!).Due);
 
         // 水曜始まりなら今週は 9/23〜9/29、来週の頭は 9/30（水）
         var wednesday = Create(D(2026, 9, 24), DayOfWeek.Wednesday).TaskMenuFor(_test.Workspace.Tasks.Find("t1"));
-        Assert.Equal(D(2026, 9, 30), ((TaskDueRequest)Due(wednesday, "来週の週始め（最初の稼働日）").Parameter!).Due);
+        Assert.Equal(D(2026, 9, 30), ((TaskDueRequest)Due(wednesday, "来週の週始め（最初の実働日）").Parameter!).Due);
     }
 
     [Fact]

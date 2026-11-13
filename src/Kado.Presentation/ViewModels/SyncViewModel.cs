@@ -61,6 +61,12 @@ public sealed class SyncViewModel : ObservableObject
     private bool _cancelledByUser;
 
     /// <summary>
+    /// 失敗の原因が、繋ぎ直さないと直らないものか（更新トークンが死んでいる・接続そのものに失敗した）。
+    /// 設定の「Google」を開いて繋ぎ直してもらう。
+    /// </summary>
+    private bool _needsReconnect;
+
+    /// <summary>
     /// 走っているものの中身。右上の「同期中…」「接続中…」「切断中…」の出し分けに使う。
     /// 中止ボタンはどれにも効く（<see cref="_syncCts"/> を切る）。
     /// </summary>
@@ -145,9 +151,13 @@ public sealed class SyncViewModel : ObservableObject
         get => _state;
         private set
         {
+            // 失敗でなくなれば、繋ぎ直しの印も要らない（失敗に入る側は Fail が先に立てる）
+            if (value != SyncState.Failed) _needsReconnect = false;
+
             if (Set(ref _state, value))
             {
-                Raise(nameof(StatusText), nameof(IsConnected), nameof(IsBusy),
+                Raise(nameof(StatusText), nameof(IsConnected), nameof(IsBusy), nameof(NeedsSettings),
+                    nameof(MenuLabel), nameof(MenuGesture),
                     nameof(ActionLabel), nameof(ActionToolTip), nameof(DetailText));
             }
             RaiseCanExecute();
@@ -287,10 +297,33 @@ public sealed class SyncViewModel : ObservableObject
     /// <para>押すと止められることをその場で示す。右上の状態表示（<see cref="StatusText"/>）は
     /// 「同期中…」のまま変えない。ボタンでの操作案内と状態表示は役目が違う。</para>
     /// </summary>
-    public string ActionLabel => IsBusy ? "中止" : StatusText;
+    public string ActionLabel => _state switch
+    {
+        SyncState.Running => $"{StatusText}（押すと中止）",
+        SyncState.Disconnected => "Google に接続…",
+        _ => StatusText,
+    };
 
-    /// <summary>ボタンのツールチップ。走っている間だけ、押すと止まることを伝える。</summary>
-    public string ActionToolTip => IsBusy ? "押すと同期を中止します" : "押すと今すぐ同期します";
+    /// <summary>
+    /// 押すと、同期ではなく設定の「Google」を開くべきか。
+    /// <para>繋いでいないとき、または繋ぎ直さないと直らない失敗のとき。そこに接続のボタンがある。</para>
+    /// </summary>
+    public bool NeedsSettings => _state == SyncState.Disconnected || (_state == SyncState.Failed && _needsReconnect);
+
+    /// <summary>ボタンのツールチップ。走っている間は、押すと止まることを伝える。</summary>
+    public string ActionToolTip => _state switch
+    {
+        SyncState.Running => "押すと同期を中止します",
+        SyncState.Disconnected => "Google カレンダーと ToDo リストを同期します",
+        SyncState.Failed when _needsReconnect => "押すと設定の「Google」を開きます（繋ぎ直してください）",
+        _ => "押すと今すぐ同期します",
+    };
+
+    /// <summary>メニューの「今すぐ同期」の文言。繋いでいなければ「Google に接続…」。</summary>
+    public string MenuLabel => NeedsSettings ? "Google に接続…" : "今すぐ同期";
+
+    /// <summary>メニューに添えるキー。同期のキー（F5）は繋いでいないと効かないので、そのときは添えない。</summary>
+    public string MenuGesture => NeedsSettings ? string.Empty : "F5";
 
     /// <summary>直前の同期の結果。詳しく見せるとき用。</summary>
     public SyncReport? LastReport { get; private set; }
@@ -352,13 +385,14 @@ public sealed class SyncViewModel : ObservableObject
         }
         catch (OAuthException ex)
         {
-            Fail(ex.WasDeclined ? "許可されませんでした" : ex.Message);
+            Fail(ex.WasDeclined ? "許可されませんでした" : ex.Message, needsReconnect: true);
         }
         catch (Exception ex)
         {
             // 通信の失敗は原因ごとに言い分ける（プロキシの認証・証明書・接続・時間切れ・応答が読めない）。
             // 想定していない転び方をしても、繋がっていない扱いのまま止める。型名は出さない
-            Fail(GoogleFailure.Describe(ex, ex is HttpRequestException ? "ネットワークに繋がりません" : "接続できませんでした"));
+            Fail(GoogleFailure.Describe(ex, ex is HttpRequestException ? "ネットワークに繋がりません" : "接続できませんでした"),
+                needsReconnect: true);
         }
         finally
         {
@@ -491,7 +525,7 @@ public sealed class SyncViewModel : ObservableObject
         catch (OAuthException ex)
         {
             // 更新トークンが死んでいたら繋ぎ直しが要る
-            Fail(ex.IsRefreshTokenDead ? "繋ぎ直してください" : ex.Message);
+            Fail(ex.IsRefreshTokenDead ? "繋ぎ直してください" : ex.Message, needsReconnect: ex.IsRefreshTokenDead);
             RaiseInterruptedIfWritten();
         }
         catch (Exception ex)
@@ -537,10 +571,14 @@ public sealed class SyncViewModel : ObservableObject
         cts.Cancel();
     }
 
-    private void Fail(string detail)
+    private void Fail(string detail, bool needsReconnect = false)
     {
         _detail = detail;
+        _needsReconnect = needsReconnect;
         State = SyncState.Failed;
+
+        // すでに失敗していて、繋ぎ直しの要不要だけが変わることもある（State は動かない）
+        Raise(nameof(NeedsSettings), nameof(ActionToolTip), nameof(MenuLabel), nameof(MenuGesture));
     }
 
     private void RaiseCanExecute()

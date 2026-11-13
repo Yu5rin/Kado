@@ -42,8 +42,9 @@ public sealed class ShellViewModel : ObservableObject
         ToOverlayCommand = new RelayCommand(() => Mode = ShellMode.Overlay);
         ToggleEdgeCommand = new RelayCommand(
             () => Edge = _edge == DockEdge.Left ? DockEdge.Right : DockEdge.Left);
-        EdgeLeftCommand = new RelayCommand(() => Edge = DockEdge.Left);
-        EdgeRightCommand = new RelayCommand(() => Edge = DockEdge.Right);
+        EdgeLeftCommand = new RelayCommand(() => ChooseEdge(DockEdge.Left));
+        EdgeRightCommand = new RelayCommand(() => ChooseEdge(DockEdge.Right));
+        ToDockCommand = new RelayCommand(Dock);
         ToggleSlideCommand = new RelayCommand(
             () => Mode = _mode == ShellMode.Window ? ShellMode.Overlay : ShellMode.Window);
         ShowEventsCommand = new RelayCommand(() => Tab = SidebarTab.Events);
@@ -314,6 +315,37 @@ public sealed class ShellViewModel : ObservableObject
     /// スライドで返すと、画面から消えてしまって戻し方が分からなくなる。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// 出す位置を選ぶ。ウィンドウで出しているときは、位置を変えても何も動かないので、
+    /// 「スライドにしたときの話」だと知らせる（<see cref="Announced"/>）。
+    /// </summary>
+    private void ChooseEdge(DockEdge edge)
+    {
+        Edge = edge;
+
+        if (_mode == ShellMode.Window) Announced?.Invoke(this, EdgeNoticeInWindow(edge));
+    }
+
+    /// <summary>ウィンドウで出しているときに、寄せる辺を選んだ知らせ。</summary>
+    public static string EdgeNoticeInWindow(DockEdge edge) => edge == DockEdge.Left
+        ? "スライドにしたとき左端から出ます"
+        : "スライドにしたとき右端から出ます";
+
+    /// <summary>画面に知らせたいことが起きた（ステータスの帯に出す）。</summary>
+    public event EventHandler<string>? Announced;
+
+    /// <summary>固定にする（すでに固定ならそのまま）。外したときは、留める前の出しかたに戻る。</summary>
+    private void Dock()
+    {
+        if (_mode == ShellMode.Dock) return;
+
+        _beforePin = _mode;
+        Mode = ShellMode.Dock;
+    }
+
+    /// <summary>出しかたを固定にする。トレイの「固定」。</summary>
+    public RelayCommand ToDockCommand { get; }
+
     private void TogglePin()
     {
         if (_mode == ShellMode.Dock)

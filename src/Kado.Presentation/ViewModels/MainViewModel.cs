@@ -41,7 +41,7 @@ public enum CalendarView
 /// ツールバー側に置く。
 /// </para>
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject, IStatusSource
 {
     private readonly CalendarWorkspace _workspace;
     private readonly IEditorPresenter _editors;
@@ -113,6 +113,8 @@ public sealed partial class MainViewModel : ObservableObject
     private const string OnboardingSeenKey = "ui.onboarding_seen";
 
     private bool _showsOnboarding;
+
+    private StatusKind _statusKind;
 
     public MainViewModel(CalendarWorkspace workspace, DateOnly today, DayOfWeek weekStart = DayOfWeek.Sunday,
         IEditorPresenter? editors = null, IFileDialogs? files = null,
@@ -263,14 +265,13 @@ public sealed partial class MainViewModel : ObservableObject
         PaneMonthPreviousCommand = new RelayCommand(() => PaneMonthGoTo(PaneMonth.Month.AddMonths(-1)));
         PaneMonthNextCommand = new RelayCommand(() => PaneMonthGoTo(PaneMonth.Month.AddMonths(1)));
         ShowShortcutsCommand = new RelayCommand(() => _editors.ShowShortcuts());
+        QuitCommand = new RelayCommand(() => QuitRequested?.Invoke(this, EventArgs.Empty));
+        DismissStatusCommand = new RelayCommand(ClearStatusMessage);
 
-        // 初回案内（項目7）。「試す」はスライドに切り替えてから既読にする
-        TryOnboardingCommand = new RelayCommand(() =>
-        {
-            Shell.Mode = ShellMode.Overlay;
-            DismissOnboarding();
-        });
+        // 初回案内（項目7）。見せるのは2行の案内と「閉じる」だけ。
+        // 「試す」でいきなり画面の出しかたを変えることはしない（勝手に窓が端へ寄るのは驚く）
         DismissOnboardingCommand = new RelayCommand(DismissOnboarding);
+        Shell.Announced += (_, message) => StatusMessage = message;
         Shell.PropertyChanged += (_, args) =>
         {
             // ウィンドウ側から FitTo を呼んでいるが、取りこぼすと詰め方が
@@ -368,12 +369,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 抜けたあと）に評価されるので、まだ代入していないプロパティ（Sync や
         // 下の各コマンド）を先に参照しても構わない
         OpenSettingsCommand = new RelayCommand(
-            () => _editors.ShowSettings(new SettingsViewModel(
-                _settings!, _startup, _notifier, SourceLists.Calendars, Sync,
-                ImportWorkingDaysCommand, ImportLegacyBackupCommand, FetchWorkingDayFeedCommand,
-                ExportWorkingDayFeedCommand, RemoveDuplicatesCommand, BackupCommand, RestoreCommand,
-                ImportGoogleClientCommand, CheckForUpdateCommand,
-                CheckUpdateConnection)),
+            () => OpenSettings(_lastSettingsCategory),
             () => _settings is not null);
 
         AddCalendarCommand = new RelayCommand(() => AddSource(isTaskList: false));
@@ -401,7 +397,7 @@ public sealed partial class MainViewModel : ObservableObject
         FetchWorkingDayFeedCommand = new AsyncRelayCommand(
             () => FetchFeedAsync(quiet: false),
             () => _settings is { FeedUrl.Length: > 0 },
-            ex => StatusMessage = $"配信元から取り込めませんでした（{(ex is SqliteException ? FailureReason(ex) : FeedFetchPolicy.Describe(ex))}）");
+            ex => ReportFailure($"配信元から取り込めませんでした（{(ex is SqliteException ? FailureReason(ex) : FeedFetchPolicy.Describe(ex))}）"));
 
         ExportWorkingDayFeedCommand = new RelayCommand(ExportFeed);
 
@@ -415,9 +411,13 @@ public sealed partial class MainViewModel : ObservableObject
         CheckForUpdateCommand = new AsyncRelayCommand(
             () => CheckForUpdate?.Invoke() ?? Task.CompletedTask,
             () => CheckForUpdate is not null,
-            ex => StatusMessage = $"更新を確かめられませんでした（{ex.Message}）");
+            ex => ReportFailure($"更新を確かめられませんでした（{ex.Message}）"));
 
         Sync = StartupTrace.Measure("SyncViewModel", () => new SyncViewModel(google));
+
+        // 同期の状態に追従する。RelayCommand は CommandManager に乗っていないので自分で知らせる
+        SyncButtonCommand = new RelayCommand(OnSyncButton, CanSyncButton);
+        Sync.SyncNowCommand.CanExecuteChanged += (_, _) => SyncButtonCommand.RaiseCanExecuteChanged();
 
         // 同期で中身が変わる。所属カレンダーも増えるので一覧ごと引き直す。
         //
@@ -446,6 +446,7 @@ public sealed partial class MainViewModel : ObservableObject
                 or nameof(SyncViewModel.DetailText))
             {
                 Raise(nameof(SyncStatusText), nameof(IsSynced));
+                SyncButtonCommand.RaiseCanExecuteChanged();
             }
         };
 
@@ -622,7 +623,8 @@ public sealed partial class MainViewModel : ObservableObject
             RefreshVisibleCenterView();
 
             Raise(nameof(IsMonthView), nameof(IsWeekView), nameof(IsDayView),
-                nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader));
+                nameof(IsYearView), nameof(IsAgendaView), nameof(ShowsMonthHeader),
+                nameof(PreviousToolTip), nameof(NextToolTip));
 
             // 出す番になった年・一覧の実体を画面へ渡す（それまでは null を渡している）
             Raise(nameof(YearForView), nameof(AgendaForView));
@@ -658,7 +660,8 @@ public sealed partial class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsSidePanelOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(PreviousToolTip), nameof(NextToolTip));
         }
     }
 
@@ -679,9 +682,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// <para>通常の操作結果（<see cref="StatusMessage"/>）と、初回案内のどちらかがあれば出す。</para>
     /// </summary>
     public bool ShowsStatusPill => StatusMessage is not null || _showsOnboarding;
-
-    /// <summary>案内の「試す」。スライドへ切り替えてから既読にする。</summary>
-    public RelayCommand TryOnboardingCommand { get; private set; } = null!;
 
     /// <summary>案内の「閉じる」。</summary>
     public RelayCommand DismissOnboardingCommand { get; private set; } = null!;
@@ -725,9 +725,36 @@ public sealed partial class MainViewModel : ObservableObject
             EnsureSomethingShows(nameof(IsMainViewOpen));
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(PreviousToolTip), nameof(NextToolTip));
             RaiseHeader();
         }
+    }
+
+    /// <summary>◀ のツールチップ。いま出しているビューの単位に合わせる（「前の月」「前の週」…）。</summary>
+    public string PreviousToolTip => NavigationLabel("前の", _currentView, _isMainViewOpen);
+
+    /// <summary>▶ のツールチップ。いま出しているビューの単位に合わせる（「次の月」「次の週」…）。</summary>
+    public string NextToolTip => NavigationLabel("次の", _currentView, _isMainViewOpen);
+
+    /// <summary>
+    /// ◀ ▶ が何を送るか。<see cref="GoToPrevious"/> と同じ決まりで、中央を畳んでいれば日、
+    /// 週・日・年はその単位、月と一覧（一覧は月ごとに送る）は月。
+    /// </summary>
+    /// <param name="prefix">「前の」「次の」。</param>
+    /// <param name="view">出しているビュー。</param>
+    /// <param name="mainViewOpen">中央のカレンダーを出しているか。</param>
+    public static string NavigationLabel(string prefix, CalendarView view, bool mainViewOpen)
+    {
+        if (!mainViewOpen) return prefix + "日";
+
+        return prefix + view switch
+        {
+            CalendarView.Week => "週",
+            CalendarView.Day => "日",
+            CalendarView.Year => "年度",
+            _ => "月",
+        };
     }
 
     /// <summary>
@@ -749,7 +776,8 @@ public sealed partial class MainViewModel : ObservableObject
             CatchUpPaneMonth();
             SavePanes();
             Raise(nameof(ShowsCalendarTools), nameof(ShowsViewSwitcher),
-                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav));
+                nameof(ShowsDayNav), nameof(ShowsToolbarDate), nameof(ShowsToolbarNav),
+                nameof(PreviousToolTip), nameof(NextToolTip));
         }
     }
 
@@ -1241,7 +1269,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var message = Kado.Data.SqliteFailure.DescribeSaveFailure(exception);
 
-        StatusMessage = message;
+        ReportFailure(message);
 
         // 設定の変更は連続して起きる（スライダーなど）。何度も止めない
         if (_settingsSaveFailureShown) return;
@@ -1261,7 +1289,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var message = Kado.Data.SqliteFailure.DescribeSaveFailure(exception);
 
-        StatusMessage = message;
+        ReportFailure(message);
         _files.ShowReport("保存できませんでした", message);
     }
 
@@ -1380,25 +1408,67 @@ public sealed partial class MainViewModel : ObservableObject
     public string? StatusMessage
     {
         get => _statusMessage;
-        private set
-        {
-            if (!Set(ref _statusMessage, value)) return;
-
-            Raise(nameof(ShowsStatusPill));
-        }
+        private set => SetStatus(value, StatusKind.Success);
     }
+
+    /// <summary>
+    /// 出している知らせの種類。成功は数秒で消え、失敗は×を押すか次の知らせが出るまで残る
+    /// （<see cref="IsStatusFailure"/>）。
+    /// </summary>
+    public StatusKind StatusKind => _statusKind;
+
+    /// <summary>
+    /// 出している知らせが失敗か。画面側（<c>MainWindow</c>）はこれが true のあいだ、自動で消さない。
+    /// 数秒で消えると、席を外していた間の失敗を見逃す。
+    /// </summary>
+    public bool IsStatusFailure => _statusMessage is not null && _statusKind == StatusKind.Failure;
+
+    /// <summary>知らせを×で消す。失敗の知らせは自動では消えないので、ここで閉じる。</summary>
+    public RelayCommand DismissStatusCommand { get; private set; } = null!;
+
+    private void SetStatus(string? message, StatusKind kind)
+    {
+        // 種類を先に入れる。画面は StatusMessage の変更を見て、そのとき種類を読む
+        var kindChanged = _statusKind != kind;
+        _statusKind = kind;
+
+        var messageChanged = Set(ref _statusMessage, message, nameof(StatusMessage));
+
+        if (!messageChanged && !kindChanged) return;
+
+        Raise(nameof(ShowsStatusPill), nameof(StatusKind), nameof(IsStatusFailure));
+        StatusChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 失敗の知らせを出す。<b>自動では消えない</b>（×を押すか、次の知らせが出るまで残る）。
+    /// </summary>
+    private void ReportFailure(string message) => SetStatus(message, StatusKind.Failure);
+
+    /// <summary>うまくいったかどうかで、知らせの種類を分けて出す。</summary>
+    private void ReportResult(bool succeeded, string successText, string failureText)
+    {
+        if (succeeded) SetStatus(successText, StatusKind.Success);
+        else ReportFailure(failureText);
+    }
+
+    /// <summary>知らせの中身か種類が変わった。設定画面も、操作の結果をここから受けて出す。</summary>
+    public event EventHandler? StatusChanged;
 
     /// <summary>
     /// 出しているステータスを消す。
     /// <para>画面側が一定時間後に呼ぶ。すでに次の内容に差し替わっていれば、何もしない。</para>
     /// </summary>
-    public void ClearStatusMessage() => StatusMessage = null;
+    public void ClearStatusMessage() => SetStatus(null, StatusKind.Success);
 
     /// <summary>
     /// 画面の外（App）から、ステータスに知らせを出す。常駐中の更新の確認が、新しい版を見つけたときなど。
     /// <para>他の知らせと同じく、数秒後に <see cref="ClearStatusMessage"/> で消える。</para>
     /// </summary>
     public void AnnounceStatus(string message) => StatusMessage = message;
+
+    /// <summary>画面の外（App）から、失敗の知らせを出す。×を押すまで残る。</summary>
+    public void AnnounceFailure(string message) => ReportFailure(message);
 
     /// <summary>
     /// 取り込み・復元など、重い処理が走っている間。
@@ -1468,6 +1538,13 @@ public sealed partial class MainViewModel : ObservableObject
             RunSearch();
         }
     }
+
+    /// <summary>
+    /// クイック入力か検索の欄に、打ちかけの文字があるか。
+    /// <para>自動更新は再起動するので、打ちかけがあるあいだは入れ替えない（<c>AutoUpdatePolicy</c>）。</para>
+    /// </summary>
+    public bool HasDraftInput =>
+        !string.IsNullOrWhiteSpace(_quickText) || !string.IsNullOrWhiteSpace(_searchText);
 
     // ------------------------------------------------------------------
     // クイック入力
@@ -1556,7 +1633,7 @@ public sealed partial class MainViewModel : ObservableObject
             // 所属の無い予定として入れると、送れずに手元へ溜まる
             if (QuickCalendarId is not { Length: > 0 } quickCalendar)
             {
-                StatusMessage = "予定を入れられるカレンダーがありません（読み取り専用のものしかありません）";
+                ReportFailure("予定を入れられるカレンダーがありません（読み取り専用のものしかありません）");
                 return;
             }
 
@@ -1854,11 +1931,67 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>実働日計算パネルを開く。常設はしない（要件書 4.5）。</summary>
     public RelayCommand OpenWorkingDayCalculatorCommand { get; }
 
-    /// <summary>設定画面を開く。</summary>
+    /// <summary>
+    /// 設定画面を開く。最後に開いていた分類から開く（この起動のあいだだけ覚える）。
+    /// </summary>
     public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>設定画面で最後に開いていた分類。次に開くときに、ここから始める。</summary>
+    private SettingsCategory _lastSettingsCategory = SettingsCategory.Startup;
+
+    /// <summary>
+    /// 設定画面を、分類を指定して開く。
+    /// <para>同期の状態を押したら「Google」を開く、など。設定を持たない組み立て方では何もしない。</para>
+    /// </summary>
+    public void OpenSettings(SettingsCategory category)
+    {
+        if (_settings is null) return;
+
+        _lastSettingsCategory = category;
+
+        var settings = new SettingsViewModel(
+            _settings, _startup, _notifier, SourceLists.Calendars, Sync,
+            ImportWorkingDaysCommand, ImportLegacyBackupCommand, FetchWorkingDayFeedCommand,
+            ExportWorkingDayFeedCommand, RemoveDuplicatesCommand, BackupCommand, RestoreCommand,
+            ImportGoogleClientCommand, CheckForUpdateCommand,
+            CheckUpdateConnection,
+            category: category, status: this);
+
+        // 画面を閉じるまで、開いていた分類を覚えておく。次に開くときはそこから始める
+        settings.CategoryChanged += (_, chosen) => _lastSettingsCategory = chosen;
+
+        _editors.ShowSettings(settings);
+    }
+
+    /// <summary>
+    /// ツールバーの同期のボタン。
+    /// <para>
+    /// 繋いでいない・繋ぎ直しが要るときは同期できないので、設定の「Google」を開く。そこに接続のボタンがある。
+    /// それ以外は今すぐ同期する。走っているあいだは、画面側が中止（<see cref="SyncViewModel.CancelSyncCommand"/>）に差し替える。
+    /// </para>
+    /// </summary>
+    public RelayCommand SyncButtonCommand { get; private set; } = null!;
+
+    private void OnSyncButton()
+    {
+        if (Sync.NeedsSettings) OpenSettings(SettingsCategory.Google);
+        else Sync.SyncNowCommand.Execute(null);
+    }
+
+    private bool CanSyncButton() =>
+        Sync.NeedsSettings ? _settings is not null : Sync.SyncNowCommand.CanExecute(null);
 
     /// <summary>ショートカットの一覧を開く。押せることを知らないと使われない。</summary>
     public RelayCommand ShowShortcutsCommand { get; }
+
+    /// <summary>
+    /// アプリを終わらせる（メニューの「Kado を終了」）。閉じるボタンはトレイに入るだけなので、
+    /// 本当に終わる道をメニューにも置く。終わらせるのは App 側（<see cref="QuitRequested"/>）。
+    /// </summary>
+    public RelayCommand QuitCommand { get; private set; } = null!;
+
+    /// <summary>終了が求められた。App が受けて、トレイに入らず本当に終わらせる。</summary>
+    public event EventHandler? QuitRequested;
 
     /// <summary>中央のカレンダーを出す・畳む。</summary>
     public RelayCommand ToggleMainViewCommand { get; }
@@ -2194,7 +2327,7 @@ public sealed partial class MainViewModel : ObservableObject
             ? _workspace.UpdateTaskList(target.Id, name)
             : _workspace.UpdateCalendar(target.Id, name, editor.Color);
 
-        StatusMessage = changed ? $"「{name}」に変更しました" : "見つかりませんでした";
+        ReportResult(changed, $"「{name}」に変更しました", "見つかりませんでした");
     }
 
     /// <summary>
@@ -2250,9 +2383,14 @@ public sealed partial class MainViewModel : ObservableObject
 
         var moved = isTaskList ? _workspace.DeleteTaskList(target.Id) : _workspace.DeleteCalendar(target.Id);
 
+        if (moved is null)
+        {
+            ReportFailure($"最後の{kind}は削除できません");
+            return;
+        }
+
         StatusMessage = moved switch
         {
-            null => $"最後の{kind}は削除できません",
             0 => $"{kind}「{target.Name}」を削除しました",
             var n => $"{kind}「{target.Name}」を削除し、{contents} {n} 件を「{destination}」へ移しました",
         };
@@ -2288,9 +2426,8 @@ public sealed partial class MainViewModel : ObservableObject
             ? _workspace.DiscardDetachedTaskList(target.Id)
             : _workspace.DiscardDetachedCalendar(target.Id);
 
-        StatusMessage = removed is null
-            ? "見つかりませんでした"
-            : $"{kind}「{target.Name}」を{contents} {removed} 件ごと手元から削除しました";
+        if (removed is null) ReportFailure("見つかりませんでした");
+        else StatusMessage = $"{kind}「{target.Name}」を{contents} {removed} 件ごと手元から削除しました";
     }
 
     /// <summary>
@@ -2442,7 +2579,7 @@ public sealed partial class MainViewModel : ObservableObject
             _feedFailures = 0;
             _feedRetryAt = null;
 
-            StatusMessage = $"配信元から実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）";
+            StatusMessage = $"配信元から実働日を取り込みました（実働日 {result.WorkingDays.Count} 件）";
         }
         catch (Exception ex) when (quiet && ex is not OutOfMemoryException)
         {
@@ -2477,7 +2614,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (_workspace.WorkingDays.Days.Count == 0)
         {
-            StatusMessage = "書き出せる実働日データがありません";
+            ReportFailure("書き出せる実働日データがありません");
             return;
         }
 
@@ -2502,7 +2639,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
                                        or SqliteException)
         {
-            StatusMessage = $"書き出せませんでした（{FailureReason(ex)}）";
+            ReportFailure($"書き出せませんでした（{FailureReason(ex)}）");
         }
     }
 
@@ -2510,7 +2647,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (SaveBackup is null)
         {
-            StatusMessage = "この画面からは書き出せません";
+            ReportFailure("この画面からは書き出せません");
             return;
         }
 
@@ -2526,7 +2663,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // 書き込めない保存先（読み取り専用・権限なし・ディスクいっぱい）は SqliteException で来る。
             // 受けないとアプリごと終わる
-            StatusMessage = $"バックアップを書き出せませんでした（{FailureReason(ex)}）";
+            ReportFailure($"バックアップを書き出せませんでした（{FailureReason(ex)}）");
         }
     }
 
@@ -2541,7 +2678,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (RestoreBackup is null)
         {
-            StatusMessage = "この画面からは復元できません";
+            ReportFailure("この画面からは復元できません");
             return;
         }
 
@@ -2569,7 +2706,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException
                                        or SqliteException)
         {
-            StatusMessage = $"復元できませんでした（{FailureReason(ex)}）";
+            ReportFailure($"復元できませんでした（{FailureReason(ex)}）");
         }
         finally
         {
@@ -2603,7 +2740,7 @@ public sealed partial class MainViewModel : ObservableObject
             var lines = new List<string>
             {
                 $"バージョン: {result.Version}",
-                $"稼働日: {result.WorkingDays.Count} 件"
+                $"実働日: {result.WorkingDays.Count} 件"
                     + $"（{result.WorkingDayRangeStart:yyyy/M/d} 〜 {result.WorkingDayRangeEnd:yyyy/M/d}）",
                 $"マイルストーン: {result.Milestones.Count} 件",
             };
@@ -2616,7 +2753,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
 
             return (string.Join(Environment.NewLine, lines),
-                    $"実働日を取り込みました（稼働日 {result.WorkingDays.Count} 件）");
+                    $"実働日を取り込みました（実働日 {result.WorkingDays.Count} 件）");
         });
     }
 
@@ -2738,7 +2875,7 @@ public sealed partial class MainViewModel : ObservableObject
             var reason = FailureReason(e);
 
             _workspace.Log?.Invoke($"{title}: 失敗。{e.GetType().Name}: {e.Message}（{Path.GetFileName(path)}）");
-            StatusMessage = $"{title}に失敗しました（{reason}）";
+            ReportFailure($"{title}に失敗しました（{reason}）");
             _files.ShowReport(title, $"取り込めませんでした。{Environment.NewLine}{Environment.NewLine}{reason}");
         }
         finally
@@ -2820,7 +2957,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 動かすと取り込んだ実働日データと食い違う。仕様期限などのラベルは動かせる
         if (CalendarWorkspace.IsClosedDayId(found.Id) || CalendarWorkspace.IsOpenDayId(found.Id))
         {
-            StatusMessage = "休業日と特別出勤は実働日データが決めるので、動かせません";
+            ReportFailure("休業日と特別出勤は実働日データが決めるので、動かせません");
             return false;
         }
 
@@ -2828,7 +2965,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 書けないままなので、複製かどうかに関わらず止める
         if (UnsendableMessage(found) is { } unsendable)
         {
-            StatusMessage = unsendable;
+            ReportFailure(unsendable);
             return false;
         }
 
@@ -2836,7 +2973,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 画面と Google とで日付が食い違うだけ。複製は元を触らないので通す
         if (!copy && IsLocked(found))
         {
-            StatusMessage = LockedMessage;
+            ReportFailure(LockedMessage);
             return false;
         }
 
@@ -2851,7 +2988,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 向こうでは繰り返しの予定で、開始日だけを動かすと系列の開始がずれる
         if (found.IsRecurring || EventMapper.HoldsUnrepresentableRecurrence(found))
         {
-            StatusMessage = "繰り返しの予定は編集画面から変えてください";
+            ReportFailure("繰り返しの予定は編集画面から変えてください");
             return false;
         }
 
@@ -3152,7 +3289,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 case EditConflictKind.Deleted:
                     // 行を作り直すと、Google が消したものを手元だけが生き返らせてしまう
-                    StatusMessage = "編集中にこの予定が Google 側で消えたため、保存しませんでした";
+                    ReportFailure("編集中にこの予定が Google 側で消えたため、保存しませんでした");
                     return;
 
                 case EditConflictKind.GoogleChanged
@@ -3167,7 +3304,7 @@ public sealed partial class MainViewModel : ObservableObject
 
             if (saved && editor.RecreateRequested) _workspace.RecreateEventOnGoogle(id);
 
-            StatusMessage = saved ? "予定を変更しました" : "予定が見つかりませんでした";
+            ReportResult(saved, "予定を変更しました", "予定が見つかりませんでした");
             return;
         }
     }
@@ -3197,27 +3334,34 @@ public sealed partial class MainViewModel : ObservableObject
             // （削除の記録を残さない）。残したままだと、見えるのに消せない予定になる
             if (CanDeleteLocallyOnly(target))
             {
-                StatusMessage = _workspace.DeleteEventLocally(id)
-                    ? "予定を手元だけで削除しました（Google には何も送りません）"
-                    : "予定が見つかりませんでした";
+                ReportResult(
+                    _workspace.DeleteEventLocally(id),
+                    "予定を手元だけで削除しました（Google には何も送りません）", "予定が見つかりませんでした");
                 return;
             }
 
-            StatusMessage = unsendable;
+            ReportFailure(unsendable);
             return;
         }
 
-        // 繰り返しの回を選ばず、系列ごと消える。黙って消えると気づきにくいので、
-        // 「すべての回」を消したことが分かる文言にする（確認ダイアログは増やさない。
-        // Ctrl＋Z で戻せるため）
+        // 繰り返しの回を選ばず、系列ごと消える。1回のつもりで押すと、先の回まで全部消えるので、
+        // 消す前に確かめる（右クリック・Delete キー・編集画面の削除のどれから来ても、ここを通る）。
+        // 繰り返しでない予定は、今までどおり確認なし（元に戻すで戻せる）
         // （Kado では表せない繰り返しの予定も、向こうでは繰り返しの予定）
         var isRecurring = _workspace.Events.Find(id) is { } found &&
                           (found.IsRecurring || EventMapper.HoldsUnrepresentableRecurrence(found));
 
-        StatusMessage = _workspace.DeleteEvent(id)
-            ? isRecurring ? "繰り返しの予定をすべての回、削除しました" : "予定を削除しました"
-            : "予定が見つかりませんでした";
+        if (isRecurring && !_editors.Confirm(
+                "繰り返しの予定の削除", RecurringDeleteMessage, "削除", "キャンセル")) return;
+
+        ReportResult(
+            _workspace.DeleteEvent(id),
+            isRecurring ? "繰り返しの予定をすべての回、削除しました" : "予定を削除しました",
+            "予定が見つかりませんでした");
     }
+
+    /// <summary>繰り返しの予定を消す前の確認の文。</summary>
+    public const string RecurringDeleteMessage = "繰り返しの予定を、すべての回、削除します。";
 
     /// <inheritdoc cref="EditEventBy"/>
     private void EditTaskBy(string? id) => Guard(() => EditTaskByCore(id));
@@ -3244,7 +3388,7 @@ public sealed partial class MainViewModel : ObservableObject
             switch (EditConflict.Check(stored, _workspace.Tasks.Find(id)))
             {
                 case EditConflictKind.Deleted:
-                    StatusMessage = "編集中にこのタスクが Google 側で消えたため、保存しませんでした";
+                    ReportFailure("編集中にこのタスクが Google 側で消えたため、保存しませんでした");
                     return;
 
                 case EditConflictKind.GoogleChanged
@@ -3258,11 +3402,13 @@ public sealed partial class MainViewModel : ObservableObject
             if (saved && editor.RecreateRequested) _workspace.RecreateTaskOnGoogle(id);
 
             // 編集画面で完了にして保存したときも、繰り返しの次の回が作られる（CalendarWorkspace.UpdateTask）
-            StatusMessage = !saved
-                ? "タスクが見つかりませんでした"
-                : nextRepeatDue is { } next
+            if (!saved) ReportFailure("タスクが見つかりませんでした");
+            else
+            {
+                StatusMessage = nextRepeatDue is { } next
                     ? $"タスクを完了にしました。{NextRepeatText(next)}"
                     : "タスクを変更しました";
+            }
             return;
         }
     }
@@ -3274,9 +3420,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (id is not { Length: > 0 }) return;
 
-        StatusMessage = _workspace.DeleteTask(id)
-            ? "タスクを削除しました"
-            : "タスクが見つかりませんでした";
+        ReportResult(_workspace.DeleteTask(id), "タスクを削除しました", "タスクが見つかりませんでした");
     }
 
     // ------------------------------------------------------------------
@@ -3349,14 +3493,14 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            StatusMessage = $"開けませんでした（{ex.Message}）";
+            ReportFailure($"開けませんでした（{ex.Message}）");
         }
     }
 
     /// <summary>開けなかったとき、または伝えることがあるときだけ、ステータス行に出す。</summary>
     private void Report(LaunchResult result)
     {
-        if (result.Message is { } message) StatusMessage = message;
+        if (result.Message is { } message) ReportResult(result.Opened, message, message);
     }
 
     /// <summary>選択している日を期限にしてタスクを足す。</summary>
@@ -3413,9 +3557,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (target is null) return;
 
-        StatusMessage = _workspace.DeleteTask(target.Id)
-            ? "タスクを削除しました"
-            : "タスクが見つかりませんでした";
+        ReportResult(_workspace.DeleteTask(target.Id), "タスクを削除しました", "タスクが見つかりませんでした");
     }
 
     /// <summary>チェックの入り切り。画面を開かずに切り替えられる。</summary>
@@ -3512,7 +3654,7 @@ public sealed partial class MainViewModel : ObservableObject
         _workspace.Tasks.SetOrder(ids);
         RefreshViews();
 
-        StatusMessage = up ? $"「{target.Title}」を上へ動かしました" : $"「{target.Title}」を下へ動かしました";
+        StatusMessage = up ? $"「{target.Title}」を上へ移しました" : $"「{target.Title}」を下へ移しました";
     }
 
     /// <summary>グループの端にいて動かせないときは、メニューを無効にする。</summary>

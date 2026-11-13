@@ -35,6 +35,9 @@ public partial class EventEditorWindow : Window
         };
 
         Loaded += (_, _) => TitleBox.Focus();
+
+        // Esc・キャンセル・×で閉じるとき、変えていれば確かめる。Ctrl＋Enter で保存する
+        EditorWindowGuard.Attach(this, () => editor.IsDirty, () => editor.Deleted, Save);
     }
 
     /// <summary>保存して閉じる。キャンセルは「キャンセル」ボタンの IsCancel が受ける。</summary>

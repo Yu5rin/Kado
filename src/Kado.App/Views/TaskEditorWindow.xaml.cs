@@ -30,6 +30,9 @@ public partial class TaskEditorWindow : Window
         };
 
         Loaded += (_, _) => TitleBox.Focus();
+
+        // Esc・キャンセル・×で閉じるとき、変えていれば確かめる。Ctrl＋Enter で保存する
+        EditorWindowGuard.Attach(this, () => editor.IsDirty, () => editor.Deleted, Save);
     }
 
     public RelayCommand SaveCommand { get; }

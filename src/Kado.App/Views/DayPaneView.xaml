@@ -126,13 +126,16 @@
                     MouseEnter="OnRowPointerEntered" MouseLeave="OnRowPointerExited">
                 <DockPanel>
                     <!--
-                        印だけ。押す相手は行そのもの（OnTaskClicked）にした。
-                        ここにも押す口を持たせると、行と二重に効いて素通りしてしまう
+                        完了を切り替えるのは、このチェックだけ。押すとその場で切り替わる（待ちは無い）。
+                        行のそれ以外の所は、1回押しは何もせず、2回押しで編集が開く（OnTaskClicked）。
+                        ToggleButton は押下を自分で受けて止めるので、行の受け手とは二重に効かない
                     -->
                     <CheckBox DockPanel.Dock="Left" Margin="0,2,9,0"
                               Style="{StaticResource TaskCheckBoxStyle}"
-                              IsChecked="{Binding IsDone, Mode=OneWay}"
-                              IsHitTestVisible="False" Focusable="False" />
+                              IsChecked="{Binding IsDone, Mode=OneWay}" Focusable="False"
+                              Command="{Binding DataContext.ToggleTaskDoneCommand,
+                                        RelativeSource={RelativeSource AncestorType={x:Type views:DayPaneView}}}"
+                              CommandParameter="{Binding}" />
 
                     <Button x:Name="Delete" DockPanel.Dock="Right" VerticalAlignment="Top"
                             Style="{StaticResource RowDeleteButtonStyle}"

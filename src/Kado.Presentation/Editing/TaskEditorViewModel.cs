@@ -90,6 +90,8 @@ public sealed class TaskEditorViewModel : ObservableObject
         _today = today;
         _due = due;
         _taskListId = defaultTaskListId ?? (taskLists.Count > 0 ? taskLists[0].Id : null);
+
+        _baseline = Snapshot();
     }
 
     /// <summary>すでにあるタスクを直す。</summary>
@@ -124,7 +126,24 @@ public sealed class TaskEditorViewModel : ObservableObject
         _url = value.Url;
         _attachments = TaskAttachments.Read(value.Attachments);
         _repeatKey = TaskRepeatChoice.KeyOf(value.Repeat);
+
+        _baseline = Snapshot();
     }
+
+    /// <summary>開いた直後の値。<see cref="IsDirty"/> はこれと見比べる。</summary>
+    private readonly string _baseline;
+
+    /// <summary>
+    /// 開いたときから、何か変えたか。
+    /// <para>Esc・キャンセル・×で閉じるとき、変えているときだけ「変更を破棄しますか？」と尋ねる。</para>
+    /// </summary>
+    public bool IsDirty => !string.Equals(Snapshot(), _baseline, StringComparison.Ordinal);
+
+    /// <summary>入力欄の値をひとまとめの文字にする。開いた直後と見比べるため。</summary>
+    private string Snapshot() => string.Join(
+        '\u001f',
+        _title, _hasDue, _due, _isDone, _note, _taskListId, _url, _repeatKey,
+        string.Join('\u001e', _attachments.Select(a => a.ToString())));
 
     /// <summary>期限の早入れ。日付欄を開かずに決められる。</summary>
     public IReadOnlyList<DuePreset> DuePresets =>

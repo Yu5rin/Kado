@@ -82,7 +82,7 @@
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
-            <MenuItem Header="名前と色を変える"
+            <MenuItem Header="名前と色を変える…"
                       Command="{Binding PlacementTarget.Tag.EditSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
@@ -119,7 +119,7 @@
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
-            <MenuItem Header="名前を変える"
+            <MenuItem Header="名前を変える…"
                       Command="{Binding PlacementTarget.Tag.EditSourceCommand,
                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
@@ -187,46 +187,95 @@
         </Style>
 
 
+
+        <!--
+            ⚙ と「…」で共有するメニュー（窓が狭いと ⚙ が「…」に畳まれる）。
+            同じ並びを2か所に書くと、片方だけ直し忘れる。1つを両方のボタンに付け、
+            狭いときだけ要る項目（検索・パネル・寄せる辺）は UsesOverflowMenu で出し分ける。
+            ContextMenu は画面の木から外れて出るので、DataContext は OpenAttachedMenu が渡す。
+
+            決まり：窓やファイル選択が開く項目には「…」を付ける。「…」は括弧の前に置かない。
+            ショートカットはここに添える（右クリックメニューには添えない）。
+        -->
+        <ContextMenu x:Key="AppMenu">
+            <MenuItem Header="予定を追加…" Command="{Binding AddEventCommand}" InputGestureText="Ctrl+N" />
+            <MenuItem Header="タスクを追加…" Command="{Binding AddTaskCommand}" InputGestureText="Ctrl+Shift+N" />
+            <MenuItem Header="検索" InputGestureText="Ctrl+F" Click="OnSearchMenuClicked"
+                      Visibility="{Binding UsesOverflowMenu, Converter={StaticResource BoolToVisibility}}" />
+            <Separator />
+            <MenuItem Header="元に戻す" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+            <MenuItem Header="やり直す" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y" />
+            <Separator />
+            <MenuItem Header="{Binding Sync.MenuLabel}" Command="{Binding SyncButtonCommand}"
+                      InputGestureText="{Binding Sync.MenuGesture}" />
+            <MenuItem Header="実働日計算…" Command="{Binding OpenWorkingDayCalculatorCommand}"
+                      InputGestureText="Ctrl+K" />
+            <MenuItem Header="Excel から実働日を取り込む…" Command="{Binding ImportWorkingDaysCommand}" />
+            <MenuItem Header="配信元から実働日を取り込む"
+                      Command="{Binding FetchWorkingDayFeedCommand}"
+                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
+            <MenuItem Header="パネル"
+                      Visibility="{Binding UsesOverflowMenu, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
+                          Command="{Binding ToggleSidePanelCommand}"
+                          IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
+                          IsCheckable="True" />
+                <MenuItem Header="中央（カレンダー）"
+                          Command="{Binding ToggleMainViewCommand}"
+                          IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
+                          IsCheckable="True" />
+                <MenuItem Header="右パネル（予定・タスク）"
+                          Command="{Binding ToggleDetailPaneCommand}"
+                          IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
+                          IsCheckable="True" />
+            </MenuItem>
+            <MenuItem Header="寄せる辺"
+                      Visibility="{Binding UsesOverflowMenu, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem Header="左端"
+                          Command="{Binding Shell.EdgeLeftCommand}"
+                          IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
+                          IsCheckable="True"
+                          ToolTip="画面の左端にマウスを留めると出てきます" />
+                <MenuItem Header="右端"
+                          Command="{Binding Shell.EdgeRightCommand}"
+                          IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
+                          IsCheckable="True"
+                          ToolTip="画面の右端にマウスを留めると出てきます" />
+            </MenuItem>
+            <Separator />
+            <MenuItem Header="ショートカット…" Command="{Binding ShowShortcutsCommand}" InputGestureText="F1" />
+            <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" InputGestureText="Ctrl+," />
+            <Separator />
+            <MenuItem Header="Kado を終了" Command="{Binding QuitCommand}" />
+        </ContextMenu>
     </Window.Resources>
 
     <!--
         元に戻す・やり直しはツールバーに出さない。モックに無く、キーで足りる。
 
         毎日何度も開くアプリなので、よく使う操作は手が覚えられるように増やしてある
-        （項目3）。修飾キー無しの単独キー（T・1〜5・矢印・PageUp/PageDown）は、
-        クイック入力欄・検索欄・エディタの中で打ったときにまで奪うと実害が出る
-        （「3」と打つと月表示に切り替わる、など）。<c>OnPreviewKeyDown</c>
-        （MainWindow.xaml.cs）が、入力要素にフォーカスがあるときはここへ
-        届く前に止める。
+        （項目3）。ここに置くのは、修飾キーを伴うキーと F キーだけ。
+
+        修飾キー無しの単独キー（T・Home・1〜5・テンキーの1〜5・PageUp/PageDown・矢印・Enter・
+        Delete）は、InputBindings には置かない。クイック入力欄・検索欄・エディタの中で打ったときにまで
+        奪うと実害が出る（「3」と打つと月表示に切り替わる、など）。かといって PreviewKeyDown を
+        Handled にして止めると、文字そのものが入らなくなる。MainWindow.xaml.cs の
+        OnPreviewKeyDown が、入力欄にフォーカスが無いときだけ受ける。
     -->
     <Window.InputBindings>
         <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
         <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
         <KeyBinding Key="F5" Command="{Binding Sync.SyncNowCommand}" />
 
-        <KeyBinding Key="T" Command="{Binding TodayCommand}" />
-
-        <!--
-            ←→↑↓ は選んでいる日を動かす（項目8）。PageUp/PageDown は今までどおり
-            月（ビューの単位）を送る。矢印キーは入力欄にいるときの素通しや、
-            右ペインの行を指しているときの削除も絡むので、コマンドには繋がず
-            OnPreviewKeyDown で直に受ける
-        -->
-        <KeyBinding Key="PageUp" Command="{Binding PreviousCommand}" />
-        <KeyBinding Key="PageDown" Command="{Binding NextCommand}" />
-
-        <!-- 一覧・年・月・週・日。ビュー切替のセグメントと同じ並び -->
-        <KeyBinding Key="D1" Command="{Binding SwitchViewCommand}" CommandParameter="Agenda" />
-        <KeyBinding Key="D2" Command="{Binding SwitchViewCommand}" CommandParameter="Year" />
-        <KeyBinding Key="D3" Command="{Binding SwitchViewCommand}" CommandParameter="Month" />
-        <KeyBinding Key="D4" Command="{Binding SwitchViewCommand}" CommandParameter="Week" />
-        <KeyBinding Key="D5" Command="{Binding SwitchViewCommand}" CommandParameter="Day" />
-
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding AddEventCommand}" />
         <KeyBinding Key="N" Modifiers="Control+Shift" Command="{Binding AddTaskCommand}" />
 
         <!-- 実働日計算を開く（項目4）。左パネルとスリムパネルの下にしか出口が無かった -->
         <KeyBinding Key="K" Modifiers="Control" Command="{Binding OpenWorkingDayCalculatorCommand}" />
+
+        <!-- ショートカットの一覧と設定。どちらも窓が開く。⚙ のメニューに出している -->
+        <KeyBinding Key="F1" Command="{Binding ShowShortcutsCommand}" />
+        <KeyBinding Key="OemComma" Modifiers="Control" Command="{Binding OpenSettingsCommand}" />
 
         <!--
             Ctrl＋F（検索）・Ctrl＋L と /（クイック入力）は ViewModel のコマンドではなく
@@ -321,14 +370,14 @@
                 </TextBlock>
 
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}" Margin="8,0,0,0"
-                        Command="{Binding PreviousCommand}" ToolTip="前の月"
+                        Command="{Binding PreviousCommand}" ToolTip="{Binding PreviousToolTip}"
                         Visibility="{Binding ShowsToolbarNav, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronLeft}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Button>
                 <Button DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
-                        Command="{Binding NextCommand}" ToolTip="次の月"
+                        Command="{Binding NextCommand}" ToolTip="{Binding NextToolTip}"
                         Visibility="{Binding ShowsToolbarNav, Converter={StaticResource BoolToVisibility}}">
                     <Path Data="{StaticResource IconChevronRight}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -460,28 +509,9 @@
                     クライアント設定）は設定画面（⚙→設定…）へ移してある
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
-                        ToolTip="取り込みと設定" Click="OnSettingsClicked"
+                        ToolTip="メニュー" Click="OnSettingsClicked"
+                        ContextMenu="{StaticResource AppMenu}"
                         Visibility="{Binding UsesOverflowMenu, Converter={StaticResource InverseBoolToVisibility}}">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="今すぐ同期"
-                                      Command="{Binding Sync.SyncNowCommand}"
-                                      InputGestureText="F5" />
-                            <!-- 本業なのに開ける口が2つの左パネル下にしか無かった（項目4） -->
-                            <MenuItem Header="実働日計算…"
-                                      Command="{Binding OpenWorkingDayCalculatorCommand}"
-                                      InputGestureText="Ctrl+K" />
-                            <Separator />
-                            <MenuItem Header="実働日ファイルを取り込む…（Excel）"
-                                      Command="{Binding ImportWorkingDaysCommand}" />
-                            <MenuItem Header="配信元から実働日を取り込む"
-                                      Command="{Binding FetchWorkingDayFeedCommand}"
-                                      ToolTip="設定で決めた配信元（feed.json）から取りに行きます" />
-                            <Separator />
-                            <MenuItem Header="ショートカット…" Command="{Binding ShowShortcutsCommand}" />
-                            <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
                     <Path Data="{StaticResource IconSettings}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -497,50 +527,9 @@
                     する（項目2・6）
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
-                        Margin="0,0,2,0" ToolTip="検索・パネル・設定" Click="OnOverflowClicked"
+                        Margin="0,0,2,0" ToolTip="メニュー" Click="OnOverflowClicked"
+                        ContextMenu="{StaticResource AppMenu}"
                         Visibility="{Binding UsesOverflowMenu, Converter={StaticResource BoolToVisibility}}">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="今すぐ同期"
-                                      Command="{Binding Sync.SyncNowCommand}"
-                                      InputGestureText="F5" />
-                            <MenuItem Header="実働日計算…"
-                                      Command="{Binding OpenWorkingDayCalculatorCommand}"
-                                      InputGestureText="Ctrl+K" />
-                            <MenuItem Header="予定とタスクを検索"
-                                      Command="{Binding OpenSearchCommand}" />
-                            <Separator />
-                            <!--
-                                「ウィンドウ⇔スライドを切替」はここには置かない（項目4）。
-                                出しかたのボタンが常に出るようになったので、同じことをする
-                                道が2つあると迷う
-                            -->
-                            <MenuItem Header="左端から出す"
-                                      Command="{Binding Shell.EdgeLeftCommand}"
-                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="右端から出す"
-                                      Command="{Binding Shell.EdgeRightCommand}"
-                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <Separator />
-                            <MenuItem Header="左パネル"
-                                      Command="{Binding ToggleSidePanelCommand}"
-                                      IsChecked="{Binding IsSidePanelOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="中央（カレンダー）"
-                                      Command="{Binding ToggleMainViewCommand}"
-                                      IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <MenuItem Header="右パネル"
-                                      Command="{Binding ToggleDetailPaneCommand}"
-                                      IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
-                                      IsCheckable="True" />
-                            <Separator />
-                            <MenuItem Header="ショートカット…" Command="{Binding ShowShortcutsCommand}" />
-                            <MenuItem Header="設定…" Command="{Binding OpenSettingsCommand}" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
                     <Path Data="{StaticResource IconMore}" Stretch="Uniform" Width="16" Height="16"
                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                           StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -559,22 +548,10 @@
                     Width を IconButtonStyle の既定28pxから40pxへ上げる
                 -->
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButtonStyle}"
-                        Width="40" Margin="0,0,2,0" ToolTip="表示するパネルを選ぶ" Click="OnPanesClicked"
+                        Width="40" Margin="0,0,2,0" ToolTip="パネルと寄せる辺" Click="OnPanesClicked"
                         Visibility="{Binding UsesOverflowMenu, Converter={StaticResource InverseBoolToVisibility}}">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="寄せる辺" IsEnabled="False" Focusable="False" />
-                            <MenuItem Header="左端から出す"
-                                      Command="{Binding Shell.EdgeLeftCommand}"
-                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
-                                      IsCheckable="True"
-                                      ToolTip="画面の左端にマウスを留めると出てきます" />
-                            <MenuItem Header="右端から出す"
-                                      Command="{Binding Shell.EdgeRightCommand}"
-                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
-                                      IsCheckable="True"
-                                      ToolTip="画面の右端にマウスを留めると出てきます" />
-                            <Separator />
                             <MenuItem Header="表示するパネル" IsEnabled="False" Focusable="False" />
                             <MenuItem Header="左パネル（ミニ月暦・カレンダー一覧）"
                                       Command="{Binding ToggleSidePanelCommand}"
@@ -584,10 +561,22 @@
                                       Command="{Binding ToggleMainViewCommand}"
                                       IsChecked="{Binding IsMainViewOpen, Mode=OneWay}"
                                       IsCheckable="True" />
-                            <MenuItem Header="右パネル（月カレンダー・予定・タスク）"
+                            <MenuItem Header="右パネル（予定・タスク）"
                                       Command="{Binding ToggleDetailPaneCommand}"
                                       IsChecked="{Binding IsDetailPaneOpen, Mode=OneWay}"
                                       IsCheckable="True" />
+                            <Separator />
+                            <MenuItem Header="スライド・固定で寄せる辺" IsEnabled="False" Focusable="False" />
+                            <MenuItem Header="左端"
+                                      Command="{Binding Shell.EdgeLeftCommand}"
+                                      IsChecked="{Binding Shell.IsAtLeft, Mode=OneWay}"
+                                      IsCheckable="True"
+                                      ToolTip="画面の左端にマウスを留めると出てきます" />
+                            <MenuItem Header="右端"
+                                      Command="{Binding Shell.EdgeRightCommand}"
+                                      IsChecked="{Binding Shell.IsAtRight, Mode=OneWay}"
+                                      IsCheckable="True"
+                                      ToolTip="画面の右端にマウスを留めると出てきます" />
                         </ContextMenu>
                     </Button.ContextMenu>
                     <StackPanel Orientation="Horizontal">
@@ -712,18 +701,23 @@
                     そちらでは中止に切り替えられなくなる（DockGrip と同じ落とし穴）
                 -->
                 <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="6,2"
+                        ContextMenuOpening="OnSyncContextMenuOpening"
                         Visibility="{Binding ShowsSyncStatus, Converter={StaticResource BoolToVisibility}}"
                         ToolTip="{Binding Sync.ActionToolTip}">
-                    <!-- 警告は件数だけが出る。全文は状態の文字のツールチップか、⚙の接続の状態で読む。右クリックで読んだことにする -->
+                    <!--
+                        警告は件数だけが出る。全文は状態の文字のツールチップか、⚙の接続の状態で読む。
+                        右クリックで読んだことにする。警告が無いときは出す項目が無いので、メニューを出さない
+                        （ContextMenuOpening を OnSyncContextMenuOpening が止める）
+                    -->
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="警告を確認した（消す）"
+                            <MenuItem Header="警告を確認済みにする"
                                       Command="{Binding Sync.AcknowledgeWarningsCommand}" />
                         </ContextMenu>
                     </Button.ContextMenu>
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource SyncStatusButtonStyle}">
-                            <Setter Property="Command" Value="{Binding Sync.SyncNowCommand}" />
+                            <Setter Property="Command" Value="{Binding SyncButtonCommand}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Sync.IsBusy}" Value="True">
                                     <Setter Property="Command" Value="{Binding Sync.CancelSyncCommand}" />
@@ -766,7 +760,7 @@
                         ToolTip="{Binding SyncStatusText}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
-                            <Setter Property="Command" Value="{Binding Sync.SyncNowCommand}" />
+                            <Setter Property="Command" Value="{Binding SyncButtonCommand}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Sync.IsBusy}" Value="True">
                                     <Setter Property="Command" Value="{Binding Sync.CancelSyncCommand}" />
@@ -1216,6 +1210,7 @@
             Root.ActualWidth-24 に結び、広いときは既定の560で頭打ちにする。
         -->
         <Grid Style="{StaticResource StatusPillStyle}"
+              MouseEnter="OnStatusPointerEntered" MouseLeave="OnStatusPointerLeft"
               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16"
               MaxWidth="{Binding ActualWidth, ElementName=Root,
                          Converter={StaticResource ShrinkWidth}, ConverterParameter=24:560}">
@@ -1234,6 +1229,14 @@
                     <!-- 通常の操作結果（元に戻す）。項目7 の案内と同じ帯を使い回す -->
                     <DockPanel LastChildFill="False"
                                Visibility="{Binding ShowsOnboarding, Converter={StaticResource InverseBoolToVisibility}}">
+                        <!--
+                            失敗の知らせは自動では消えない。×を押すか、次の知らせが出るまで残る
+                            （成功の知らせはこれまでどおり数秒で消える。ただしカーソルが載っているあいだは消えない）
+                        -->
+                        <Button DockPanel.Dock="Right" Content="×" Padding="8,2" Margin="6,0,0,0"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Command="{Binding DismissStatusCommand}" ToolTip="閉じる"
+                                Visibility="{Binding IsStatusFailure, Converter={StaticResource BoolToVisibility}}" />
                         <Button DockPanel.Dock="Right" Content="元に戻す" Padding="8,2"
                                 Command="{Binding UndoCommand}">
                             <Button.Style>
@@ -1252,21 +1255,17 @@
                     </DockPanel>
 
                     <!--
-                        初回起動だけの案内（項目7）。出しかたの違い（出しかたのボタンで
-                        スライド、ピンで固定）と最初の一歩（マスをダブルクリック）を、
-                        ここでしか教えていなかった。ステータス行の帯を流用する
+                        初回起動だけの案内（項目7）。最初の一歩（マスをダブルクリック）と、
+                        Google との同期の入口（⚙ → 設定… → Google）を、ここでしか教えていなかった。
+                        ステータス行の帯を流用する。「試す」でいきなり出しかたを変えることはしない
                     -->
                     <DockPanel LastChildFill="True"
                                Visibility="{Binding ShowsOnboarding, Converter={StaticResource BoolToVisibility}}">
                         <Button DockPanel.Dock="Right" Content="閉じる" Padding="8,2" Margin="6,0,0,0"
                                 Style="{StaticResource GhostButtonStyle}"
                                 Command="{Binding DismissOnboardingCommand}" />
-                        <Button DockPanel.Dock="Right" Content="試す" Padding="8,2"
-                                Style="{StaticResource GhostButtonStyle}"
-                                Command="{Binding TryOnboardingCommand}"
-                                ToolTip="スライドに切り替えます" />
                         <!--
-                            LastChildFill="True" で残りの幅に収め、その中で折り返させる。
+                            LastChild を残りの幅に収め、その中で折り返させる。
                             帯が狭いと、既定の Stretch のままではボタンの下まで文字が
                             伸びて重なっていた。HorizontalAlignment="Left" で、幅が
                             余ったときにボタンから離れて真ん中に寄らないようにする
@@ -1274,7 +1273,7 @@
                         <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
                                    HorizontalAlignment="Left" Margin="0,0,8,0"
                                    TextWrapping="Wrap" MaxWidth="360"
-                                   Text="画面の端に寄せて使えます：出しかたのボタンでスライド、ピンで固定 ／ 予定はマスをダブルクリック" />
+                                   Text="予定はマスをダブルクリックで追加できます&#10;Google と同期するには ⚙ → 設定… → Google" />
                     </DockPanel>
                 </Grid>
             </Border>

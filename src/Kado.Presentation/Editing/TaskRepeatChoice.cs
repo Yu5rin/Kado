@@ -60,10 +60,10 @@ public static class TaskRepeatChoice
             new(nameof(TaskRepeatKind.Weekly), LabelOf(RecurrenceKind.Weekly)),
             new(nameof(TaskRepeatKind.Monthly), LabelOf(RecurrenceKind.Monthly)),
             new(nameof(TaskRepeatKind.Yearly), LabelOf(RecurrenceKind.Yearly)),
-            new(nameof(TaskRepeatKind.WeekFirstWorkday), "毎週の週始め（最初の稼働日）"),
-            new(nameof(TaskRepeatKind.WeekLastWorkday), "毎週の週終わり（最後の稼働日）"),
-            new(nameof(TaskRepeatKind.MonthFirstWorkday), "毎月の月初（最初の稼働日）"),
-            new(nameof(TaskRepeatKind.MonthLastWorkday), "毎月の月末（最後の稼働日）"),
+            new(nameof(TaskRepeatKind.WeekFirstWorkday), "毎週の週始め（最初の実働日）"),
+            new(nameof(TaskRepeatKind.WeekLastWorkday), "毎週の週終わり（最後の実働日）"),
+            new(nameof(TaskRepeatKind.MonthFirstWorkday), "毎月の月初（最初の実働日）"),
+            new(nameof(TaskRepeatKind.MonthLastWorkday), "毎月の月末（最後の実働日）"),
         };
 
         if (includeCustom) options.Add(new TaskRepeatOption(Custom, CustomLabel));

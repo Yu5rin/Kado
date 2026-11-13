@@ -39,6 +39,9 @@ public enum AutoUpdateWait
     ModalDialogOpen,
     MenuOrDragActive,
     SyncRunning,
+
+    /// <summary>メインウィンドウのクイック入力・検索の欄に、打ちかけの文字がある。</summary>
+    DraftInput,
     IdleUnknown,
     NotIdleLongEnough,
 }
@@ -53,6 +56,8 @@ public enum AutoUpdateWait
 /// <param name="DragInProgress">ドラッグの最中か。</param>
 /// <param name="SyncRunning">Google との同期の最中か。</param>
 /// <param name="IdleFor">キーボードとマウスの操作が無い時間。分からなければ null。</param>
+/// <param name="HasDraftInput">メインウィンドウのクイック入力・検索の欄に、打ちかけの文字があるか。
+/// 再起動すると消えるので、10分操作が無くても入れ替えない。</param>
 public readonly record struct AutoUpdateState(
     bool Enabled,
     bool HasStaged,
@@ -62,7 +67,8 @@ public readonly record struct AutoUpdateState(
     bool MenuOrPopupOpen,
     bool DragInProgress,
     bool SyncRunning,
-    TimeSpan? IdleFor);
+    TimeSpan? IdleFor,
+    bool HasDraftInput = false);
 
 /// <summary>
 /// 自動更新の判断。通信も画面も時計も持たない純粋な関数にして、判断の中身を試せるようにしてある
@@ -137,6 +143,9 @@ public static class AutoUpdatePolicy
         if (state.MenuOrPopupOpen || state.DragInProgress) return AutoUpdateWait.MenuOrDragActive;
         if (state.SyncRunning) return AutoUpdateWait.SyncRunning;
 
+        // 打ちかけの文字は、再起動すると消える。操作が無い時間がどれだけ長くても入れ替えない
+        if (state.HasDraftInput) return AutoUpdateWait.DraftInput;
+
         // 操作の無い時間が分からないときは、手が空いているとは言えない
         if (state.IdleFor is not { } idle) return AutoUpdateWait.IdleUnknown;
 
@@ -154,6 +163,7 @@ public static class AutoUpdatePolicy
         AutoUpdateWait.ModalDialogOpen => "確認の窓などが開いている",
         AutoUpdateWait.MenuOrDragActive => "メニューやポップアップ、ドラッグの最中",
         AutoUpdateWait.SyncRunning => "同期の最中",
+        AutoUpdateWait.DraftInput => "クイック入力か検索の欄に打ちかけの文字がある",
         AutoUpdateWait.IdleUnknown => "操作の無い時間が分からない",
         AutoUpdateWait.NotIdleLongEnough => "操作の無い時間が10分に届かない",
         _ => wait.ToString(),

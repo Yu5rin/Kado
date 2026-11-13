@@ -22,7 +22,7 @@ public class TaskDuePresetsTests
         var presets = TaskDuePresets.For(Wednesday, DayOfWeek.Sunday, Weekdays);
 
         Assert.Equal(
-            ["今日", "明日", "次の稼働日", "来週の週始め（最初の稼働日）", "期限なし"],
+            ["今日", "明日", "次の実働日", "来週の週始め（最初の実働日）", "期限なし"],
             presets.Select(p => p.Label));
         Assert.Equal(
             [TaskDueKind.Today, TaskDueKind.Tomorrow, TaskDueKind.NextWorkday, TaskDueKind.NextWeekStart, TaskDueKind.None],

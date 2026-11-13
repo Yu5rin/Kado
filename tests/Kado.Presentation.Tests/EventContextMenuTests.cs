@@ -392,7 +392,7 @@ public class EventContextMenuTests : IDisposable
         var info = Vm.EventMenuFor(_test.Workspace.Events.Find("e1"));
 
         Assert.False(info.CanEdit);
-        Assert.Equal("詳細を見る", info.EditLabel);
+        Assert.Equal("詳細を見る…", info.EditLabel);
         Assert.False(info.CanMove);
         Assert.Contains("読み取り専用", info.MoveDisabledReason, StringComparison.Ordinal);
         Assert.Empty(info.MoveChoices);
@@ -449,7 +449,7 @@ public class EventContextMenuTests : IDisposable
             var info = Vm.EventMenuFor(_test.Workspace.Events.Find("e1"));
 
             Assert.False(info.CanEdit);
-            Assert.Equal("詳細を見る", info.EditLabel);
+            Assert.Equal("詳細を見る…", info.EditLabel);
             Assert.False(info.CanMove);
             Assert.Contains("Google 側", info.MoveDisabledReason, StringComparison.Ordinal);
 
@@ -469,7 +469,7 @@ public class EventContextMenuTests : IDisposable
 
         var info = Vm.EventMenuFor(_test.Workspace.Events.Find("e1"));
         Assert.True(info.CanEdit);
-        Assert.Equal("編集", info.EditLabel);
+        Assert.Equal("編集…", info.EditLabel);
 
         Vm.EditEventEntryCommand.Execute(_test.Workspace.Events.Find("e1"));
 

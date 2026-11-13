@@ -128,8 +128,9 @@ public partial class MainWindow : Window, ISlideRevealHost
             _persist.Poke();
         };
 
-        // ステータス行（項目1）。出すたびに数秒後へ仕切り直し、最後の1件だけを消す
-        _statusClear = new Views.Settle(() => ViewModel?.ClearStatusMessage(), TimeSpan.FromSeconds(4.5));
+        // ステータス行（項目1）。出すたびに数秒後へ仕切り直し、最後の1件だけを消す。
+        // 失敗の知らせは自動では消さない。カーソルが載っているあいだは、成功も消さない
+        _statusClear = new Views.Settle(ClearStatusIfIdle, TimeSpan.FromSeconds(4.5));
 
         // 検索語は打つたびに欄自体は動くが、ViewModel への反映（＝検索の実行）は
         // 手が止まってから。1文字ごとに DB を読みに行っていたのをやめる
@@ -407,15 +408,50 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>検索語の入力が落ち着いてから、ViewModel へ渡して検索を走らせる。</summary>
     private readonly Views.Settle _searchSettle;
 
-    /// <summary>StatusMessage が変わるたびに、消すまでの時間を仕切り直す。</summary>
+    /// <summary>
+    /// StatusMessage が変わるたびに、消すまでの時間を仕切り直す。
+    /// <para>失敗の知らせは仕切り直さず、待っている分も取りやめる（×を押すか、次の知らせが出るまで残す）。</para>
+    /// </summary>
     private void OnStatusMessageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainViewModel.StatusMessage)) return;
+        if (e.PropertyName is not (nameof(MainViewModel.StatusMessage) or nameof(MainViewModel.StatusKind))) return;
 
         // 空になった（もう消えている）ときは、あらためて仕切り直さない
         if (ViewModel?.StatusMessage is null) return;
 
+        if (ViewModel.IsStatusFailure)
+        {
+            _statusClear.Cancel();
+            return;
+        }
+
         _statusClear.Poke();
+    }
+
+    /// <summary>知らせの帯の上にカーソルがあるか。載っているあいだは、成功の知らせも消さない。</summary>
+    private bool _pointerOnStatus;
+
+    private void OnStatusPointerEntered(object sender, MouseEventArgs e)
+    {
+        _pointerOnStatus = true;
+        _statusClear.Cancel();
+    }
+
+    private void OnStatusPointerLeft(object sender, MouseEventArgs e)
+    {
+        _pointerOnStatus = false;
+
+        // 離れたら、あらためて数え直す。失敗の知らせは残す
+        if (ViewModel is { StatusMessage: not null, IsStatusFailure: false }) _statusClear.Poke();
+    }
+
+    /// <summary>消す時間になった。失敗の知らせと、カーソルが載っている知らせは消さない。</summary>
+    private void ClearStatusIfIdle()
+    {
+        if (ViewModel is not { } vm) return;
+        if (vm.IsStatusFailure || _pointerOnStatus) return;
+
+        vm.ClearStatusMessage();
     }
 
     /// <summary>
@@ -622,11 +658,18 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>
     /// 本体のキー割当（項目3）。
     /// <para>
-    /// 修飾キー無しの単独キー（T・1〜5・矢印・PageUp・PageDown）は、クイック入力欄・
-    /// 検索欄・エディタの中で打ったときにまで <c>Window.InputBindings</c> に奪われると
-    /// 実害が出る（「3」と打つと月表示に切り替わる、など）。フォーカスが
-    /// テキスト入力系の要素にあるときは、ここで <c>Handled</c> にして先に止め、
-    /// InputBindings まで届かせない（素通しして、いつもどおり文字として入力させる）。
+    /// 修飾キー無しの単独キー（T・Home・1〜5・テンキーの1〜5・PageUp・PageDown）は、
+    /// <c>InputBindings</c> には置かず、ここで受ける。クイック入力欄・検索欄・エディタの中で打ったときに
+    /// 「3」と打つと月表示に切り替わる、では実害が出る。フォーカスがテキスト入力系の要素にあるときは何もせず、
+    /// 文字としてそのまま入力させる。
+    /// </para>
+    /// <para>
+    /// <b>PreviewKeyDown を <c>Handled</c> にして「止める」作りにはしない。</b>Windows では、キーを
+    /// 先に処理済みにすると、そのキーの文字入力（WM_CHAR）まで生まれない。打ちたい文字が入らなくなる。
+    /// </para>
+    /// <para>
+    /// Enter・Space・矢印・Delete は、フォーカスがボタン・仕切り・メニュー・スライダーなど、
+    /// 自分でそのキーを使う操作部品にあるときも、ここでは奪わない（<see cref="KeyFocusPolicy"/>）。
     /// </para>
     /// <para>
     /// Ctrl＋F（検索）・Ctrl＋L と /（クイック入力）はフォーカス移動そのものなので、
@@ -635,13 +678,9 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// </summary>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        var inTextInput = Keyboard.FocusedElement is TextBoxBase or ComboBox;
-
-        if (inTextInput && IsBareShortcutKey(e.Key))
-        {
-            e.Handled = true;
-            return;
-        }
+        var focusedType = Keyboard.FocusedElement?.GetType();
+        var inTextInput = KeyFocusPolicy.IsTextInput(focusedType);
+        var onOperable = KeyFocusPolicy.TakesNavigationKeys(focusedType);
 
         // Esc でスライドを引っ込める（項目9）。検索欄・クイック入力は自分の Esc
         // （打ちかけを消す・検索を消す）を持っているので、そちらを優先して奪わない。
@@ -658,19 +697,7 @@ public partial class MainWindow : Window, ISlideRevealHost
 
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            // 畳んでいる（虫めがねだけの）ときは、先に入力欄を開かないと
-            // Visibility="Collapsed" のままでフォーカスが乗らない
-            if (ViewModel is { UsesCompactSearch: true } vm && vm.OpenSearchCommand.CanExecute(null))
-            {
-                vm.OpenSearchCommand.Execute(null);
-            }
-
-            Dispatcher.BeginInvoke(() =>
-            {
-                SearchBox.Focus();
-                Keyboard.Focus(SearchBox);
-            }, DispatcherPriority.Input);
-
+            FocusSearchBox();
             e.Handled = true;
             return;
         }
@@ -690,18 +717,76 @@ public partial class MainWindow : Window, ISlideRevealHost
             return;
         }
 
-        // キーボードだけで日を選ぶ（項目8）。入力欄にフォーカスが無いときだけ効かせる
-        if (!inTextInput && Keyboard.Modifiers == ModifierKeys.None && HandleDaySelectionKey(e.Key))
+        if (inTextInput || Keyboard.Modifiers != ModifierKeys.None) return;
+
+        // 修飾キー無しの単独キー（今日・ビュー切替・前へ・次へ）
+        if (HandleBareKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        // キーボードだけで日を選ぶ（項目8）。入力欄にも、自分で矢印や Enter を使う部品にも
+        // フォーカスが無いときだけ効かせる
+        if (!onOperable && HandleDaySelectionKey(e.Key))
         {
             e.Handled = true;
         }
     }
 
     /// <summary>
+    /// 修飾キー無しの単独キー。T・Home＝今日、1〜5（テンキーも）＝ビュー切替（一覧・年・月・週・日）、
+    /// PageUp・PageDown＝前へ・次へ。
+    /// <para>テキスト入力の最中は、呼び出し側が先に除いている。</para>
+    /// </summary>
+    private bool HandleBareKey(Key key)
+    {
+        if (ViewModel is not { } vm) return false;
+
+        switch (key)
+        {
+            case Key.T:
+            case Key.Home:
+                return Run(vm.TodayCommand, null);
+
+            case Key.PageUp:
+                return Run(vm.PreviousCommand, null);
+
+            case Key.PageDown:
+                return Run(vm.NextCommand, null);
+
+            case Key.D1 or Key.NumPad1:
+                return Run(vm.SwitchViewCommand, "Agenda");
+
+            case Key.D2 or Key.NumPad2:
+                return Run(vm.SwitchViewCommand, "Year");
+
+            case Key.D3 or Key.NumPad3:
+                return Run(vm.SwitchViewCommand, "Month");
+
+            case Key.D4 or Key.NumPad4:
+                return Run(vm.SwitchViewCommand, "Week");
+
+            case Key.D5 or Key.NumPad5:
+                return Run(vm.SwitchViewCommand, "Day");
+
+            default:
+                return false;
+        }
+
+        static bool Run(ICommand command, object? parameter)
+        {
+            if (!command.CanExecute(parameter)) return false;
+
+            command.Execute(parameter);
+            return true;
+        }
+    }
+
+    /// <summary>
     /// ←→↑↓・Enter・Delete で選択日を動かす、その日に予定を足す、行を消す（項目8）。
     /// <para>
-    /// ←→ は ±1日、↑↓ は ±7日。PageUp/PageDown は今までどおり
-    /// <c>Window.InputBindings</c> の Previous/NextCommand（ビューの単位＝月）が受ける。
+    /// ←→ は ±1日、↑↓ は ±7日。PageUp/PageDown は <see cref="HandleBareKey"/>（ビューの単位＝月・週・日・年度）が受ける。
     /// </para>
     /// </summary>
     private bool HandleDaySelectionKey(Key key)
@@ -750,10 +835,6 @@ public partial class MainWindow : Window, ISlideRevealHost
     private bool DeletePointedRow(MainViewModel vm) =>
         Detail.DayPane.DeleteHoveredRow(vm);
 
-    /// <summary>InputBindings に登録してある、修飾キー無しの単独キー。</summary>
-    private static bool IsBareShortcutKey(Key key) => key is
-        Key.T or Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5 or Key.PageUp or Key.PageDown;
-
     /// <summary>
     /// クイック入力へフォーカスする（項目4）。
     /// <para>右パネルが閉じていれば開いてから当てる。</para>
@@ -771,6 +852,30 @@ public partial class MainWindow : Window, ISlideRevealHost
         // レイアウトが一段落してから当てる
         Dispatcher.BeginInvoke(() => Detail.FocusQuickInput(), DispatcherPriority.Input);
     }
+
+    /// <summary>
+    /// 検索欄へフォーカスする（Ctrl＋F・メニューの「検索」）。
+    /// <para>
+    /// 畳んでいる（虫めがねだけの）ときは、先に入力欄を開かないと
+    /// <c>Visibility="Collapsed"</c> のままでフォーカスが乗らない。
+    /// </para>
+    /// </summary>
+    private void FocusSearchBox()
+    {
+        if (ViewModel is { UsesCompactSearch: true } vm && vm.OpenSearchCommand.CanExecute(null))
+        {
+            vm.OpenSearchCommand.Execute(null);
+        }
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            SearchBox.Focus();
+            Keyboard.Focus(SearchBox);
+        }, DispatcherPriority.Input);
+    }
+
+    /// <summary>メニューの「検索」（窓が狭いときの「…」にだけ出る）。</summary>
+    private void OnSearchMenuClicked(object sender, RoutedEventArgs e) => FocusSearchBox();
 
     /// <summary>
     /// 畳んであるときの虫めがね。
@@ -816,6 +921,15 @@ public partial class MainWindow : Window, ISlideRevealHost
     /// <summary>検索欄の中身を ViewModel へ渡し、検索を走らせる。</summary>
     private void CommitSearchText() =>
         SearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+    /// <summary>
+    /// 同期の状態を右クリックしたとき。読んでいない警告が無ければ、メニューを出さない
+    /// （出しても「確認済みにする」が灰色なだけで、何をするメニューなのか分からない）。
+    /// </summary>
+    private void OnSyncContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (ViewModel is { Sync.HasUnreadWarnings: false }) e.Handled = true;
+    }
 
     /// <summary>設定ボタン。押した位置にメニューを開く。</summary>
     private void OnSettingsClicked(object sender, RoutedEventArgs e) => OpenAttachedMenu(sender);

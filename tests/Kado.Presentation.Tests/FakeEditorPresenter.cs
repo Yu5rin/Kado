@@ -75,6 +75,25 @@ internal sealed class FakeEditorPresenter : IEditorPresenter
         return Confirms;
     }
 
+    /// <summary>直近に出した確認の、進める側のボタンの文言。</summary>
+    public string? LastAcceptLabel { get; private set; }
+
+    /// <summary>直近に出した確認の、取り消す側のボタンの文言。</summary>
+    public string? LastCancelLabel { get; private set; }
+
+    /// <summary>文言つきの確認を出した回数。</summary>
+    public int LabeledConfirmAsked { get; private set; }
+
+    public bool Confirm(string title, string message, string acceptLabel, string cancelLabel)
+    {
+        LabeledConfirmAsked++;
+        LastConfirmedTitle = title;
+        LastConfirmMessage = message;
+        LastAcceptLabel = acceptLabel;
+        LastCancelLabel = cancelLabel;
+        return Confirms;
+    }
+
     public bool ConfirmOverwrite(string title, string message)
     {
         OverwriteAsked++;

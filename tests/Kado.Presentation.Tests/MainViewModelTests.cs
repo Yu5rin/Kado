@@ -34,15 +34,17 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void 案内の試すはスライドへ切り替えて既読にする()
+    public void 案内を閉じても出しかたは変わらない()
     {
+        // 以前は「試す」でいきなりスライドに切り替えていた。案内は教えるだけで、画面は動かさない
         using var test = TestWorkspace.Create();
         var vm = Create(test);
+        var before = vm.Shell.Mode;
 
-        vm.TryOnboardingCommand.Execute(null);
+        vm.DismissOnboardingCommand.Execute(null);
 
         Assert.False(vm.ShowsOnboarding);
-        Assert.Equal(Kado.Presentation.Settings.ShellMode.Overlay, vm.Shell.Mode);
+        Assert.Equal(before, vm.Shell.Mode);
     }
 
     [Fact]

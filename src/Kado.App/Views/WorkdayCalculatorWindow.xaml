@@ -51,7 +51,7 @@
         <Border DockPanel.Dock="Bottom" Padding="16,11"
                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
             <Button Content="閉じる" HorizontalAlignment="Right"
-                    Style="{StaticResource GhostButtonStyle}" IsCancel="True" />
+                    Style="{StaticResource GhostButtonStyle}" IsCancel="True" Click="OnCloseClick" />
         </Border>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -184,15 +184,15 @@
                                          Typography.NumeralAlignment="Tabular"
                                          Text="{Binding Offset, UpdateSourceTrigger=PropertyChanged,
                                                 ValidatesOnExceptions=True, NotifyOnValidationError=True}" />
-                                <Button Content="▲" Margin="6,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                <Button Content="▲" Margin="6,0,0,0" Style="{StaticResource SmallIconButtonStyle}" ToolTip="上へ"
                                         Command="{Binding DataContext.MoveStepUpCommand,
                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" />
-                                <Button Content="▼" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                <Button Content="▼" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}" ToolTip="下へ"
                                         Command="{Binding DataContext.MoveStepDownCommand,
                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" />
-                                <Button Content="×" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}"
+                                <Button Content="×" Margin="2,0,0,0" Style="{StaticResource SmallIconButtonStyle}" ToolTip="この節目を削除"
                                         Command="{Binding DataContext.RemoveStepCommand,
                                                   RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" />

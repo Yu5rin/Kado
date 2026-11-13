@@ -65,7 +65,8 @@ public class UnrepresentableRecurrenceTests
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(Held());
 
-        var main = Create(test);
+        // 繰り返しの予定を消す前の確認には「削除」と答える
+        var main = new MainViewModel(test.Workspace, Today, editors: new FakeEditorPresenter { Confirms = true });
         main.DeleteEventCommand.Execute(Assert.Single(main.SelectedDay.Events));
 
         Assert.Equal("繰り返しの予定をすべての回、削除しました", main.StatusMessage);

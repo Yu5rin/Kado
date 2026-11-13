@@ -55,7 +55,26 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
         window.Show();
     }
 
-    public void ShowShortcuts() => Show(new ShortcutsWindow());
+    /// <summary>いま開いているショートカットの一覧。二重に開かないよう、あれば前面に出すだけにする。</summary>
+    private ShortcutsWindow? _shortcutsWindow;
+
+    public void ShowShortcuts()
+    {
+        if (_shortcutsWindow is { } existing)
+        {
+            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+
+        // モードレス。見ながら本体のキーを試せるようにする。親を設定するので、本体を閉じれば一緒に閉じる
+        var window = new ShortcutsWindow { Owner = ownerProvider() };
+
+        _shortcutsWindow = window;
+        window.Closed += (_, _) => _shortcutsWindow = null;
+
+        window.Show();
+    }
 
     public bool ConfirmDelete(string title) =>
         MessageBox.Show(
@@ -70,6 +89,9 @@ public sealed class DialogEditorPresenter(Func<Window?> ownerProvider) : IEditor
             message,
             title, MessageBoxButton.OKCancel, MessageBoxImage.Warning,
             MessageBoxResult.Cancel) == MessageBoxResult.OK;
+
+    public bool Confirm(string title, string message, string acceptLabel, string cancelLabel) =>
+        ConfirmWindow.Ask(ownerProvider() ?? Application.Current.MainWindow, title, message, acceptLabel, cancelLabel);
 
     public bool ConfirmOverwrite(string title, string message) =>
         MessageBox.Show(

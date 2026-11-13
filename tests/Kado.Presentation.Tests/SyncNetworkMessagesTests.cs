@@ -277,7 +277,7 @@ public class SyncNetworkMessagesTests
         // 待っているあいだ（最長5分）も、中止ボタンが押せる
         Assert.True(vm.IsBusy);
         Assert.Equal("接続中…", vm.StatusText);
-        Assert.Equal("中止", vm.ActionLabel);
+        Assert.Equal("接続中…（押すと中止）", vm.ActionLabel);
         Assert.True(vm.CancelSyncCommand.CanExecute(null));
 
         vm.CancelSyncCommand.Execute(null);

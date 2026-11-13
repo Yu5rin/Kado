@@ -64,8 +64,14 @@ public sealed class SettingsViewModel : ObservableObject
         Infrastructure.RelayCommand? restore = null,
         Infrastructure.RelayCommand? importGoogleClient = null,
         Infrastructure.AsyncRelayCommand? checkForUpdate = null,
-        Func<Task<Update.ConnectionProbeReport>>? checkUpdateConnection = null)
+        Func<Task<Update.ConnectionProbeReport>>? checkUpdateConnection = null,
+        SettingsCategory category = SettingsCategory.Startup,
+        IStatusSource? status = null)
     {
+        _category = category;
+        _status = status;
+        if (_status is not null) _status.StatusChanged += OnStatusChanged;
+
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startup = startup ?? NullStartupRegistration.Instance;
         _notifier = notifier ?? NullNotifier.Instance;
@@ -638,6 +644,72 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _message;
         private set => Set(ref _message, value);
+    }
+
+    // ------------------------------------------------------------------
+    // 開いている分類
+    // ------------------------------------------------------------------
+
+    private SettingsCategory _category;
+
+    /// <summary>いま開いている分類。画面は左の一覧の選びと結ぶ。</summary>
+    public SettingsCategory Category
+    {
+        get => _category;
+        set
+        {
+            if (!Set(ref _category, value)) return;
+
+            CategoryChanged?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>分類が変わった。本体は、次に開くときのためにこれを覚える。</summary>
+    public event EventHandler<SettingsCategory>? CategoryChanged;
+
+    // ------------------------------------------------------------------
+    // 設定の中で押した操作の結果
+    //
+    // バックアップ・書き出し・重複整理・クライアント設定の取り込みなどの結果は、本体の窓の帯に出る。
+    // 設定の窓が前にあると見えないので、窓の下の行にも出す（成功は通常の色、失敗は赤）。
+    // 窓を開いてから起きたものだけを出す（前から残っている失敗を、開いた途端に見せない）
+    // ------------------------------------------------------------------
+
+    private readonly IStatusSource? _status;
+
+    private string? _notice;
+    private bool _noticeIsFailure;
+
+    /// <summary>設定の窓を開いているあいだに起きた操作の結果。無ければ null。</summary>
+    public string? Notice
+    {
+        get => _notice;
+        private set => Set(ref _notice, value);
+    }
+
+    /// <summary>結果が失敗か。画面は赤で出す。</summary>
+    public bool NoticeIsFailure
+    {
+        get => _noticeIsFailure;
+        private set => Set(ref _noticeIsFailure, value);
+    }
+
+    private void OnStatusChanged(object? sender, EventArgs e)
+    {
+        // 帯が自動で消えたとき（null）は、こちらは残す。読む前に消えないように
+        if (_status?.StatusMessage is not { } text) return;
+
+        NoticeIsFailure = _status.IsStatusFailure;
+        Notice = text;
+    }
+
+    /// <summary>
+    /// 窓を閉じたときに呼ぶ。本体の知らせの購読を外す。
+    /// <para>外さないと、閉じた窓の ViewModel が本体より長く生きる。</para>
+    /// </summary>
+    public void Detach()
+    {
+        if (_status is not null) _status.StatusChanged -= OnStatusChanged;
     }
 
     // ------------------------------------------------------------------

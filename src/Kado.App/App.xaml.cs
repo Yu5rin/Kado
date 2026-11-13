@@ -883,7 +883,8 @@ public partial class App : Application
             MenuOrPopupOpen: Shell.PopupActivityHooks.Tracker.IsAnyOpen,
             DragInProgress: Views.DragActivity.IsDragging,
             SyncRunning: main?.Sync.IsBusy == true,
-            IdleFor: Shell.UserIdle.Current());
+            IdleFor: Shell.UserIdle.Current(),
+            HasDraftInput: main?.HasDraftInput == true);
     }
 
     /// <summary>入れ替えを待たせている理由を、変わったときだけ shell.log に書く（毎分は書かない）。</summary>
@@ -1534,6 +1535,9 @@ public partial class App : Application
         // Apply() を呼ぶので ModeChanged は上がらず、ここで一度明示的に合わせる
         Shell.WorkAreaGuard.MarkReserved(main.Shell.Mode == ShellMode.Dock);
 
+        // メニューの「Kado を終了」。閉じるボタンと違い、トレイに入らず本当に終わる
+        main.QuitRequested += (_, _) => { _reallyExiting = true; Shutdown(); };
+
         _tray = new Shell.TrayIcon("Kado", BuildTrayMenu(main));
         _tray.Activated += (_, _) => Dispatcher.Invoke(BringToFront);
         _tray.BalloonClicked += (_, _) => Dispatcher.Invoke(OnUpdateBalloonClicked);
@@ -1653,39 +1657,69 @@ public partial class App : Application
         }
     }
 
-    /// <summary>トレイのメニュー（要件書 7.4）。</summary>
+    /// <summary>トレイのメニュー（要件書 7.4）。
+    /// <para>
+    /// 作りは WPF の <c>ContextMenu</c>（Win32 のメニューではない）。チェックは項目の <c>IsChecked</c> を、
+    /// 開くたびに（<c>Opened</c>）いまの状態に合わせ直す。出しかた（ウィンドウ／スライド／固定）は3択で、
+    /// 今のものにチェックが付く。寄せる辺（左端／右端）も同じ。
+    /// </para>
+    /// <para>ショートカットはここには出さない。</para>
+    /// </summary>
     private System.Windows.Controls.ContextMenu BuildTrayMenu(MainViewModel main)
     {
         var menu = new System.Windows.Controls.ContextMenu();
 
-        void Add(string header, Action action)
+        System.Windows.Controls.MenuItem Add(string header, Action action)
         {
             var item = new System.Windows.Controls.MenuItem { Header = header };
             item.Click += (_, _) => action();
             menu.Items.Add(item);
+            return item;
         }
 
-        Add("表示", BringToFront);
-        menu.Items.Add(new System.Windows.Controls.Separator());
+        void Separator() => menu.Items.Add(new System.Windows.Controls.Separator());
+
+        Add("Kado を開く", BringToFront);
+        Add("予定を追加…", () =>
+        {
+            BringToFront();
+            main.AddEventCommand.Execute(null);
+        });
+        Separator();
 
         // 出しかたと、出す位置を分ける。ツールバーのボタンと同じ考え方で、
         // 上の3つが「どう出すか」、下の2つが「どちらの端から出すか」
-        Add("ウィンドウ", () => main.Shell.ToWindowCommand.Execute(null));
-        Add("スライド", () => main.Shell.ToOverlayCommand.Execute(null));
-        Add("出したまま固定する・やめる", () => main.Shell.TogglePinCommand.Execute(null));
-        menu.Items.Add(new System.Windows.Controls.Separator());
+        var window = Add("ウィンドウ", () => main.Shell.ToWindowCommand.Execute(null));
+        var slide = Add("スライド", () => main.Shell.ToOverlayCommand.Execute(null));
+        var dock = Add("固定", () => main.Shell.ToDockCommand.Execute(null));
+        Separator();
 
-        Add("左端から出す", () => main.Shell.EdgeLeftCommand.Execute(null));
-        Add("右端から出す", () => main.Shell.EdgeRightCommand.Execute(null));
-        menu.Items.Add(new System.Windows.Controls.Separator());
+        var left = Add("左端", () => main.Shell.EdgeLeftCommand.Execute(null));
+        var right = Add("右端", () => main.Shell.EdgeRightCommand.Execute(null));
+        Separator();
 
-        Add("今すぐ同期", () => main.Sync.SyncNowCommand.Execute(null));
-        Add("ショートカット", () => main.ShowShortcutsCommand.Execute(null));
-        Add("設定", () => main.OpenSettingsCommand.Execute(null));
-        menu.Items.Add(new System.Windows.Controls.Separator());
+        // 繋いでいなければ同期できない。そのときは設定の「Google」を開く（ツールバーの同期のボタンと同じ）
+        var sync = Add("今すぐ同期", () => main.SyncButtonCommand.Execute(null));
+        Add("設定…", () =>
+        {
+            BringToFront();
+            main.OpenSettingsCommand.Execute(null);
+        });
+        Separator();
 
         // ここでだけ本当に終わる。閉じるボタンはトレイに入るだけ
-        Add("終了", () => { _reallyExiting = true; Shutdown(); });
+        Add("Kado を終了", () => { _reallyExiting = true; Shutdown(); });
+
+        // 開くたびに、いまの状態に合わせる
+        menu.Opened += (_, _) =>
+        {
+            window.IsChecked = main.Shell.Mode == ShellMode.Window;
+            slide.IsChecked = main.Shell.Mode == ShellMode.Overlay;
+            dock.IsChecked = main.Shell.Mode == ShellMode.Dock;
+            left.IsChecked = main.Shell.IsAtLeft;
+            right.IsChecked = main.Shell.IsAtRight;
+            sync.Header = main.Sync.MenuLabel;
+        };
 
         return menu;
     }

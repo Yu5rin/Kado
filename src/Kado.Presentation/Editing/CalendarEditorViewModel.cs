@@ -32,6 +32,7 @@ public sealed class CalendarEditorViewModel : ObservableObject
         IsTaskList = isTaskList;
         _name = string.Empty;
         _color = CalendarPalette.NextColor(usedColors ?? []);
+        _baseline = Snapshot();
     }
 
     /// <summary>すでにあるものを直す。</summary>
@@ -50,7 +51,19 @@ public sealed class CalendarEditorViewModel : ObservableObject
         IsNameLocked = isNameLocked;
         _name = name;
         _color = color ?? CalendarPalette.ColorFor(name);
+        _baseline = Snapshot();
     }
+
+    /// <summary>開いた直後の値。<see cref="IsDirty"/> はこれと見比べる。</summary>
+    private readonly string _baseline;
+
+    /// <summary>
+    /// 開いたときから、名前か色を変えたか。
+    /// <para>Esc・キャンセル・×で閉じるとき、変えているときだけ「変更を破棄しますか？」と尋ねる。</para>
+    /// </summary>
+    public bool IsDirty => !string.Equals(Snapshot(), _baseline, StringComparison.Ordinal);
+
+    private string Snapshot() => string.Join('\u001f', _name, _color.ToLowerInvariant());
 
     /// <summary>
     /// 名前を変えられないか。

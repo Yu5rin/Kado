@@ -36,7 +36,7 @@ public class ImportCommandTests
         vm.ImportWorkingDaysCommand.Execute(null);
 
         Assert.Contains("実働日を取り込みました", vm.StatusMessage);
-        Assert.Contains("稼働日", files.LastReport);
+        Assert.Contains("実働日", files.LastReport);
 
         // サンプルの範囲は 2023/1/5 〜 2025/11/24
         Assert.True(test.Workspace.WorkingDays.HasDataFor(D(2025, 11, 4)));

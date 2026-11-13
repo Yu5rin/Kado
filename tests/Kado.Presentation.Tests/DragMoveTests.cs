@@ -467,7 +467,8 @@ public class DragMoveTests
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(Recurring("r1", monday));
 
-        var main = Create(test);
+        // 繰り返しの予定を消す前の確認には「削除」と答える
+        var main = new MainViewModel(test.Workspace, Today, editors: new FakeEditorPresenter { Confirms = true });
         var chip = main.Month.Cells.Single(c => c.Date == monday).Events.Single();
         main.DeleteChipCommand.Execute(chip);
 

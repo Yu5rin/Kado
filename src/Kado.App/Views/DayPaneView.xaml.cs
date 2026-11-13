@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Kado.Presentation.ViewModels;
 
 namespace Kado.App.Views;
@@ -160,66 +159,26 @@ public partial class DayPaneView : UserControl
     // ------------------------------------------------------------------
     // タスクの行を押したとき
     //
-    // ゴミ箱以外のどこを1回押しても済みの印が付き、2回押すと編集が開く。
-    // 2回押したときに印が付いたままにならないこと、が要点。
+    // 完了を切り替えるのは、行の左のチェックだけ（XAML の CheckBox が自分のコマンドで受ける）。
+    // 以前は行のどこを押しても完了になり、2回押しと区別するために 0.5 秒待っていた。
+    // 待っているあいだに別の行を押すと先のチェックが捨てられ、押したのに付かないことがあった。
     //
-    // 1回目を押した時点では、2回目が来るかどうかは分からない。押した瞬間に
-    // 印を付けると、2回押しの1回目でも必ず付いてしまう。そこで OS の
-    // 「2回押しと見なす間隔」（既定 500 ミリ秒）だけ待ってから付ける。
-    // その間に2回目が来たら、待っているぶんを取り消して編集を開く。
-    //
-    // 印が付くまでに一拍あるのはこのため。付けてから取り消す作りにすれば
-    // 待ちは消せるが、2回押しのたびに印が一瞬ついて消えるうえ、済みの
-    // 書き換えが2回走る（Google へ送るぶんも2回動く）
+    // 行のそれ以外の所は、1回押しは何もしない。2回押しで編集を開く。
+    // ドラッグでの並べ替えはこれまでどおり（下の OnTaskRowPreviewMouseDown 以下）
     // ------------------------------------------------------------------
-
-    private DispatcherTimer? _taskToggleTimer;
-    private TaskListItemViewModel? _taskToggleTarget;
 
     private void OnTaskClicked(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not TaskListItemViewModel task) return;
         if (DataContext is not MainViewModel main) return;
 
-        // ゴミ箱の上は行の操作にしない
+        // ゴミ箱・チェックの上は行の操作にしない
         if (IsInteractiveControl(e.OriginalSource as DependencyObject, sender as DependencyObject)) return;
 
-        if (e.ClickCount >= 2)
-        {
-            CancelTaskToggle();
-            main.EditTaskCommand.Execute(task);
-            e.Handled = true;
-            return;
-        }
+        if (e.ClickCount < 2) return;
 
-        if (e.ClickCount != 1) return;
-
-        CancelTaskToggle();
-
-        _taskToggleTarget = task;
-        _taskToggleTimer = new DispatcherTimer(DispatcherPriority.Input)
-        {
-            Interval = TimeSpan.FromMilliseconds(Shell.NativeMethods.GetDoubleClickTime()),
-        };
-
-        _taskToggleTimer.Tick += (_, _) =>
-        {
-            var target = _taskToggleTarget;
-            CancelTaskToggle();
-
-            if (target is not null) main.ToggleTaskDoneCommand.Execute(target);
-        };
-
-        _taskToggleTimer.Start();
+        main.EditTaskCommand.Execute(task);
         e.Handled = true;
-    }
-
-    /// <summary>待っている印付けを取り消す。2回押し・つまんで動かしたときに呼ぶ。</summary>
-    private void CancelTaskToggle()
-    {
-        _taskToggleTimer?.Stop();
-        _taskToggleTimer = null;
-        _taskToggleTarget = null;
     }
 
     /// <summary>日付ラベル（マイルストーン）を2回押すと編集を開く。</summary>
@@ -293,9 +252,6 @@ public partial class DayPaneView : UserControl
         }
 
         _taskDragCandidate = null;
-
-        // つまんで動かしたのであって、押したのではない
-        CancelTaskToggle();
 
         DragActivity.DoDragDrop(source, candidate, DragDropEffects.Move);
     }

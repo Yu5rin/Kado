@@ -49,6 +49,9 @@ public partial class CalendarEditorWindow : Window
         editor.PropertyChanged += (_, _) => SaveCommand.RaiseCanExecuteChanged();
 
         Loaded += (_, _) => { NameBox.Focus(); NameBox.SelectAll(); };
+
+        // Esc・キャンセル・×で閉じるとき、変えていれば確かめる。Ctrl＋Enter で保存する
+        EditorWindowGuard.Attach(this, () => editor.IsDirty, () => false, () => Save(editor));
     }
 
     /// <summary>保存して閉じる。</summary>

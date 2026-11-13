@@ -224,27 +224,27 @@ public sealed partial class MainViewModel
     {
         if (target is null || _workspace.Events.Find(target.Id) is not { } stored)
         {
-            StatusMessage = "予定が見つかりませんでした";
+            ReportFailure("予定が見つかりませんでした");
             return;
         }
 
         if (CalendarForCopy(stored) is not { } calendarId)
         {
-            StatusMessage = "予定を入れられるカレンダーがありません（読み取り専用のものしかありません）";
+            ReportFailure("予定を入れられるカレンダーがありません（読み取り専用のものしかありません）");
             return;
         }
 
         // 編集画面は開かない。作ったらすぐ元に戻せる（Ctrl＋Z）
-        StatusMessage = _workspace.DuplicateEvent(stored.Id, calendarId, target.Date) is null
-            ? "予定が見つかりませんでした"
-            : "複製しました";
+        ReportResult(
+            _workspace.DuplicateEvent(stored.Id, calendarId, target.Date) is not null,
+            "複製しました", "予定が見つかりませんでした");
     }
 
     private void CopyEventText(EventEntry? target)
     {
         if (target is null || _workspace.Events.Find(target.Id) is not { } stored)
         {
-            StatusMessage = "予定が見つかりませんでした";
+            ReportFailure("予定が見つかりませんでした");
             return;
         }
 
@@ -252,26 +252,27 @@ public sealed partial class MainViewModel
     }
 
     private void CopyToClipboard(string text) =>
-        StatusMessage = _clipboard.TrySetText(text) ? "コピーしました" : "コピーできませんでした（クリップボードを他のアプリが使っています）";
+        ReportResult(
+            _clipboard.TrySetText(text), "コピーしました", "コピーできませんでした（クリップボードを他のアプリが使っています）");
 
     private void MoveEventToCalendarCore(EventMoveRequest? request)
     {
         if (request is null || _workspace.Events.Find(request.EventId) is not { } stored)
         {
-            StatusMessage = "予定が見つかりませんでした";
+            ReportFailure("予定が見つかりませんでした");
             return;
         }
 
         // 子メニューは、押せない項目を灰色にしている。呼ばれ方によらず、ここでも同じ理由で止める
         if (EditBlockReason(stored) is { } blocked)
         {
-            StatusMessage = blocked;
+            ReportFailure(blocked);
             return;
         }
 
         if (EventMapper.MoveBlockReason(stored) is { } cannotMove)
         {
-            StatusMessage = cannotMove;
+            ReportFailure(cannotMove);
             return;
         }
 
@@ -280,13 +281,13 @@ public sealed partial class MainViewModel
 
         if (target is null)
         {
-            StatusMessage = "そのカレンダーには移せません";
+            ReportFailure("そのカレンダーには移せません");
             return;
         }
 
-        StatusMessage = _workspace.MoveEventToCalendar(stored.Id, target.Id)
-            ? $"「{target.Name}」へ移しました"
-            : "予定が見つかりませんでした";
+        ReportResult(
+            _workspace.MoveEventToCalendar(stored.Id, target.Id),
+            $"「{target.Name}」へ移しました", "予定が見つかりませんでした");
     }
 
     // ------------------------------------------------------------------
@@ -347,7 +348,7 @@ public sealed partial class MainViewModel
                     IsEnabled: stored.Due is not null,
                     ToolTip: stored.Due is null ? "期限はありません" : stored.IsRepeating ? "繰り返しも外れます" : null)
                 : new MenuChoice(
-                    preset.Label, SetTaskDueCommand, parameter, IsEnabled: false, ToolTip: "稼働日が見つかりません");
+                    preset.Label, SetTaskDueCommand, parameter, IsEnabled: false, ToolTip: "実働日が見つかりません");
         }
 
         var current = stored.Due == date;
@@ -393,20 +394,20 @@ public sealed partial class MainViewModel
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored)
         {
-            StatusMessage = "タスクが見つかりませんでした";
+            ReportFailure("タスクが見つかりませんでした");
             return;
         }
 
-        StatusMessage = _workspace.DuplicateTask(stored.Id, TaskListForCopy(stored)) is null
-            ? "タスクが見つかりませんでした"
-            : "複製しました";
+        ReportResult(
+            _workspace.DuplicateTask(stored.Id, TaskListForCopy(stored)) is not null,
+            "複製しました", "タスクが見つかりませんでした");
     }
 
     private void CopyTaskTitle(string? id)
     {
         if (id is not { Length: > 0 } || _workspace.Tasks.Find(id) is not { } stored)
         {
-            StatusMessage = "タスクが見つかりませんでした";
+            ReportFailure("タスクが見つかりませんでした");
             return;
         }
 
@@ -417,7 +418,7 @@ public sealed partial class MainViewModel
     {
         if (request is null || _workspace.Tasks.Find(request.TaskId) is not { } stored)
         {
-            StatusMessage = "タスクが見つかりませんでした";
+            ReportFailure("タスクが見つかりませんでした");
             return;
         }
 
@@ -427,7 +428,7 @@ public sealed partial class MainViewModel
 
         if (!_workspace.SetTaskDue(stored.Id, request.Due))
         {
-            StatusMessage = "タスクが見つかりませんでした";
+            ReportFailure("タスクが見つかりませんでした");
             return;
         }
 
@@ -440,14 +441,14 @@ public sealed partial class MainViewModel
     {
         if (request is null || _workspace.Tasks.Find(request.TaskId) is not { } stored)
         {
-            StatusMessage = "タスクが見つかりませんでした";
+            ReportFailure("タスクが見つかりませんでした");
             return;
         }
 
         // 子メニューは、押せない項目を灰色にしている。呼ばれ方によらず、ここでも同じ理由で止める
         if (TaskMapper.MoveBlockReason(stored, TaskMapper.HasChildren(stored, _workspace.Tasks.All())) is { } blocked)
         {
-            StatusMessage = blocked;
+            ReportFailure(blocked);
             return;
         }
 
@@ -456,13 +457,13 @@ public sealed partial class MainViewModel
 
         if (target is null)
         {
-            StatusMessage = "そのリストには移せません";
+            ReportFailure("そのリストには移せません");
             return;
         }
 
-        StatusMessage = _workspace.MoveTaskToList(stored.Id, target.Id)
-            ? $"「{target.Name}」へ移しました"
-            : "タスクが見つかりませんでした";
+        ReportResult(
+            _workspace.MoveTaskToList(stored.Id, target.Id),
+            $"「{target.Name}」へ移しました", "タスクが見つかりませんでした");
     }
 
     // ------------------------------------------------------------------

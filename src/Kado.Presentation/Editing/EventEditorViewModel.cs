@@ -122,6 +122,8 @@ public sealed class EventEditorViewModel : ObservableObject
             _startTimeText = TimeInput.Format(start);
             _endTimeText = TimeInput.Format(TimeInput.OneHourAfter(start));
         }
+
+        _baseline = Snapshot();
     }
 
     /// <summary>すでにある予定を直す。</summary>
@@ -172,7 +174,28 @@ public sealed class EventEditorViewModel : ObservableObject
         // Google Tasks には添付の API が無いので予定だけが対象。ローカルだけのカレンダー
         // の予定は attachments を書き戻せないので使わせない（CanUseAttachments を見よ）
         _attachments = [.. EventMapper.EffectiveAttachments(value)];
+
+        _baseline = Snapshot();
     }
+
+    /// <summary>開いた直後の値。<see cref="IsDirty"/> はこれと見比べる。</summary>
+    private readonly string _baseline;
+
+    /// <summary>
+    /// 開いたときから、何か変えたか。
+    /// <para>
+    /// 画面を Esc・キャンセル・×で閉じるとき、変えているときだけ「変更を破棄しますか？」と尋ねる。
+    /// 変えていなければ尋ねない。読み取り専用の画面は、変えられないので常に false。
+    /// </para>
+    /// </summary>
+    public bool IsDirty => !IsReadOnly && !string.Equals(Snapshot(), _baseline, StringComparison.Ordinal);
+
+    /// <summary>入力欄の値をひとまとめの文字にする。開いた直後と見比べるため。</summary>
+    private string Snapshot() => string.Join(
+        '\u001f',
+        _title, _date, _endDate, _isAllDay, _notify, _startTimeText, _endTimeText,
+        _location, _note, _calendarId, _url, _recurrence,
+        string.Join('\u001e', _attachments.Select(a => a.ToString())));
 
     /// <summary>新規か。見出しとボタンの文言を変える。</summary>
     public bool IsNew => _original is null;
@@ -551,7 +574,7 @@ public sealed class EventEditorViewModel : ObservableObject
     /// <summary>添付欄を使えない理由。使えるなら null。</summary>
     public string? AttachmentsDisabledReason => CanUseAttachments
         ? null
-        : "ローカルだけのカレンダーの予定には添付を付けられません";
+        : "このアプリだけのカレンダーの予定には添付を付けられません";
 
     /// <summary>アップロード中か。ボタンの二重押しを防ぐ表示に使う。</summary>
     public bool IsUploadingAttachment
