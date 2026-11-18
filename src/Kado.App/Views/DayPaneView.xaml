@@ -83,9 +83,14 @@
                     </Button>
 
                     <StackPanel>
-                        <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource InkBrush}" />
+                        <!-- 題名は折り返す。印は右に固定し、1行目の高さ（Body の行 18）に合わせて上に寄せる -->
+                        <DockPanel>
+                            <views:EventMarks DockPanel.Dock="Right" Margin="4,0,0,0" MarkSize="12"
+                                              VerticalAlignment="Top" Height="18" />
+                            <TextBlock Style="{StaticResource BodyTextStyle}" Text="{Binding Title}" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource InkBrush}" />
+                        </DockPanel>
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding SubText}" Margin="0,1,0,0"
                                    Foreground="{DynamicResource Ink3Brush}"
                                    TextTrimming="CharacterEllipsis"

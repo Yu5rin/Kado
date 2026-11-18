@@ -1,5 +1,6 @@
 using System.Globalization;
 using Kado.Data.Repositories;
+using Kado.Presentation.Links;
 
 namespace Kado.Presentation.ViewModels;
 
@@ -48,6 +49,21 @@ public sealed class EventChipViewModel(
     public ScheduledEvent Scheduled { get; } = scheduled;
 
     public string Id => Scheduled.Source.Id;
+
+    // 題名の横の印。マスを組み立てるたびに JSON を読み直さないよう、作るときに1回だけ判断して持つ
+    private readonly EventMarkSet _marks = OpenTargets.MarksOf(scheduled.Source);
+
+    /// <summary>
+    /// 題名の横に地球儀を出すか（右クリックの「リンクを開く」と同じ条件）。
+    /// <para>題名を出さない日（複数日の途中の日）には出さない。印は題名の付き物なので。</para>
+    /// </summary>
+    public bool HasLink => ShowsTitle && _marks.HasLink;
+
+    /// <summary>
+    /// 題名の横にクリップを出すか（右クリックの「添付を開く」と同じ条件）。
+    /// <para>題名を出さない日には出さない。</para>
+    /// </summary>
+    public bool HasAttachments => ShowsTitle && _marks.HasAttachments;
 
     /// <summary>
     /// 帯の色（<c>#rrggbb</c>）。所属カレンダーで決まる。

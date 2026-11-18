@@ -114,10 +114,13 @@
                                             MouseLeftButtonDown="OnAllDayEventClicked"
                                             MouseMove="OnAllDayDragging"
                                             Background="{DynamicResource AccentSoftBrush}">
-                                        <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}"
-                                                   Foreground="{DynamicResource InkBrush}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding Tooltip}" />
+                                        <DockPanel>
+                                            <views:EventMarks DockPanel.Dock="Right" Margin="4,0,0,0" MarkSize="11" />
+                                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding Label}"
+                                                       Foreground="{DynamicResource InkBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Tooltip}" />
+                                        </DockPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

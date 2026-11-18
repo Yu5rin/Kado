@@ -10,6 +10,18 @@ namespace Kado.Presentation.Links;
 /// <param name="Target">開く対象。予定なら <see cref="EventAttachment"/>、タスクなら <see cref="TaskAttachment"/>。</param>
 public sealed record AttachmentItem(string Label, object Target);
 
+/// <summary>予定の題名の横に出す印。リンクがあるか、開ける添付があるか。</summary>
+/// <param name="HasLink">開けるリンク（http/https の URL）があるか。</param>
+/// <param name="HasAttachments">開ける添付があるか。</param>
+public readonly record struct EventMarkSet(bool HasLink, bool HasAttachments)
+{
+    /// <summary>どちらも無い。</summary>
+    public static EventMarkSet None => default;
+
+    /// <summary>どちらか1つでもあるか。</summary>
+    public bool Any => HasLink || HasAttachments;
+}
+
 /// <summary>メニューに並べる、開く先1件。</summary>
 /// <param name="Label">表示名。</param>
 /// <param name="Command">押したときのコマンド。</param>
@@ -61,13 +73,33 @@ public sealed class OpenTargets
         if (value is null) return None;
 
         var link = LinkRules.WebUrl(value.Url);
-        var attachments = EventMapper.EffectiveAttachments(value)
-            .Where(a => LinkRules.IsHttps(a.FileUrl))
+        var attachments = OpenableAttachments(value)
             .Select(a => new AttachmentItem(LabelOf(a), a))
             .ToArray();
 
         return link is null && attachments.Length == 0 ? None : new OpenTargets(link, attachments);
     }
+
+    /// <summary>
+    /// 予定の題名の横に出す印（地球儀・クリップ）を出すかどうか。件数だけを見て、メニュー用の項目は作らない。
+    /// <para>
+    /// 判断は右クリックメニューと同じ（リンクは <see cref="LinkRules.WebUrl"/>、添付は
+    /// <see cref="OpenableAttachments"/>）。印の有無とメニューの有無が食い違わないよう、読み方はここ1か所に置く。
+    /// </para>
+    /// </summary>
+    public static EventMarkSet MarksOf(CalendarEvent? value)
+    {
+        if (value is null) return EventMarkSet.None;
+
+        var hasLink = LinkRules.WebUrl(value.Url) is not null;
+        var hasAttachments = OpenableAttachments(value).Any();
+
+        return hasLink || hasAttachments ? new EventMarkSet(hasLink, hasAttachments) : EventMarkSet.None;
+    }
+
+    /// <summary>開ける予定の添付（https のものだけ）。メニューと印が共有する。</summary>
+    private static IEnumerable<EventAttachment> OpenableAttachments(CalendarEvent value) =>
+        EventMapper.EffectiveAttachments(value).Where(a => LinkRules.IsHttps(a.FileUrl));
 
     /// <summary>タスクから読む。</summary>
     public static OpenTargets For(TaskItem? value)

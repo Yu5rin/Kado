@@ -29,7 +29,17 @@ public sealed class TimeBlockViewModel
         Height = height;
         Color = color;
         Location = location;
+        _marks = Links.OpenTargets.MarksOf(source);
     }
+
+    // 題名の横の印。作るときに1回だけ判断して持つ（再描画のたびに JSON を読み直さない）
+    private readonly Links.EventMarkSet _marks;
+
+    /// <summary>題名の横に地球儀を出すか（右クリックの「リンクを開く」と同じ条件）。</summary>
+    public bool HasLink => _marks.HasLink;
+
+    /// <summary>題名の横にクリップを出すか（右クリックの「添付を開く」と同じ条件）。</summary>
+    public bool HasAttachments => _marks.HasAttachments;
 
     public string Id { get; }
 

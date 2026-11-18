@@ -102,4 +102,14 @@
     <PathGeometry x:Key="IconTaskAdd"
                   Figures="M3 10.5l4 4L14 5M18 14.5v7M14.5 18h7" />
 
+    <!--
+        予定の題名の横に出す小さな印。24 の格子で、線で描く（StrokeThickness は呼び出し側）。
+        地球儀＝URL（リンク）がある、クリップ＝添付がある。
+    -->
+    <PathGeometry x:Key="IconLink"
+                  Figures="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9" />
+
+    <PathGeometry x:Key="IconAttachment"
+                  Figures="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" />
+
 </ResourceDictionary>

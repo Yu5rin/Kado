@@ -1,0 +1,48 @@
+<!--
+    予定の題名の右に出す小さな印。地球儀（URL がある）→ クリップ（添付がある）の順。
+    どちらも無いときは Collapsed にして、幅も余白も取らない。
+
+    DataContext の HasLink / HasAttachments を読む（EventChipViewModel・DayEventViewModel・
+    TimeBlockViewModel が持つ。判断は OpenTargets.MarksOf で1回だけ行い、ここでは計算しない）。
+    押せない（IsHitTestVisible=False）ので、行のクリック・ドラッグ・右クリックを奪わない。
+    色は Foreground（既定は Ink2）、大きさは MarkSize。不透明度は親に従う。
+
+    使うときは DockPanel.Dock="Right" で右に固定し、題名を残りに入れる。
+    題名が省略記号で縮んでも、印は消えない。
+-->
+<UserControl x:Class="Kado.App.Views.EventMarks"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             IsHitTestVisible="False" Focusable="False"
+             Foreground="{DynamicResource Ink2Brush}">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <Path x:Name="LinkMark" Data="{StaticResource IconLink}" Stretch="Uniform"
+              Width="{Binding MarkSize, ElementName=Root}" Height="{Binding MarkSize, ElementName=Root}"
+              StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+              Stroke="{Binding Foreground, ElementName=Root}"
+              Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+        <Path x:Name="AttachmentMark" Data="{StaticResource IconAttachment}" Stretch="Uniform"
+              Width="{Binding MarkSize, ElementName=Root}" Height="{Binding MarkSize, ElementName=Root}"
+              Margin="2,0,0,0"
+              StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+              Stroke="{Binding Foreground, ElementName=Root}"
+              Visibility="{Binding HasAttachments, Converter={StaticResource BoolToVisibility}}" />
+    </StackPanel>
+
+    <UserControl.Style>
+        <Style TargetType="UserControl">
+            <!-- どちらも無ければ丸ごと畳む。両方 false の組は下の MultiDataTrigger で見る -->
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasLink}" Value="False" />
+                        <Condition Binding="{Binding HasAttachments}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Style>
+</UserControl>
