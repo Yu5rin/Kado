@@ -58,6 +58,12 @@ public static class TaskMapper
 
         var isDone = string.Equals(element.Text("status"), CompletedStatus, StringComparison.OrdinalIgnoreCase);
 
+        var raw = GoogleJson.Normalize(element);
+
+        // 「Google に送れなかった」印は、Google の姿がそのときと同じ間だけ引き継ぐ（EventMapper.FromGoogle と同じ）
+        var keepsRejection = existing is { PushRejection: not null }
+            && string.Equals(existing.GoogleRaw, raw, StringComparison.Ordinal);
+
         var due = ReadDue(element.Text("due"));
 
         return new TaskItem
@@ -84,7 +90,9 @@ public static class TaskMapper
             ParentId = element.Text("parent"),
             Position = element.Text("position"),
 
-            GoogleRaw = GoogleJson.Normalize(element),
+            GoogleRaw = raw,
+            PushRejection = keepsRejection ? existing!.PushRejection : null,
+            PushRejectionFingerprint = keepsRejection ? existing!.PushRejectionFingerprint : null,
             GoogleTaskId = googleId,
             GoogleTaskListId = taskListId,
             GoogleUpdated = element.Text("updated"),
@@ -279,6 +287,51 @@ public static class TaskMapper
 
     private static string FormatMoment(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 送る前に、明らかにおかしくないかを見る。送れない理由（送れるなら null）。
+    /// 期限が既定値（0001-01-01）や異常な年（<see cref="EventMapper.MinSendableYear"/> 未満・
+    /// <see cref="EventMapper.MaxSendableYear"/> 超）のとき。
+    /// </summary>
+    public static string? OutgoingProblem(TaskItem value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.Due is { } due
+               && (due.Year < EventMapper.MinSendableYear || due.Year > EventMapper.MaxSendableYear)
+            ? $"期限が不正です（{due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}）"
+            : null;
+    }
+
+    /// <summary>送ろうとしている中身の指紋（<see cref="EventMapper.PushFingerprint"/> のタスク版）。</summary>
+    public static string PushFingerprint(TaskItem value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var basis = GoogleJson.Canonical(ToGoogle(value));
+
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"{basis}|{value.TaskListId}")))[..32];
+    }
+
+    /// <summary>「Google に送れなかった」印が付いていて、中身がそのときから変わっていないか。</summary>
+    public static bool IsHeldBack(TaskItem value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.PushRejection is { Length: > 0 }
+               && string.Equals(value.PushRejectionFingerprint, PushFingerprint(value), StringComparison.Ordinal);
+    }
+
+    /// <summary>断られたときに shell.log へ残す素材。題名と期限だけで、メモは含めない。</summary>
+    public static string DescribeForLog(TaskItem value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return $"手元: Due={(value.Due is { } due ? due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "-")} " +
+               $"IsDone={value.IsDone} 親={(value.ParentId is { Length: > 0 } ? "あり" : "なし")}";
+    }
 
     /// <summary>書き戻す必要があるか。控えた生データと見比べる。</summary>
     public static bool NeedsPush(TaskItem value)

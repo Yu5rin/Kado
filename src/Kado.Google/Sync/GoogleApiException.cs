@@ -99,6 +99,22 @@ public sealed class GoogleApiException(
         !IsRateLimited &&
         !Reason.Contains("uota", StringComparison.Ordinal);
 
+    /// <summary>
+    /// 送った中身そのものを断られた（一時的でない 4xx）。出し直しても同じ結果になる。
+    /// <para>
+    /// invalid・badRequest・forbidden など。無い（404）、取り直せば直る認証（401・407）、待てば通る
+    /// （408・429・5xx）、全部取り直す（410）は含めない。同期は、これで断られた予定・タスクに
+    /// 「送れなかった」印を付け、中身が変わるまで送り直さない。
+    /// </para>
+    /// </summary>
+    public bool IsRejection =>
+        (int)Status is >= 400 and < 500 &&
+        !IsMissing && !IsTransient && !IsUnauthorized && !IsProxyAuthRequired &&
+        Status is not (HttpStatusCode.RequestTimeout or HttpStatusCode.Gone);
+
+    /// <summary>断られた理由を、画面と印に出す1つの文にする（理由と、Google の説明）。</summary>
+    public string RejectionText => Description is { Length: > 0 } detail ? $"{Reason} — {detail}" : Reason;
+
     /// <summary>出し直せば直る見込みがあるか。</summary>
     public bool IsTransient =>
         IsRateLimited ||

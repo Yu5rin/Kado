@@ -17,6 +17,9 @@ public static class GoogleJson
     public static string Normalize(JsonElement element) =>
         Sort(JsonNode.Parse(element.GetRawText())).ToJsonString();
 
+    /// <summary>キーを並べ替えた、比較用の文字列にする（JSON の木から）。</summary>
+    public static string Canonical(JsonNode? node) => Sort(node?.DeepClone())?.ToJsonString() ?? "null";
+
     /// <summary>同じ内容か。キーの並び順は見ない。</summary>
     public static bool SameContent(string? left, string? right)
     {

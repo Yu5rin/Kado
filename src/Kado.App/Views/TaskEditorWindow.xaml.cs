@@ -25,11 +25,13 @@ public partial class TaskEditorWindow : Window
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
         DeleteCommand = new RelayCommand(Delete, () => !editor.IsNew);
         RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);
+        RetryPushCommand = new RelayCommand(RetryPush, () => editor.IsPushRejected && editor.CanSave);
 
         editor.PropertyChanged += (_, _) =>
         {
             SaveCommand.RaiseCanExecuteChanged();
             RecreateCommand.RaiseCanExecuteChanged();
+            RetryPushCommand.RaiseCanExecuteChanged();
         };
 
         Loaded += (_, _) => TitleBox.Focus();
@@ -49,10 +51,23 @@ public partial class TaskEditorWindow : Window
     /// </summary>
     public RelayCommand RecreateCommand { get; }
 
+    /// <summary>
+    /// 「もう一度送る」。保存と一緒に、「Google に送れていない」印を外す指定を残す。
+    /// 断られた中身のまま、次の同期でもう一度送る。印が付いたものにだけボタンを出す。
+    /// </summary>
+    public RelayCommand RetryPushCommand { get; }
+
     /// <summary>作り直しを ViewModel に求めて、保存して閉じる。</summary>
     private void Recreate()
     {
         _editor.RequestRecreate();
+        Save();
+    }
+
+    /// <summary>「もう一度送る」を ViewModel に求めて、保存して閉じる。印を外すのは呼び出し側が行う。</summary>
+    private void RetryPush()
+    {
+        _editor.RequestRetryPush();
         Save();
     }
 

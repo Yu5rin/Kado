@@ -395,6 +395,23 @@ public static class SchemaMigrations
         ALTER TABLE tasks ADD COLUMN repeat TEXT;
         """;
 
+    /// <summary>
+    /// V14：「Google に送れなかった」印。
+    /// <para>
+    /// <b><c>events.push_rejection</c> / <c>tasks.push_rejection</c></b>：送ろうとして Google に
+    /// 断られた（一時的でない 4xx。invalid・forbidden など）理由。<b><c>push_rejection_fingerprint</c></b>
+    /// は、そのとき送ろうとした中身の指紋。中身が変わらない間は送り直さず、警告も繰り返さない
+    /// （知らせるのは印を付けた同期の1回だけ）。使う人が直すか、Google から新しい姿を受け取ると外れる。
+    /// 既存の行は両方とも空（NULL）＝断られていない。
+    /// </para>
+    /// </summary>
+    private const string V14 = """
+        ALTER TABLE events ADD COLUMN push_rejection TEXT;
+        ALTER TABLE events ADD COLUMN push_rejection_fingerprint TEXT;
+        ALTER TABLE tasks ADD COLUMN push_rejection TEXT;
+        ALTER TABLE tasks ADD COLUMN push_rejection_fingerprint TEXT;
+        """;
+
     /// <summary>適用順に並んだスキーマ定義。</summary>
     public static IReadOnlyList<Migration> All { get; } =
     [
@@ -411,6 +428,7 @@ public static class SchemaMigrations
         new(11, "Google から外れたタスクリストの印を持つ", V11),
         new(12, "タスクに URL と添付（ファイルの場所）を持つ。Kado だけが持ち、Google には送らない", V12),
         new(13, "タスクに繰り返しの指定を持つ。Kado だけが持ち、Google には送らない", V13),
+        new(14, "Google に送れなかった印（理由と、そのとき送ろうとした中身の指紋）を持つ", V14),
     ];
 
     /// <summary>このコードが期待する最新の版。</summary>

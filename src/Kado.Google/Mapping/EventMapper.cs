@@ -59,6 +59,8 @@ public static class EventMapper
         var googleId = element.Text("id")
             ?? throw new ArgumentException("id の無いイベントは読めません。", nameof(element));
 
+        var raw = GoogleJson.Normalize(element);
+
         var start = element.Child("start");
         var end = element.Child("end");
 
@@ -126,9 +128,18 @@ public static class EventMapper
                 existing is null ? null : ReadOriginalRecurrenceLines(existing)),
 
             Status = element.Text("status"),
-            GoogleRaw = GoogleJson.Normalize(element),
+            GoogleRaw = raw,
             GoogleEventId = googleId,
             GoogleUpdated = element.Text("updated"),
+
+            // 「Google に送れなかった」印は、Google の姿がそのときと同じ間だけ引き継ぐ（全件の取り直しで
+            // 同じ姿が降ってきても、また送って、また知らせることにならない）。Google で変わっていたら外す
+            PushRejection = existing is { PushRejection: not null } && string.Equals(existing.GoogleRaw, raw, StringComparison.Ordinal)
+                ? existing.PushRejection
+                : null,
+            PushRejectionFingerprint = existing is { PushRejection: not null } && string.Equals(existing.GoogleRaw, raw, StringComparison.Ordinal)
+                ? existing.PushRejectionFingerprint
+                : null,
             Source = SourceName,
 
             // ここへ来た姿（GoogleRaw）が新しい確定した姿。まだ送っていない添付の指定が
@@ -624,6 +635,142 @@ public static class EventMapper
         return !guestsCanModify;
     }
 
+    /// <summary>Google が受け付ける年の下限。これより前の日付は「不正な日付」として送らない。</summary>
+    public const int MinSendableYear = 1900;
+
+    /// <summary>Google が受け付ける年の上限。</summary>
+    public const int MaxSendableYear = 2200;
+
+    /// <summary>送る本文と、送れない理由（送れるなら null）。本文を組み立てられなかったときは本文も null。</summary>
+    public readonly record struct OutgoingCheck(JsonObject? Body, string? Problem);
+
+    /// <summary>
+    /// 送る本文を組み立て、<b>送る前に</b>明らかにおかしくないかを見る。
+    /// <para>
+    /// 開始日が既定値（0001-01-01）や異常な年（1900 年より前・2200 年より後）、開始と終了の形の食い違い
+    /// （片方が <c>date</c>・片方が <c>dateTime</c>、両方が入っている、どちらも無い）、終了が開始以前。
+    /// これらは送っても Google に断られる（<c>400 invalid — Invalid start time.</c>）ので、
+    /// 送らずに「送れない」扱いにする。
+    /// </para>
+    /// </summary>
+    public static OutgoingCheck CheckOutgoing(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!SendableYear(value.Date.Year))
+        {
+            return new OutgoingCheck(null, $"開始日が不正です（{Format(value.Date)}）");
+        }
+
+        if (!SendableYear(value.LastDate.Year))
+        {
+            return new OutgoingCheck(null, $"終了日が不正です（{Format(value.LastDate)}）");
+        }
+
+        JsonObject body;
+        try
+        {
+            body = ToGoogle(value);
+        }
+        catch (ArgumentException ex)
+        {
+            // DateTimeOffset が作れない日付など
+            return new OutgoingCheck(null, $"日時を Google の形に直せません（{ex.GetType().Name}）");
+        }
+
+        return new OutgoingCheck(body, ShapeProblem(body));
+    }
+
+    private static bool SendableYear(int year) => year is >= MinSendableYear and <= MaxSendableYear;
+
+    private static string? ShapeProblem(JsonObject body)
+    {
+        if (body["start"] is not JsonObject start || body["end"] is not JsonObject end)
+        {
+            return "開始または終了がありません";
+        }
+
+        var startDate = Text(start, "date");
+        var startMoment = Text(start, "dateTime");
+        var endDate = Text(end, "date");
+        var endMoment = Text(end, "dateTime");
+
+        if ((startDate is null) == (startMoment is null)) return "開始の形が不正です（date と dateTime のどちらか1つだけ）";
+        if ((endDate is null) == (endMoment is null)) return "終了の形が不正です（date と dateTime のどちらか1つだけ）";
+
+        if ((startDate is null) != (endDate is null))
+        {
+            return "開始と終了の形が食い違っています（片方が終日、片方が時刻つき）";
+        }
+
+        if (startDate is not null)
+        {
+            var from = ParseDate(startDate);
+            var to = ParseDate(endDate!);
+            if (from == default || to == default) return "終日の日付が読めません";
+
+            return to <= from ? "終了が開始以前です" : null;
+        }
+
+        var begin = ParseDateTime(startMoment);
+        var finish = ParseDateTime(endMoment);
+        if (begin is null || finish is null) return "日時が読めません";
+
+        return finish.Value <= begin.Value ? "終了が開始以前です" : null;
+    }
+
+    /// <summary>
+    /// 送ろうとしている中身の指紋。本文（キーを並べ替えたもの）と入れ先のハッシュ。
+    /// <para>
+    /// Google に断られたとき、この指紋を印に控える（<see cref="CalendarEvent.PushRejectionFingerprint"/>）。
+    /// 次の同期で指紋が同じなら中身が変わっていないので、送り直さない。本文を作れないほど不正なときは、
+    /// 日時の欄そのものから作る。
+    /// </para>
+    /// </summary>
+    public static string PushFingerprint(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var check = CheckOutgoing(value);
+
+        var basis = check.Body is { } body
+            ? GoogleJson.Canonical(body)
+            : $"local|{value.Date:O}|{value.EndDate:O}|{value.StartTime:O}|{value.EndTime:O}|{value.Title}";
+
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"{basis}|{value.CalendarId}")))[..32];
+    }
+
+    /// <summary>
+    /// 「Google に送れなかった」印が付いていて、中身がそのときから変わっていないか。
+    /// 変わっていなければ送っても同じ結果なので、送らず、警告も出さない。
+    /// </summary>
+    public static bool IsHeldBack(CalendarEvent value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.PushRejection is { Length: > 0 }
+               && string.Equals(value.PushRejectionFingerprint, PushFingerprint(value), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 断られたときに shell.log へ残す1行の素材。<b>題名と日時だけ</b>で、メモや場所は含めない。
+    /// </summary>
+    public static string DescribeForLog(CalendarEvent value, JsonObject? body)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var sent = body is null
+            ? "(本文を組み立てられず)"
+            : $"start={body["start"]?.ToJsonString()} end={body["end"]?.ToJsonString()}";
+
+        return $"{sent} 手元: Date={Format(value.Date)} StartTime={value.StartTime?.ToString("HH:mm") ?? "-"} " +
+               $"EndDate={(value.EndDate is { } endDate ? Format(endDate) : "-")} " +
+               $"EndTime={value.EndTime?.ToString("HH:mm") ?? "-"} IsAllDay={value.IsAllDay} " +
+               $"recurringEventId={(IsRecurringInstance(value) ? "あり" : "なし")} 繰り返し={(value.IsRecurring ? "あり" : "なし")}";
+    }
+
     /// <summary>
     /// 書き戻す必要があるか。
     /// <para>
@@ -646,7 +793,10 @@ public static class EventMapper
             // そのたびに「一部を伝えられません」と出る
             if (IsLockedOnGoogle(original)) return false;
 
-            var wanted = ToGoogle(value);
+            // 送れない形（不正な日付など）なら、受け取った姿と比べるまでもなく「送る側」に数える。
+            // 送ると決めたあとの扱い（断られた印）は同期が決める
+            if (CheckOutgoing(value) is not { Body: { } wanted, Problem: null }) return true;
+
             foreach (var pair in wanted)
             {
                 // 開始と終了は書き方の揺れが大きい。文字列ではなく時刻として比べる
@@ -773,11 +923,40 @@ public static class EventMapper
 
     private static JsonObject WriteStart(CalendarEvent value, JsonObject? original)
     {
-        if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.Date) };
+        var clock = value.IsAllDay
+            ? default
+            : value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
 
-        var clock = value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
+        var node = value.IsAllDay
+            ? new JsonObject { ["date"] = Format(value.Date) }
+            : WriteMoment(clock, OriginalTimeZoneId(original, "start"));
 
-        return WriteMoment(clock, OriginalTimeZoneId(original, "start"));
+        return DropOtherForm(node, original, "start", value.IsAllDay);
+    }
+
+    /// <summary>
+    /// 終日⇔時刻つきを切り替えるとき、<b>元の形の項目を明示的に消す</b>。
+    /// <para>
+    /// patch は入れ子の項目を<b>混ぜ合わせる</b>。終日にするのに <c>{date}</c> だけ送ると、元の
+    /// <c>dateTime</c> が残って <c>date</c> と <c>dateTime</c> が両方ある開始になり、Google は
+    /// <c>400 invalid — Invalid start time.</c> で断る（時刻つきにするときの <c>date</c> も同じ）。
+    /// 元が<b>そちらの形だったときだけ</b> null を添える（形が同じなら何も足さない）。
+    /// </para>
+    /// </summary>
+    private static JsonObject DropOtherForm(JsonObject node, JsonObject? original, string key, bool toAllDay)
+    {
+        if (original?[key] is not JsonObject received) return node;
+
+        if (toAllDay)
+        {
+            if (Text(received, "dateTime") is not null) node["dateTime"] = null;
+        }
+        else if (Text(received, "date") is not null)
+        {
+            node["date"] = null;
+        }
+
+        return node;
     }
 
     /// <summary>
@@ -795,7 +974,11 @@ public static class EventMapper
     /// </summary>
     private static JsonObject WriteEnd(CalendarEvent value, JsonObject? original)
     {
-        if (value.IsAllDay) return new JsonObject { ["date"] = Format(value.LastDate.AddDays(1)) };
+        if (value.IsAllDay)
+        {
+            return DropOtherForm(
+                new JsonObject { ["date"] = Format(value.LastDate.AddDays(1)) }, original, "end", toAllDay: true);
+        }
 
         var startAt = value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
 
@@ -805,7 +988,8 @@ public static class EventMapper
 
         if (endAt <= startAt) endAt = startAt.AddHours(1);
 
-        return WriteMoment(endAt, OriginalTimeZoneId(original, "end"));
+        return DropOtherForm(
+            WriteMoment(endAt, OriginalTimeZoneId(original, "end")), original, "end", toAllDay: false);
     }
 
     /// <summary>

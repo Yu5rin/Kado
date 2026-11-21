@@ -236,6 +236,34 @@ public sealed class EventEditorViewModel : ObservableObject
     }
 
     // ------------------------------------------------------------------
+    // Google に送れていない予定
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// 送ろうとしたら Google に断られ、中身がそのときから変わっていない予定か。
+    /// <para>
+    /// 同期はこの間、送り直さず、警告も繰り返さない（知らせたのは印を付けた1回だけ）。中身を直して
+    /// 保存すれば、次の同期でもう一度送る。直さずにもう一度送りたいときは「もう一度送る」。
+    /// </para>
+    /// </summary>
+    public bool IsPushRejected => _original is not null && EventMapper.IsHeldBack(_original);
+
+    /// <summary>送れていないときに、編集画面に出す説明。無ければ null。</summary>
+    public string? PushRejectionMessage => IsPushRejected
+        ? $"この予定は Google に送れていません：{_original!.PushRejection}。手元にだけ残しています。" +
+          "直して保存すると、次の同期で送り直します。"
+        : null;
+
+    /// <summary>「もう一度送る」を求めて保存したか。呼び出し側が保存のあとにこれを見て、印を外す。</summary>
+    public bool RetryPushRequested { get; private set; }
+
+    /// <summary>「もう一度送る」を選ぶ。印が付いた予定のときだけ効く。</summary>
+    public void RequestRetryPush()
+    {
+        if (IsPushRejected) RetryPushRequested = true;
+    }
+
+    // ------------------------------------------------------------------
     // Kado では表せない繰り返しの予定
     // ------------------------------------------------------------------
 
@@ -824,6 +852,8 @@ public sealed class EventEditorViewModel : ObservableObject
             GoogleUpdated = _original?.GoogleUpdated,
             GoogleRaw = _original?.GoogleRaw,
             GoogleMissing = _original?.GoogleMissing ?? false,
+            PushRejection = _original?.PushRejection,
+            PushRejectionFingerprint = _original?.PushRejectionFingerprint,
             Status = _original?.Status,
             Source = _original?.Source,
 

@@ -28,6 +28,7 @@ public partial class EventEditorWindow : Window
         SaveCommand = new RelayCommand(Save, () => editor.CanSave);
         DeleteCommand = new RelayCommand(Delete, () => editor.CanDelete);
         RecreateCommand = new RelayCommand(Recreate, () => editor.IsMissingOnGoogle && editor.CanSave);
+        RetryPushCommand = new RelayCommand(RetryPush, () => editor.IsPushRejected && editor.CanSave);
 
         // RelayCommand は CommandManager に乗っていないので、自分で知らせないと
         // 「保存できるようになったのにボタンが戻らない」状態のままになる
@@ -35,6 +36,7 @@ public partial class EventEditorWindow : Window
         {
             SaveCommand.RaiseCanExecuteChanged();
             RecreateCommand.RaiseCanExecuteChanged();
+            RetryPushCommand.RaiseCanExecuteChanged();
         };
 
         Loaded += (_, _) => TitleBox.Focus();
@@ -54,6 +56,12 @@ public partial class EventEditorWindow : Window
     /// 「Google 上で見つからない」印が付いた予定にだけボタンを出す。
     /// </summary>
     public RelayCommand RecreateCommand { get; }
+
+    /// <summary>
+    /// 「もう一度送る」。保存と一緒に、「Google に送れていない」印を外す指定を残す。
+    /// 断られた中身のまま、次の同期でもう一度送る。印が付いたものにだけボタンを出す。
+    /// </summary>
+    public RelayCommand RetryPushCommand { get; }
 
     /// <summary>
     /// 保存の先頭で、いま打ちかけの値を確定させる。
@@ -77,6 +85,13 @@ public partial class EventEditorWindow : Window
     private void Recreate()
     {
         _editor.RequestRecreate();
+        Save();
+    }
+
+    /// <summary>「もう一度送る」を ViewModel に求めて、保存して閉じる。印を外すのは呼び出し側が行う。</summary>
+    private void RetryPush()
+    {
+        _editor.RequestRetryPush();
         Save();
     }
 

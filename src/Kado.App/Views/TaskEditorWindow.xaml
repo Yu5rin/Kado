@@ -83,6 +83,23 @@
                 </StackPanel>
             </Border>
 
+            <!--
+                送ろうとして Google に断られ、中身がそのときから変わっていないタスクにだけ出す。
+                同期は送り直さず警告も繰り返さない。直して保存すれば、次の同期で送り直す
+            -->
+            <Border Margin="0,0,0,12" Padding="10,8" CornerRadius="5"
+                    BorderThickness="1" BorderBrush="{DynamicResource SundayBrush}"
+                    Visibility="{Binding PushRejectionMessage, Converter={StaticResource NullToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding PushRejectionMessage}" Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource SundayBrush}" />
+                    <Button Content="もう一度送る" Style="{StaticResource GhostButtonStyle}"
+                            HorizontalAlignment="Left" Margin="0,6,0,0" IsEnabled="{Binding CanSave}"
+                            ToolTip="断られた中身のまま、次の同期でもう一度送ります（保存も一緒に行います）"
+                            Command="{Binding RetryPushCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="タイトル" Style="{StaticResource FieldLabelStyle}" />
             <TextBox x:Name="TitleBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,12"
                      Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />

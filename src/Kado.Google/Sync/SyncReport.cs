@@ -112,6 +112,15 @@ public sealed record SyncReport
     /// </summary>
     public IReadOnlyList<string> Notes { get; init; } = [];
 
+    /// <summary>
+    /// shell.log に残す行。画面には出さない。
+    /// <para>
+    /// Google に送れなかった予定・タスクの、断られた理由と送ろうとした中身（題名と日時だけ。メモや場所は
+    /// 含めない）。原因を後から追えるようにする。呼び出し側（<c>GoogleSyncService</c>）が記録に書く。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> LogLines { get; init; } = [];
+
     /// <summary>何か変わったか。変わっていなければ画面に出さない。</summary>
     public bool HasChanges =>
         CreatedLocal + UpdatedLocal + DeletedLocal +
@@ -147,5 +156,6 @@ public sealed record SyncReport
         Throttled = left.Throttled || right.Throttled,
         Warnings = [.. left.Warnings, .. right.Warnings],
         Notes = [.. left.Notes, .. right.Notes],
+        LogLines = [.. left.LogLines, .. right.LogLines],
     };
 }

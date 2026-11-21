@@ -586,4 +586,111 @@ public class EditDuringSyncTests
         Assert.False(test.Workspace.RecreateEventOnGoogle("e1"));
         Assert.Equal("g1", test.Workspace.Events.Find("e1")!.GoogleEventId);
     }
+
+    // ------------------------------------------------------------------
+    // 「Google に送れていない」印（断られた予定・タスク）
+    // ------------------------------------------------------------------
+
+    private static CalendarEvent Rejected() =>
+        Synced() with { PushRejection = "invalid — Invalid start time.", PushRejectionFingerprint = EventMapper.PushFingerprint(Synced()) };
+
+    private static TaskItem RejectedTask() =>
+        SyncedTask() with { PushRejection = "invalid", PushRejectionFingerprint = TaskMapper.PushFingerprint(SyncedTask()) };
+
+    [Fact]
+    public void 送れていない予定の編集画面は理由を出す()
+    {
+        var editor = new EventEditorViewModel(Rejected(), []);
+
+        Assert.True(editor.IsPushRejected);
+        Assert.Contains("Google に送れていません", editor.PushRejectionMessage, StringComparison.Ordinal);
+        Assert.Contains("invalid — Invalid start time.", editor.PushRejectionMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 中身が変わった予定は送れていないとは出さない()
+    {
+        // 直して保存した後は、次の同期で送り直すので、帯は出さない
+        var editor = new EventEditorViewModel(Rejected() with { Title = "直した題" }, []);
+
+        Assert.False(editor.IsPushRejected);
+        Assert.Null(editor.PushRejectionMessage);
+
+        editor.RequestRetryPush();
+        Assert.False(editor.RetryPushRequested);
+    }
+
+    [Fact]
+    public void もう一度送るを選ぶと印が外れ次の同期で送る対象になる()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddEvent(Rejected());
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = editor =>
+        {
+            Assert.True(editor.IsPushRejected);
+            editor.RequestRetryPush();
+            return true;
+        };
+
+        vm.EditEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        var saved = ws.Events.Find("e1")!;
+        Assert.Null(saved.PushRejection);
+        Assert.Null(saved.PushRejectionFingerprint);
+        Assert.False(EventMapper.IsHeldBack(saved));
+    }
+
+    [Fact]
+    public void 直して保存しても印は残り中身が違うので送り直される()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddEvent(Rejected());
+        var (vm, editors) = Create(test);
+
+        editors.OnEvent = editor => { editor.Title = "定例（直した）"; return true; };
+
+        vm.EditEventCommand.Execute(Assert.Single(vm.SelectedDay.Events));
+
+        var saved = ws.Events.Find("e1")!;
+
+        // 印は同期が外す。ただし指紋が合わないので、同期は送り直す
+        Assert.NotNull(saved.PushRejection);
+        Assert.False(EventMapper.IsHeldBack(saved));
+    }
+
+    [Fact]
+    public void 送れていないタスクも同じに扱う()
+    {
+        using var test = TestWorkspace.Create();
+        var ws = test.Workspace;
+        ws.AddTask(RejectedTask());
+        var (vm, editors) = Create(test);
+
+        editors.OnTask = editor =>
+        {
+            Assert.True(editor.IsPushRejected);
+            Assert.NotNull(editor.PushRejectionMessage);
+            editor.RequestRetryPush();
+            return true;
+        };
+
+        vm.EditTaskCommand.Execute(Assert.Single(vm.SelectedDay.Tasks));
+
+        var saved = ws.Tasks.Find("t1")!;
+        Assert.Null(saved.PushRejection);
+        Assert.False(TaskMapper.IsHeldBack(saved));
+    }
+
+    [Fact]
+    public void 印が付いていない予定のもう一度送るは受け付けない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Synced());
+
+        Assert.False(test.Workspace.RetryEventPush("e1"));
+    }
 }

@@ -267,4 +267,39 @@ public class MigrationTests
         Assert.Equal("https://example.com", db.Connection.ExecuteScalar<string>("SELECT url FROM tasks WHERE id = 't1';"));
         Assert.Equal("g1", db.Connection.ExecuteScalar<string>("SELECT google_task_id FROM tasks WHERE id = 't1';"));
     }
+
+    /// <summary>
+    /// V14（Google に送れなかった印）が、V13 までの既存の予定・タスクを壊さずに列を足すこと。
+    /// 既存の行は空（NULL）＝断られていない。
+    /// </summary>
+    [Fact]
+    public void V14は既存の予定とタスクを変えずに送れなかった印の列を足す()
+    {
+        using var db = TestDatabase.CreateWithoutSchema();
+
+        foreach (var migration in SchemaMigrations.All.Where(m => m.Version < 14).OrderBy(m => m.Version))
+        {
+            db.Connection.Execute(migration.Sql);
+            db.Connection.Execute($"PRAGMA user_version = {migration.Version};");
+        }
+
+        db.Connection.Execute(
+            "INSERT INTO events (id, title, date, google_event_id, updated_at) VALUES ('e1', '会議', '2026-09-24', 'g1', 1);");
+        db.Connection.Execute(
+            "INSERT INTO tasks (id, title, google_task_id, updated_at) VALUES ('t1', '集計', 'g2', 1);");
+
+        var applied = DatabaseMigrator.Migrate(db.Connection);
+
+        Assert.Contains(applied, m => m.Version == 14);
+        Assert.Equal(SchemaMigrations.LatestVersion, DatabaseMigrator.GetVersion(db.Connection));
+
+        foreach (var table in new[] { "events", "tasks" })
+        {
+            Assert.Null(db.Connection.ExecuteScalar<string?>($"SELECT push_rejection FROM {table};"));
+            Assert.Null(db.Connection.ExecuteScalar<string?>($"SELECT push_rejection_fingerprint FROM {table};"));
+        }
+
+        Assert.Equal("g1", db.Connection.ExecuteScalar<string>("SELECT google_event_id FROM events WHERE id = 'e1';"));
+        Assert.Equal("g2", db.Connection.ExecuteScalar<string>("SELECT google_task_id FROM tasks WHERE id = 't1';"));
+    }
 }

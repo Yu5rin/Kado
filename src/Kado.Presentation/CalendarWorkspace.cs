@@ -1232,6 +1232,33 @@ public sealed class CalendarWorkspace
         return true;
     }
 
+    /// <summary>
+    /// 「Google に送れていない」印（<see cref="CalendarEvent.PushRejection"/>）を外し、次の同期でもう一度送る。
+    /// <para>
+    /// 中身は変えない。印を外すだけなので、それでもまた断られれば、その同期で1回だけ知らせてまた印が付く。
+    /// 同期の結び付きを書き換える操作なので、Undo には積まない。
+    /// </para>
+    /// </summary>
+    /// <returns>印を外したら true。</returns>
+    public bool RetryEventPush(string id)
+    {
+        if (Events.Find(id) is not { PushRejection: not null } found) return false;
+
+        Events.Upsert(found with { PushRejection = null, PushRejectionFingerprint = null });
+        NotifyChanged();
+        return true;
+    }
+
+    /// <summary>タスク版。<see cref="RetryEventPush"/> と同じ。</summary>
+    public bool RetryTaskPush(string id)
+    {
+        if (Tasks.Find(id) is not { PushRejection: not null } found) return false;
+
+        Tasks.Upsert(found with { PushRejection = null, PushRejectionFingerprint = null });
+        NotifyChanged();
+        return true;
+    }
+
     /// <summary>タスク版。<see cref="RecreateEventOnGoogle"/> と同じ。</summary>
     public bool RecreateTaskOnGoogle(string id)
     {

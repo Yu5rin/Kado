@@ -120,9 +120,27 @@ internal sealed class FakeEventGateway : IEventGateway
         throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
     }
 
+    /// <summary>添付を含む本文を、一時的でない 4xx で断る（ドライブの権限が無い場面）。</summary>
+    public bool RefuseAttachments { get; set; }
+
+    private void ThrowIfAttachmentsRefused(JsonObject body)
+    {
+        if (RefuseAttachments && body["attachments"] is JsonArray { Count: > 0 })
+        {
+            throw new GoogleApiException(
+                HttpStatusCode.Forbidden, "forbidden",
+                """{"error":{"message":"The user does not have sufficient permissions for this file."}}""");
+        }
+    }
+
+    private static GoogleApiException InvalidTime(string key) =>
+        new(HttpStatusCode.BadRequest, "invalid",
+            "{\"error\":{\"message\":\"Invalid " + key + " time.\"}}");
+
     public Task<JsonElement> InsertAsync(string calendarId, JsonObject body, CancellationToken cancellationToken)
     {
         ThrowIfWriteFails();
+        ThrowIfAttachmentsRefused(body);
 
         var id = $"g{_nextId++}";
         var stored = body.DeepClone().AsObject();
@@ -144,8 +162,35 @@ internal sealed class FakeEventGateway : IEventGateway
             throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
         }
 
-        // patch なので、本文にある項目だけを当てる
-        foreach (var pair in body) stored[pair.Key] = pair.Value?.DeepClone();
+        ThrowIfAttachmentsRefused(body);
+
+        // patch なので、本文にある項目だけを当てる。start / end は入れ子の項目を混ぜ合わせる
+        // （本物の Google と同じ。null を送った項目は消える）
+        foreach (var pair in body)
+        {
+            if (pair.Key is "start" or "end" && pair.Value is JsonObject patch && stored[pair.Key] is JsonObject current)
+            {
+                foreach (var inner in patch)
+                {
+                    if (inner.Value is null) current.Remove(inner.Key);
+                    else current[inner.Key] = inner.Value.DeepClone();
+                }
+
+                continue;
+            }
+
+            stored[pair.Key] = pair.Value?.DeepClone();
+        }
+
+        // 混ぜ合わせた結果、date と dateTime が両方ある開始・終了は、本物の Google が断る
+        foreach (var key in new[] { "start", "end" })
+        {
+            if (stored[key] is JsonObject moment && moment.ContainsKey("date") && moment.ContainsKey("dateTime"))
+            {
+                throw InvalidTime(key);
+            }
+        }
+
         stored["updated"] = "2026-09-19T01:00:00.000Z";
         Touch(eventId);
 

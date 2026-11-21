@@ -86,6 +86,12 @@ public sealed record TaskItem
     /// <summary>送ろうとしたら Google に「無い」と言われた（404）印。理由は <see cref="CalendarEvent.GoogleMissing"/> と同じ。</summary>
     public bool GoogleMissing { get; init; }
 
+    /// <summary>送ろうとしたら Google に断られた（一時的でない 4xx）ときの理由。意味は <see cref="CalendarEvent.PushRejection"/> と同じ。</summary>
+    public string? PushRejection { get; init; }
+
+    /// <summary>断られたときに送ろうとした中身の指紋。意味は <see cref="CalendarEvent.PushRejectionFingerprint"/> と同じ。</summary>
+    public string? PushRejectionFingerprint { get; init; }
+
     /// <summary>取り込み元。</summary>
     public string? Source { get; init; }
 

@@ -92,6 +92,28 @@ public class EventRepositoryTests
     }
 
     [Fact]
+    public void 送れなかった印は予定とタスクで書いて読める()
+    {
+        using var db = TestDatabase.Create();
+        var events = new EventRepository(db.Connection);
+        var tasks = new TaskRepository(db.Connection);
+
+        events.Upsert(Sample("e1", D(2026, 9, 24)));
+        Assert.Null(events.Find("e1")!.PushRejection);
+
+        events.Upsert(events.Find("e1")! with { PushRejection = "invalid — Invalid start time.", PushRejectionFingerprint = "abc" });
+        Assert.Equal("invalid — Invalid start time.", events.Find("e1")!.PushRejection);
+        Assert.Equal("abc", events.Find("e1")!.PushRejectionFingerprint);
+
+        events.Upsert(events.Find("e1")! with { PushRejection = null, PushRejectionFingerprint = null });
+        Assert.Null(events.Find("e1")!.PushRejection);
+
+        tasks.Upsert(new TaskItem { Id = "t1", Title = "集計", PushRejection = "invalid", PushRejectionFingerprint = "def" });
+        Assert.Equal("invalid", tasks.Find("t1")!.PushRejection);
+        Assert.Equal("def", tasks.Find("t1")!.PushRejectionFingerprint);
+    }
+
+    [Fact]
     public void 終日予定は時刻を持たない()
     {
         using var db = TestDatabase.Create();

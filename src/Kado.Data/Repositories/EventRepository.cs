@@ -25,6 +25,7 @@ public sealed class EventRepository(SqliteConnection connection)
         status AS Status, source_title AS SourceTitle, google_raw AS GoogleRaw,
         google_event_id AS GoogleEventId, google_calendar_id AS GoogleCalendarId,
         google_updated AS GoogleUpdated, google_missing AS GoogleMissing,
+        push_rejection AS PushRejection, push_rejection_fingerprint AS PushRejectionFingerprint,
         source AS Source, notify AS Notify, pending_attachments AS PendingAttachments,
         updated_at AS UpdatedAt
         """;
@@ -202,13 +203,13 @@ public sealed class EventRepository(SqliteConnection connection)
                 id, title, date, end_date, start_time, end_time,
                 location, note, color, calendar_id, recurrence, url,
                 status, source_title, google_raw,
-                google_event_id, google_calendar_id, google_updated, google_missing, source, notify,
+                google_event_id, google_calendar_id, google_updated, google_missing, push_rejection, push_rejection_fingerprint, source, notify,
                 pending_attachments, updated_at
             ) VALUES (
                 @Id, @Title, @Date, @EndDate, @StartTime, @EndTime,
                 @Location, @Note, @Color, @CalendarId, @Recurrence, @Url,
                 @Status, @SourceTitle, @GoogleRaw,
-                @GoogleEventId, @GoogleCalendarId, @GoogleUpdated, @GoogleMissing, @Source, @Notify,
+                @GoogleEventId, @GoogleCalendarId, @GoogleUpdated, @GoogleMissing, @PushRejection, @PushRejectionFingerprint, @Source, @Notify,
                 @PendingAttachments, @UpdatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -222,6 +223,8 @@ public sealed class EventRepository(SqliteConnection connection)
                 google_calendar_id = excluded.google_calendar_id,
                 google_updated = excluded.google_updated,
                 google_missing = excluded.google_missing,
+                push_rejection = excluded.push_rejection,
+                push_rejection_fingerprint = excluded.push_rejection_fingerprint,
                 source = excluded.source, notify = excluded.notify,
                 pending_attachments = excluded.pending_attachments,
                 updated_at = excluded.updated_at;

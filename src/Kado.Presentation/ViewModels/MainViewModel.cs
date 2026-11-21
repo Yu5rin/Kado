@@ -3303,6 +3303,7 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
             var saved = _workspace.UpdateEvent(editor.ToModel());
 
             if (saved && editor.RecreateRequested) _workspace.RecreateEventOnGoogle(id);
+            if (saved && editor.RetryPushRequested) _workspace.RetryEventPush(id);
 
             ReportResult(saved, "予定を変更しました", "予定が見つかりませんでした");
             return;
@@ -3400,6 +3401,7 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
             var saved = _workspace.UpdateTask(editor.ToModel(), out var nextRepeatDue, _today, _weekStart);
 
             if (saved && editor.RecreateRequested) _workspace.RecreateTaskOnGoogle(id);
+            if (saved && editor.RetryPushRequested) _workspace.RetryTaskPush(id);
 
             // 編集画面で完了にして保存したときも、繰り返しの次の回が作られる（CalendarWorkspace.UpdateTask）
             if (!saved) ReportFailure("タスクが見つかりませんでした");

@@ -40,6 +40,8 @@ public static class SyncLinks
             GoogleRaw = latest.GoogleRaw,
             GoogleUpdated = latest.GoogleUpdated,
             GoogleMissing = latest.GoogleMissing,
+            PushRejection = latest.PushRejection,
+            PushRejectionFingerprint = latest.PushRejectionFingerprint,
             Status = latest.Status,
             Source = latest.Source,
 
@@ -65,6 +67,8 @@ public static class SyncLinks
             GoogleRaw = latest.GoogleRaw,
             GoogleUpdated = latest.GoogleUpdated,
             GoogleMissing = latest.GoogleMissing,
+            PushRejection = latest.PushRejection,
+            PushRejectionFingerprint = latest.PushRejectionFingerprint,
             Source = latest.Source,
             ParentId = latest.ParentId,
             Position = latest.Position,
@@ -91,6 +95,8 @@ public static class SyncLinks
             GoogleRaw = null,
             GoogleUpdated = null,
             GoogleMissing = false,
+            PushRejection = null,
+            PushRejectionFingerprint = null,
             PendingAttachments = value.PendingAttachments is null && attachments.Count > 0
                 ? EventMapper.ToPendingAttachmentsJson(attachments)
                 : value.PendingAttachments,
@@ -109,6 +115,8 @@ public static class SyncLinks
             GoogleRaw = null,
             GoogleUpdated = null,
             GoogleMissing = false,
+            PushRejection = null,
+            PushRejectionFingerprint = null,
             ParentId = null,
             Position = null,
         };

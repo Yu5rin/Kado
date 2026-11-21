@@ -309,7 +309,12 @@ public sealed class GoogleSyncService(
     {
         try
         {
-            return await work().ConfigureAwait(false);
+            var result = await work().ConfigureAwait(false);
+
+            // 送れなかった予定・タスクの詳細（理由と送ろうとした日時）。後から原因を追えるように残す
+            foreach (var line in result.LogLines) _log.Write(LogArea, line);
+
+            return result;
         }
         catch (GoogleApiException ex) when (IsFatalForRun(ex))
         {

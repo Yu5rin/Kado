@@ -176,6 +176,27 @@ public sealed class TaskEditorViewModel : ObservableObject
         if (IsMissingOnGoogle) RecreateRequested = true;
     }
 
+    /// <summary>
+    /// 送ろうとしたら Google に断られ、中身がそのときから変わっていないタスクか。
+    /// <para>扱いは <see cref="EventEditorViewModel.IsPushRejected"/> と同じ。</para>
+    /// </summary>
+    public bool IsPushRejected => _original is not null && TaskMapper.IsHeldBack(_original);
+
+    /// <summary>送れていないときに、編集画面に出す説明。無ければ null。</summary>
+    public string? PushRejectionMessage => IsPushRejected
+        ? $"このタスクは Google に送れていません：{_original!.PushRejection}。手元にだけ残しています。" +
+          "直して保存すると、次の同期で送り直します。"
+        : null;
+
+    /// <summary>「もう一度送る」を求めて保存したか。</summary>
+    public bool RetryPushRequested { get; private set; }
+
+    /// <summary>「もう一度送る」を選ぶ。印が付いたタスクのときだけ効く。</summary>
+    public void RequestRetryPush()
+    {
+        if (IsPushRejected) RetryPushRequested = true;
+    }
+
     public string HeaderText => IsNew ? "タスクの追加" : "タスクの編集";
 
     /// <summary>
@@ -478,6 +499,8 @@ public sealed class TaskEditorViewModel : ObservableObject
             GoogleUpdated = _original?.GoogleUpdated,
             GoogleRaw = _original?.GoogleRaw,
             GoogleMissing = _original?.GoogleMissing ?? false,
+            PushRejection = _original?.PushRejection,
+            PushRejectionFingerprint = _original?.PushRejectionFingerprint,
             ParentId = _original?.ParentId,
             Position = _original?.Position,
             Source = _original?.Source,

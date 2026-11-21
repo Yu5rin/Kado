@@ -538,20 +538,43 @@ public sealed class TaskSyncEngine(
         var deferred = false;
         var throttled = false;
         var warnings = new List<string>();
+        var logLines = new List<string>();
         var now = _clock.GetUtcNow();
 
         // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む
         //
-        // 「Google 上で見つからない」印が付いたものは送らない（下の catch を見よ）
+        // 「Google 上で見つからない」印が付いたものは送らない（下の catch を見よ）。
+        // 「Google に送れなかった」印が付いていて、中身がそのときから変わっていないものも送らない
+        // （送っても同じ結果になる。知らせたのは印を付けた同期の1回だけ）
         var mine = tasks.All()
             .Where(t => string.Equals(t.TaskListId, localListId, StringComparison.Ordinal))
             .Where(t => !t.GoogleMissing)
+            .Where(t => !TaskMapper.IsHeldBack(t))
             .Where(t => TaskMapper.NeedsPush(t) || NeedsMove(t, taskListId))
             .ToArray();
+
+        // 断られたタスクに印を付け、1回だけ知らせる（EventSyncEngine と同じ）
+        void Reject(TaskItem attempted, string reason, string via)
+        {
+            var title = attempted.Title is { Length: > 0 } text ? text : "(無題)";
+
+            tasks.Upsert((tasks.Find(attempted.Id) ?? attempted) with
+            {
+                PushRejection = reason,
+                PushRejectionFingerprint = TaskMapper.PushFingerprint(attempted),
+            });
+
+            warnings.Add($"Google に送れませんでした（{title}）：{reason}。手元にだけ残しています。直すと送り直します");
+
+            // 題名と期限だけ。メモは書かない
+            logLines.Add($"送れなかったタスク「{title}」（{via}）: 理由={reason} {TaskMapper.DescribeForLog(attempted)}");
+        }
 
         foreach (var value in mine)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var attempted = value;
 
             try
             {
@@ -620,27 +643,47 @@ public sealed class TaskSyncEngine(
                         }
                     }
 
+                    attempted = current;
+
                     if (TaskMapper.NeedsPush(current))
                     {
+                        // 明らかにおかしい中身（不正な期限）は送らず、手元で「送れない」扱いにする
+                        if (TaskMapper.OutgoingProblem(current) is { } problem)
+                        {
+                            Reject(current, problem, "送る前の確認");
+                            continue;
+                        }
+
                         var body = TaskMapper.ToGoogle(current);
 
                         var patched = await gateway
                             .PatchAsync(patchList, googleId, body, cancellationToken)
                             .ConfigureAwait(false);
 
-                        tasks.Upsert(TaskMapper.FromGoogle(patched, patchList, patchLocalList, current, now));
+                        // 送れたので「送れなかった」印は外す
+                        tasks.Upsert(
+                            TaskMapper.FromGoogle(patched, patchList, patchLocalList, current, now)
+                            with { PushRejection = null, PushRejectionFingerprint = null });
                         updated++;
                     }
                 }
                 else
                 {
+                    if (TaskMapper.OutgoingProblem(value) is { } problem)
+                    {
+                        Reject(value, problem, "送る前の確認");
+                        continue;
+                    }
+
                     var body = TaskMapper.ToGoogle(value);
 
                     var inserted = await gateway
                         .InsertAsync(taskListId, body, cancellationToken)
                         .ConfigureAwait(false);
 
-                    tasks.Upsert(TaskMapper.FromGoogle(inserted, taskListId, localListId, value, now));
+                    tasks.Upsert(
+                        TaskMapper.FromGoogle(inserted, taskListId, localListId, value, now)
+                        with { PushRejection = null, PushRejectionFingerprint = null });
                     created++;
                 }
             }
@@ -664,6 +707,12 @@ public sealed class TaskSyncEngine(
                 warnings.Add(SyncReport.BusyWarning);
                 break;
             }
+            catch (GoogleApiException ex) when (ex.IsRejection)
+            {
+                // 中身そのものを断られた。出し直しても同じなので、印を付けて、中身が変わるまで送らない。
+                // 知らせるのはこの同期の1回だけ
+                Reject(attempted, ex.RejectionText, $"{(int)ex.Status}");
+            }
             catch (GoogleApiException ex)
             {
                 // 1件が受け付けられないだけで、そのリストの同期全体を止めない
@@ -684,6 +733,7 @@ public sealed class TaskSyncEngine(
             Deferred = deferred,
             Throttled = throttled,
             Warnings = warnings,
+            LogLines = logLines,
         };
     }
 

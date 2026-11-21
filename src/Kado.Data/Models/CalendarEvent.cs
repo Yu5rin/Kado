@@ -99,6 +99,22 @@ public sealed record CalendarEvent
     /// </summary>
     public bool GoogleMissing { get; init; }
 
+    /// <summary>
+    /// 送ろうとしたら Google に断られた（一時的でない 4xx）ときの理由。断られていなければ null。
+    /// <para>
+    /// 送れないと分かったものを、同期のたびに送り直して警告を出し続けないための印。
+    /// <see cref="PushRejectionFingerprint"/> と組で持つ。中身がそのときから変わらない間は送らず、
+    /// 警告も出さない（知らせるのは印を付けた同期の1回だけ）。
+    /// </para>
+    /// </summary>
+    public string? PushRejection { get; init; }
+
+    /// <summary>
+    /// 断られたときに送ろうとした中身の指紋。いまの中身の指紋と同じなら、送っても同じ結果に
+    /// なるので送らない。違えば（使う人が直したなら）もう一度送る。
+    /// </summary>
+    public string? PushRejectionFingerprint { get; init; }
+
     /// <summary>取り込み元。</summary>
     public string? Source { get; init; }
 

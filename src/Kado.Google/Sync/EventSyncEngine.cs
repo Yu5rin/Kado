@@ -748,6 +748,7 @@ public sealed class EventSyncEngine(
         var deferred = false;
         var throttled = false;
         var warnings = new List<string>();
+        var logLines = new List<string>();
         var now = _clock.GetUtcNow();
 
         // 送る対象は「内容が変わった」ものだけでなく、「入れ先だけを変えた」ものも含む。
@@ -758,14 +759,67 @@ public sealed class EventSyncEngine(
         // DB 側でこのカレンダーの分だけに絞る（EventRepository.ByCalendarId）
         //
         // 「Google 上で見つからない」印が付いたものは送らない（下の catch を見よ）
+        //
+        // 「Google に送れなかった」印が付いていて、中身がそのときから変わっていないものも送らない
+        // （送っても同じ結果になる。知らせたのは印を付けた同期の1回だけ）。中身が変わっていれば送る
         var mine = events.ByCalendarId(localCalendarId)
             .Where(e => !e.GoogleMissing)
+            .Where(e => !EventMapper.IsHeldBack(e))
             .Where(e => EventMapper.NeedsPush(e) || NeedsMove(e, calendarId))
             .ToArray();
+
+        // 断られた予定に印を付け、1回だけ知らせる。印を付ける中身は「送ろうとしたもの」
+        // （同期の途中で編集されても、試していない中身を断られたことにしない）
+        void Reject(CalendarEvent attempted, string reason, string via)
+        {
+            var title = attempted.Title is { Length: > 0 } text ? text : "(無題)";
+
+            events.Upsert((events.Find(attempted.Id) ?? attempted) with
+            {
+                PushRejection = reason,
+                PushRejectionFingerprint = EventMapper.PushFingerprint(attempted),
+            });
+
+            warnings.Add($"Google に送れませんでした（{title}）：{reason}。手元にだけ残しています。直すと送り直します");
+
+            // 題名と日時だけ。メモや場所は書かない
+            logLines.Add(
+                $"送れなかった予定「{title}」（{via}）: 理由={reason} " +
+                EventMapper.DescribeForLog(attempted, EventMapper.CheckOutgoing(attempted).Body));
+        }
+
+        // 添付を付けた本文が断られたとき、添付だけが原因かもしれない（ドライブの権限が無いなど）。
+        // 添付を外して一度だけ送り直す。通れば他の項目は送れているので、添付だけ送れなかったと
+        // 1回だけ知らせる（送り終えた姿を取り込むと指定は空に戻るので、次からは繰り返さない）
+        async Task<JsonElement> SendAsync(
+            CalendarEvent attempted, JsonObject body, Func<JsonObject, Task<JsonElement>> send)
+        {
+            try
+            {
+                return await send(body).ConfigureAwait(false);
+            }
+            catch (GoogleApiException ex) when (ex.IsRejection && body["attachments"] is JsonArray { Count: > 0 })
+            {
+                var withoutAttachments = body.DeepClone().AsObject();
+                withoutAttachments.Remove("attachments");
+
+                var result = await send(withoutAttachments).ConfigureAwait(false);
+
+                var title = attempted.Title is { Length: > 0 } text ? text : "(無題)";
+                warnings.Add(
+                    $"添付だけ Google に送れませんでした（{title}）：{ex.RejectionText}。" +
+                    "ほかの項目は送りました。添付は手元にも残っていません");
+                logLines.Add($"添付だけ送れなかった予定「{title}」: 理由={ex.RejectionText}");
+
+                return result;
+            }
+        }
 
         foreach (var value in mine)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var attempted = value;
 
             try
             {
@@ -840,28 +894,48 @@ public sealed class EventSyncEngine(
                         }
                     }
 
+                    attempted = current;
+
                     if (EventMapper.NeedsPush(current))
                     {
-                        var body = EventMapper.ToGoogle(current);
+                        // 明らかにおかしい中身（不正な日付・開始と終了の形の食い違いなど）は、送らない。
+                        // 送っても断られるだけなので、手元で「送れない」扱いにする
+                        var check = EventMapper.CheckOutgoing(current);
+                        if (check.Problem is { } problem)
+                        {
+                            Reject(current, problem, "送る前の確認");
+                            continue;
+                        }
 
-                        var patched = await gateway
-                            .PatchAsync(patchCalendar, googleId, body, cancellationToken)
+                        var patched = await SendAsync(
+                                current, check.Body!,
+                                b => gateway.PatchAsync(patchCalendar, googleId, b, cancellationToken))
                             .ConfigureAwait(false);
 
-                        // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため
-                        events.Upsert(EventMapper.FromGoogle(patched, patchLocalCalendar, current, now, patchCalendar));
+                        // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため。
+                        // 送れたので「送れなかった」印は外す
+                        events.Upsert(
+                            EventMapper.FromGoogle(patched, patchLocalCalendar, current, now, patchCalendar)
+                            with { PushRejection = null, PushRejectionFingerprint = null });
                         updated++;
                     }
                 }
                 else
                 {
-                    var body = EventMapper.ToGoogle(value);
+                    var check = EventMapper.CheckOutgoing(value);
+                    if (check.Problem is { } problem)
+                    {
+                        Reject(value, problem, "送る前の確認");
+                        continue;
+                    }
 
-                    var inserted = await gateway
-                        .InsertAsync(calendarId, body, cancellationToken)
+                    var inserted = await SendAsync(
+                            value, check.Body!, b => gateway.InsertAsync(calendarId, b, cancellationToken))
                         .ConfigureAwait(false);
 
-                    events.Upsert(EventMapper.FromGoogle(inserted, localCalendarId, value, now, calendarId));
+                    events.Upsert(
+                        EventMapper.FromGoogle(inserted, localCalendarId, value, now, calendarId)
+                        with { PushRejection = null, PushRejectionFingerprint = null });
                     created++;
                 }
             }
@@ -890,6 +964,13 @@ public sealed class EventSyncEngine(
                 warnings.Add(SyncReport.BusyWarning);
                 break;
             }
+            catch (GoogleApiException ex) when (ex.IsRejection)
+            {
+                // 中身そのものを断られた（invalid・forbidden など）。出し直しても同じなので、
+                // 印を付けて、中身が変わるまで送らない。知らせるのはこの同期の1回だけ
+                // （以前は同期のたびに送り直して、毎回「送れませんでした」と出していた）
+                Reject(attempted, ex.RejectionText, $"{(int)ex.Status}");
+            }
             catch (GoogleApiException ex)
             {
                 // 1件が受け付けられないだけで、そのカレンダーの同期全体を止めない。
@@ -909,6 +990,7 @@ public sealed class EventSyncEngine(
             Deferred = deferred,
             Throttled = throttled,
             Warnings = warnings,
+            LogLines = logLines,
         };
     }
 
