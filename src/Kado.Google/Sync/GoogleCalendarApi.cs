@@ -70,7 +70,7 @@ public sealed class GoogleCalendarApi(
         CancellationToken cancellationToken = default)
     {
         var query = new StringBuilder($"{Root}/calendars/{Uri.EscapeDataString(calendarId)}/events");
-        query.Append("?maxResults=250&singleEvents=false");
+        query.Append("?maxResults=2500&singleEvents=false");
 
         if (syncToken is { Length: > 0 })
         {
@@ -243,7 +243,10 @@ public sealed class GoogleCalendarApi(
 
     /// <summary>
     /// イベントを消す。
-    /// <para>すでに無ければ成功として扱う。消したいのだから、無いのは望む状態。</para>
+    /// <para>
+    /// 404・410 は飲み込まず、そのまま例外にして投げる。同期側が「持ち主の分からない削除記録は、
+    /// 別のカレンダーのものかもしれないので残す」と見分けるのに、どのカレンダーで無かったのかが要る。
+    /// </para>
     /// </summary>
     public async Task DeleteEventAsync(
         string calendarId, string eventId, CancellationToken cancellationToken = default)
@@ -252,8 +255,6 @@ public sealed class GoogleCalendarApi(
 
         using var response = await SendRawAsync(
             () => new HttpRequestMessage(HttpMethod.Delete, url), cancellationToken).ConfigureAwait(false);
-
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) return;
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
     }

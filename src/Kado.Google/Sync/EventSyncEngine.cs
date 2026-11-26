@@ -187,7 +187,7 @@ public sealed class EventSyncEngine(
                     $"権限が無いため、Google 側の予定を削除できません（{tombstone.Id}）: {ex.Reason}。" +
                     "手元からは消えていますが、Google には残っています");
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsTransient || ex.IsQuotaExceeded)
             {
                 // 呼びすぎ・Google の不調。通信の層で待って出し直したあとなので、続けても同じ結果に
                 // なりやすい。残りの削除の記録は残したまま止め、次回に回す
@@ -371,7 +371,8 @@ public sealed class EventSyncEngine(
         // 予定を消してしまう
         if (fullListing && complete)
         {
-            deleted += RemoveVanished(calendarId, localCalendarId, items, warnings);
+            deleted += await RemoveVanishedAsync(calendarId, localCalendarId, items, warnings, now, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // 一覧を最後まで読めなかったとき（件数が上限のページ数を超えた）は、印を進めない。
@@ -572,8 +573,9 @@ public sealed class EventSyncEngine(
     /// </para>
     /// </summary>
     /// <returns>手元から消した件数。</returns>
-    private int RemoveVanished(
-        string calendarId, string localCalendarId, List<JsonElement> listed, List<string> warnings)
+    private async Task<int> RemoveVanishedAsync(
+        string calendarId, string localCalendarId, List<JsonElement> listed, List<string> warnings,
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         var listedIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in listed)
@@ -592,8 +594,20 @@ public sealed class EventSyncEngine(
             if (!LivesIn(value, calendarId, localCalendarId)) continue;
             if (!IsWithinListedRange(value, from)) continue;
 
+            // 移す指示（手元で割り当てた入れ先が、いま Google 上にいるカレンダーと違う）を出していた行は、
+            // 一覧に無いだけで消さない。移しは Google で通っていて、移し先にあるのかもしれない。
+            // 移し先に確かにあれば、移動は済んでいたものとして場所だけ直す
+            var wantsMove = WantsMoveFrom(value, calendarId, localCalendarId);
+
+            if (wantsMove &&
+                await IsAlreadyMovedAsync(value, cancellationToken).ConfigureAwait(false))
+            {
+                events.Upsert(value with { GoogleCalendarId = value.CalendarId, UpdatedAt = now });
+                continue;
+            }
+
             // 未送信の変更（内容・添付・別のカレンダーへ移す指示）があるなら、捨てない
-            if (HasUnsentChanges(value) || NeedsMove(value, calendarId))
+            if (HasUnsentChanges(value) || wantsMove)
             {
                 events.Upsert(value with { GoogleMissing = true });
                 kept.Add(value.Title is { Length: > 0 } title ? title : "(無題)");
@@ -616,6 +630,18 @@ public sealed class EventSyncEngine(
 
         return removed;
     }
+
+    /// <summary>
+    /// このカレンダー（Google 側 <paramref name="calendarId"/>）にいる行に、別のカレンダーへ移す指示が
+    /// 出ているか。手元で割り当てた入れ先（<see cref="CalendarEvent.CalendarId"/>）が、
+    /// いまこのカレンダーに対応するこちらの ID（<paramref name="localCalendarId"/>）と違うとき true。
+    /// </summary>
+    private static bool WantsMoveFrom(CalendarEvent value, string calendarId, string localCalendarId) =>
+        value.GoogleEventId is { Length: > 0 } &&
+        value.GoogleCalendarId is { Length: > 0 } actual &&
+        string.Equals(actual, calendarId, StringComparison.Ordinal) &&
+        value.CalendarId is { Length: > 0 } wanted &&
+        !string.Equals(wanted, localCalendarId, StringComparison.Ordinal);
 
     /// <summary>
     /// Google 側でいま実際にこのカレンダーにある予定か。
@@ -733,7 +759,36 @@ public sealed class EventSyncEngine(
                 string.Equals(e.CalendarId, localCalendarId, StringComparison.Ordinal) &&
                 string.Equals(e.Title, incoming.Title, StringComparison.Ordinal) &&
                 e.Date == incoming.Date &&
-                e.StartTime == incoming.StartTime);
+                e.StartTime == incoming.StartTime &&
+                // 題・日付・開始時刻が同じだけでは「同じもの」と言い切れない。メモ・場所・終了が
+                // 食い違うなら別物として扱う（引き受けると、手元の中身を警告なしで捨てる）
+                SameText(e.Note, incoming.Note) &&
+                SameText(e.Location, incoming.Location) &&
+                SameEnd(e, incoming));
+
+    /// <summary>「無い」と「空」を同じものとして、文字を比べる。</summary>
+    private static bool SameText(string? left, string? right) =>
+        string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 終わりが同じか。手元の予定は、終了時刻が無い・開始以前のとき、送るときに開始の1時間後へ
+    /// 補われる（<see cref="EventMapper.ToGoogle"/>）ので、その形に直してから比べる。
+    /// </summary>
+    private static bool SameEnd(CalendarEvent local, CalendarEvent incoming)
+    {
+        if (local.IsAllDay != incoming.IsAllDay) return false;
+        if (local.IsAllDay) return local.LastDate == incoming.LastDate;
+
+        return SentEnd(local) == SentEnd(incoming);
+    }
+
+    private static DateTime SentEnd(CalendarEvent value)
+    {
+        var start = value.Date.ToDateTime(value.StartTime!.Value);
+        var end = value.EndTime is { } time ? (value.EndDate ?? value.Date).ToDateTime(time) : start.AddHours(1);
+
+        return end <= start ? start.AddHours(1) : end;
+    }
 
     // ------------------------------------------------------------------
     // 送る
@@ -786,6 +841,46 @@ public sealed class EventSyncEngine(
             logLines.Add(
                 $"送れなかった予定「{title}」（{via}）: 理由={reason} " +
                 EventMapper.DescribeForLog(attempted, EventMapper.CheckOutgoing(attempted).Body));
+        }
+
+        // 送れた応答を手元に書く。送信の最中に使う人が保存した編集を、応答の古い中身で潰さない。
+        // 書く直前に読み直し、送ったものから中身が変わっていれば、Google との結び付きの項目だけを書く
+        // （手元の新しい中身は残り、次回の同期で送る）。送っている間に手元で消された行は復活させない
+        void StoreSent(CalendarEvent sent, JsonElement response, string storeLocalCalendarId, string storeGoogleCalendarId)
+        {
+            var fresh = events.Find(sent.Id);
+
+            if (fresh is null)
+            {
+                // 新規として送った行が、送っている間に消された。Google にだけ残った写しを、
+                // 次の同期で消せるよう、削除の記録を残す
+                if (sent.GoogleEventId is null && GoogleJson.Text(response, "id") is { Length: > 0 } orphanId)
+                {
+                    tombstones.Record(sent.Id, TombstoneRepository.EventKind, orphanId, now, calendarId);
+                }
+
+                return;
+            }
+
+            if (string.Equals(EventMapper.PushFingerprint(fresh), EventMapper.PushFingerprint(sent), StringComparison.Ordinal))
+            {
+                // 中身は送ったとおり。手元だけの項目（通知・色）は読み直した行から引き継ぐ。
+                // 送れたので「送れなかった」印は外す
+                events.Upsert(
+                    EventMapper.FromGoogle(response, storeLocalCalendarId, fresh, now, storeGoogleCalendarId)
+                    with { PushRejection = null, PushRejectionFingerprint = null });
+                return;
+            }
+
+            var received = EventMapper.FromGoogle(response, storeLocalCalendarId, sent, now, storeGoogleCalendarId);
+
+            events.Upsert(fresh with
+            {
+                GoogleEventId = received.GoogleEventId,
+                GoogleCalendarId = received.GoogleCalendarId,
+                GoogleRaw = received.GoogleRaw,
+                GoogleUpdated = received.GoogleUpdated,
+            });
         }
 
         // 添付を付けた本文が断られたとき、添付だけが原因かもしれない（ドライブの権限が無いなど）。
@@ -867,7 +962,8 @@ public sealed class EventSyncEngine(
                             // 内容の変更（このあと patch で送るはずのもの）を上書きしてしまうので、
                             // 場所に関する項目だけを取り込む
                             var atDestination = EventMapper.FromGoogle(moved1, localCalendarId, current, now, calendarId);
-                            current = current with
+                            // 読み直した行に書く。移している間に保存された編集を潰さない
+                            current = (events.Find(value.Id) ?? current) with
                             {
                                 GoogleEventId = atDestination.GoogleEventId,
                                 GoogleCalendarId = atDestination.GoogleCalendarId,
@@ -882,7 +978,7 @@ public sealed class EventSyncEngine(
                         }
                         else
                         {
-                            current = current with { CalendarId = origin, UpdatedAt = now };
+                            current = (events.Find(value.Id) ?? current) with { CalendarId = origin, UpdatedAt = now };
                             events.Upsert(current);
                             patchCalendar = origin;
                             patchLocalCalendar = origin;
@@ -912,11 +1008,8 @@ public sealed class EventSyncEngine(
                                 b => gateway.PatchAsync(patchCalendar, googleId, b, cancellationToken))
                             .ConfigureAwait(false);
 
-                        // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため。
-                        // 送れたので「送れなかった」印は外す
-                        events.Upsert(
-                            EventMapper.FromGoogle(patched, patchLocalCalendar, current, now, patchCalendar)
-                            with { PushRejection = null, PushRejectionFingerprint = null });
+                        // 応答をそのまま控える。次の同期で「変わった」と誤判定しないため
+                        StoreSent(current, patched, patchLocalCalendar, patchCalendar);
                         updated++;
                     }
                 }
@@ -933,9 +1026,7 @@ public sealed class EventSyncEngine(
                             value, check.Body!, b => gateway.InsertAsync(calendarId, b, cancellationToken))
                         .ConfigureAwait(false);
 
-                    events.Upsert(
-                        EventMapper.FromGoogle(inserted, localCalendarId, value, now, calendarId)
-                        with { PushRejection = null, PushRejectionFingerprint = null });
+                    StoreSent(value, inserted, localCalendarId, calendarId);
                     created++;
                 }
             }
@@ -954,7 +1045,7 @@ public sealed class EventSyncEngine(
                     $"Google 上で見つからないため送りません（{value.Title}）。" +
                     "編集画面から「Google に新しく作り直す」を選べます");
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsTransient || ex.IsQuotaExceeded)
             {
                 // 呼びすぎ・Google の不調。通信の層で待って出し直したあとなので、続けても同じ結果に
                 // なりやすい（1件ずつ叩き続けると、かえって混む）。残りは次回に回す。

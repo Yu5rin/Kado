@@ -1,3 +1,4 @@
+using Kado.Core;
 using System.Globalization;
 
 namespace Kado.Google.Mapping;
@@ -402,6 +403,18 @@ public static class RecurrenceConverter
     private static string? DatePart(string value)
     {
         var text = value.Trim();
+
+        // 末尾 Z は UTC の時刻。UTC の日付のまま使うと、日本では前日の9時より前の回で1日ずれる。
+        // この PC の時刻に直してから日付を取る（Google へ送り返す行は元の文字列のままで、ここでは変えない）
+        if (text.EndsWith('Z') &&
+            DateTimeOffset.TryParseExact(
+                text, ["yyyyMMdd'T'HHmmss'Z'", "yyyyMMdd'T'HHmm'Z'"], CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var utc))
+        {
+            var local = TimeZoneInfo.ConvertTime(utc, LocalZone.Current);
+            return local.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
         if (text.Length >= 8 && DateOnly.TryParseExact(
                 text[..8], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
         {

@@ -678,12 +678,12 @@ public static class EventMapper
             return new OutgoingCheck(null, $"日時を Google の形に直せません（{ex.GetType().Name}）");
         }
 
-        return new OutgoingCheck(body, ShapeProblem(body));
+        return new OutgoingCheck(body, ShapeProblem(body, KeepsReceivedZeroLengthEnd(value, ParseReceived(value))));
     }
 
     private static bool SendableYear(int year) => year is >= MinSendableYear and <= MaxSendableYear;
 
-    private static string? ShapeProblem(JsonObject body)
+    private static string? ShapeProblem(JsonObject body, bool allowZeroLength = false)
     {
         if (body["start"] is not JsonObject start || body["end"] is not JsonObject end)
         {
@@ -715,6 +715,9 @@ public static class EventMapper
         var begin = ParseDateTime(startMoment);
         var finish = ParseDateTime(endMoment);
         if (begin is null || finish is null) return "日時が読めません";
+
+        // 受け取ったままの長さ 0 の終了は、こちらで作ったものではないので断らない
+        if (allowZeroLength && finish.Value == begin.Value) return null;
 
         return finish.Value <= begin.Value ? "終了が開始以前です" : null;
     }
@@ -950,6 +953,10 @@ public static class EventMapper
         if (toAllDay)
         {
             if (Text(received, "dateTime") is not null) node["dateTime"] = null;
+
+            // 時刻つきの timeZone が残ると、終日の開始・終了に時間帯だけが居座る。
+            // JSON の null を明示して消す
+            if (Text(received, "timeZone") is not null) node["timeZone"] = null;
         }
         else if (Text(received, "date") is not null)
         {
@@ -980,6 +987,13 @@ public static class EventMapper
                 new JsonObject { ["date"] = Format(value.LastDate.AddDays(1)) }, original, "end", toAllDay: true);
         }
 
+        // Google から受け取った終了が開始と同じ（長さ 0）で、使う人が時刻を変えていないなら、
+        // 補正せず受け取った終了をそのまま使う。補正すると、編集していないのに終了を動かして送ってしまう
+        if (KeepsReceivedZeroLengthEnd(value, original) && original?["end"] is JsonObject receivedEnd)
+        {
+            return receivedEnd.DeepClone().AsObject();
+        }
+
         var startAt = value.Date.ToDateTime(value.StartTime!.Value, DateTimeKind.Unspecified);
 
         var endAt = value.EndTime is { } endTime
@@ -990,6 +1004,32 @@ public static class EventMapper
 
         return DropOtherForm(
             WriteMoment(endAt, OriginalTimeZoneId(original, "end")), original, "end", toAllDay: false);
+    }
+
+    /// <summary>
+    /// 受け取った終了が開始と同じ時刻（長さ 0）で、手元の日付・時刻がそこから変わっていないか。
+    /// <para>
+    /// 補正（開始+1時間）は、新規と、使う人が時刻を変えたときだけ。取り込んだままのものは対象にしない。
+    /// </para>
+    /// </summary>
+    private static bool KeepsReceivedZeroLengthEnd(CalendarEvent value, JsonObject? original)
+    {
+        if (value.IsAllDay || value.StartTime is null) return false;
+        if (original?["start"] is not JsonObject receivedStart || original["end"] is not JsonObject receivedEnd) return false;
+
+        var begin = ParseDateTime(Text(receivedStart, "dateTime"));
+        var finish = ParseDateTime(Text(receivedEnd, "dateTime"));
+        if (begin is null || finish is null || begin.Value != finish.Value) return false;
+
+        // 受け取った姿を読み直した値と、手元の値が同じなら、時刻は触られていない
+        using var document = JsonDocument.Parse(original.ToJsonString());
+        var (date, startTime) = ReadStart(document.RootElement.Child("start"));
+        var (endDate, endTime) = ReadEnd(document.RootElement.Child("end"), date, startTime is not null);
+
+        return value.Date == date &&
+               value.StartTime == startTime &&
+               value.EndTime == endTime &&
+               value.EndDate == endDate;
     }
 
     /// <summary>

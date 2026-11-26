@@ -101,11 +101,23 @@ public class GoogleTasksApiTests
     }
 
     [Fact]
-    public async Task すでに無いものを消しても成功にする()
+    public async Task すでに無いものを消すと404を例外として投げる()
     {
         var (api, _) = Create(_ => (HttpStatusCode.NotFound, """{"error":{"code":404}}"""));
 
-        await api.DeleteTaskAsync("@default", "kieta");
+        var error = await Assert.ThrowsAsync<GoogleApiException>(() => api.DeleteTaskAsync("@default", "kieta"));
+
+        Assert.True(error.IsMissing);
+    }
+
+    [Fact]
+    public async Task 消したタスクをもう一度消すと410を例外として投げる()
+    {
+        var (api, _) = Create(_ => (HttpStatusCode.Gone, """{"error":{"code":410}}"""));
+
+        var error = await Assert.ThrowsAsync<GoogleApiException>(() => api.DeleteTaskAsync("@default", "kieta"));
+
+        Assert.Equal(HttpStatusCode.Gone, error.Status);
     }
 
     [Fact]

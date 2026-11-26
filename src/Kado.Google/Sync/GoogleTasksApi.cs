@@ -123,7 +123,13 @@ public sealed class GoogleTasksApi(
         return await SendAsync(HttpMethod.Post, url, new JsonObject(), cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>タスクを消す。すでに無ければ成功として扱う。</summary>
+    /// <summary>
+    /// タスクを消す。
+    /// <para>
+    /// 404・410 は飲み込まず、そのまま例外にして投げる。同期側が「持ち主の分からない削除記録は、
+    /// 別のカレンダーのものかもしれないので残す」と見分けるのに、どのカレンダーで無かったのかが要る。
+    /// </para>
+    /// </summary>
     public async Task DeleteTaskAsync(
         string taskListId, string taskId, CancellationToken cancellationToken = default)
     {
@@ -131,8 +137,6 @@ public sealed class GoogleTasksApi(
 
         using var response = await SendRawAsync(
             () => new HttpRequestMessage(HttpMethod.Delete, url), cancellationToken).ConfigureAwait(false);
-
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) return;
 
         await EnsureOkAsync(response, cancellationToken).ConfigureAwait(false);
     }

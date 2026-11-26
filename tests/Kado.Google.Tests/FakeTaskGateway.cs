@@ -34,6 +34,9 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
     /// <summary>書き込み（作成・書き換え・削除・移動）を試みた回数。失敗したものも数える。</summary>
     public int WriteAttempts { get; private set; }
 
+    /// <summary>作成・書き換えを受け付けたあと、応答を返す前に呼ぶ。送信中に使う人が保存した場面を作る。</summary>
+    public Action? AfterWrite { get; set; }
+
     private void ThrowIfWriteFails()
     {
         WriteAttempts++;
@@ -88,7 +91,10 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
         Items[id] = stored;
         Touch(id);
 
-        return Task.FromResult(Parse(stored));
+        var response = Parse(stored);
+        AfterWrite?.Invoke();
+
+        return Task.FromResult(response);
     }
 
     public Task<JsonElement> PatchAsync(
@@ -105,12 +111,18 @@ internal sealed class FakeTaskGateway(ManualClock clock) : ITaskGateway
         stored["updated"] = Now.ToString("O");
         Touch(taskId);
 
-        return Task.FromResult(Parse(stored));
+        var response = Parse(stored);
+        AfterWrite?.Invoke();
+
+        return Task.FromResult(response);
     }
 
     public Task DeleteAsync(string taskListId, string taskId, CancellationToken cancellationToken)
     {
         ThrowIfWriteFails();
+
+        // 本物と同じく、無いものを消そうとすると 404 を返す
+        if (!Items.ContainsKey(taskId)) throw new GoogleApiException(HttpStatusCode.NotFound, "notFound");
 
         Deleted.Add(taskId);
         Items.Remove(taskId);

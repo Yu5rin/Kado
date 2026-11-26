@@ -165,12 +165,34 @@ public class GoogleCalendarApiTests
     }
 
     [Fact]
-    public async Task すでに無いものを消しても成功にする()
+    public async Task すでに無いものを消すと404を例外として投げる()
     {
         var (api, _) = Create(_ => (HttpStatusCode.NotFound, """{"error":{"code":404}}"""));
 
-        // 消したいのだから、無いのは望む状態
-        await api.DeleteEventAsync("primary", "kieta");
+        // 飲み込まない。どのカレンダーで無かったのかを、同期側が見分けるのに要る
+        var error = await Assert.ThrowsAsync<GoogleApiException>(() => api.DeleteEventAsync("primary", "kieta"));
+
+        Assert.True(error.IsMissing);
+    }
+
+    [Fact]
+    public async Task 消した予定をもう一度消すと410を例外として投げる()
+    {
+        var (api, _) = Create(_ => (HttpStatusCode.Gone, """{"error":{"code":410}}"""));
+
+        var error = await Assert.ThrowsAsync<GoogleApiException>(() => api.DeleteEventAsync("primary", "kieta"));
+
+        Assert.Equal(HttpStatusCode.Gone, error.Status);
+    }
+
+    [Fact]
+    public async Task 予定の一覧は1ページ2500件で頼む()
+    {
+        var (api, seen) = Create(_ => (HttpStatusCode.OK, """{"items":[]}"""));
+
+        await api.ListEventsAsync("primary");
+
+        Assert.Contains("maxResults=2500", seen[0].RequestUri!.Query, StringComparison.Ordinal);
     }
 
     [Fact]

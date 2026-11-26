@@ -97,7 +97,15 @@ public sealed class GoogleApiException(
     public bool IsPermissionDenied =>
         Status == HttpStatusCode.Forbidden &&
         !IsRateLimited &&
-        !Reason.Contains("uota", StringComparison.Ordinal);
+        !IsQuotaExceeded;
+
+    /// <summary>
+    /// 容量・回数の上限で断られた（403 の quotaExceeded など）。送った中身のせいではない。
+    /// <para>中身を断られたのではないので、印は付けない。その回の送信は打ち切り、次回に回す。</para>
+    /// </summary>
+    public bool IsQuotaExceeded =>
+        Status == HttpStatusCode.Forbidden &&
+        Reason.Contains("uota", StringComparison.Ordinal);
 
     /// <summary>
     /// 送った中身そのものを断られた（一時的でない 4xx）。出し直しても同じ結果になる。
@@ -109,7 +117,7 @@ public sealed class GoogleApiException(
     /// </summary>
     public bool IsRejection =>
         (int)Status is >= 400 and < 500 &&
-        !IsMissing && !IsTransient && !IsUnauthorized && !IsProxyAuthRequired &&
+        !IsMissing && !IsTransient && !IsQuotaExceeded && !IsUnauthorized && !IsProxyAuthRequired &&
         Status is not (HttpStatusCode.RequestTimeout or HttpStatusCode.Gone);
 
     /// <summary>断られた理由を、画面と印に出す1つの文にする（理由と、Google の説明）。</summary>

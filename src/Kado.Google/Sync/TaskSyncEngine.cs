@@ -166,7 +166,7 @@ public sealed class TaskSyncEngine(
                     $"権限が無いため、Google 側のタスクを削除できません（{tombstone.Id}）: {ex.Reason}。" +
                     "手元からは消えていますが、Google には残っています");
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsTransient || ex.IsQuotaExceeded)
             {
                 // 呼びすぎ・Google の不調。待って出し直したあとなので、残りは次回に回す
                 deferred = true;
@@ -287,7 +287,8 @@ public sealed class TaskSyncEngine(
         // 一覧を最後まで読めたときだけ行う
         if (since is null && complete)
         {
-            deleted += RemoveVanished(taskListId, localListId, items, warnings);
+            deleted += await RemoveVanishedAsync(taskListId, localListId, items, warnings, now, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // 読む上限のページ数で打ち切ったときは、印を進めない。進めると、取り込みきれなかった分は
@@ -459,8 +460,9 @@ public sealed class TaskSyncEngine(
     /// <para>考え方は <c>EventSyncEngine.RemoveVanished</c> と同じ（理由もそちらを見よ）。</para>
     /// </summary>
     /// <returns>手元から消した件数。</returns>
-    private int RemoveVanished(
-        string taskListId, string localListId, List<JsonElement> listed, List<string> warnings)
+    private async Task<int> RemoveVanishedAsync(
+        string taskListId, string localListId, List<JsonElement> listed, List<string> warnings,
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         var listedIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in listed)
@@ -481,7 +483,21 @@ public sealed class TaskSyncEngine(
                 : string.Equals(value.TaskListId, localListId, StringComparison.Ordinal);
             if (!lives) continue;
 
-            if (TaskMapper.NeedsPush(value) || NeedsMove(value, taskListId))
+            // 移す指示（手元で割り当てた入れ先が、いま Google 上にいるリストと違う）を出していた行は、
+            // 一覧に無いだけで消さない（EventSyncEngine と同じ理由）。移し先に確かにあれば、
+            // 移動は済んでいたものとして場所だけ直す
+            var wantsMove = value.GoogleTaskListId is { Length: > 0 } &&
+                            value.TaskListId is { Length: > 0 } wanted &&
+                            !string.Equals(wanted, localListId, StringComparison.Ordinal);
+
+            if (wantsMove &&
+                await IsAlreadyMovedAsync(value, cancellationToken).ConfigureAwait(false))
+            {
+                tasks.Upsert(value with { GoogleTaskListId = value.TaskListId, UpdatedAt = now });
+                continue;
+            }
+
+            if (TaskMapper.NeedsPush(value) || wantsMove)
             {
                 tasks.Upsert(value with { GoogleMissing = true });
                 kept.Add(value.Title is { Length: > 0 } title ? title : "(無題)");
@@ -527,7 +543,11 @@ public sealed class TaskSyncEngine(
                 t.GoogleTaskId is null &&
                 string.Equals(t.TaskListId, localListId, StringComparison.Ordinal) &&
                 string.Equals(t.Title, incoming.Title, StringComparison.Ordinal) &&
-                t.Due == incoming.Due);
+                t.Due == incoming.Due &&
+                // 題・期限が同じだけでは「同じもの」と言い切れない。メモや完了が食い違うなら別物として
+                // 扱う（引き受けると、手元の中身を警告なしで捨てる）
+                string.Equals(t.Note ?? string.Empty, incoming.Note ?? string.Empty, StringComparison.Ordinal) &&
+                t.IsDone == incoming.IsDone);
 
     private async Task<SyncReport> PushChangesAsync(
         string taskListId, string localListId, CancellationToken cancellationToken)
@@ -568,6 +588,45 @@ public sealed class TaskSyncEngine(
 
             // 題名と期限だけ。メモは書かない
             logLines.Add($"送れなかったタスク「{title}」（{via}）: 理由={reason} {TaskMapper.DescribeForLog(attempted)}");
+        }
+
+        // 送れた応答を手元に書く（EventSyncEngine と同じ理由）。送信の最中に使う人が保存した編集を、
+        // 応答の古い中身で潰さない。書く直前に読み直し、送ったものから中身が変わっていれば、
+        // Google との結び付きの項目だけを書く。送っている間に手元で消された行は復活させない
+        void StoreSent(TaskItem sent, JsonElement response, string storeListId, string storeLocalListId)
+        {
+            var fresh = tasks.Find(sent.Id);
+
+            if (fresh is null)
+            {
+                // 新規として送った行が、送っている間に消された。Google にだけ残った写しを、
+                // 次の同期で消せるよう、削除の記録を残す
+                if (sent.GoogleTaskId is null && GoogleJson.Text(response, "id") is { Length: > 0 } orphanId)
+                {
+                    tombstones.Record(sent.Id, TombstoneRepository.TaskKind, orphanId, now, taskListId);
+                }
+
+                return;
+            }
+
+            if (string.Equals(TaskMapper.PushFingerprint(fresh), TaskMapper.PushFingerprint(sent), StringComparison.Ordinal))
+            {
+                // 中身は送ったとおり。送れたので「送れなかった」印は外す
+                tasks.Upsert(
+                    TaskMapper.FromGoogle(response, storeListId, storeLocalListId, fresh, now)
+                    with { PushRejection = null, PushRejectionFingerprint = null });
+                return;
+            }
+
+            var received = TaskMapper.FromGoogle(response, storeListId, storeLocalListId, sent, now);
+
+            tasks.Upsert(fresh with
+            {
+                GoogleTaskId = received.GoogleTaskId,
+                GoogleTaskListId = received.GoogleTaskListId,
+                GoogleRaw = received.GoogleRaw,
+                GoogleUpdated = received.GoogleUpdated,
+            });
         }
 
         foreach (var value in mine)
@@ -618,7 +677,8 @@ public sealed class TaskSyncEngine(
                             // FromGoogle に通すと、まだ送れていない内容の変更を上書きしてしまう
                             // ので、場所に関する項目だけを取り込む（EventSyncEngine と同じ理由）
                             var atDestination = TaskMapper.FromGoogle(moved1, taskListId, localListId, current, now);
-                            current = current with
+                            // 読み直した行に書く。移している間に保存された編集を潰さない
+                            current = (tasks.Find(value.Id) ?? current) with
                             {
                                 GoogleTaskId = atDestination.GoogleTaskId,
                                 GoogleTaskListId = atDestination.GoogleTaskListId,
@@ -631,7 +691,7 @@ public sealed class TaskSyncEngine(
                         }
                         else
                         {
-                            current = current with { TaskListId = origin, UpdatedAt = now };
+                            current = (tasks.Find(value.Id) ?? current) with { TaskListId = origin, UpdatedAt = now };
                             tasks.Upsert(current);
                             patchList = origin;
                             patchLocalList = origin;
@@ -660,10 +720,7 @@ public sealed class TaskSyncEngine(
                             .PatchAsync(patchList, googleId, body, cancellationToken)
                             .ConfigureAwait(false);
 
-                        // 送れたので「送れなかった」印は外す
-                        tasks.Upsert(
-                            TaskMapper.FromGoogle(patched, patchList, patchLocalList, current, now)
-                            with { PushRejection = null, PushRejectionFingerprint = null });
+                        StoreSent(current, patched, patchList, patchLocalList);
                         updated++;
                     }
                 }
@@ -681,9 +738,7 @@ public sealed class TaskSyncEngine(
                         .InsertAsync(taskListId, body, cancellationToken)
                         .ConfigureAwait(false);
 
-                    tasks.Upsert(
-                        TaskMapper.FromGoogle(inserted, taskListId, localListId, value, now)
-                        with { PushRejection = null, PushRejectionFingerprint = null });
+                    StoreSent(value, inserted, taskListId, localListId);
                     created++;
                 }
             }
@@ -698,7 +753,7 @@ public sealed class TaskSyncEngine(
                     $"Google 上で見つからないため送りません（{value.Title}）。" +
                     "編集画面から「Google に新しく作り直す」を選べます");
             }
-            catch (GoogleApiException ex) when (ex.IsTransient)
+            catch (GoogleApiException ex) when (ex.IsTransient || ex.IsQuotaExceeded)
             {
                 // 呼びすぎ・Google の不調。待って出し直したあとなので、残りは次回に回す
                 // （EventSyncEngine と同じ。送れていないものは、次の同期でまた送る）
