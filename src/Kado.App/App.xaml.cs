@@ -1073,7 +1073,7 @@ public partial class App : Application
 
         if (MainWindow?.DataContext is MainViewModel main)
         {
-            main.AnnounceStatus($"新しい版 {info.TagName} があります。⚙メニューの「更新を確認…」から更新できます");
+            main.AnnounceStatus($"新しい版 {info.TagName} があります。メニュー（右上の歯車）の「更新を確認…」から更新できます");
         }
 
         _balloonTarget = BalloonTarget.UpdateAvailable;
@@ -1137,7 +1137,7 @@ public partial class App : Application
     /// 隠れている窓を前に出す。
     /// <para>畳まれていたら開く。2本目を起動したときに、押した甲斐があるようにする。</para>
     /// </summary>
-    private void BringToFront()
+    internal void BringToFront()
     {
         if (MainWindow is not { } window) return;
 

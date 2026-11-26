@@ -75,7 +75,7 @@ public class EditorAndDragWiringTests
     {
         var code = Read("Kado.App/Views/ToastWindow.xaml.cs");
 
-        Assert.Contains("SingleInstance.AskRunningInstanceToShow", code, StringComparison.Ordinal);
+        Assert.Contains("App)?.BringToFront()", code, StringComparison.Ordinal);
         Assert.DoesNotContain("main.Activate()", code, StringComparison.Ordinal);
     }
 
