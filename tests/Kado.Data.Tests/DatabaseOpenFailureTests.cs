@@ -39,10 +39,19 @@ public class DatabaseOpenFailureTests
     [Fact]
     public void 新しい版のデータは退避を選べる()
     {
-        var kind = DatabaseOpenFailure.Classify(new InvalidOperationException("スキーマ版が新しい"));
+        var kind = DatabaseOpenFailure.Classify(new Kado.Data.Migrations.SchemaTooNewException(99, 5));
 
         Assert.Equal(DatabaseOpenFailureKind.NewerVersion, kind);
         Assert.True(DatabaseOpenFailure.OffersSetAside(kind));
+    }
+
+    [Fact]
+    public void 版の超過ではない操作の誤りを新しい版のデータとは案内しない()
+    {
+        var kind = DatabaseOpenFailure.Classify(new InvalidOperationException("接続がまだ開いていません"));
+
+        Assert.Equal(DatabaseOpenFailureKind.Other, kind);
+        Assert.False(DatabaseOpenFailure.OffersSetAside(kind));
     }
 
     [Fact]

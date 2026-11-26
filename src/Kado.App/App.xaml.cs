@@ -164,6 +164,27 @@ public partial class App : Application
         foreach (var note in location.Notes) Shell.ShellDiagnosticsLog.Write(note);
         Shell.ShellDiagnosticsLog.Write($"保存先: {location.Directory}");
 
+        // data にデータがあるのに書き込めない。従来の場所へ黙って切り替えず、知らせて止める
+        if (location.IsBlocked)
+        {
+            var answer = Shell.FrontMessageBox.Show(
+                location.Warning ?? "data フォルダに書き込めません。",
+                Shell.FrontButtons.RetryCancel, Shell.FrontIcon.Error);
+
+            if (answer == Shell.FrontResult.Retry)
+            {
+                // 保存先の決定は1回きりなので、立ち上げ直して決め直す
+                RestartProcess();
+            }
+            else
+            {
+                _instance.Dispose();
+                Shutdown(1);
+            }
+
+            return;
+        }
+
         // 2本目の起動の合図は、できるだけ早く受け付ける。データベースを開く・案内を出す・窓を作る
         // あいだに2本目を起動されても、前に出てこないままにしない（窓がまだ無ければ何もしない）
         _instance.ListenForActivation(() => Dispatcher.InvokeAsync(BringToFront));
@@ -251,7 +272,7 @@ public partial class App : Application
 
         // 起動時の自動バックアップ（世代保存）。取り込み系は Undo に積まないので、
         // 戻したいときの拠り所がこれしか無い。裏の別接続で取るので起動は待たせず、
-        // 失敗しても起動そのものは止めない（AutoBackupService.TryRun が例外を外へ出さない）
+        // 失敗しても起動そのものは止めない（AutoBackupService.TryRunStartup が例外を外へ出さない）
         _ = AutoBackupService.RunInBackgroundAsync();
 
         var workspace = StartupTrace.Measure("CalendarWorkspace(画面用)", () => new CalendarWorkspace(_connection));
@@ -521,7 +542,7 @@ public partial class App : Application
                 // 積まないので、これが唯一の戻り道になる
                 main.AutoBackupBeforeImport = () =>
                 {
-                    if (_connection is { } current) AutoBackupService.TryRun(current);
+                    if (_connection is { } current) AutoBackupService.TryRunSafety(current);
                 };
 
                 // RelayCommand は CommandManager に乗っていない。RestoreBackup を
@@ -735,7 +756,11 @@ public partial class App : Application
             if (_autoUpdater.TakeStagedForStartup() is not { } staged) return false;
 
             var result = _autoUpdater.ApplySync(staged);
-            if (!result.Succeeded) return false;
+            if (!result.Succeeded)
+            {
+                NotifyIfRollbackFailed(result);
+                return false;
+            }
 
             // 新しいほうがもう立ち上がって、こちらが終わるのを待っている
             Shutdown();
@@ -845,6 +870,7 @@ public partial class App : Application
 
             // 新しいほうがもう立ち上がっている。こちらは速やかに終わる
             if (result.Succeeded) Shutdown();
+            else NotifyIfRollbackFailed(result);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -855,6 +881,17 @@ public partial class App : Application
         {
             _autoApplying = false;
         }
+    }
+
+    /// <summary>
+    /// 入れ替えに失敗し、元の版へ戻すのにも失敗したときは、ログだけでなく画面にも出す。
+    /// 次の起動で exe が無くなるので、利用者が手で戻すしかない。
+    /// </summary>
+    private static void NotifyIfRollbackFailed(SwapResult result)
+    {
+        if (result.Outcome != SwapOutcome.RollbackFailed) return;
+
+        Shell.FrontMessageBox.Show(result.Message, Shell.FrontButtons.Ok, Shell.FrontIcon.Error);
     }
 
     /// <summary>入れ替えてよいかを決めるための、いまの状態を集める（画面のスレッドで呼ぶ）。</summary>
@@ -1141,7 +1178,7 @@ public partial class App : Application
         // 復元の直前にも世代バックアップを1本残す（項目4）。復元は「いまの内容を
         // すべて置き換える」破壊的操作で、選んだファイルを取り違えても後戻りできない。
         // 接続を閉じる前、まだ読める間に取る。失敗しても復元そのものは止めない
-        if (_connection is { } current) AutoBackupService.TryRun(current);
+        if (_connection is { } current) AutoBackupService.TryRunSafety(current);
 
         // ここから先は、画面が使う接続を閉じる。終わるまでのわずかな間に画面のタイマーが
         // 読み込みを試みても、予期しないエラーとして見せない
@@ -1339,17 +1376,15 @@ public partial class App : Application
 
             var target = CalendarDatabase.DefaultPath;
 
-            if (File.Exists(target))
-            {
-                var broken = $"{target}.broken-{DateTimeOffset.Now:yyyyMMdd-HHmmss}";
-                File.Move(target, broken);
-            }
+            // 同じ接尾辞でそろえて改名する。-wal / -shm は消さずに残す
+            // （WAL に書き込み済みで本体に反映されていない内容が、取り出せるように）。
+            // 本体が無くても、-wal / -shm だけが残っていると次の新しいデータベースと食い違うのでどける
+            var stamp = $".broken-{DateTimeOffset.Now:yyyyMMdd-HHmmss}";
 
-            // 古い WAL が残っていると、次に作る新しいデータベースと食い違う
-            foreach (var suffix in (string[])["-wal", "-shm"])
+            foreach (var suffix in (string[])["", "-wal", "-shm"])
             {
-                var side = target + suffix;
-                if (File.Exists(side)) File.Delete(side);
+                var file = target + suffix;
+                if (File.Exists(file)) File.Move(file, file + stamp);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

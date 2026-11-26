@@ -157,9 +157,16 @@ public sealed class UpdateService
             throw new InvalidOperationException("更新の取得先が許されていない場所です。");
         }
 
+        // タグ名をそのままファイル名にしない。vX.Y.Z として読めた版から組み立てた名前だけを使う
+        if (UpdateLinks.TryBuildStagedFileName(info.TagName) is not { } fileName)
+        {
+            _log($"更新のダウンロード: タグが vX.Y.Z の形ではないため中止 {UpdateDiagnostics.SafeUrl(info.TagName)}");
+            throw new InvalidOperationException("更新のタグが想定した形ではありません。");
+        }
+
         var folder = directory ?? TempDir;
         Directory.CreateDirectory(folder);
-        var path = Path.Combine(folder, $"Kado-{info.TagName}.exe");
+        var path = Path.Combine(folder, fileName);
 
         _log($"更新のダウンロード: 開始 {UpdateDiagnostics.SafeUrl(info.DownloadUrl)}" +
              $"（想定 {info.SizeBytes}バイト, SHA256={(info.Sha256 is { Length: > 0 } ? "あり" : "なし")}）");
@@ -203,7 +210,12 @@ public sealed class UpdateService
 
             if (UpdateDiagnostics.IsHtml(contentType)) throw new UnexpectedContentException(contentType!);
 
-            var total = response.Content.Headers.ContentLength ?? info.SizeBytes;
+            var declared = response.Content.Headers.ContentLength;
+
+            // 大きすぎるものは、書き始める前に断る
+            DownloadSizeCheck.EnsureWithinLimit(declared);
+
+            var total = declared ?? info.SizeBytes;
 
             await using (var source = await response.Content
                              .ReadAsStreamAsync(linked.Token).ConfigureAwait(false))
@@ -220,9 +232,16 @@ public sealed class UpdateService
                     await target.WriteAsync(buffer.AsMemory(0, read), linked.Token).ConfigureAwait(false);
 
                     done += read;
+
+                    // 宣言が無い・嘘でも、上限を超えて書き続けない
+                    DownloadSizeCheck.EnsureReceivedWithinLimit(done);
+
                     if (total > 0) progress?.Report((double)done / total);
                 }
             }
+
+            // 受け取った大きさが、宣言と合っているか（途中で切れたものを置かない）
+            DownloadSizeCheck.EnsureLengthMatches(declared, done);
 
             // ハッシュを確かめられなくても、実行ファイルの形はしているか
             if (!await StartsWithExecutableHeaderAsync(path, linked.Token).ConfigureAwait(false))
@@ -390,6 +409,8 @@ public sealed class UpdateService
     {
         if (Environment.ProcessPath is { Length: > 0 } current)
         {
+            // 消す前に、入れ替えの途中で終わった状態（exe が無く .old だけ）を戻す
+            ExecutableSwap.RecoverLeftovers(current, _log);
             TryDelete(current + OldSuffix);
             TryDelete(current + ExecutableSwap.FailedSuffix);
         }

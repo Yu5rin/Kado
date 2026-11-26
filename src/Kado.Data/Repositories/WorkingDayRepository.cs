@@ -51,11 +51,14 @@ public sealed class WorkingDayRepository(SqliteConnection connection)
     /// 併合の規則を Core 側のテストだけで担保できる。
     /// </para>
     /// </summary>
-    public void Save(WorkingDayCalendar calendar)
+    /// <param name="calendar">保存する内容。</param>
+    /// <param name="outer">呼んだ側のトランザクション。渡すと、その中で書く（確定は呼んだ側）。</param>
+    public void Save(WorkingDayCalendar calendar, SqliteTransaction? outer = null)
     {
         ArgumentNullException.ThrowIfNull(calendar);
 
-        using var transaction = _connection.BeginTransaction();
+        using var own = outer is null ? _connection.BeginTransaction() : null;
+        var transaction = outer ?? own!;
 
         _connection.Execute("DELETE FROM working_days;", transaction: transaction);
         _connection.Execute("DELETE FROM milestones;", transaction: transaction);
@@ -88,7 +91,7 @@ public sealed class WorkingDayRepository(SqliteConnection connection)
         SaveRange(WorkingDayKind, calendar.RangeStart, calendar.RangeEnd, transaction);
         SaveRange(MilestoneKind, calendar.MilestoneRangeStart, calendar.MilestoneRangeEnd, transaction);
 
-        transaction.Commit();
+        own?.Commit();
     }
 
     /// <summary>

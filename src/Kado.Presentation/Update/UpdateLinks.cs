@@ -38,6 +38,16 @@ public static partial class UpdateLinks
     }
 
     /// <summary>
+    /// 落としたファイルをしまうときの名前（<c>Kado-v1.2.3.exe</c>）。
+    /// <para>
+    /// 応答に書かれたタグ名をそのままファイル名に入れず、<c>vX.Y.Z</c> として読めた版から組み立てる。
+    /// 読めなければ null（呼んだ側は落とさない）。
+    /// </para>
+    /// </summary>
+    public static string? TryBuildStagedFileName(string? tag) =>
+        TryParseTag(tag, out var version) ? $"Kado-v{version}.exe" : null;
+
+    /// <summary>
     /// API の問い合わせ先から、同じリポジトリの Atom フィードの URL を組み立てる。
     /// 組み立てられない形（GitHub 以外の配布元など）は null。
     /// <code>

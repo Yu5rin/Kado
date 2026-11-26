@@ -1,3 +1,4 @@
+using Kado.Data.Migrations;
 using Microsoft.Data.Sqlite;
 
 namespace Kado.Data.Backup;
@@ -223,6 +224,15 @@ public static class DatabaseBackup
             {
                 throw new IOException($"バックアップのファイルが壊れています: {path}");
             }
+
+            // このアプリより新しい版で取ったものは、復元しても開けない。いまのデータに触れる前に断る
+            var found = Convert.ToInt32(
+                Query(connection, "PRAGMA user_version;"), System.Globalization.CultureInfo.InvariantCulture);
+
+            if (found > SchemaMigrations.LatestVersion)
+            {
+                throw new BackupTooNewException(path, found, SchemaMigrations.LatestVersion);
+            }
         }
         catch (SqliteException ex) when (SqliteFailure.Classify(ex)
                                          is SqliteFailureKind.Io or SqliteFailureKind.ReadOnly
@@ -230,6 +240,13 @@ public static class DatabaseBackup
         {
             // 読み取り専用の置き場など、中身の検査のために開けないだけ。印は確かめたので進める
         }
+    }
+
+    private static object? Query(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
     }
 
     private static readonly byte[] SqliteHeader = "SQLite format 3\0"u8.ToArray();

@@ -41,13 +41,21 @@ public sealed class SettingsRepository(SqliteConnection connection)
     }
 
     /// <summary>まとめて書く。</summary>
-    public void SetMany(IEnumerable<KeyValuePair<string, string>> values)
+    /// <param name="values">書く内容。</param>
+    /// <param name="transaction">呼んだ側のトランザクション。渡すと、その中で書く（確定は呼んだ側）。</param>
+    public void SetMany(IEnumerable<KeyValuePair<string, string>> values, SqliteTransaction? transaction = null)
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        using var transaction = _connection.BeginTransaction();
-        foreach (var (key, value) in values) Set(key, value, transaction);
-        transaction.Commit();
+        if (transaction is not null)
+        {
+            foreach (var (key, value) in values) Set(key, value, transaction);
+            return;
+        }
+
+        using var own = _connection.BeginTransaction();
+        foreach (var (key, value) in values) Set(key, value, own);
+        own.Commit();
     }
 
     /// <summary>設定を全件読む。</summary>
@@ -85,5 +93,7 @@ public sealed class SettingsRepository(SqliteConnection connection)
     /// 同期状態をすべて消す。全再同期をかけるときに使う。
     /// <para>旧データからの移行では syncToken を引き継げないため、初回はここを空にして始める。</para>
     /// </summary>
-    public void ClearSyncState() => _connection.Execute("DELETE FROM sync_state;");
+    /// <param name="transaction">呼んだ側のトランザクション。渡すと、その中で消す。</param>
+    public void ClearSyncState(SqliteTransaction? transaction = null) =>
+        _connection.Execute("DELETE FROM sync_state;", transaction: transaction);
 }

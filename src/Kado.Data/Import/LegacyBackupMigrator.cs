@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Kado.Core.Import;
 using Kado.Core.WorkingDays;
 using Kado.Data.Repositories;
 
@@ -27,34 +28,47 @@ public sealed class LegacyBackupMigrator(SqliteConnection connection)
         return result;
     }
 
-    /// <summary>読み込み済みの内容を書き込む。</summary>
+    /// <summary>
+    /// 読み込み済みの内容を書き込む。
+    /// <para>予定・タスク・実働日・設定・同期状態の消去は、<b>1つのトランザクション</b>で行う。途中で失敗したら、どれも反映しない。</para>
+    /// </summary>
     public void Apply(LegacyImportResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        new EventRepository(_connection).UpsertMany(result.Events);
-        new TaskRepository(_connection).UpsertMany(result.Tasks);
+        // 実働日は既存と併合する。バックアップの期間だけを差し替え、期間外の既存データと
+        // マイルストーンは残す（全面的な置き換えにしない）。読むのは書き始める前に済ませる
+        var workingDays = new WorkingDayRepository(_connection);
+        var merged = result.WorkingDays.Count > 0
+            ? workingDays.Load().Merge(ToImportResult(result))
+            : null;
 
-        if (result.WorkingDays.Count > 0)
-        {
-            // 実働日は既存と併合する。バックアップには無いマイルストーンを消さないため、
-            // 全面的な置き換えではなく Merge を通す
-            var repository = new WorkingDayRepository(_connection);
-            var existing = repository.Load();
+        using var transaction = _connection.BeginTransaction();
 
-            var incoming = WorkingDayCalendar.Create(
-                result.WorkingDays,
-                result.WorkingDayRangeStart, result.WorkingDayRangeEnd,
-                existing.AllMilestones, existing.MilestoneRangeStart, existing.MilestoneRangeEnd);
+        new EventRepository(_connection).UpsertMany(result.Events, transaction);
+        new TaskRepository(_connection).UpsertMany(result.Tasks, transaction);
 
-            repository.Save(incoming);
-        }
+        if (merged is not null) workingDays.Save(merged, transaction);
 
         var settings = new SettingsRepository(_connection);
-        if (result.Settings.Count > 0) settings.SetMany(result.Settings);
+        if (result.Settings.Count > 0) settings.SetMany(result.Settings, transaction);
 
         // 同期トークンは引き継げないので、必ず空にしてから始める。
         // 古いトークンが残っていると差分同期が噛み合わず、取りこぼしが出る
-        settings.ClearSyncState();
+        settings.ClearSyncState(transaction);
+
+        transaction.Commit();
     }
+
+    /// <summary>旧バックアップの実働日を、<see cref="WorkingDayCalendar.Merge"/> に渡せる形にする。</summary>
+    private static ImportResult ToImportResult(LegacyImportResult result) =>
+        new(
+            Version: string.Empty,
+            WorkingDayRangeStart: result.WorkingDayRangeStart ?? result.WorkingDays.Min(),
+            WorkingDayRangeEnd: result.WorkingDayRangeEnd ?? result.WorkingDays.Max(),
+            MilestoneRangeStart: null,
+            MilestoneRangeEnd: null,
+            WorkingDays: result.WorkingDays,
+            Milestones: [],
+            Warnings: []);
 }

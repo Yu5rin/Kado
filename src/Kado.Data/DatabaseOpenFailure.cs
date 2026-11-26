@@ -1,3 +1,4 @@
+using Kado.Data.Migrations;
 using Microsoft.Data.Sqlite;
 
 namespace Kado.Data;
@@ -48,7 +49,7 @@ public static class DatabaseOpenFailure
             SqliteException sqlite => ClassifySqlite(sqlite),
 
             // 新しい版で作ったデータ（DatabaseMigrator が投げる）
-            InvalidOperationException => DatabaseOpenFailureKind.NewerVersion,
+            SchemaTooNewException => DatabaseOpenFailureKind.NewerVersion,
 
             UnauthorizedAccessException => DatabaseOpenFailureKind.NoAccess,
 

@@ -42,6 +42,16 @@ public static class WorkdayFeed
     /// </summary>
     private const int MaxItems = 10_000;
 
+    /// <summary>読み飛ばした要素ごとの警告を、そのまま並べる件数。超えたぶんは「ほか N 件」にまとめる。</summary>
+    internal const int MaxItemWarnings = 20;
+
+    /// <summary>
+    /// 期間（dataStart / dataEnd）が、稼働日の最小〜最大から外れてよい幅。これより広いときは
+    /// 稼働日の最小〜最大に縮める。広い期間のまま取り込むと、その期間の既存の実働日が
+    /// （ファイルに無いからと）まとめて消える。
+    /// </summary>
+    private const int MaxRangeMarginYears = 1;
+
     /// <summary>読み込む。形として成り立っていなければ例外。</summary>
     /// <param name="json">feed.json の中身。</param>
     public static ImportResult Read(string json)
@@ -62,6 +72,14 @@ public static class WorkdayFeed
 
         var warnings = new List<string>();
 
+        // 読み飛ばした要素ごとの警告は先頭だけ並べる（壊れたファイルで何万行も出さない）
+        var skippedWarnings = 0;
+        void WarnSkipped(string message)
+        {
+            if (skippedWarnings < MaxItemWarnings) warnings.Add(message);
+            skippedWarnings++;
+        }
+
         if (Text(body, "type") is { Length: > 0 } type && !string.Equals(type, Kind, StringComparison.Ordinal))
         {
             warnings.Add($"種類が「{type}」になっています。実働日データとして読み進めます。");
@@ -79,7 +97,7 @@ public static class WorkdayFeed
 
                 if (text is null || ParseDate(text) is not { } date)
                 {
-                    warnings.Add($"日付として読めない値がありました: {item}");
+                    WarnSkipped($"日付として読めない値がありました: {Shorten(item)}");
                     continue;
                 }
 
@@ -110,7 +128,7 @@ public static class WorkdayFeed
             {
                 if (item is not JsonObject mark)
                 {
-                    warnings.Add($"マイルストーンとして読めない要素がありました: {item}");
+                    WarnSkipped($"マイルストーンとして読めない要素がありました: {Shorten(item)}");
                     continue;
                 }
 
@@ -119,7 +137,7 @@ public static class WorkdayFeed
 
                 if (date is not { } at || name is not { Length: > 0 })
                 {
-                    warnings.Add($"マイルストーンとして読めない要素がありました: {item}");
+                    WarnSkipped($"マイルストーンとして読めない要素がありました: {Shorten(item)}");
                     continue;
                 }
 
@@ -152,10 +170,30 @@ public static class WorkdayFeed
             warnings.Add($"マイルストーンが上限（{MaxItems}件）を超えたため、{droppedMilestonesForCount}件を読み飛ばしました。");
         }
 
+        if (skippedWarnings > MaxItemWarnings)
+        {
+            warnings.Add($"ほか {skippedWarnings - MaxItemWarnings} 件、読み飛ばした要素がありました。");
+        }
+
+        var rangeStart = ParseDate(Text(body, "dataStart")) ?? days[0];
+        var rangeEnd = ParseDate(Text(body, "dataEnd")) ?? days[^1];
+
+        // 期間が稼働日から大きく外れていたら、稼働日の最小〜最大に縮める。期間は「この範囲の
+        // 既存の実働日をファイルの内容に置き換える」範囲なので、広いまま使うと既存の実働日が消える
+        if (rangeStart < days[0].AddYears(-MaxRangeMarginYears) || rangeEnd > days[^1].AddYears(MaxRangeMarginYears))
+        {
+            warnings.Add(
+                $"期間（{Format(rangeStart)}〜{Format(rangeEnd)}）が稼働日（{Format(days[0])}〜{Format(days[^1])}）より" +
+                $"{MaxRangeMarginYears}年以上広いため、稼働日の範囲に縮めました。");
+
+            rangeStart = days[0];
+            rangeEnd = days[^1];
+        }
+
         return new ImportResult(
             Text(body, "updatedAt") ?? string.Empty,
-            ParseDate(Text(body, "dataStart")) ?? days[0],
-            ParseDate(Text(body, "dataEnd")) ?? days[^1],
+            rangeStart,
+            rangeEnd,
             milestones.Count > 0 ? milestones[0].Date : null,
             milestones.Count > 0 ? milestones[^1].Date : null,
             days,
@@ -199,6 +237,13 @@ public static class WorkdayFeed
         }
 
         return body.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>警告に載せる要素の表示。長いものは切る。</summary>
+    private static string Shorten(JsonNode? item)
+    {
+        var text = item?.ToString() ?? "null";
+        return text.Length <= 60 ? text : text[..60] + "…";
     }
 
     private static string? Text(JsonObject body, string name) =>

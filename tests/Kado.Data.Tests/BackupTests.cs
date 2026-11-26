@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Kado.Data;
 using Kado.Data.Backup;
 using Kado.Data.Models;
@@ -187,6 +188,49 @@ public class BackupTests : IDisposable
         Assert.ThrowsAny<Exception>(() => DatabaseBackup.RestoreFrom(backupPath, databasePath));
 
         Assert.Equal(before, File.ReadAllBytes(databasePath));
+    }
+
+    [Fact]
+    public void 新しい版で取ったバックアップはいまのデータに触れずに断る()
+    {
+        var databasePath = Path.Combine(_work, "data.db");
+        var backupPath = Path.Combine(_work, "newer.db");
+
+        using (var connection = CalendarDatabase.OpenFile(databasePath).ConnectAndMigrate())
+        {
+            new EventRepository(connection).Upsert(Sample("now"));
+        }
+
+        using (var connection = CalendarDatabase.OpenFile(backupPath).ConnectAndMigrate())
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA user_version = {Migrations.SchemaMigrations.LatestVersion + 1};";
+            command.ExecuteNonQuery();
+        }
+
+        var e = Assert.Throws<BackupTooNewException>(() => DatabaseBackup.RestoreFrom(backupPath, databasePath));
+
+        Assert.Contains("新しい版の Kado で取ったバックアップです", e.Message);
+        Assert.IsAssignableFrom<IOException>(e);
+
+        // いまのデータはそのまま、.bak も作らない
+        Assert.False(File.Exists(databasePath + ".bak"));
+        using var after = CalendarDatabase.OpenFile(databasePath).Connect();
+        Assert.Equal("予定now", new EventRepository(after).Find("now")!.Title);
+    }
+
+    [Fact]
+    public void 最新版と同じ版のバックアップは確認を通る()
+    {
+        var backupPath = Path.Combine(_work, "latest.db");
+
+        using (var connection = CalendarDatabase.OpenFile(backupPath).ConnectAndMigrate())
+        {
+            Assert.Equal(Migrations.SchemaMigrations.LatestVersion, Migrations.DatabaseMigrator.GetVersion(connection));
+        }
+
+        SqliteConnection.ClearAllPools();
+        DatabaseBackup.EnsureReadableDatabase(backupPath);
     }
 
     [Fact]

@@ -289,6 +289,45 @@ public class LegacyImportTests
     }
 
     [Fact]
+    public void 移行してもバックアップの期間外の実働日は消えない()
+    {
+        using var db = TestDatabase.Create();
+        var workingDays = new WorkingDayRepository(db.Connection);
+
+        // バックアップの期間（2023/1/5〜2026/3/31）の外に、既存の実働日がある
+        var outside = new DateOnly(2027, 4, 1);
+        workingDays.Save(Core.WorkingDays.WorkingDayCalendar.Create([outside]));
+
+        using var stream = TestDatabase.OpenLegacyBackup();
+        new LegacyBackupMigrator(db.Connection).Migrate(stream);
+
+        var loaded = workingDays.Load();
+        Assert.True(loaded.IsWorkingDay(outside));
+        Assert.Equal(754, loaded.Count);
+        Assert.Equal(new DateOnly(2023, 1, 5), loaded.RangeStart);
+        Assert.Equal(outside, loaded.RangeEnd);
+    }
+
+    [Fact]
+    public void 途中で失敗したら何も書き込まない()
+    {
+        using var db = TestDatabase.Create();
+        var settings = new SettingsRepository(db.Connection);
+        settings.SetSyncState("calendar.syncToken", "古いトークン");
+
+        // 設定の書き込み（予定・タスク・実働日のあと）で転ぶようにする
+        var read = Read();
+        var broken = read with { Settings = new Dictionary<string, string> { [" "] = "x" } };
+
+        Assert.ThrowsAny<ArgumentException>(() => new LegacyBackupMigrator(db.Connection).Apply(broken));
+
+        Assert.Equal(0, new EventRepository(db.Connection).Count());
+        Assert.Equal(0, new TaskRepository(db.Connection).Count());
+        Assert.Equal(0, new WorkingDayRepository(db.Connection).Count());
+        Assert.Equal("古いトークン", settings.GetSyncState("calendar.syncToken"));
+    }
+
+    [Fact]
     public void 壊れたJSONは読み込みを止める()
     {
         using var stream = new MemoryStream("これは JSON ではない"u8.ToArray());

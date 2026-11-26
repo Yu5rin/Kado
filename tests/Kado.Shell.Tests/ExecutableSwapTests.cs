@@ -77,18 +77,80 @@ public class ExecutableSwapTests : IDisposable
     }
 
     [Fact]
-    public void 新しいexeを置けなかったときも元の版へ戻す()
+    public void 新しいexeを写せなかったときはいまのexeに触れない()
     {
         Prepare();
 
-        // 落としたファイルが消えている（コピーに失敗する）
+        // 落としたファイルが消えている（写しに失敗する）
         File.Delete(Downloaded);
 
         var result = ExecutableSwap.Run(Current, Downloaded, _ => { });
 
-        Assert.Equal(SwapOutcome.RolledBack, result.Outcome);
+        // 先に写すので、いまの exe は改名されず、元のまま
+        Assert.Equal(SwapOutcome.FailedUnchanged, result.Outcome);
         Assert.IsAssignableFrom<IOException>(result.Error);
         Assert.Equal("旧い版", File.ReadAllText(Current));
+        Assert.False(File.Exists(Current + ".old"));
+        Assert.False(File.Exists(Current + ExecutableSwap.NewSuffix));
+    }
+
+    [Fact]
+    public void 入れ替えが成功したら新しい名前の写しは残らない()
+    {
+        Prepare();
+
+        var result = ExecutableSwap.Run(Current, Downloaded, _ => { });
+
+        Assert.True(result.Succeeded);
+        Assert.False(File.Exists(Current + ExecutableSwap.NewSuffix));
+    }
+
+    [Fact]
+    public void 前回の写しかけが残っていても入れ替えられる()
+    {
+        Prepare();
+        File.WriteAllText(Current + ExecutableSwap.NewSuffix, "途中で終わった写し");
+
+        var result = ExecutableSwap.Run(Current, Downloaded, _ => { });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("新しい版", File.ReadAllText(Current));
+    }
+
+    [Fact]
+    public void 起動時に写しかけの残骸を片付ける()
+    {
+        File.WriteAllText(Current, "いまの版");
+        File.WriteAllText(Current + ExecutableSwap.NewSuffix, "途中で終わった写し");
+
+        var recovered = ExecutableSwap.RecoverLeftovers(Current);
+
+        Assert.False(recovered);
+        Assert.False(File.Exists(Current + ExecutableSwap.NewSuffix));
+        Assert.Equal("いまの版", File.ReadAllText(Current));
+    }
+
+    [Fact]
+    public void 起動時にexeが無く旧い版だけがあれば元の名前へ戻す()
+    {
+        File.WriteAllText(Current + ".old", "旧い版");
+
+        var recovered = ExecutableSwap.RecoverLeftovers(Current);
+
+        Assert.True(recovered);
+        Assert.Equal("旧い版", File.ReadAllText(Current));
+        Assert.False(File.Exists(Current + ".old"));
+    }
+
+    [Fact]
+    public void 起動時にexeがあれば旧い版は戻さない()
+    {
+        File.WriteAllText(Current, "いまの版");
+        File.WriteAllText(Current + ".old", "旧い版");
+
+        Assert.False(ExecutableSwap.RecoverLeftovers(Current));
+        Assert.Equal("いまの版", File.ReadAllText(Current));
+        Assert.True(File.Exists(Current + ".old"));
     }
 
     [Fact]

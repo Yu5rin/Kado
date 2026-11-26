@@ -54,11 +54,9 @@ public class ReleaseFeedTests
 
     [Theory]
     [InlineData("v0.5.0", 0, 5, 0)]
-    [InlineData("0.5.0", 0, 5, 0)]
-    [InlineData("V1.2.3", 1, 2, 3)]
-    [InlineData("v0.5.0-beta", 0, 5, 0)]
-    [InlineData("v0.5.0+build7", 0, 5, 0)]
-    public void いろいろな書き方のタグを読める(string tag, int major, int minor, int build)
+    [InlineData("v1.2.3", 1, 2, 3)]
+    [InlineData("v0.4.10", 0, 4, 10)]
+    public void vXYZの形のタグを読める(string tag, int major, int minor, int build)
     {
         Assert.True(ReleaseFeed.TryParseVersion(tag, out var version));
         Assert.Equal(new Version(major, minor, build), version);
@@ -69,9 +67,36 @@ public class ReleaseFeedTests
     [InlineData(null)]
     [InlineData("最新版")]
     [InlineData("v")]
+    [InlineData("v1.0.6-beta")]
+    [InlineData("v0.5.0+build7")]
+    [InlineData("0.5.0")]
+    [InlineData("V1.2.3")]
+    [InlineData("v1.2")]
+    [InlineData("v1.2.3.4")]
     public void 読めないタグは断る(string? tag)
     {
         Assert.False(ReleaseFeed.TryParseVersion(tag, out _));
+    }
+
+    [Theory]
+    [InlineData("v1.0.6-beta")]
+    [InlineData("v1.0.6+build7")]
+    [InlineData("1.0.6")]
+    public void vXYZの形でないタグのリリースは無視する(string tag)
+    {
+        var json = Typical.Replace("\"tag_name\": \"v0.5.0\"", $"\"tag_name\": \"{tag}\"");
+
+        Assert.NotEqual(Typical, json);
+        Assert.Null(ReleaseFeed.Parse(json));
+    }
+
+    [Fact]
+    public void 落としたファイルの名前は読めた版から組み立てる()
+    {
+        Assert.Equal("Kado-v1.2.3.exe", UpdateLinks.TryBuildStagedFileName("v1.2.3"));
+        Assert.Null(UpdateLinks.TryBuildStagedFileName("v1.2.3-beta"));
+        Assert.Null(UpdateLinks.TryBuildStagedFileName("../../evil"));
+        Assert.Null(UpdateLinks.TryBuildStagedFileName(null));
     }
 
     [Fact]

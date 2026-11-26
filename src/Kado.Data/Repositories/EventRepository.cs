@@ -233,13 +233,21 @@ public sealed class EventRepository(SqliteConnection connection)
     }
 
     /// <summary>まとめて登録する。1件ずつ Upsert するより速い。</summary>
-    public void UpsertMany(IEnumerable<CalendarEvent> values)
+    /// <param name="values">登録する内容。</param>
+    /// <param name="transaction">呼んだ側のトランザクション。渡すと、その中で書く（確定は呼んだ側）。</param>
+    public void UpsertMany(IEnumerable<CalendarEvent> values, SqliteTransaction? transaction = null)
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        using var transaction = _connection.BeginTransaction();
-        foreach (var value in values) Upsert(value, transaction);
-        transaction.Commit();
+        if (transaction is not null)
+        {
+            foreach (var value in values) Upsert(value, transaction);
+            return;
+        }
+
+        using var own = _connection.BeginTransaction();
+        foreach (var value in values) Upsert(value, own);
+        own.Commit();
     }
 
     /// <summary>

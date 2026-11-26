@@ -73,8 +73,9 @@ public class MigrationTests
         db.Connection.Execute($"PRAGMA user_version = {SchemaMigrations.LatestVersion + 1};");
 
         // 知らないスキーマに書き込むと壊すので、黙って動かさず止める
-        var e = Assert.Throws<InvalidOperationException>(() => DatabaseMigrator.Migrate(db.Connection));
+        var e = Assert.Throws<SchemaTooNewException>(() => DatabaseMigrator.Migrate(db.Connection));
         Assert.Contains("新しいバージョンのアプリ", e.Message);
+        Assert.IsAssignableFrom<InvalidOperationException>(e);
     }
 
     [Fact]

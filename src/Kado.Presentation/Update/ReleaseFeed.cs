@@ -108,21 +108,13 @@ public static class ReleaseFeed
 
     /// <summary>
     /// <c>v0.5.0</c> のようなタグから版を取り出す。
-    /// <para><c>0.5.0-beta</c> のような後ろ側は落とす。</para>
+    /// <para>
+    /// 読めるのは <c>vX.Y.Z</c>（数字3つ）だけ。Atom の側（<see cref="UpdateLinks.TryParseTag"/>）と同じ判定にしてある。
+    /// <c>v1.0.6-beta</c> を 1.0.6 と読むと、Atom が無視する版を API の側だけが配ってしまう。
+    /// </para>
     /// </summary>
-    public static bool TryParseVersion(string? tag, out Version version)
-    {
-        version = new Version(0, 0, 0);
-
-        if (tag is not { Length: > 0 }) return false;
-
-        var text = tag.TrimStart('v', 'V');
-
-        var cut = text.IndexOfAny(['-', '+']);
-        if (cut >= 0) text = text[..cut];
-
-        return Version.TryParse(text, out version!);
-    }
+    public static bool TryParseVersion(string? tag, out Version version) =>
+        UpdateLinks.TryParseTag(tag, out version);
 
     /// <summary>
     /// 入れ替えるべきか。

@@ -58,7 +58,7 @@ public sealed class DataLocationTests : IDisposable
     [InlineData(true, false, true, true, DataPlacement.MigrateFromLocalAppData)]
     [InlineData(true, false, false, true, DataPlacement.MigrateFromLegacy)]
     [InlineData(false, false, false, false, DataPlacement.UseLocalAppData)]
-    [InlineData(false, true, false, false, DataPlacement.UseLocalAppData)]
+    [InlineData(false, true, false, false, DataPlacement.BesideExeNotWritable)]
     [InlineData(false, false, true, false, DataPlacement.UseLocalAppData)]
     [InlineData(false, false, false, true, DataPlacement.UseLocalAppData)]
     public void どこを使うかは引数だけで決まる(
@@ -74,8 +74,11 @@ public sealed class DataLocationTests : IDisposable
     [InlineData(true, false, false, true, false, true, DataPlacement.UseLocalAppDataAlreadyMoved)]
     // 印があっても、data にあればそちらを使う（いつもどおり）
     [InlineData(true, true, true, false, true, false, DataPlacement.UseBesideExe)]
-    // 書けないなら、印があっても従来どおり
-    [InlineData(false, false, true, false, true, false, DataPlacement.UseLocalAppData)]
+    // 書けないとき、従来の場所に印があれば移し済みの扱い（自動の同期を止めて知らせる）
+    [InlineData(false, false, true, false, true, false, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    [InlineData(false, false, false, true, false, true, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    // 書けなくて data にデータがあるなら、印があっても黙って切り替えずエラー
+    [InlineData(false, true, true, false, true, false, DataPlacement.BesideExeNotWritable)]
     // 印が無ければ、今までどおり写す
     [InlineData(true, false, true, false, false, false, DataPlacement.MigrateFromLocalAppData)]
     [InlineData(true, false, false, true, false, false, DataPlacement.MigrateFromLegacy)]
@@ -84,6 +87,67 @@ public sealed class DataLocationTests : IDisposable
         DataPlacement expected)
     {
         Assert.Equal(expected, DataLocation.Decide(writable, beside, local, legacy, localMoved, legacyMoved));
+    }
+
+    [Theory]
+    // 従来の Kado にある, 印がある, data が使用済み → 答え
+    // data にデータが無くても使用済みなら、古い写しから写し直さず新しく始める
+    [InlineData(true, true, true, DataPlacement.UseBesideExe)]
+    [InlineData(true, false, true, DataPlacement.UseBesideExe)]
+    // 使用済みの痕跡が無ければ、今までどおり
+    [InlineData(true, false, false, DataPlacement.MigrateFromLocalAppData)]
+    [InlineData(true, true, false, DataPlacement.UseLocalAppDataAlreadyMoved)]
+    public void dataが使用済みなら引っ越し前の古い写しを使わない(
+        bool localHasData, bool localMoved, bool besideUsed, DataPlacement expected)
+    {
+        var placement = DataLocation.Decide(
+            writable: true, besideHasData: false, localHasData: localHasData, legacyHasData: false,
+            localMoved: localMoved, legacyMoved: false, besideUsed: besideUsed);
+
+        Assert.Equal(expected, placement);
+    }
+
+    [Fact]
+    public void データをどけた直後は印つきの古い写しを使わず新しく始める()
+    {
+        // 引っ越し済み（印あり）の状態から、data.db を .broken-日時 へどけた
+        MakeData(Local, "古い写し");
+        DataLocation.Resolve(Exe, LocalAppData);
+        File.Move(Path.Combine(Beside, "data.db"), Path.Combine(Beside, "data.db.broken-20260101-000000"));
+
+        var result = DataLocation.Resolve(Exe, LocalAppData);
+
+        Assert.Equal(Beside, result.Directory);
+        Assert.Equal(LocalFallbackReason.None, result.Reason);
+        Assert.False(result.PausesBackgroundSync);
+        Assert.False(File.Exists(Path.Combine(Beside, "data.db")));
+    }
+
+    [Fact]
+    public void データをどけた直後は印の無い古い写しからも写し直さない()
+    {
+        MakeData(Local, "古い写し");
+        Directory.CreateDirectory(Beside);
+        File.WriteAllText(Path.Combine(Beside, "data.db.broken-20260101-000000"), "x");
+
+        var result = DataLocation.Resolve(Exe, LocalAppData);
+
+        Assert.Equal(Beside, result.Directory);
+        Assert.False(File.Exists(Path.Combine(Beside, "data.db")));
+        Assert.False(File.Exists(Path.Combine(Local, DataMigration.MovedMarkerFileName)));
+    }
+
+    [Fact]
+    public void dataにデータがあって書けないときは従来の場所へ切り替えず止める()
+    {
+        // 書き込めない状況を権限に頼らず作る: data が「フォルダ」ではなく data.db を含むが、
+        // 書き込みの確かめ先（data）が無い状態は作れないので、純粋な判断で確かめる
+        Assert.Equal(
+            DataPlacement.BesideExeNotWritable,
+            DataLocation.Decide(writable: false, besideHasData: true, localHasData: true, legacyHasData: false));
+        Assert.True(new DataLocationResult(
+            Beside, LocalFallbackReason.DataFolderNotWritable, [], "x").IsBlocked);
+        Assert.False(new DataLocationResult(Local, LocalFallbackReason.NotWritable, []).IsBlocked);
     }
 
     [Fact]

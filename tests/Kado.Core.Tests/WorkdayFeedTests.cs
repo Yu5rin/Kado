@@ -95,6 +95,65 @@ public class WorkdayFeedTests
     }
 
     [Fact]
+    public void 読み飛ばした要素の警告は先頭20件と残りの件数にまとめる()
+    {
+        var bad = string.Join(",", Enumerable.Range(0, 500).Select(i => $"\"だめ{i}\""));
+        var json = $$"""{ "type": "workingdays", "workingDays": ["2026-09-01", {{bad}}] }""";
+
+        var result = WorkdayFeed.Read(json);
+
+        Assert.Single(result.WorkingDays);
+
+        // 先頭20件 + 「ほか N 件」の1行
+        Assert.Equal(21, result.Warnings.Count);
+        Assert.Contains(result.Warnings, w => w.Contains("ほか 480 件"));
+    }
+
+    [Fact]
+    public void 警告が上限以下ならまとめない()
+    {
+        var bad = string.Join(",", Enumerable.Range(0, 20).Select(i => $"\"だめ{i}\""));
+        var json = $$"""{ "type": "workingdays", "workingDays": ["2026-09-01", {{bad}}] }""";
+
+        var result = WorkdayFeed.Read(json);
+
+        Assert.Equal(20, result.Warnings.Count);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("ほか"));
+    }
+
+    [Fact]
+    public void 期間が稼働日より1年以上広いときは稼働日の範囲に縮めて警告する()
+    {
+        var result = WorkdayFeed.Read("""
+            {
+              "type": "workingdays",
+              "workingDays": ["2026-09-01", "2026-09-02"],
+              "dataStart": "2000-01-01", "dataEnd": "2099-12-31"
+            }
+            """);
+
+        Assert.Equal(new DateOnly(2026, 9, 1), result.WorkingDayRangeStart);
+        Assert.Equal(new DateOnly(2026, 9, 2), result.WorkingDayRangeEnd);
+        Assert.Contains(result.Warnings, w => w.Contains("縮めました"));
+    }
+
+    [Fact]
+    public void 期間が稼働日の前後1年以内ならそのまま使う()
+    {
+        var result = WorkdayFeed.Read("""
+            {
+              "type": "workingdays",
+              "workingDays": ["2026-09-01", "2026-09-02"],
+              "dataStart": "2026-04-01", "dataEnd": "2027-03-31"
+            }
+            """);
+
+        Assert.Equal(new DateOnly(2026, 4, 1), result.WorkingDayRangeStart);
+        Assert.Equal(new DateOnly(2027, 3, 31), result.WorkingDayRangeEnd);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("縮めました"));
+    }
+
+    [Fact]
     public void 稼働日の件数が上限を超えたぶんは読み飛ばす()
     {
         var days = string.Join(",", Enumerable.Range(1, 10_050)

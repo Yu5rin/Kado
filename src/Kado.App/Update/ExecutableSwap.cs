@@ -81,6 +81,9 @@ internal static class ExecutableSwap
     /// <summary>起動できなかった新しい exe の退避先の接尾辞。</summary>
     internal const string FailedSuffix = ".failed";
 
+    /// <summary>入れ替える前に、同じフォルダへ写し終えておく新しい exe の接尾辞。</summary>
+    internal const string NewSuffix = ".new";
+
     /// <param name="current">いま動いている exe。</param>
     /// <param name="downloaded">落とした新しい exe。入れ替えに成功したら消す。</param>
     /// <param name="launch">入れ替えた exe を起動する。失敗したら例外を投げる。</param>
@@ -96,6 +99,7 @@ internal static class ExecutableSwap
 
         var backup = current + OldSuffix;
         var failed = current + FailedSuffix;
+        var staged = current + NewSuffix;
         var renamed = false;
 
         try
@@ -103,12 +107,18 @@ internal static class ExecutableSwap
             // 前回の入れ替えで残ったものを先に片付ける
             TryDelete(backup);
             TryDelete(failed);
+            TryDelete(staged);
 
+            // 大きなコピーは、いまの exe に触れる前に済ませる。コピーの途中で落ちても、
+            // 元の exe はそのまま残る（名前を変えたあとにコピーすると、途中で落ちたとき exe が無くなる）
+            File.Copy(downloaded, staged, overwrite: true);
+
+            // 名前を変えるのは2回だけ（いまの exe を .old へ、写し終えた .new を元の名前へ）
             // 実行中の exe は上書きできないが、名前は変えられる
             File.Move(current, backup);
             renamed = true;
 
-            File.Copy(downloaded, current, overwrite: true);
+            File.Move(staged, current);
 
             launch(current);
 
@@ -121,8 +131,12 @@ internal static class ExecutableSwap
         {
             log($"更新の入れ替え: 失敗。{UpdateDiagnostics.Summarize(ex)}");
 
-            // 名前を変える前に転んだなら、何も動いていない
-            if (!renamed) return new SwapResult(SwapOutcome.FailedUnchanged, ex, current, backup);
+            // 名前を変える前に転んだなら、何も動いていない（写しかけだけ片付ける）
+            if (!renamed)
+            {
+                TryDelete(staged);
+                return new SwapResult(SwapOutcome.FailedUnchanged, ex, current, backup);
+            }
 
             try
             {
@@ -139,6 +153,39 @@ internal static class ExecutableSwap
 
                 return new SwapResult(SwapOutcome.RollbackFailed, ex, current, backup);
             }
+        }
+    }
+
+    /// <summary>
+    /// 入れ替えの途中で終わった残骸を、起動時に片付ける。
+    /// <para>
+    /// 写しかけの <c>.new</c> は捨てる。いまの exe が無く <c>.old</c> だけがあるとき
+    /// （2回の改名のあいだに落ちた）は、<c>.old</c> を元の名前へ戻す。
+    /// <b>この戻しを <c>.old</c> を消す前に行うこと。</b>
+    /// </para>
+    /// </summary>
+    /// <returns>元の名前へ戻したか。</returns>
+    internal static bool RecoverLeftovers(string current, Action<string>? log = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(current);
+
+        log ??= _ => { };
+
+        TryDelete(current + NewSuffix);
+
+        var backup = current + OldSuffix;
+        if (File.Exists(current) || !File.Exists(backup)) return false;
+
+        try
+        {
+            File.Move(backup, current);
+            log("更新の入れ替え: 途中で終わっていたので、元の版を戻しました");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log($"更新の入れ替え: 元の版を戻せませんでした。{UpdateDiagnostics.Summarize(ex)}");
+            return false;
         }
     }
 

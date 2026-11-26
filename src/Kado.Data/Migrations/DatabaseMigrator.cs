@@ -37,10 +37,7 @@ public static class DatabaseMigrator
         // 黙って動かすと壊れたデータを書き込みかねないので、適用するものが無い場合も含めて先に止める。
         if (current > SchemaMigrations.LatestVersion)
         {
-            throw new InvalidOperationException(
-                $"データベースのスキーマ版 {current} は、このアプリが知っている最新版 "
-                + $"{SchemaMigrations.LatestVersion} より新しいため開けません。"
-                + "新しいバージョンのアプリで開いてください。");
+            throw new SchemaTooNewException(current, SchemaMigrations.LatestVersion);
         }
 
         var pending = SchemaMigrations.All

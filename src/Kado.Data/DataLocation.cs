@@ -25,6 +25,12 @@ public enum DataPlacement
     /// </para>
     /// </summary>
     UseLocalAppDataAlreadyMoved,
+
+    /// <summary>
+    /// <c>data</c> にデータがあるのに書き込めない。従来の場所へ黙って切り替えず、エラーとして扱う。
+    /// <para>切り替えると、<c>data</c> にある新しい内容を置き去りにして、古い写しで立ち上がる。</para>
+    /// </summary>
+    BesideExeNotWritable,
 }
 
 /// <summary>従来の場所（<c>%LOCALAPPDATA%\Kado</c>）を使っている理由。</summary>
@@ -41,6 +47,9 @@ public enum LocalFallbackReason
 
     /// <summary>従来の場所のデータは、すでに別の場所へ移してある（古い写しのまま立ち上げている）。</summary>
     AlreadyMovedElsewhere,
+
+    /// <summary>exe の隣の <c>data</c> にデータがあるのに書き込めない（起動を止めて利用者に知らせる）。</summary>
+    DataFolderNotWritable,
 }
 
 /// <summary>保存先の決定の結果。</summary>
@@ -59,6 +68,12 @@ public sealed record DataLocationResult(
     /// </para>
     /// </summary>
     public bool PausesBackgroundSync => Reason == LocalFallbackReason.AlreadyMovedElsewhere;
+
+    /// <summary>
+    /// <c>data</c> に書き込めず、起動を続けられないか。
+    /// そのとき <see cref="Warning"/> に利用者へ出す文面が入る。
+    /// </summary>
+    public bool IsBlocked => Reason == LocalFallbackReason.DataFolderNotWritable;
 }
 
 /// <summary>
@@ -124,6 +139,7 @@ public static class DataLocation
         LocalFallbackReason.NotWritable => "exe のフォルダに書き込めないため、こちらを使っています",
         LocalFallbackReason.MigrationFailed => "exe のフォルダの data へ移せなかったため、今回はこちらを使っています（次の起動でもう一度試します）",
         LocalFallbackReason.AlreadyMovedElsewhere => "すでに別の場所へ移したデータがあるため、残してある古い内容を使っています",
+        LocalFallbackReason.DataFolderNotWritable => "exe の隣の data フォルダに書き込めません",
         _ => null,
     };
 
@@ -140,12 +156,32 @@ public static class DataLocation
     /// <param name="legacyHasData"><c>%LOCALAPPDATA%\SlideinaCalendar</c> にデータがあるか。</param>
     /// <param name="localMoved"><c>%LOCALAPPDATA%\Kado</c> に「移しました.txt」があるか（すでに別の場所へ移してある）。</param>
     /// <param name="legacyMoved"><c>%LOCALAPPDATA%\SlideinaCalendar</c> に「移しました.txt」があるか。</param>
+    /// <param name="besideUsed">
+    /// <c>data</c> が使用済みか（<c>data.db.broken-*</c> など、この <c>data</c> を使っていた痕跡がある）。
+    /// data.db だけが無い状態で、引っ越し前の古い写しを使い直さないための手がかり。
+    /// </param>
     public static DataPlacement Decide(
         bool writable, bool besideHasData, bool localHasData, bool legacyHasData,
-        bool localMoved = false, bool legacyMoved = false)
+        bool localMoved = false, bool legacyMoved = false, bool besideUsed = false)
     {
-        // 書けないなら、従来どおり。書けなければ写せもしない
-        if (!writable) return DataPlacement.UseLocalAppData;
+        if (!writable)
+        {
+            // data にデータがあるのに書けない。従来の場所へ黙って落ちると、新しい内容を置き去りにする
+            if (besideHasData) return DataPlacement.BesideExeNotWritable;
+
+            // 書けなければ写せもしない。ただし従来の場所が「すでに移した」古い写しなら、
+            // 移し済みの扱い（自動の同期を止めて知らせる）にする
+            if ((localHasData && localMoved) || (legacyHasData && legacyMoved))
+            {
+                return DataPlacement.UseLocalAppDataAlreadyMoved;
+            }
+
+            return DataPlacement.UseLocalAppData;
+        }
+
+        // data は使用済み（壊れたデータをどけた直後など）。data.db が無くても、古い写しからは写さず、
+        // 新しく始める。写すと、引っ越し前の古い内容で立ち上がる
+        if (besideUsed) return DataPlacement.UseBesideExe;
 
         // data にもうある（引っ越し済み、フォルダごと持ってきた、初めて入れた人の2回目以降）。
         // 古い場所にデータが残っていても、新しいほうを使う
@@ -205,10 +241,22 @@ public static class DataLocation
         var writable = CanWrite(target, out var writeError);
         var placement = Decide(
             writable, HasData(target), HasData(local), HasData(legacy),
-            DataMigration.HasMovedMarker(local), DataMigration.HasMovedMarker(legacy));
+            DataMigration.HasMovedMarker(local), DataMigration.HasMovedMarker(legacy),
+            IsUsedFolder(target));
 
         switch (placement)
         {
+            case DataPlacement.BesideExeNotWritable:
+            {
+                notes.Add($"保存先: {target} にデータがあるが書き込めない。従来の場所へは切り替えずに止める。理由: {writeError}");
+                return new DataLocationResult(
+                    target, LocalFallbackReason.DataFolderNotWritable, notes,
+                    $"data フォルダに書き込めません。\n\n保存先: {target}\n\n" +
+                    "読み取り専用になっていないか、ほかのアプリが使っていないか、フォルダの権限を確かめてください。" +
+                    "古い場所へ切り替えると、このフォルダの新しい内容を置き去りにするため、起動を止めています。");
+            }
+
+
             case DataPlacement.UseBesideExe:
                 return new DataLocationResult(target, LocalFallbackReason.None, notes);
 
@@ -223,12 +271,13 @@ public static class DataLocation
             {
                 // 印のあるほう（新しい名前のフォルダを先に見る）。印から移し先を読む
                 var markedFolder = HasData(local) && DataMigration.HasMovedMarker(local) ? local : legacy;
+                var reasonText = writable ? $"{target} にデータが無い" : $"{target} に書き込めない（{writeError}）";
                 var recorded = DataMigration.ReadMovedTarget(markedFolder);
                 var directory = ResolveLocalAppData(localAppData);
 
                 notes.Add(
                     $"保存先: {markedFolder} は {recorded ?? "別の場所"} へ移した記録があるので、写さずに従来の場所を使う" +
-                    $"（{directory}）。{target} にデータが無い");
+                    $"（{directory}）。{reasonText}");
 
                 return new DataLocationResult(
                     directory, LocalFallbackReason.AlreadyMovedElsewhere, notes,
@@ -292,6 +341,22 @@ public static class DataLocation
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return legacy;
+        }
+    }
+
+    /// <summary>
+    /// <c>data</c> を使っていた痕跡があるか（どけたデータベース <c>data.db.broken-*</c>）。
+    /// </summary>
+    internal static bool IsUsedFolder(string folder)
+    {
+        try
+        {
+            return System.IO.Directory.Exists(folder)
+                && System.IO.Directory.EnumerateFiles(folder, DatabaseFileName + ".broken-*").Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 

@@ -58,6 +58,41 @@ public class DataLocationWiringTests
     }
 
     [Fact]
+    public void dataに書けないときは保存先を決めた直後に知らせて止める()
+    {
+        var source = File.ReadAllText(Path.Combine(AppDirectory, "App.xaml.cs"));
+
+        var resolve = source.IndexOf("DataLocation.EnsureResolved()", StringComparison.Ordinal);
+        var blocked = source.IndexOf("location.IsBlocked", StringComparison.Ordinal);
+        var openDb = source.IndexOf("OpenDatabaseOrAskUser)", StringComparison.Ordinal);
+
+        Assert.True(blocked > resolve && blocked < openDb, "データベースを開く前に、書けないことを知らせて止めること");
+        Assert.Contains("FrontButtons.RetryCancel", source[blocked..openDb], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void データをどけるときは本体も_wal_shmも同じ接尾辞で改名して残す()
+    {
+        var source = File.ReadAllText(Path.Combine(AppDirectory, "App.xaml.cs"));
+        var start = source.IndexOf("private void SetAsideBrokenDatabaseAndRestart", StringComparison.Ordinal);
+        var end = source.IndexOf("private void RestoreFromPickedBackupAndRestart", StringComparison.Ordinal);
+        var body = source[start..end];
+
+        Assert.Contains("\"-wal\"", body, StringComparison.Ordinal);
+        Assert.Contains("File.Move(file, file + stamp)", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.Delete", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 入れ替えの巻き戻しに失敗したときは画面にも出す()
+    {
+        var source = File.ReadAllText(Path.Combine(AppDirectory, "App.xaml.cs"));
+
+        Assert.Equal(2, Regex.Matches(source, @"NotifyIfRollbackFailed\(result\);").Count);
+        Assert.Contains("SwapOutcome.RollbackFailed", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void 自動更新の置き場所は保存先のupdates()
     {
         var source = File.ReadAllText(Path.Combine(AppDirectory, "Update", "UpdateService.cs"));
