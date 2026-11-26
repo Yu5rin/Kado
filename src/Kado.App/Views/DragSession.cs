@@ -52,8 +52,19 @@ internal sealed class DragSession
     {
         ArgumentNullException.ThrowIfNull(e);
 
-        if (e.LeftButton != MouseButtonState.Pressed || _candidate is null) return;
+        // 左ボタンが離れているのに掴みかけが残っていると、あとで別の予定の上を
+        // 動かしただけで前に押した予定が動く。離れていたら掴みかけを捨てる
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _candidate = null;
+            return;
+        }
+
+        if (_candidate is null) return;
         if (sender is not UIElement source) return;
+
+        // 押した要素と動かしている要素が違うなら、別のものを掴むことになる
+        if (sender is FrameworkElement { DataContext: var current } && !ReferenceEquals(current, _candidate)) return;
 
         var now = e.GetPosition(null);
         if (Math.Abs(now.X - _origin.X) < SystemParameters.MinimumHorizontalDragDistance &&

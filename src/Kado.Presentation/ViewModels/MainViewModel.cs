@@ -1285,6 +1285,32 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
     private static string FailureReason(Exception exception) =>
         exception is SqliteException sqlite ? Kado.Data.SqliteFailure.DescribeReason(sqlite) : exception.Message;
 
+    /// <summary>
+    /// 編集画面を出して、保存まで進める。書き込みに失敗したら、同じ入力のまま画面を出し直す。
+    /// <para>
+    /// 失敗のたびに画面を閉じると、打った内容が全部消える。書けない理由（ロック・ディスクいっぱい）は
+    /// 少し待てば直ることが多いので、入力を残して保存し直せるようにする。画面で取り消せば抜ける。
+    /// </para>
+    /// </summary>
+    /// <returns>保存したら true。画面を取り消したら false。</returns>
+    private bool ShowUntilSaved(Func<bool> show, Action write)
+    {
+        while (true)
+        {
+            if (!show()) return false;
+
+            try
+            {
+                write();
+                return true;
+            }
+            catch (SqliteException ex)
+            {
+                ReportSaveFailure(ex);
+            }
+        }
+    }
+
     private void ReportSaveFailure(SqliteException exception)
     {
         var message = Kado.Data.SqliteFailure.DescribeSaveFailure(exception);
@@ -2788,7 +2814,7 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
             _files.ShowReport(
                 "Google の設定を取り込みました",
                 $"""
-                 次に、⚙ メニューの「Google に接続…」を押してください。
+                 次に、メニュー（右上の歯車）の「Google に接続…」を押してください。
                  ブラウザが開いて許可を求められます。許可すると、そのまま
                  1回目の同期が走ります。
 
@@ -3040,37 +3066,37 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
     /// <summary>
     /// 時刻を置き直した予定を組み立てる。
     /// <para>
-    /// 日をまたぐ時刻つきの予定（22:00〜翌02:00 など）は、長さを<b>日付込み</b>（開始日時〜終了日時）で
-    /// 保ち、動かしたあとの終了日と終了時刻を計算し直す。時刻だけで長さを測ると、終わりが始まりより前になって
-    /// 1時間と見なされ、終了日はそのまま次の日に残って25時間の予定になる。
+    /// 長さを<b>日付込み</b>（開始日時〜終了日時）で保ち、動かしたあとの終了日と終了時刻を計算し直す。
+    /// 2時間の予定を 23:00 に落としたときは、終了を翌日の 01:00 にする。その日の終わりで止めると、
+    /// 長さが黙って縮む。日をまたぐ時刻つきの予定は、週・日の時間軸にそのまま出せる。
     /// </para>
     /// <para>
-    /// もともと日をまたいでいない予定を遅い時刻に置いたときは、これまでどおり、その日の終わりで止める
-    /// （<see cref="EndOf"/>）。
+    /// 時刻を持たない予定（終日）を時間軸へ落としたときは、長さを1時間として扱う
+    /// （<see cref="LengthOf"/>）。
     /// </para>
     /// </summary>
     private static CalendarEvent PlaceAt(CalendarEvent found, CalendarEvent moved, DateOnly date, TimeOnly at)
     {
+        var length = LengthOf(found);
+
+        // 日をまたぐ予定は、終了日を含めて測る。時刻だけで測ると終わりが始まりより前になる
         if (found.StartTime is { } from && found.EndTime is { } to &&
             found.EndDate is { } lastDate && lastDate > found.Date)
         {
-            var length = lastDate.ToDateTime(to) - found.Date.ToDateTime(from);
+            var spanned = lastDate.ToDateTime(to) - found.Date.ToDateTime(from);
 
-            if (length > TimeSpan.Zero)
-            {
-                var end = date.ToDateTime(at) + length;
-                var endDate = DateOnly.FromDateTime(end);
-
-                return moved with
-                {
-                    StartTime = at,
-                    EndDate = endDate > date ? endDate : null,
-                    EndTime = TimeOnly.FromDateTime(end),
-                };
-            }
+            if (spanned > TimeSpan.Zero) length = spanned;
         }
 
-        return moved with { StartTime = at, EndTime = EndOf(at, found) };
+        var end = date.ToDateTime(at) + length;
+        var endDate = DateOnly.FromDateTime(end);
+
+        return moved with
+        {
+            StartTime = at,
+            EndDate = endDate > date ? endDate : null,
+            EndTime = TimeOnly.FromDateTime(end),
+        };
     }
 
     /// <summary>予定の長さ。時刻を持たない予定は1時間として扱う。</summary>
@@ -3078,20 +3104,6 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
         value.StartTime is { } from && value.EndTime is { } to && to > from
             ? to.ToTimeSpan() - from.ToTimeSpan()
             : TimeSpan.FromHours(1);
-
-    /// <summary>
-    /// 移した先での終わりの時刻。
-    /// <para>
-    /// <b>日をまたがせない。</b>またぐと終わりが始まりより前になり、時間軸に
-    /// 置けなくなって画面から消える。遅い時刻に移したときは、その日の終わりで止める。
-    /// </para>
-    /// </summary>
-    private static TimeOnly EndOf(TimeOnly start, CalendarEvent value)
-    {
-        var end = start.Add(LengthOf(value));
-
-        return end > start ? end : new TimeOnly(23, 59);
-    }
 
     /// <summary>タスクの期限を別の日へ移す。<paramref name="copy"/> なら複製する。</summary>
     /// <returns>動かしたら true。</returns>
@@ -3210,9 +3222,8 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
         var editor = new EventEditorViewModel(
             SelectedDate, CalendarChoicesFor(null), NowTime, QuickCalendarId,
             _attachmentUploader, _files, _links);
-        if (!_editors.ShowEventEditor(editor)) return;
+        if (!ShowUntilSaved(() => _editors.ShowEventEditor(editor), () => _workspace.AddEvent(editor.ToModel()))) return;
 
-        _workspace.AddEvent(editor.ToModel());
         StatusMessage = "予定を追加しました";
     }
 
@@ -3237,9 +3248,8 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
             StartTimeText = TimeInput.Format(time),
         };
 
-        if (!_editors.ShowEventEditor(editor)) return;
+        if (!ShowUntilSaved(() => _editors.ShowEventEditor(editor), () => _workspace.AddEvent(editor.ToModel()))) return;
 
-        _workspace.AddEvent(editor.ToModel());
         StatusMessage = "予定を追加しました";
     }
 
@@ -3300,7 +3310,17 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
             }
 
             // Google との結び付きは、保存の時点の最新の行から採られる（UpdateEventEdit）
-            var saved = _workspace.UpdateEvent(editor.ToModel());
+            bool saved;
+            try
+            {
+                saved = _workspace.UpdateEvent(editor.ToModel());
+            }
+            catch (SqliteException ex)
+            {
+                // 書けなかった。同じ入力のまま編集画面に戻り、直して保存し直せるようにする
+                ReportSaveFailure(ex);
+                continue;
+            }
 
             if (saved && editor.RecreateRequested) _workspace.RecreateEventOnGoogle(id);
             if (saved && editor.RetryPushRequested) _workspace.RetryEventPush(id);
@@ -3398,7 +3418,18 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
                     continue;
             }
 
-            var saved = _workspace.UpdateTask(editor.ToModel(), out var nextRepeatDue, _today, _weekStart);
+            bool saved;
+            DateOnly? nextRepeatDue;
+            try
+            {
+                saved = _workspace.UpdateTask(editor.ToModel(), out nextRepeatDue, _today, _weekStart);
+            }
+            catch (SqliteException ex)
+            {
+                // 予定と同じ。同じ入力のまま編集画面に戻る
+                ReportSaveFailure(ex);
+                continue;
+            }
 
             if (saved && editor.RecreateRequested) _workspace.RecreateTaskOnGoogle(id);
             if (saved && editor.RetryPushRequested) _workspace.RetryTaskPush(id);
@@ -3513,9 +3544,8 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
         var editor = new TaskEditorViewModel(
             SelectedDate, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id,
             dialogs: _files, links: _links);
-        if (!_editors.ShowTaskEditor(editor)) return;
+        if (!ShowUntilSaved(() => _editors.ShowTaskEditor(editor), () => _workspace.AddTask(editor.ToModel()))) return;
 
-        _workspace.AddTask(editor.ToModel());
         StatusMessage = "タスクを追加しました";
     }
 
@@ -3526,9 +3556,8 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
     {
         var editor = new EventEditorViewModel(
             date, CalendarChoicesFor(null), NowTime, QuickCalendarId, _attachmentUploader, _files, _links);
-        if (!_editors.ShowEventEditor(editor)) return;
+        if (!ShowUntilSaved(() => _editors.ShowEventEditor(editor), () => _workspace.AddEvent(editor.ToModel()))) return;
 
-        _workspace.AddEvent(editor.ToModel());
         StatusMessage = "予定を追加しました";
     }
 
@@ -3540,9 +3569,8 @@ public sealed partial class MainViewModel : ObservableObject, IStatusSource
         var editor = new TaskEditorViewModel(
             date, TaskListChoicesFor(null), _today, SourceLists.DefaultTaskList?.Id,
             dialogs: _files, links: _links);
-        if (!_editors.ShowTaskEditor(editor)) return;
+        if (!ShowUntilSaved(() => _editors.ShowTaskEditor(editor), () => _workspace.AddTask(editor.ToModel()))) return;
 
-        _workspace.AddTask(editor.ToModel());
         StatusMessage = "タスクを追加しました";
     }
 

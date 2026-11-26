@@ -108,12 +108,10 @@ public partial class ToastWindow : Window
 
     private void OnClicked(object sender, MouseButtonEventArgs e)
     {
-        if (Application.Current?.MainWindow is { } main)
-        {
-            if (main.WindowState == WindowState.Minimized) main.WindowState = WindowState.Normal;
-
-            main.Activate();
-        }
+        // Activate だけでは、トレイに入っている本体やスライド・ピン留めの本体は出てこない。
+        // 2本目の起動と同じ合図（SingleInstance）を自分に送り、App の BringToFront
+        // （ShellController.Show）を通す。待たされないよう別のスレッドで送る
+        _ = Task.Run(SingleInstance.AskRunningInstanceToShow);
 
         Close();
     }

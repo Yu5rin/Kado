@@ -73,6 +73,7 @@ public partial class EventEditorWindow : Window
     /// </summary>
     private void Save()
     {
+        EditorWindowGuard.CommitDatePicker(this);
         CommitFocusedBinding();
 
         // 確定した値で保存できるかをもう一度確かめる。無効なまま閉じない

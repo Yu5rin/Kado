@@ -84,19 +84,13 @@ internal static class DateSegments
         }
     }
 
-    /// <summary>いま選んでいる区切りの数を増減する。</summary>
+    /// <summary>いま選んでいる区切りを、日付として増減する。</summary>
     private static bool Step(TextBox box, int by)
     {
-        var (from, length) = SpanAt(box.Text, box.SelectionStart);
+        if (DateSegment.Step(box.Text, box.SelectionStart, by) is not { } stepped) return false;
 
-        if (length <= 0) return false;
-        if (!int.TryParse(box.Text.AsSpan(from, length), out var value)) return false;
-
-        var text = (value + by).ToString(System.Globalization.CultureInfo.InvariantCulture)
-            .PadLeft(length, '0');
-
-        box.Text = string.Concat(box.Text.AsSpan(0, from), text, box.Text.AsSpan(from + length));
-        box.Select(from, text.Length);
+        box.Text = stepped.Text;
+        box.Select(stepped.From, stepped.Length);
 
         return true;
     }

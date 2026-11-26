@@ -1265,7 +1265,7 @@
                         <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"
                                    HorizontalAlignment="Left" Margin="0,0,8,0"
                                    TextWrapping="Wrap" MaxWidth="360"
-                                   Text="予定はマスをダブルクリックで追加できます&#10;Google と同期するには ⚙ → 設定… → Google" />
+                                   Text="予定はマスをダブルクリックで追加できます&#10;Google と同期するには メニュー（右上の歯車）→ 設定… → Google" />
                     </DockPanel>
                 </Grid>
             </Border>

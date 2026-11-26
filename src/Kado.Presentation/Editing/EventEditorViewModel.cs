@@ -188,7 +188,8 @@ public sealed class EventEditorViewModel : ObservableObject
     /// 変えていなければ尋ねない。読み取り専用の画面は、変えられないので常に false。
     /// </para>
     /// </summary>
-    public bool IsDirty => !IsReadOnly && !string.Equals(Snapshot(), _baseline, StringComparison.Ordinal);
+    public bool IsDirty =>
+        !IsReadOnly && (_isUploadingAttachment || !string.Equals(Snapshot(), _baseline, StringComparison.Ordinal));
 
     /// <summary>入力欄の値をひとまとめの文字にする。開いた直後と見比べるため。</summary>
     private string Snapshot() => string.Join(
@@ -608,7 +609,10 @@ public sealed class EventEditorViewModel : ObservableObject
     public bool IsUploadingAttachment
     {
         get => _isUploadingAttachment;
-        private set => Set(ref _isUploadingAttachment, value);
+        private set
+        {
+            if (Set(ref _isUploadingAttachment, value)) Raise(nameof(CanSave), nameof(ValidationMessage), nameof(IsDirty));
+        }
     }
 
     /// <summary>添付にまつわる最後のエラー。無ければ null。</summary>
@@ -765,6 +769,9 @@ public sealed class EventEditorViewModel : ObservableObject
     {
         get
         {
+            // 上げ終わる前に保存すると、その添付は予定に載らずに落ちる
+            if (_isUploadingAttachment) return "添付をアップロードしています。";
+
             if (string.IsNullOrWhiteSpace(_title)) return "タイトルを入れてください。";
 
             // 長すぎるタイトルは Google 側で断られる。入口で止めておく

@@ -330,7 +330,7 @@ public class OperabilityWiringTests
         Assert.DoesNotContain("TryOnboarding", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Content=\"試す\"", xaml, StringComparison.Ordinal);
         Assert.Contains("予定はマスをダブルクリックで追加できます", xaml, StringComparison.Ordinal);
-        Assert.Contains("Google と同期するには ⚙ → 設定… → Google", xaml, StringComparison.Ordinal);
+        Assert.Contains("Google と同期するには メニュー（右上の歯車）→ 設定… → Google", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

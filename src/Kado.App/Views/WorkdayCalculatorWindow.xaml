@@ -62,7 +62,7 @@
                     Visibility="{Binding HasData, Converter={StaticResource InverseBoolToVisibility}}">
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextStyle}"
                            Foreground="{DynamicResource Ink2Brush}"
-                           Text="実働日データがまだありません。⚙ から Excel を取り込むか、配信元を設定してください。" />
+                           Text="実働日データがまだありません。メニュー（右上の歯車）から Excel を取り込むか、配信元を設定してください。" />
             </Border>
 
             <!-- 期間 → 実働日数 -->

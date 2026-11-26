@@ -14,6 +14,28 @@ namespace Kado.App.Views;
 /// </summary>
 internal static class EditorWindowGuard
 {
+    /// <summary>
+    /// 日付欄（<c>DatePicker</c>）に打ちかけの文字を確定させる。
+    /// <para>
+    /// 中の入力欄は <c>Text</c> をバインドしておらず、フォーカスが外れたときに初めて
+    /// <c>SelectedDate</c> へ取り込まれる。打った直後の Ctrl＋Enter では取り込まれる前に
+    /// 保存してしまうので、先にフォーカスを窓へ移して取り込ませる。
+    /// </para>
+    /// </summary>
+    internal static void CommitDatePicker(Window window)
+    {
+        if (Keyboard.FocusedElement is not DependencyObject focused) return;
+
+        for (var node = focused; node is not null; node = TreeWalk.ParentOf(node))
+        {
+            if (node is not System.Windows.Controls.DatePicker) continue;
+
+            // フォーカスが外れると DatePicker が文字を日付にして SelectedDate へ渡す
+            window.Focus();
+            return;
+        }
+    }
+
     /// <param name="window">編集画面。<c>ShowDialog</c> で出すもの。</param>
     /// <param name="isDirty">開いたときから変えたか（各 ViewModel の <c>IsDirty</c>）。</param>
     /// <param name="isDeleted">削除を求めて閉じようとしているか。削除のときは尋ねない。</param>

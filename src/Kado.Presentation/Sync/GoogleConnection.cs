@@ -204,7 +204,7 @@ public sealed class GoogleConnection(
 
             var options = secrets.Load()
                 ?? throw new OAuthException(
-                    "Google のクライアント設定がありません。⚙メニューから読み込んでください。");
+                    "Google のクライアント設定がありません。メニュー（右上の歯車）から読み込んでください。");
 
             return _provider = new GoogleTokenProvider(
                 new LoopbackOAuthFlow(

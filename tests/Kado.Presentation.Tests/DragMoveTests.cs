@@ -477,7 +477,7 @@ public class DragMoveTests
     }
 
     [Fact]
-    public void 遅い時刻に移しても画面から消えない()
+    public void 遅い時刻に移すと終了は翌日になり長さを保つ()
     {
         using var test = TestWorkspace.Create();
         test.Workspace.AddEvent(Event("e1", Today));   // 10:00〜11:00
@@ -487,9 +487,39 @@ public class DragMoveTests
 
         var moved = test.Workspace.Events.Find("e1")!;
 
-        // 日をまたぐと終わりが始まりより前になり、時間軸に置けなくなる
-        Assert.True(moved.EndTime > moved.StartTime);
-        Assert.Equal(new TimeOnly(23, 59), moved.EndTime);
+        // 日をまたぐ形にして、1時間の長さを保つ（23:59 で止めると30分に縮む）
+        Assert.Equal(Today.AddDays(1), moved.EndDate);
+        Assert.Equal(new TimeOnly(0, 30), moved.EndTime);
+    }
+
+    [Fact]
+    public void 二時間の予定を23時に落としても二時間のまま()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today) with { EndTime = new TimeOnly(12, 0) });   // 10:00〜12:00
+
+        var main = Create(test);
+        main.MoveEventToTime("e1", Today, new TimeOnly(23, 0));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+
+        Assert.Equal(Today.AddDays(1), moved.EndDate);
+        Assert.Equal(new TimeOnly(1, 0), moved.EndTime);
+    }
+
+    [Fact]
+    public void 日をまたがない移し先では終了日を付けない()
+    {
+        using var test = TestWorkspace.Create();
+        test.Workspace.AddEvent(Event("e1", Today));   // 10:00〜11:00
+
+        var main = Create(test);
+        main.MoveEventToTime("e1", Today, new TimeOnly(15, 0));
+
+        var moved = test.Workspace.Events.Find("e1")!;
+
+        Assert.Null(moved.EndDate);
+        Assert.Equal(new TimeOnly(16, 0), moved.EndTime);
     }
 
     // ------------------------------------------------------------------

@@ -398,7 +398,7 @@
                             <Button Content="Excel から実働日を取り込む…" Style="{StaticResource GhostButtonStyle}"
                                     Command="{Binding ImportWorkingDaysCommand}" />
                         </StackPanel>
-                        <TextBlock Text="どちらも⚙メニューからいつでも行えます。"
+                        <TextBlock Text="どちらもメニュー（右上の歯車）からいつでも行えます。"
                                    Style="{StaticResource FieldNoteStyle}" />
                     </StackPanel>
 
@@ -459,7 +459,7 @@
                             </StackPanel>
                             <!-- BackgroundSync（App.xaml.cs）が15分ごとに自動で回している。
                                  手動でしか同期しないように読めていた旧文言を直した -->
-                            <TextBlock Text="接続は最初の1回だけです。あとは15分ごとに自動で同期します。すぐ合わせたいときは F5（⚙→今すぐ同期）。"
+                            <TextBlock Text="接続は最初の1回だけです。あとは15分ごとに自動で同期します。すぐ合わせたいときは F5、またはメニュー（右上の歯車）の「今すぐ同期」。"
                                        Style="{StaticResource FieldNoteStyle}" />
 
                             <!--

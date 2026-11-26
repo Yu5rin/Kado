@@ -114,6 +114,7 @@ public partial class TaskEditorWindow : Window
     /// </summary>
     private void Save()
     {
+        EditorWindowGuard.CommitDatePicker(this);
         CommitFocusedBinding();
 
         if (!_editor.CanSave) return;
